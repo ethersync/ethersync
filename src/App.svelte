@@ -1,5 +1,9 @@
 <script>
-	export let name;
+    let title = "foobar"
+    let pages = [
+        {title: "Animals", content: "- Cats\n- Dogs"},
+        {title: "Fruit", content: "- Apple\n- Pear"},
+    ]
 </script>
 
 <svelte:head>
@@ -12,7 +16,7 @@
 
 <div class="flex-col h-screen">
     <div class="flex bg-gray-200">
-        <div id="room" class="p-2 font-bold w-60"></div>
+        <div id="room" class="p-2 font-bold w-60">{title}</div>
         <!--<input id="search" placeholder="Search..." class="m-2 px-3 py-1 w-60">-->
         <div class="flex-1"></div>
         <div id="export" class="p-2 cursor-pointer hover:bg-gray-500 text-center">📥 Export zip</div>
@@ -38,7 +42,11 @@
     <div class="flex flex-col">
         <div class="flex flex-1">
             <div class="flex flex-col bg-gray-300 w-60 h-screen">
-                <div class="flex flex-col overflow-y-auto" id="docs"></div>
+                <div class="flex flex-col overflow-y-auto" id="docs">
+                    {#each pages as {title}, i}
+                        <div class="doc-button p-2 border-b border-gray-400 flex hover:bg-gray-400 cursor-pointer" data-id={i}>{title}</div>
+                    {/each}
+                </div>
                 <div
                     id="add-button"
                     class="p-2 hover:bg-blue-400 text-center cursor-pointer"
