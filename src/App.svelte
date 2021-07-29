@@ -1,4 +1,38 @@
 <script>
+    import { onMount } from 'svelte';
+
+    import * as Y from 'yjs'
+    import { WebrtcProvider } from 'y-webrtc'
+
+    import { QuillBinding } from 'y-quill'
+    import Quill from 'quill'
+    import QuillCursors from 'quill-cursors'
+
+    Quill.register('modules/cursors', QuillCursors)
+
+    onMount(() => {
+        const ydoc = new Y.Doc()
+        const ytext = ydoc.getText("content")
+
+        const provider = new WebrtcProvider(`svelte-yjs-experiment`, ydoc, {
+            signaling: ['wss://signaling.yjs.dev', 'wss://y-webrtc-signaling-eu.herokuapp.com', 'wss://y-webrtc-signaling-us.herokuapp.com']
+        })
+
+        console.log(document.querySelector("#content"))
+        const quill = new Quill(document.querySelector("#content"), {
+            modules: {
+                cursors: true,
+                toolbar: false,
+                history: {
+                    userOnly: true
+                }
+            },
+            formats: [],
+        })
+        quill.root.setAttribute('spellcheck', false)
+        const binding = new QuillBinding(ytext, quill)
+    })
+
     let title = "foobar"
     let pages = [
         {title: "Animals", content: "- Cats\n- Dogs"},
@@ -57,7 +91,7 @@
             </div>
             <div class="w-full flex flex-col">
                 <div id="title"></div>
-                <div id="editor" class="flex-grow"></div>
+                <div id="content" class="flex-grow"></div>
             </div>
         </div>
     </div>
@@ -71,14 +105,9 @@
         height: 2.8em;
         font-size: 1.1rem;
     }
-    #editor {
+    #content {
         font-family: monospace;
         height: 10em;
-    }
-    .ql-editor {
-        /*display: flex;
-        flex-direction: column;
-        flex: 1;*/
     }
     input[type=file] {
         opacity: 0.01;
