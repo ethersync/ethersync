@@ -42,8 +42,7 @@
   })
 
   const addPage = () => {
-    pages.push([pages.length, pages.length + 1])
-    console.log(pages.toArray())
+    ypages.push([ypages.length])
   }
 
   let title = 'foobar'
