@@ -1,45 +1,58 @@
 <script>
-    let title = "foobar"
+    let title = window.location.hash.substring(1)
+    window.addEventListener("hashchange", () => {
+        title = window.location.hash.substring(1)
+    })
 
     import Editor from "./Editor.svelte"
 
     import * as Y from "yjs"
     import {WebrtcProvider} from "y-webrtc"
-
-    const ydoc = new Y.Doc()
-    const ypages = ydoc.getArray("pages")
-
     import {IndexeddbPersistence} from "y-indexeddb"
-    const persistence = new IndexeddbPersistence(title, ydoc)
 
-    let pages = ypages.toArray()
-    ypages.observeDeep(() => {
-        pages = ypages.toArray().sort(function (first, second) {
-            const nameA = first.get("title").toString().toLowerCase()
-            const nameB = second.get("title").toString().toLowerCase()
-            if (nameA < nameB) {
-                return -1
-            }
-            if (nameA > nameB) {
-                return 1
-            }
-            return 0
-        })
-    })
+    let ydoc, ypages, persistence, pages
 
-    const provider = new WebrtcProvider(`svelte-yjs-experiment`, ydoc, {
-        signaling: [
-            "wss://signaling.yjs.dev",
-            "wss://y-webrtc-signaling-eu.herokuapp.com",
-            "wss://y-webrtc-signaling-us.herokuapp.com",
-        ],
-    })
-    const awareness = provider.awareness
-
+    let provider, awareness
     let awarenessStates = []
-    awareness.on("change", () => {
-        awarenessStates = [...awareness.getStates()]
-    })
+
+    $: {
+        ydoc = new Y.Doc()
+        ypages = ydoc.getArray("pages")
+
+        persistence = new IndexeddbPersistence(title, ydoc)
+
+        pages = ypages.toArray()
+        ypages.observeDeep(() => {
+            pages = ypages.toArray().sort(function (first, second) {
+                const nameA = first.get("title").toString().toLowerCase()
+                const nameB = second.get("title").toString().toLowerCase()
+                if (nameA < nameB) {
+                    return -1
+                }
+                if (nameA > nameB) {
+                    return 1
+                }
+                return 0
+            })
+        })
+
+        if (provider) {
+            provider.disconnect()
+            provider.destroy()
+        }
+        provider = new WebrtcProvider(`etherwiki-${title}`, ydoc, {
+            signaling: [
+                "wss://signaling.yjs.dev",
+                "wss://y-webrtc-signaling-eu.herokuapp.com",
+                "wss://y-webrtc-signaling-us.herokuapp.com",
+            ],
+        })
+        awareness = provider.awareness
+
+        awareness.on("change", () => {
+            awarenessStates = [...awareness.getStates()]
+        })
+    }
 
     const addPage = () => {
         const ypage = new Y.Map()
@@ -98,6 +111,7 @@
         href="https://unpkg.com/tailwindcss@^2.0/dist/tailwind.min.css"
         rel="stylesheet"
     />
+    <title>{title}</title>
 </svelte:head>
 
 <div class="flex-col h-screen">
