@@ -6,6 +6,9 @@
 
     import Editor from "./Editor.svelte"
 
+    import JSZip from "jszip"
+    import {saveAs} from "file-saver"
+
     import * as Y from "yjs"
     import {WebrtcProvider} from "y-webrtc"
     import {IndexeddbPersistence} from "y-indexeddb"
@@ -19,6 +22,9 @@
         ydoc = new Y.Doc()
         ypages = ydoc.getArray("pages")
 
+        if (persistence) {
+            persistence.destroy()
+        }
         persistence = new IndexeddbPersistence(title, ydoc)
 
         pages = ypages.toArray()
@@ -108,7 +114,6 @@
     let files
 
     $: if (files) {
-        console.log(files)
         Array.from(files).forEach((f) => {
             var reader = new FileReader()
             reader.onload = ((file) => {
@@ -134,6 +139,19 @@
             })(f)
             reader.readAsText(f)
         })
+        files = null
+    }
+
+    function exportZip() {
+        var zip = new JSZip()
+        for (const doc of ypages) {
+            const title = doc.get("title").toString()
+            const content = doc.get("content").toString()
+            zip.file(title, content)
+        }
+        zip.generateAsync({type: "blob"}).then((content) => {
+            saveAs(content, `${title}.zip`)
+        })
     }
 </script>
 
@@ -151,8 +169,8 @@
         <!--<input id="search" placeholder="Search..." class="m-2 px-3 py-1 w-60">-->
         <div class="flex-1" />
         <div
-            id="export"
             class="p-2 cursor-pointer hover:bg-gray-500 text-center"
+            on:click={exportZip}
         >
             📥 Export zip
         </div>
