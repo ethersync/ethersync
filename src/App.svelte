@@ -61,10 +61,18 @@
         currentPage = page
     }
 
+    let deletePage = (page) => {
+        if (confirm(`Really delete '${page.get("title")}'?`)) {
+            currentPage = null
+            let i = ypages.toArray().indexOf(page)
+            ypages.delete(i)
+        }
+    }
+
     const deleteAll = () => {
         if (confirm(`Really delete all pages?`)) {
-            ypages.delete(0, ypages.length)
             currentPage = null
+            ypages.delete(0, ypages.length)
         }
     }
 
@@ -164,14 +172,24 @@
                 <div class="flex flex-col overflow-y-auto" id="docs">
                     {#each pages as page, i}
                         <div
-                            class="doc-button p-2 border-b border-gray-400 flex hover:bg-gray-400
-                            {currentPage && currentPage == page
+                            class="border-b border-gray-400 flex hover:bg-gray-400
+                            {currentPage == page
                                 ? 'bg-gray-500 hover:bg-gray-500'
                                 : ''} cursor-pointer"
                             data-id={i}
                             on:click={openPage(page)}
                         >
-                            {page.get("title").toString()}
+                            <div class="flex-grow p-2">
+                                {page.get("title").toString()}
+                            </div>
+                            {#if currentPage == page}
+                                <div
+                                    class="p-2 hover:bg-red-500"
+                                    on:click={deletePage(page)}
+                                >
+                                    ×
+                                </div>
+                            {/if}
                         </div>
                     {/each}
                 </div>
