@@ -1,8 +1,16 @@
 <script>
-    let title = window.location.hash.substring(1)
-    window.addEventListener("hashchange", () => {
+    var title, enterTitle
+    function hashchange() {
         title = window.location.hash.substring(1)
-    })
+        if (title.length == 0) {
+            title = null
+        }
+    }
+    window.addEventListener("hashchange", hashchange)
+    hashchange()
+    $: if (title) {
+        window.location.hash = title
+    }
 
     import Editor from "./Editor.svelte"
 
@@ -18,7 +26,7 @@
     let provider, awareness
     let awarenessStates = []
 
-    $: {
+    $: if (title) {
         ydoc = new Y.Doc()
         ypages = ydoc.getArray("pages")
 
@@ -58,6 +66,8 @@
         awareness.on("change", () => {
             awarenessStates = [...awareness.getStates()]
         })
+
+        currentPage = null
     }
 
     const addPage = () => {
@@ -73,12 +83,23 @@
         ypages.push([ypage])
 
         currentPage = ypage
+        console.log(awareness)
     }
 
     let currentPage = null
     const openPage = (page) => {
         currentPage = page
     }
+
+    /*
+    $: if (currentPage) {
+        console.log(currentPage)
+        awareness.setLocalStateField(
+            "page",
+            currentPage.get("title").toString(),
+        )
+    }
+    */
 
     let deletePage = (page) => {
         if (confirm(`Really delete '${page.get("title")}'?`)) {
@@ -109,7 +130,10 @@
         "#1be7ff",
     ]
     const myColor = usercolors[Math.floor(Math.random() * usercolors.length)]
-    $: awareness.setLocalStateField("user", {name: username, color: myColor})
+
+    $: if (awareness && username) {
+        awareness.setLocalStateField("user", {name: username, color: myColor})
+    }
 
     let files
 
@@ -163,124 +187,146 @@
     <title>{title}</title>
 </svelte:head>
 
-<div class="flex-col h-screen">
-    <div class="flex bg-gray-200">
-        <div id="room" class="p-2 font-bold w-60">{title}</div>
-        <!--<input id="search" placeholder="Search..." class="m-2 px-3 py-1 w-60">-->
-        <div class="flex-1" />
-        <div
-            class="p-2 cursor-pointer hover:bg-gray-500 text-center"
-            on:click={exportZip}
-        >
-            📥 Export zip
-        </div>
-        <div
-            style="display: grid;"
-            class="hover:bg-gray-500 hover:cursor-pointer w-40"
-        >
-            <input
-                type="file"
-                multiple
-                bind:files
-                style="grid-column: 1; grid-row: 1;"
-                class="cursor-pointer"
-            />
-            <span style="grid-column: 1; grid-row: 1;" class="p-2 text-center"
-                >📤 Upload files</span
-            >
-        </div>
-        <div
-            id="delete-all"
-            class="p-2 cursor-pointer hover:bg-gray-500 text-center"
-            on:click={deleteAll}
-        >
-            💣 Delete all
-        </div>
-        <div class="dropdown relative">
+{#if title}
+    <div class="flex-col h-screen">
+        <div class="flex bg-gray-200">
+            <div id="room" class="p-2 font-bold w-60">🍃 {title}</div>
+            <!--<input id="search" placeholder="Search..." class="m-2 px-3 py-1 w-60">-->
+            <div class="flex-1" />
             <div
-                class="bg-gray-300 text-gray-700 font-semibold py-2 px-4 flex place-items-end items-center w-60"
+                class="p-2 cursor-pointer hover:bg-gray-500 text-center"
+                on:click={exportZip}
             >
-                <span class="mr-1" id="connection-status"
-                    >{awarenessStates.length} connected</span
+                📥 Export zip
+            </div>
+            <div
+                style="display: grid;"
+                class="hover:bg-gray-500 hover:cursor-pointer w-40"
+            >
+                <input
+                    type="file"
+                    multiple
+                    bind:files
+                    style="grid-column: 1; grid-row: 1;"
+                    class="cursor-pointer"
+                />
+                <span
+                    style="grid-column: 1; grid-row: 1;"
+                    class="p-2 text-center">📤 Upload files</span
                 >
             </div>
-            <ul
-                class="dropdown-menu absolute hidden text-gray-700 pt-1 bg-gray-100 w-60"
+            <div
+                id="delete-all"
+                class="p-2 cursor-pointer hover:bg-gray-500 text-center"
+                on:click={deleteAll}
             >
-                <div id="users">
-                    {#each awarenessStates as [id, state]}
-                        <div
-                            class="p-2 font-bold"
-                            style="color:{state.user.color};"
-                        >
-                            {#if id == awareness.clientID}
-                                <input
-                                    type="text"
-                                    class="m-2 p-1"
-                                    autocomplete="off"
-                                    bind:value={username}
-                                />
-                            {:else}
-                                {state.user.name}
-                            {/if}
-                        </div>
-                    {/each}
-                </div>
-            </ul>
-        </div>
-    </div>
-    <div class="flex flex-col">
-        <div class="flex flex-1">
-            <div class="flex flex-col bg-gray-300 w-60 h-screen">
-                <div class="flex flex-col overflow-y-auto" id="docs">
-                    {#each pages as page, i}
-                        <div
-                            class="border-b border-gray-400 flex hover:bg-gray-400
-                            {currentPage == page
-                                ? 'bg-gray-500 hover:bg-gray-500'
-                                : ''} cursor-pointer"
-                            data-id={i}
-                            on:click={openPage(page)}
-                        >
-                            <div class="flex-grow p-2">
-                                {page.get("title").toString()}
-                            </div>
-                            {#if currentPage == page}
-                                <div
-                                    class="p-2 hover:bg-red-500"
-                                    on:click={deletePage(page)}
-                                >
-                                    ×
-                                </div>
-                            {/if}
-                        </div>
-                    {/each}
-                </div>
+                💣 Delete all
+            </div>
+            <div class="dropdown relative">
                 <div
-                    id="add-button"
-                    class="p-2 hover:bg-blue-400 text-center cursor-pointer"
-                    on:click={addPage}
+                    class="bg-gray-300 text-gray-700 font-semibold py-2 px-4 flex place-items-end items-center w-60"
                 >
-                    ➕ Add page
+                    <span class="mr-1" id="connection-status"
+                        >{awarenessStates.length} connected</span
+                    >
                 </div>
-                <div class="flex-1" />
+                <ul
+                    class="dropdown-menu absolute hidden z-10 text-gray-700 pt-1 bg-gray-100 w-60"
+                >
+                    <div id="users">
+                        {#each awarenessStates as [id, state]}
+                            <div
+                                class="p-2 font-bold"
+                                style="color:{state.user.color};"
+                            >
+                                {#if id == awareness.clientID}
+                                    <input
+                                        type="text"
+                                        class="m-2 p-1"
+                                        autocomplete="off"
+                                        bind:value={username}
+                                    />
+                                {:else}
+                                    {state.user.name}
+                                {/if}
+                            </div>
+                        {/each}
+                    </div>
+                </ul>
             </div>
-            <div class="w-full flex flex-col">
-                {#if currentPage}
-                    <div id="title">
-                        <Editor ytext={currentPage.get("title")} {awareness} />
+        </div>
+        <div class="flex flex-col">
+            <div class="flex flex-1">
+                <div class="flex flex-col bg-gray-300 w-60 h-screen">
+                    <div class="flex flex-col overflow-y-auto" id="docs">
+                        {#each pages as page, i}
+                            <div
+                                class="border-b border-gray-400 flex hover:bg-gray-400
+                                {currentPage == page
+                                    ? 'bg-gray-500 hover:bg-gray-500'
+                                    : ''} cursor-pointer"
+                                data-id={i}
+                                on:click={openPage(page)}
+                            >
+                                <div class="flex-grow p-2">
+                                    {page.get("title").toString()}
+                                </div>
+                                {#if currentPage == page}
+                                    <div
+                                        class="p-2 hover:bg-red-500"
+                                        on:click={deletePage(page)}
+                                    >
+                                        ×
+                                    </div>
+                                {/if}
+                            </div>
+                        {/each}
                     </div>
-                    <div id="content" class="flex-grow">
-                        <Editor
-                            ytext={currentPage.get("content")}
-                            {awareness}
-                        />
+                    <div
+                        id="add-button"
+                        class="p-2 hover:bg-blue-400 text-center cursor-pointer"
+                        on:click={addPage}
+                    >
+                        ➕ Add page
                     </div>
-                {/if}
+                    <div class="flex-1" />
+                </div>
+                <div class="w-full flex flex-col">
+                    {#if currentPage}
+                        <div id="title">
+                            <Editor
+                                ytext={currentPage.get("title")}
+                                {awareness}
+                            />
+                        </div>
+                        <div id="content" class="flex-grow">
+                            <Editor
+                                ytext={currentPage.get("content")}
+                                {awareness}
+                            />
+                        </div>
+                    {/if}
+                </div>
             </div>
         </div>
     </div>
-</div>
+{:else}
+    <div class="w-80 my-10 mx-auto">
+        Enter a name for your EtherWiki: <input
+            bind:this={enterTitle}
+            class="bg-gray-100 p-2"
+            on:keydown={(e) => {
+                if (e.keyCode == 13) {
+                    title = e.target.value
+                }
+            }}
+        />
+        <button
+            class="bg-green-500 p-2"
+            on:click={(e) => (title = enterTitle.value)}>OK</button
+        >
+    </div>
+{/if}
 
 <style>
     #title {
