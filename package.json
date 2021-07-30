@@ -22,6 +22,7 @@
     "quill-cursors": "^3.1.0",
     "sirv-cli": "^1.0.0",
     "svelt-yjs": "^1.1.0",
+    "y-indexeddb": "^9.0.6",
     "y-quill": "^0.1.4",
     "y-webrtc": "^10.2.0",
     "yjs": "^13.5.11"

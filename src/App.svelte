@@ -1,4 +1,6 @@
 <script>
+    let title = "foobar"
+
     import Editor from "./Editor.svelte"
 
     import * as Y from "yjs"
@@ -6,6 +8,9 @@
 
     const ydoc = new Y.Doc()
     const ypages = ydoc.getArray("pages")
+
+    import {IndexeddbPersistence} from "y-indexeddb"
+    const persistence = new IndexeddbPersistence(title, ydoc)
 
     let pages = ypages.toArray()
     ypages.observeDeep(() => {
@@ -34,7 +39,6 @@
         ypage.set("title", ytitle)
 
         const ycontent = new Y.Text()
-        ycontent.insert(0, "Foobar")
         ypage.set("content", ycontent)
 
         ypages.push([ypage])
@@ -54,7 +58,6 @@
         }
     }
 
-    let title = "foobar"
     let username = localStorage.getItem("username") || "anonymous"
     $: localStorage.setItem("username", username)
 
