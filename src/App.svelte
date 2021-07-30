@@ -104,6 +104,37 @@
     ]
     const myColor = usercolors[Math.floor(Math.random() * usercolors.length)]
     $: awareness.setLocalStateField("user", {name: username, color: myColor})
+
+    let files
+
+    $: if (files) {
+        console.log(files)
+        Array.from(files).forEach((f) => {
+            var reader = new FileReader()
+            reader.onload = ((file) => {
+                return function (e2) {
+                    var existingPage = ypages
+                        .toArray()
+                        .find((p) => p.get("title") == file.name)
+                    if (existingPage) {
+                        var content = existingPage.get("content")
+                        content.delete(0, content.length)
+                        content.insert(0, e2.target.result)
+                    } else {
+                        const newDoc = new Y.Map()
+                        const title = new Y.Text()
+                        title.applyDelta([{insert: file.name}])
+                        const content = new Y.Text()
+                        content.applyDelta([{insert: e2.target.result}])
+                        newDoc.set("title", title)
+                        newDoc.set("content", content)
+                        ypages.push([newDoc])
+                    }
+                }
+            })(f)
+            reader.readAsText(f)
+        })
+    }
 </script>
 
 <svelte:head>
@@ -131,8 +162,8 @@
         >
             <input
                 type="file"
-                id="import"
                 multiple
+                bind:files
                 style="grid-column: 1; grid-row: 1;"
                 class="cursor-pointer"
             />
