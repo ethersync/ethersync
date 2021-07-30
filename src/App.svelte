@@ -5,12 +5,11 @@
     import {WebrtcProvider} from "y-webrtc"
 
     const ydoc = new Y.Doc()
-    const ytext = ydoc.getText("content")
     const ypages = ydoc.getArray("pages")
 
     let pages = ypages.toArray()
     ypages.observeDeep(() => {
-        pages = ypages.toArray().map((p) => p.get("title").toString())
+        pages = ypages.toArray()
     })
 
     const provider = new WebrtcProvider(`svelte-yjs-experiment`, ydoc, {
@@ -21,6 +20,11 @@
         ],
     })
     const awareness = provider.awareness
+
+    let awarenessStates = []
+    awareness.on("change", () => {
+        awarenessStates = [...awareness.getStates()]
+    })
 
     const addPage = () => {
         const ypage = new Y.Map()
@@ -34,14 +38,25 @@
         ypage.set("content", ycontent)
 
         ypages.push([ypage])
+
+        currentPage = ypage
     }
 
     let currentPage = null
-    const openPage = (pateTitle, i) => {
-        currentPage = ypages.get(i)
+    const openPage = (page) => {
+        currentPage = page
+    }
+
+    const deleteAll = () => {
+        if (confirm(`Really delete all pages?`)) {
+            ypages.delete(0, ypages.length)
+            currentPage = null
+        }
     }
 
     let title = "foobar"
+    let username = localStorage.getItem("username") || "anonymous"
+    $: localStorage.setItem("username", username)
 
     export const usercolors = [
         "#30bced",
@@ -54,7 +69,7 @@
         "#1be7ff",
     ]
     const myColor = usercolors[Math.floor(Math.random() * usercolors.length)]
-    awareness.setLocalStateField("user", {name: "flupp", color: myColor})
+    $: awareness.setLocalStateField("user", {name: username, color: myColor})
 </script>
 
 <svelte:head>
@@ -93,6 +108,7 @@
         <div
             id="delete-all"
             class="p-2 cursor-pointer hover:bg-gray-500 text-center"
+            on:click={deleteAll}
         >
             💣 Delete all
         </div>
@@ -100,20 +116,32 @@
             <div
                 class="bg-gray-300 text-gray-700 font-semibold py-2 px-4 flex place-items-end items-center w-60"
             >
-                <span class="mr-1" id="connection-status">unknown</span>
+                <span class="mr-1" id="connection-status"
+                    >{awarenessStates.length} connected</span
+                >
             </div>
             <ul
                 class="dropdown-menu absolute hidden text-gray-700 pt-1 bg-gray-100 w-60"
             >
-                <li class="">
-                    <input
-                        id="username"
-                        type="text"
-                        class="m-2 p-1 font-mono"
-                        autocomplete="off"
-                    />
-                </li>
-                <div id="users" />
+                <div id="users">
+                    {#each awarenessStates as [id, state]}
+                        <div
+                            class="p-2 font-bold"
+                            style="color:{state.user.color};"
+                        >
+                            {#if id == awareness.clientID}
+                                <input
+                                    type="text"
+                                    class="m-2 p-1"
+                                    autocomplete="off"
+                                    bind:value={username}
+                                />
+                            {:else}
+                                {state.user.name}
+                            {/if}
+                        </div>
+                    {/each}
+                </div>
             </ul>
         </div>
     </div>
@@ -125,9 +153,9 @@
                         <div
                             class="doc-button p-2 border-b border-gray-400 flex hover:bg-gray-400 cursor-pointer"
                             data-id={i}
-                            on:click={openPage(page, i)}
+                            on:click={openPage(page)}
                         >
-                            {page}
+                            {page.get("title").toString()}
                         </div>
                     {/each}
                 </div>
