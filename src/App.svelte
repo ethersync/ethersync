@@ -14,7 +14,17 @@
 
     let pages = ypages.toArray()
     ypages.observeDeep(() => {
-        pages = ypages.toArray()
+        pages = ypages.toArray().sort(function (first, second) {
+            const nameA = first.get("title").toString().toLowerCase()
+            const nameB = second.get("title").toString().toLowerCase()
+            if (nameA < nameB) {
+                return -1
+            }
+            if (nameA > nameB) {
+                return 1
+            }
+            return 0
+        })
     })
 
     const provider = new WebrtcProvider(`svelte-yjs-experiment`, ydoc, {
@@ -154,7 +164,10 @@
                 <div class="flex flex-col overflow-y-auto" id="docs">
                     {#each pages as page, i}
                         <div
-                            class="doc-button p-2 border-b border-gray-400 flex hover:bg-gray-400 cursor-pointer"
+                            class="doc-button p-2 border-b border-gray-400 flex hover:bg-gray-400
+                            {currentPage && currentPage == page
+                                ? 'bg-gray-500 hover:bg-gray-500'
+                                : ''} cursor-pointer"
                             data-id={i}
                             on:click={openPage(page)}
                         >
