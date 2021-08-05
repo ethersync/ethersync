@@ -9,9 +9,11 @@
 
     let editor
     export let ytext, awareness
+    export let requestSelectTitle = false
 
+    let quill
     $: if (editor) {
-        const quill = new Quill(editor, {
+        quill = new Quill(editor, {
             modules: {
                 cursors: true,
                 toolbar: false,
@@ -23,10 +25,18 @@
         })
         quill.root.setAttribute("spellcheck", false)
         const binding = new QuillBinding(ytext, quill, awareness)
+
+        if (quill.getText() == "New Page\n") {
+            selectAll()
+        }
+    }
+
+    function selectAll() {
+        quill.setSelection(0, quill.getLength())
     }
 </script>
 
-<div class="editor" bind:this={editor}></div>
+<div class="editor" bind:this={editor} />
 
 <svelte:head>
     <link

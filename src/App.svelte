@@ -26,6 +26,20 @@
     let provider, awareness
     let awarenessStates = []
 
+    function updatePages() {
+        pages = ypages.toArray().sort(function (first, second) {
+            const nameA = first.get("title").toString().toLowerCase()
+            const nameB = second.get("title").toString().toLowerCase()
+            if (nameA < nameB) {
+                return -1
+            }
+            if (nameA > nameB) {
+                return 1
+            }
+            return 0
+        })
+    }
+
     $: if (title) {
         ydoc = new Y.Doc()
         ypages = ydoc.getArray("pages")
@@ -36,19 +50,7 @@
         persistence = new IndexeddbPersistence(title, ydoc)
 
         pages = ypages.toArray()
-        ypages.observeDeep(() => {
-            pages = ypages.toArray().sort(function (first, second) {
-                const nameA = first.get("title").toString().toLowerCase()
-                const nameB = second.get("title").toString().toLowerCase()
-                if (nameA < nameB) {
-                    return -1
-                }
-                if (nameA > nameB) {
-                    return 1
-                }
-                return 0
-            })
-        })
+        ypages.observeDeep(updatePages)
 
         if (provider) {
             provider.disconnect()
@@ -83,7 +85,6 @@
         ypages.push([ypage])
 
         currentPage = ypage
-        console.log(awareness)
     }
 
     let currentPage = null
@@ -190,11 +191,13 @@
 {#if title}
     <div class="flex-col h-screen">
         <div class="flex bg-gray-200">
-            <div id="room" class="p-2 font-bold w-60">🍃 {title}</div>
+            <div id="room" class="p-2 font-bold w-60 flex items-center">
+                🍃 {title}
+            </div>
             <!--<input id="search" placeholder="Search..." class="m-2 px-3 py-1 w-60">-->
             <div class="flex-1" />
             <div
-                class="p-2 cursor-pointer hover:bg-gray-500 text-center"
+                class="p-2 cursor-pointer hover:bg-gray-500 text-center flex items-center"
                 on:click={exportZip}
             >
                 📥 Export zip
@@ -212,26 +215,27 @@
                 />
                 <span
                     style="grid-column: 1; grid-row: 1;"
-                    class="p-2 text-center">📤 Upload files</span
+                    class="p-2 text-center flex items-center justify-center"
+                    >📤 Upload files</span
                 >
             </div>
             <div
                 id="delete-all"
-                class="p-2 cursor-pointer hover:bg-gray-500 text-center"
+                class="p-2 cursor-pointer hover:bg-gray-500 text-center flex items-center"
                 on:click={deleteAll}
             >
                 💣 Delete all
             </div>
-            <div class="dropdown relative">
+            <div class="dropdown relative flex">
                 <div
-                    class="bg-gray-300 text-gray-700 font-semibold py-2 px-4 flex place-items-end items-center w-60"
+                    class="bg-gray-300 text-gray-700 font-semibold py-2 px-4 place-items-end items-center flex w-60"
                 >
                     <span class="mr-1" id="connection-status"
                         >{awarenessStates.length} connected</span
                     >
                 </div>
                 <ul
-                    class="dropdown-menu absolute hidden z-10 text-gray-700 pt-1 bg-gray-100 w-60"
+                    class="dropdown-menu absolute top-12 hidden z-10 text-gray-700 pt-1 bg-gray-100 w-60"
                 >
                     <div id="users">
                         {#each awarenessStates as [id, state]}
@@ -283,7 +287,6 @@
                         {/each}
                     </div>
                     <div
-                        id="add-button"
                         class="p-2 hover:bg-blue-400 text-center cursor-pointer"
                         on:click={addPage}
                     >
