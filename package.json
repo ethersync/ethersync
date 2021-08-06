@@ -30,6 +30,7 @@
     "sirv-cli": "^1.0.0",
     "svelt-yjs": "^1.1.0",
     "y-indexeddb": "^9.0.6",
+    "y-leveldb": "^0.1.0",
     "y-quill": "^0.1.4",
     "y-websocket": "^1.3.16",
     "yjs": "^13.5.11"
