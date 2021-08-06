@@ -197,15 +197,11 @@
 </script>
 
 <svelte:head>
-    <link
-        href="https://unpkg.com/tailwindcss@^2.0/dist/tailwind.min.css"
-        rel="stylesheet"
-    />
     <title>{title}</title>
 </svelte:head>
 
 {#if title}
-    <div class="flex-col h-screen">
+    <div class="flex flex-col h-full">
         <div class="flex bg-gray-200">
             <div id="room" class="p-2 font-bold w-60 flex items-center">
                 🍃 {title}
@@ -286,63 +282,61 @@
                 </ul>
             </div>
         </div>
-        <div class="flex flex-col">
-            <div class="flex flex-1">
-                <div class="flex flex-col bg-gray-300 w-60 h-screen">
-                    <div class="flex flex-col overflow-y-auto" id="docs">
-                        {#each pages as page, i}
-                            {#if page
-                                .get("title")
-                                .toString()
-                                .toLowerCase()
-                                .includes(searchTerm.toLowerCase())}
-                                <div
-                                    class="border-b border-gray-400 flex hover:bg-gray-400
+        <div class="flex flex-1 overflow-y-hidden">
+            <div class="flex flex-col bg-gray-300 w-60">
+                <div
+                    class="flex flex-col overflow-y-auto overflow-x-hidden"
+                    id="docs"
+                >
+                    {#each pages as page, i}
+                        {#if page
+                            .get("title")
+                            .toString()
+                            .toLowerCase()
+                            .includes(searchTerm.toLowerCase())}
+                            <div
+                                class="border-b border-gray-400 flex hover:bg-gray-400
                                 {currentPage == page
-                                        ? 'bg-gray-500 hover:bg-gray-500'
-                                        : ''} cursor-pointer"
-                                    data-id={i}
-                                    on:click={openPage(page)}
-                                >
-                                    <div class="flex-grow p-2">
-                                        {page.get("title").toString()}
-                                    </div>
-                                    {#if currentPage == page}
-                                        <div
-                                            class="p-2 hover:bg-red-500"
-                                            on:click={deletePage(page)}
-                                        >
-                                            ×
-                                        </div>
-                                    {/if}
+                                    ? 'bg-gray-500 hover:bg-gray-500'
+                                    : ''} cursor-pointer"
+                                data-id={i}
+                                on:click={openPage(page)}
+                            >
+                                <div class="flex-grow p-2">
+                                    {page.get("title").toString()}
                                 </div>
-                            {/if}
-                        {/each}
-                    </div>
-                    <div
-                        class="p-2 hover:bg-blue-400 text-center cursor-pointer"
-                        on:click={addPage}
-                    >
-                        ➕ Add page
-                    </div>
-                    <div class="flex-1" />
+                                {#if currentPage == page}
+                                    <div
+                                        class="p-2 hover:bg-red-500"
+                                        on:click={deletePage(page)}
+                                    >
+                                        ×
+                                    </div>
+                                {/if}
+                            </div>
+                        {/if}
+                    {/each}
                 </div>
-                <div class="w-full flex flex-col">
-                    {#if currentPage}
-                        <div id="title">
-                            <Editor
-                                ytext={currentPage.get("title")}
-                                {awareness}
-                            />
-                        </div>
-                        <div id="content" class="flex-grow">
-                            <Editor
-                                ytext={currentPage.get("content")}
-                                {awareness}
-                            />
-                        </div>
-                    {/if}
+                <div
+                    class="p-2 hover:bg-blue-400 text-center cursor-pointer"
+                    on:click={addPage}
+                >
+                    ➕ Add page
                 </div>
+                <div class="flex-1" />
+            </div>
+            <div class="w-full flex flex-col">
+                {#if currentPage}
+                    <div id="title">
+                        <Editor ytext={currentPage.get("title")} {awareness} />
+                    </div>
+                    <div id="content" class="flex-grow">
+                        <Editor
+                            ytext={currentPage.get("content")}
+                            {awareness}
+                        />
+                    </div>
+                {/if}
             </div>
         </div>
     </div>
