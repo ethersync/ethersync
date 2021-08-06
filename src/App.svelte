@@ -18,13 +18,14 @@
     import {saveAs} from "file-saver"
 
     import * as Y from "yjs"
-    import {WebrtcProvider} from "y-webrtc"
+    import {WebsocketProvider} from "y-websocket"
     import {IndexeddbPersistence} from "y-indexeddb"
 
     let ydoc, ypages, persistence, pages
 
     let provider, awareness
     let awarenessStates = []
+    let connectionStatus = "unknown"
 
     function updatePages() {
         pages = ypages.toArray().sort(function (first, second) {
@@ -56,12 +57,13 @@
             provider.disconnect()
             provider.destroy()
         }
-        provider = new WebrtcProvider(`etherwiki-${title}`, ydoc, {
-            signaling: [
-                "wss://signaling.yjs.dev",
-                "wss://y-webrtc-signaling-eu.herokuapp.com",
-                "wss://y-webrtc-signaling-us.herokuapp.com",
-            ],
+        provider = new WebsocketProvider(
+            location.origin.replace(/^http/, "ws"),
+            `${title}`,
+            ydoc,
+        )
+        provider.on("status", (event) => {
+            connectionStatus = event.status
         })
         awareness = provider.awareness
 
@@ -228,11 +230,17 @@
             </div>
             <div class="dropdown relative flex">
                 <div
-                    class="bg-gray-300 text-gray-700 font-semibold py-2 px-4 place-items-end items-center flex w-60"
+                    class="{connectionStatus == 'connected'
+                        ? 'bg-gray-300'
+                        : 'bg-red-300'} text-gray-700 font-semibold py-2 px-4 place-items-end items-center flex w-60"
                 >
-                    <span class="mr-1" id="connection-status"
-                        >{awarenessStates.length} connected</span
-                    >
+                    <span class="mr-1">
+                        {#if connectionStatus == "connected"}
+                            {awarenessStates.length} connected
+                        {:else}
+                            {connectionStatus}
+                        {/if}
+                    </span>
                 </div>
                 <ul
                     class="dropdown-menu absolute top-12 hidden z-10 text-gray-700 pt-1 bg-gray-100 w-60"

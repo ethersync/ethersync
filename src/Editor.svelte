@@ -9,7 +9,6 @@
 
     let editor
     export let ytext, awareness
-    export let requestSelectTitle = false
 
     let quill
     $: if (editor) {
