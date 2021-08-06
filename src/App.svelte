@@ -202,7 +202,7 @@
 
 {#if title}
     <div class="flex flex-col h-full">
-        <div class="flex bg-gray-200">
+        <div class="flex flex-wrap bg-gray-200">
             <div id="room" class="p-2 font-bold w-60 flex items-center">
                 🍃 {title}
             </div>
@@ -282,8 +282,10 @@
                 </ul>
             </div>
         </div>
-        <div class="flex flex-1 overflow-y-hidden">
-            <div class="flex flex-col bg-gray-300 w-60">
+        <div class="flex flex-1 flex-col sm:flex-row overflow-y-hidden">
+            <div
+                class="flex flex-col bg-gray-300 h-40 sm:h-auto sm:w-60 sm:max"
+            >
                 <div
                     class="flex flex-col overflow-y-auto overflow-x-hidden"
                     id="docs"
@@ -323,9 +325,8 @@
                 >
                     ➕ Add page
                 </div>
-                <div class="flex-1" />
             </div>
-            <div class="w-full flex flex-col">
+            <div class="flex flex-col flex-1">
                 {#if currentPage}
                     <div id="title">
                         <Editor ytext={currentPage.get("title")} {awareness} />
