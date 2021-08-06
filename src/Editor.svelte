@@ -43,4 +43,15 @@
         type="text/css"
         href="https://cdn.quilljs.com/1.3.6/quill.snow.css"
     />
+    <link
+        href="https://pvinis.github.io/iosevka-webfont/3.4.1/iosevka.css"
+        rel="stylesheet"
+    />
 </svelte:head>
+
+<style>
+    .editor {
+        font-family: "Iosevka Web" !important;
+        font-size: 105%;
+    }
+</style>
