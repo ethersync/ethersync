@@ -170,6 +170,8 @@
         files = null
     }
 
+    let searchTerm = ""
+
     function exportZip() {
         var zip = new JSZip()
         for (const doc of ypages) {
@@ -208,7 +210,12 @@
             <div id="room" class="p-2 font-bold w-60 flex items-center">
                 🍃 {title}
             </div>
-            <!--<input id="search" placeholder="Search..." class="m-2 px-3 py-1 w-60">-->
+            <input
+                type="search"
+                class="m-2 px-3 py-1 w-60"
+                bind:value={searchTerm}
+                placeholder="Filter..."
+            />
             <div class="flex-1" />
             <div
                 class="p-2 cursor-pointer hover:bg-gray-500 text-center flex items-center"
@@ -284,26 +291,32 @@
                 <div class="flex flex-col bg-gray-300 w-60 h-screen">
                     <div class="flex flex-col overflow-y-auto" id="docs">
                         {#each pages as page, i}
-                            <div
-                                class="border-b border-gray-400 flex hover:bg-gray-400
+                            {#if page
+                                .get("title")
+                                .toString()
+                                .toLowerCase()
+                                .includes(searchTerm.toLowerCase())}
+                                <div
+                                    class="border-b border-gray-400 flex hover:bg-gray-400
                                 {currentPage == page
-                                    ? 'bg-gray-500 hover:bg-gray-500'
-                                    : ''} cursor-pointer"
-                                data-id={i}
-                                on:click={openPage(page)}
-                            >
-                                <div class="flex-grow p-2">
-                                    {page.get("title").toString()}
-                                </div>
-                                {#if currentPage == page}
-                                    <div
-                                        class="p-2 hover:bg-red-500"
-                                        on:click={deletePage(page)}
-                                    >
-                                        ×
+                                        ? 'bg-gray-500 hover:bg-gray-500'
+                                        : ''} cursor-pointer"
+                                    data-id={i}
+                                    on:click={openPage(page)}
+                                >
+                                    <div class="flex-grow p-2">
+                                        {page.get("title").toString()}
                                     </div>
-                                {/if}
-                            </div>
+                                    {#if currentPage == page}
+                                        <div
+                                            class="p-2 hover:bg-red-500"
+                                            on:click={deletePage(page)}
+                                        >
+                                            ×
+                                        </div>
+                                    {/if}
+                                </div>
+                            {/if}
                         {/each}
                     </div>
                     <div
