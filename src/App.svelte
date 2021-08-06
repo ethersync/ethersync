@@ -16,6 +16,7 @@
 
     import JSZip from "jszip"
     import {saveAs} from "file-saver"
+    import sanitize from "sanitize-filename"
 
     import * as Y from "yjs"
     import {WebsocketProvider} from "y-websocket"
@@ -172,7 +173,18 @@
     function exportZip() {
         var zip = new JSZip()
         for (const doc of ypages) {
-            const title = doc.get("title").toString()
+            const originalTitle = doc.get("title").toString()
+            let title = sanitize(originalTitle)
+            if (title == "") {
+                const hashCode = (s) =>
+                    s
+                        .split("")
+                        .reduce(
+                            (a, b) => ((a << 5) - a + b.charCodeAt(0)) | 0,
+                            0,
+                        )
+                title = "invalid_title_" + hashCode(originalTitle) // Quick hack. :/
+            }
             const content = doc.get("content").toString()
             zip.file(title, content)
         }

@@ -24,6 +24,7 @@
     "lodash.debounce": "^4.0.8",
     "quill": "^1.3.7",
     "quill-cursors": "^3.1.0",
+    "sanitize-filename": "^1.6.3",
     "serve-handler": "^6.1.3",
     "simple-git": "^2.42.0",
     "sirv-cli": "^1.0.0",

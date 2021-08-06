@@ -10,6 +10,7 @@ const map = require('lib0/dist/map.cjs')
 const fs = require('fs-extra')
 const simpleGit = require('simple-git')
 const debounce = require('lodash.debounce')
+const sanitize = require('sanitize-filename')
 
 const callbackHandler = require('./callback.js').callbackHandler
 const isCallbackSet = require('./callback.js').isCallbackSet
@@ -65,7 +66,7 @@ const updateHandler = (update, origin, doc) => {
     doc.conns.forEach((_, conn) => send(doc, conn, message))
 
     if (!doc.backupFunction) {
-        doc.backupFunction = debounce(backupWiki, 60 * 1000, { maxWait: 10 * 60 * 1000 })
+        doc.backupFunction = debounce(backupWiki, 1000, { maxWait: 10 * 60 * 1000 })
     }
     doc.backupFunction(doc)
 }
@@ -83,7 +84,12 @@ const backupWiki = (ydoc) => {
         }
     }
     for (const doc of pages) {
-        const title = doc.get('title').toString().split("\n")[0]
+        let originalTitle = doc.get('title').toString().split("\n")[0]
+        let title = sanitize(originalTitle)
+        if (title == "") {
+            const hashCode = s => s.split('').reduce((a, b) => (((a << 5) - a) + b.charCodeAt(0)) | 0, 0)
+            title = "invalid_title_" + hashCode(originalTitle) // Quick hack. :/
+        }
         const content = doc.get('content').toString()
         fs.outputFileSync(backupDir + title, content)
     }
