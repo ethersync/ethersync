@@ -66,7 +66,7 @@ const updateHandler = (update, origin, doc) => {
     doc.conns.forEach((_, conn) => send(doc, conn, message))
 
     if (!doc.backupFunction) {
-        doc.backupFunction = debounce(backupWiki, 1000, { maxWait: 10 * 60 * 1000 })
+        doc.backupFunction = debounce(backupWiki, 60 * 1000, { maxWait: 10 * 60 * 1000 })
     }
     doc.backupFunction(doc)
 }
