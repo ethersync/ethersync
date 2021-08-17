@@ -22,7 +22,10 @@
     import {WebsocketProvider} from "y-websocket"
     import {IndexeddbPersistence} from "y-indexeddb"
 
-    let ydoc, ypages, persistence, pages
+    let ydoc,
+        ypages,
+        persistence,
+        pages = []
 
     let provider, awareness
     let awarenessStates = []
@@ -87,13 +90,11 @@
 
         ypages.push([ypage])
 
+        searchTerm = ""
         currentPage = ypage
     }
 
     let currentPage = null
-    const openPage = (page) => {
-        currentPage = page
-    }
 
     /*
     $: if (currentPage) {
@@ -172,6 +173,28 @@
 
     let searchTerm = ""
 
+    $: if (searchTerm.length > 0) {
+        let matchingPages = [...pages]
+            .sort(
+                (a, b) =>
+                    a.get("title").toString().length -
+                    b.get("title").toString().length,
+            )
+            .filter((p) =>
+                p
+                    .get("title")
+                    .toString()
+                    .toLowerCase()
+                    .includes(searchTerm.toLowerCase()),
+            )
+        if (matchingPages.length > 0) {
+            let targetPage = matchingPages[0]
+            if (targetPage != currentPage) {
+                currentPage = targetPage
+            }
+        }
+    }
+
     function exportZip() {
         var zip = new JSZip()
         for (const doc of ypages) {
@@ -210,8 +233,14 @@
                 type="search"
                 class="m-2 px-3 py-1 w-60"
                 bind:value={searchTerm}
-                placeholder="Filter..."
+                placeholder="Find page..."
+                list="pages"
             />
+            <datalist id="pages">
+                {#each pages as page}
+                    <option>{page.get("title").toString()}</option>
+                {/each}
+            </datalist>
             <div class="flex-1" />
             <div
                 class="p-2 cursor-pointer hover:bg-gray-500 text-center flex items-center"
@@ -242,6 +271,12 @@
                 on:click={deleteAll}
             >
                 💣 Delete all
+            </div>
+            <div
+                class="p-2 hover:bg-blue-400 text-center cursor-pointer flex items-center"
+                on:click={addPage}
+            >
+                ➕ Add page
             </div>
             <div class="dropdown relative flex">
                 <div
@@ -282,63 +317,15 @@
                 </ul>
             </div>
         </div>
-        <div class="flex flex-1 flex-col sm:flex-row overflow-y-hidden">
-            <div
-                class="flex flex-col bg-gray-300 h-40 sm:h-auto sm:w-60 sm:max"
-            >
-                <div
-                    class="flex flex-col overflow-y-auto overflow-x-hidden"
-                    id="docs"
-                >
-                    {#each pages as page, i}
-                        {#if page
-                            .get("title")
-                            .toString()
-                            .toLowerCase()
-                            .includes(searchTerm.toLowerCase())}
-                            <div
-                                class="border-b border-gray-400 flex hover:bg-gray-400
-                                {currentPage == page
-                                    ? 'bg-gray-500 hover:bg-gray-500'
-                                    : ''} cursor-pointer"
-                                data-id={i}
-                                on:click={openPage(page)}
-                            >
-                                <div class="flex-grow p-2">
-                                    {page.get("title").toString()}
-                                </div>
-                                {#if currentPage == page}
-                                    <div
-                                        class="p-2 hover:bg-red-500"
-                                        on:click={deletePage(page)}
-                                    >
-                                        ×
-                                    </div>
-                                {/if}
-                            </div>
-                        {/if}
-                    {/each}
+        <div class="flex flex-col flex-1">
+            {#if currentPage}
+                <div id="title">
+                    <Editor ytext={currentPage.get("title")} {awareness} />
                 </div>
-                <div
-                    class="p-2 hover:bg-blue-400 text-center cursor-pointer"
-                    on:click={addPage}
-                >
-                    ➕ Add page
+                <div id="content" class="flex-grow">
+                    <Editor ytext={currentPage.get("content")} {awareness} />
                 </div>
-            </div>
-            <div class="flex flex-col flex-1">
-                {#if currentPage}
-                    <div id="title">
-                        <Editor ytext={currentPage.get("title")} {awareness} />
-                    </div>
-                    <div id="content" class="flex-grow">
-                        <Editor
-                            ytext={currentPage.get("content")}
-                            {awareness}
-                        />
-                    </div>
-                {/if}
-            </div>
+            {/if}
         </div>
     </div>
 {:else}
