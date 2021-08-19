@@ -228,7 +228,10 @@
 </script>
 
 <svelte:head>
-    <title>{title}</title>
+    <title>
+        {currentPage ? currentPage.get("title").toString() + " – " : ""}
+        {title ? title : "EtherWiki"}
+    </title>
 </svelte:head>
 
 {#if title}
