@@ -35,7 +35,9 @@
     let connectionStatus = "unknown"
 
     onMount(() => {
-        searchInput.focus()
+        if (searchInput) {
+            searchInput.focus()
+        }
     })
 
     function updatePages() {
@@ -122,7 +124,7 @@
     }
 
     const deleteAll = () => {
-        if (confirm(`Really delete all pages?`)) {
+        if (confirm(`Really delete all pages in the '${title}' wiki?`)) {
             currentPage = null
             ypages.delete(0, ypages.length)
         }
