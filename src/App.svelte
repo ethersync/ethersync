@@ -226,7 +226,7 @@
 {#if title}
     <div class="flex flex-col h-full">
         <div class="flex flex-wrap bg-gray-200">
-            <div id="room" class="p-2 font-bold w-60 flex items-center">
+            <div id="room" class="p-2 font-bold flex items-center">
                 🍃 {title}
             </div>
             <input
@@ -241,16 +241,24 @@
                     <option>{page.get("title").toString()}</option>
                 {/each}
             </datalist>
+            <div
+                class="p-2 hover:bg-gray-500 text-center cursor-pointer flex items-center"
+                on:click={addPage}
+                title="Add page"
+            >
+                ➕
+            </div>
             <div class="flex-1" />
             <div
                 class="p-2 cursor-pointer hover:bg-gray-500 text-center flex items-center"
                 on:click={exportZip}
+                title="Export zip"
             >
-                📥 Export zip
+                📥
             </div>
             <div
                 style="display: grid;"
-                class="hover:bg-gray-500 hover:cursor-pointer w-40"
+                class="hover:bg-gray-500 hover:cursor-pointer w-10"
             >
                 <input
                     type="file"
@@ -262,27 +270,22 @@
                 <span
                     style="grid-column: 1; grid-row: 1;"
                     class="p-2 text-center flex items-center justify-center"
-                    >📤 Upload files</span
+                    title="Upload files">📤</span
                 >
             </div>
             <div
                 id="delete-all"
                 class="p-2 cursor-pointer hover:bg-gray-500 text-center flex items-center"
                 on:click={deleteAll}
+                title="Delete all"
             >
-                💣 Delete all
-            </div>
-            <div
-                class="p-2 hover:bg-blue-400 text-center cursor-pointer flex items-center"
-                on:click={addPage}
-            >
-                ➕ Add page
+                💣
             </div>
             <div class="dropdown relative flex">
                 <div
                     class="{connectionStatus == 'connected'
                         ? 'bg-gray-300'
-                        : 'bg-red-300'} text-gray-700 font-semibold py-2 px-4 place-items-end items-center flex w-60"
+                        : 'bg-red-300'} text-gray-700 font-semibold py-2 px-4 place-items-end items-center flex w-40"
                 >
                     <span class="mr-1">
                         {#if connectionStatus == "connected"}
@@ -293,7 +296,7 @@
                     </span>
                 </div>
                 <ul
-                    class="dropdown-menu absolute top-12 hidden z-10 text-gray-700 pt-1 bg-gray-100 w-60"
+                    class="dropdown-menu absolute top-12 hidden z-10 text-gray-700 pt-1 bg-gray-100 w-40"
                 >
                     <div id="users">
                         {#each awarenessStates as [id, state]}
@@ -324,7 +327,7 @@
                         <Editor ytext={currentPage.get("title")} {awareness} />
                     </div>
                     <div
-                        class="p-2 hover:bg-red-500"
+                        class="p-2 hover:bg-red-500 flex text-center items-center"
                         on:click={deletePage(currentPage)}
                     >
                         🗑️
