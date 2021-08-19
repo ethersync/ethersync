@@ -239,7 +239,7 @@
 {#if title}
     <div class="flex flex-col h-full">
         <div class="flex flex-wrap bg-gray-200">
-            <div id="room" class="p-2 font-bold flex items-center">
+            <div id="room" class="p-2 font-bold flex items-center text-lg">
                 🍃 {title}
             </div>
             <input
@@ -354,7 +354,7 @@
                         🗑️
                     </div>
                 </div>
-                <div id="content" class="flex-grow">
+                <div class="flex-grow h-40">
                     <Editor ytext={currentPage.get("content")} {awareness} />
                 </div>
             {/if}
@@ -379,15 +379,6 @@
 {/if}
 
 <style>
-    #room,
-    #title {
-        height: 2.9em;
-        font-size: 1.1rem;
-    }
-    #content {
-        font-family: monospace;
-        height: 10em;
-    }
     input[type="file"] {
         opacity: 0.01;
     }
