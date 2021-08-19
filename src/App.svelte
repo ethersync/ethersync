@@ -319,8 +319,16 @@
         </div>
         <div class="flex flex-col flex-1">
             {#if currentPage}
-                <div id="title">
-                    <Editor ytext={currentPage.get("title")} {awareness} />
+                <div class="flex border-b border-gray-300">
+                    <div id="title" class="flex-grow">
+                        <Editor ytext={currentPage.get("title")} {awareness} />
+                    </div>
+                    <div
+                        class="p-2 hover:bg-red-500"
+                        on:click={deletePage(currentPage)}
+                    >
+                        🗑️
+                    </div>
                 </div>
                 <div id="content" class="flex-grow">
                     <Editor ytext={currentPage.get("content")} {awareness} />
@@ -347,12 +355,9 @@
 {/if}
 
 <style>
-    #title {
-        border-bottom: 1px solid lightgray;
-    }
     #room,
     #title {
-        height: 2.8em;
+        height: 2.9em;
         font-size: 1.1rem;
     }
     #content {
