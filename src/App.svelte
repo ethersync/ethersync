@@ -13,6 +13,9 @@
     }
 
     import Editor from "./Editor.svelte"
+    import {onMount} from "svelte"
+
+    import {shortcut} from "./shortcut.js"
 
     import JSZip from "jszip"
     import {saveAs} from "file-saver"
@@ -30,6 +33,10 @@
     let provider, awareness
     let awarenessStates = []
     let connectionStatus = "unknown"
+
+    onMount(() => {
+        searchInput.focus()
+    })
 
     function updatePages() {
         pages = ypages.toArray().sort(function (first, second) {
@@ -171,6 +178,7 @@
         files = null
     }
 
+    let searchInput
     let searchTerm = ""
 
     $: if (searchTerm.length > 0) {
@@ -233,6 +241,14 @@
                 type="search"
                 class="m-2 px-3 py-1 w-60"
                 bind:value={searchTerm}
+                bind:this={searchInput}
+                use:shortcut={{
+                    control: true,
+                    code: "KeyK",
+                    callback: () => {
+                        searchInput.select()
+                    },
+                }}
                 placeholder="Find page..."
                 list="pages"
             />

@@ -1,5 +1,6 @@
 <script>
     import {onMount} from "svelte"
+    import {shortcut} from "./shortcut.js"
 
     import {QuillBinding} from "y-quill"
     import Quill from "quill"
@@ -35,7 +36,14 @@
     }
 </script>
 
-<div class="editor" bind:this={editor} />
+<div
+    class="editor"
+    bind:this={editor}
+    use:shortcut={{
+        code: "End",
+        callback: () => quill.setSelection(quill.getLength(), 0),
+    }}
+/>
 
 <svelte:head>
     <link
