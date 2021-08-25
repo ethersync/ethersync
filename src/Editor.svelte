@@ -1,41 +1,91 @@
 <script>
-    import {onMount} from "svelte"
+    import * as Y from "yjs"
+
+    import {onMount, createEventDispatcher} from "svelte"
     import {shortcut} from "./shortcut.js"
 
-    import {QuillBinding} from "y-quill"
-    import Quill from "quill"
-    import QuillCursors from "quill-cursors"
+    import {CodemirrorBinding} from "y-codemirror"
+    import CodeMirror from "codemirror"
 
-    Quill.register("modules/cursors", QuillCursors)
+    const dispatch = createEventDispatcher()
 
-    let editor
-    export let ytext, awareness
+    let editorDiv, editor, yUndoManager, binding
+    export let ytext,
+        awareness,
+        pages = []
 
-    let quill
-    $: if (editor) {
-        quill = new Quill(editor, {
-            modules: {
-                cursors: true,
-                toolbar: false,
-                history: {
-                    userOnly: true,
-                },
+    function linkOverlay() {
+        if (pages === []) {
+            return
+        }
+
+        const query = new RegExp(pages.join("|"), "gi")
+
+        return {
+            token: function (stream) {
+                query.lastIndex = stream.pos
+                var match = query.exec(stream.string)
+                if (match && match.index == stream.pos) {
+                    stream.pos += match[0].length || 1
+                    return "link"
+                } else if (match) {
+                    stream.pos = match.index
+                } else {
+                    stream.skipToEnd()
+                }
             },
-            formats: [],
-        })
-        quill.root.setAttribute("spellcheck", false)
-        const binding = new QuillBinding(ytext, quill, awareness)
-
-        // See https://github.com/quilljs/quill/issues/3240
-        applyGoogleKeyboardWorkaround(quill)
-
-        if (quill.getText() == "New Page\n") {
-            selectAll()
         }
     }
 
-    function selectAll() {
-        quill.setSelection(0, quill.getLength())
+    function urlOverlay() {
+        const query = new RegExp(
+            "https?://(www.)?[-a-zA-Z0-9@:%._+~#=]{1,256}.[a-zA-Z0-9()]{1,6}\b([-a-zA-Z0-9()@:%_+.~#?&//=]*)",
+        )
+
+        return {
+            token: function (stream) {
+                query.lastIndex = stream.pos
+                var match = query.exec(stream.string)
+                if (match && match.index == stream.pos) {
+                    stream.pos += match[0].length || 1
+                    return "url"
+                } else if (match) {
+                    stream.pos = match.index
+                } else {
+                    stream.skipToEnd()
+                }
+            },
+        }
+    }
+
+    $: if (editorDiv) {
+        if (binding) {
+            binding.destroy()
+        }
+
+        if (editor) {
+            editor.getWrapperElement().remove()
+        }
+
+        editor = CodeMirror(editorDiv, {
+            lineNumbers: true,
+            flattenSpans: false,
+        })
+        editor.addOverlay(linkOverlay())
+        editor.addOverlay(urlOverlay())
+
+        editor.getWrapperElement().addEventListener("mousedown", (e) => {
+            if (e.which == 1 && e.target.classList.contains("cm-link")) {
+                let title = e.target.innerHTML
+                dispatch("openPage", {title})
+            }
+        })
+
+        yUndoManager = new Y.UndoManager(ytext)
+
+        binding = new CodemirrorBinding(ytext, editor, awareness, {
+            yUndoManager,
+        })
     }
 
     function currentDate() {
@@ -93,7 +143,7 @@
 
 <div
     class="editor"
-    bind:this={editor}
+    bind:this={editorDiv}
     use:shortcut={{
         code: "End",
         callback: () => {
@@ -112,13 +162,14 @@
 
 <svelte:head>
     <link
-        rel="stylesheet"
-        type="text/css"
-        href="https://cdn.quilljs.com/1.3.6/quill.snow.css"
-    />
-    <link
         href="https://pvinis.github.io/iosevka-webfont/3.4.1/iosevka.css"
         rel="stylesheet"
+    />
+    <link
+        rel="stylesheet"
+        href="https://codemirror.net/lib/codemirror.css"
+        async
+        defer
     />
 </svelte:head>
 
@@ -126,5 +177,15 @@
     .editor {
         font-family: "Iosevka Web" !important;
         font-size: 105%;
+    }
+    .CodeMirror {
+        height: 100%;
+    }
+    :global(.cm-link),
+    :global(.cm-url) {
+        cursor: pointer;
+        font-weight: bold;
+        color: darkblue !important;
+        text-decoration: none !important;
     }
 </style>

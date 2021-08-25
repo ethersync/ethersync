@@ -205,6 +205,18 @@
         }
     }
 
+    const openPage = (event) => {
+        for (const doc of ypages) {
+            if (
+                doc.get("title").toString().toLowerCase() ===
+                event.detail.title.toLowerCase()
+            ) {
+                currentPage = doc
+                searchTerm = ""
+            }
+        }
+    }
+
     function exportZip() {
         var zip = new JSZip()
         for (const doc of ypages) {
@@ -354,8 +366,13 @@
                         🗑️
                     </div>
                 </div>
-                <div class="flex-grow h-40">
-                    <Editor ytext={currentPage.get("content")} {awareness} />
+                <div class="flex-grow">
+                    <Editor
+                        ytext={currentPage.get("content")}
+                        {awareness}
+                        pages={pages.map((p) => p.get("title").toString())}
+                        on:openPage={openPage}
+                    />
                 </div>
             {/if}
         </div>
