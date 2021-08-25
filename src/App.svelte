@@ -356,7 +356,7 @@
         <div class="flex flex-col flex-1">
             {#if currentPage}
                 <div class="flex border-b border-gray-300">
-                    <div id="title" class="flex-grow">
+                    <div id="title" class="flex-grow flex flex-col">
                         <Editor ytext={currentPage.get("title")} {awareness} />
                     </div>
                     <div
@@ -366,7 +366,7 @@
                         🗑️
                     </div>
                 </div>
-                <div class="flex-grow">
+                <div class="flex-grow flex flex-col">
                     <Editor
                         ytext={currentPage.get("content")}
                         {awareness}

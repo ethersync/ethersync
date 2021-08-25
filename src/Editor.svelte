@@ -10,15 +10,9 @@
     const dispatch = createEventDispatcher()
 
     let editorDiv, editor, yUndoManager, binding
-    export let ytext,
-        awareness,
-        pages = []
+    export let ytext, awareness, pages
 
     function linkOverlay() {
-        if (pages === []) {
-            return
-        }
-
         const query = new RegExp(pages.join("|"), "gi")
 
         return {
@@ -38,9 +32,7 @@
     }
 
     function urlOverlay() {
-        const query = new RegExp(
-            "https?://(www.)?[-a-zA-Z0-9@:%._+~#=]{1,256}.[a-zA-Z0-9()]{1,6}\b([-a-zA-Z0-9()@:%_+.~#?&//=]*)",
-        )
+        const query = /\b(https?:\/\/\S*\b)/g
 
         return {
             token: function (stream) {
@@ -70,14 +62,24 @@
         editor = CodeMirror(editorDiv, {
             lineNumbers: true,
             flattenSpans: false,
+            lineWrapping: true,
         })
-        editor.addOverlay(linkOverlay())
-        editor.addOverlay(urlOverlay())
+
+        if (pages) {
+            editor.addOverlay(urlOverlay())
+            editor.addOverlay(linkOverlay())
+        }
 
         editor.getWrapperElement().addEventListener("mousedown", (e) => {
-            if (e.which == 1 && e.target.classList.contains("cm-link")) {
-                let title = e.target.innerHTML
-                dispatch("openPage", {title})
+            if (e.which == 1) {
+                if (e.target.classList.contains("cm-link")) {
+                    let title = e.target.innerHTML
+                    dispatch("openPage", {title})
+                }
+                if (e.target.classList.contains("cm-url")) {
+                    let url = e.target.innerHTML
+                    window.open(url, "_blank")
+                }
             }
         })
 
@@ -142,7 +144,7 @@
 </script>
 
 <div
-    class="editor"
+    class="editor flex-grow"
     bind:this={editorDiv}
     use:shortcut={{
         code: "End",
@@ -178,8 +180,9 @@
         font-family: "Iosevka Web" !important;
         font-size: 105%;
     }
-    .CodeMirror {
-        height: 100%;
+    :global(.CodeMirror) {
+        height: 100% !important;
+        width: 100% !important;
     }
     :global(.cm-link),
     :global(.cm-url) {
