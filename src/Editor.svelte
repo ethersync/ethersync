@@ -12,7 +12,7 @@
     let editorDiv, editor, yUndoManager, binding
     export let ytext, awareness, pages
 
-    function linkOverlay() {
+    function linkOverlay(pages) {
         const query = new RegExp(pages.join("|"), "gi")
 
         return {
@@ -28,6 +28,7 @@
                     stream.skipToEnd()
                 }
             },
+            name: "links",
         }
     }
 
@@ -51,43 +52,50 @@
     }
 
     $: if (editorDiv) {
-        if (binding) {
-            binding.destroy()
-        }
-
-        if (editor) {
+        /*if (editor) {
             editor.getWrapperElement().remove()
-        }
+        }*/
+        if (!editor) {
+            editor = CodeMirror(editorDiv, {
+                lineNumbers: true,
+                flattenSpans: false,
+                lineWrapping: true,
+            })
 
-        editor = CodeMirror(editorDiv, {
-            lineNumbers: true,
-            flattenSpans: false,
-            lineWrapping: true,
-        })
-
-        if (pages) {
             editor.addOverlay(urlOverlay())
-            editor.addOverlay(linkOverlay())
+
+            editor.getWrapperElement().addEventListener("mousedown", (e) => {
+                if (e.which == 1) {
+                    if (e.target.classList.contains("cm-link")) {
+                        let title = e.target.innerHTML
+                        dispatch("openPage", {title})
+                    }
+                    if (e.target.classList.contains("cm-url")) {
+                        let url = e.target.innerHTML
+                        window.open(url, "_blank")
+                    }
+                }
+            })
         }
 
-        editor.getWrapperElement().addEventListener("mousedown", (e) => {
-            if (e.which == 1) {
-                if (e.target.classList.contains("cm-link")) {
-                    let title = e.target.innerHTML
-                    dispatch("openPage", {title})
-                }
-                if (e.target.classList.contains("cm-url")) {
-                    let url = e.target.innerHTML
-                    window.open(url, "_blank")
-                }
+        if (binding && binding.doc === ytext) {
+            // No need to do anything.
+        } else {
+            if (binding) {
+                console.log("destroy binding")
+                binding.destroy()
             }
-        })
+            yUndoManager = new Y.UndoManager(ytext)
+            binding = new CodemirrorBinding(ytext, editor, awareness, {
+                yUndoManager,
+            })
+        }
+    }
 
-        yUndoManager = new Y.UndoManager(ytext)
-
-        binding = new CodemirrorBinding(ytext, editor, awareness, {
-            yUndoManager,
-        })
+    $: if (editor && pages) {
+        console.log("updating overlay")
+        editor.removeOverlay("links")
+        editor.addOverlay(linkOverlay(pages))
     }
 
     function currentDate() {
@@ -190,5 +198,27 @@
         font-weight: bold;
         color: darkblue !important;
         text-decoration: none !important;
+    }
+    :global(.remote-caret) {
+        position: absolute;
+        border-left: black;
+        border-left-style: solid;
+        border-left-width: 2px;
+        height: 1em;
+    }
+    :global(.remote-caret > div) {
+        position: relative;
+        top: -1.05em;
+        font-size: 13px;
+        background-color: rgb(250, 129, 0);
+        font-family: serif;
+        font-style: normal;
+        font-weight: normal;
+        line-height: normal;
+        user-select: none;
+        color: white;
+        padding-left: 2px;
+        padding-right: 2px;
+        z-index: 3;
     }
 </style>
