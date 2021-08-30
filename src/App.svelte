@@ -259,7 +259,7 @@
 {#if title}
     <div class="flex flex-col h-full">
         <div class="flex flex-wrap bg-gray-200">
-            <div id="room" class="p-2 font-bold flex items-center text-lg">
+            <div class="p-2 font-bold flex items-center text-lg cursor-pointer" on:click={() => {searchTerm = ""; currentPage = null}}>
                 🍃 {title}
             </div>
             <input
@@ -381,6 +381,18 @@
                         {titles}
                         on:openPage={openPage}
                     />
+                </div>
+            {:else}
+                <div class="flex-grow flex flex-col">
+                    {#each titles as title}
+                        <div
+                            class="border-b border-gray-400 flex hover:bg-gray-200
+                                     cursor-pointer p-2"
+                            on:click={() => (searchTerm = title)}
+                        >
+                            {title}
+                        </div>
+                    {/each}
                 </div>
             {/if}
         </div>

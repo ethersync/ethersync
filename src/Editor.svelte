@@ -63,9 +63,6 @@
     }
 
     $: if (editorDiv) {
-        /*if (editor) {
-            editor.getWrapperElement().remove()
-        }*/
         if (!editor) {
             editor = CodeMirror(editorDiv, {
                 lineNumbers: true,
