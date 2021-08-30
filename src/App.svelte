@@ -28,7 +28,8 @@
     let ydoc,
         ypages,
         persistence,
-        pages = []
+        pages = [],
+        titles = []
 
     let provider, awareness
     let awarenessStates = []
@@ -40,7 +41,24 @@
         }
     })
 
-    function updatePages() {
+    function updatePages(events) {
+        let anythingRelevant = false
+        for (let e of events) {
+            if (
+                e instanceof Y.YTextEvent &&
+                e.path[e.path.length - 1] == "content"
+            ) {
+                // This is a page content change, which is not relevant here.
+            } else {
+                anythingRelevant = true
+            }
+        }
+        if (!anythingRelevant) {
+            console.log("update cancelled")
+            return
+        }
+
+        console.log("updating pages")
         pages = ypages.toArray().sort(function (first, second) {
             const nameA = first.get("title").toString().toLowerCase()
             const nameB = second.get("title").toString().toLowerCase()
@@ -52,6 +70,7 @@
             }
             return 0
         })
+        titles = pages.map((p) => p.get("title").toString())
     }
 
     $: if (title) {
@@ -63,7 +82,6 @@
         }
         persistence = new IndexeddbPersistence(title, ydoc)
 
-        pages = ypages.toArray()
         ypages.observeDeep(updatePages)
 
         if (provider) {
@@ -104,16 +122,6 @@
     }
 
     let currentPage = null
-
-    /*
-    $: if (currentPage) {
-        console.log(currentPage)
-        awareness.setLocalStateField(
-            "page",
-            currentPage.get("title").toString(),
-        )
-    }
-    */
 
     let deletePage = (page) => {
         if (confirm(`Really delete '${page.get("title")}'?`)) {
@@ -267,11 +275,11 @@
                     },
                 }}
                 placeholder="Find page..."
-                list="pages"
+                list="titles"
             />
-            <datalist id="pages">
-                {#each pages as page}
-                    <option>{page.get("title").toString()}</option>
+            <datalist id="titles">
+                {#each titles as title}
+                    <option>{title}</option>
                 {/each}
             </datalist>
             <div
@@ -370,7 +378,7 @@
                     <Editor
                         ytext={currentPage.get("content")}
                         {awareness}
-                        pages={pages.map((p) => p.get("title").toString())}
+                        {titles}
                         on:openPage={openPage}
                     />
                 </div>

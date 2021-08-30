@@ -10,10 +10,10 @@
     const dispatch = createEventDispatcher()
 
     let editorDiv, editor, yUndoManager, binding
-    export let ytext, awareness, pages
+    export let ytext, awareness, titles
 
-    function linkOverlay(pages) {
-        const query = new RegExp(pages.join("|"), "gi")
+    function linkOverlay(titles) {
+        const query = new RegExp(titles.join("|"), "gi")
 
         return {
             token: function (stream) {
@@ -92,10 +92,10 @@
         }
     }
 
-    $: if (editor && pages) {
+    $: if (editor && titles) {
         console.log("updating overlay")
         editor.removeOverlay("links")
-        editor.addOverlay(linkOverlay(pages))
+        editor.addOverlay(linkOverlay(titles))
     }
 
     function currentDate() {
