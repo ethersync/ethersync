@@ -254,6 +254,16 @@
         {currentPage ? currentPage.get("title").toString() + " – " : ""}
         {title ? title : "EtherWiki"}
     </title>
+    <link
+        href="https://pvinis.github.io/iosevka-webfont/3.4.1/iosevka.css"
+        rel="stylesheet"
+    />
+    <link
+        rel="stylesheet"
+        href="https://codemirror.net/lib/codemirror.css"
+        async
+        defer
+    />
 </svelte:head>
 
 {#if title}
