@@ -12,8 +12,19 @@
     let editorDiv, editor, yUndoManager, binding
     export let ytext, awareness, titles
 
+    // Via https://stackoverflow.com/questions/3446170/escape-string-for-use-in-javascript-regex
+    function escapeRegex(string) {
+        return string.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") // $& means the whole matched string
+    }
+
     function linkOverlay(titles) {
-        const query = new RegExp(titles.join("|"), "gi")
+        const query = new RegExp(
+            "\\b("+titles.sort((a,b) => b.length - a.length)
+                .filter((t) => t.length > 0)
+                .map((t) => escapeRegex(t))
+                .join("|")+")",
+            "gi",
+        )
 
         return {
             token: function (stream) {
