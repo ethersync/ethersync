@@ -77,13 +77,38 @@
 
             editor.getWrapperElement().addEventListener("mousedown", (e) => {
                 if (e.which == 1) {
-                    if (e.target.classList.contains("cm-link")) {
-                        let title = e.target.innerHTML
-                        dispatch("openPage", {title})
-                    }
                     if (e.target.classList.contains("cm-url")) {
                         let url = e.target.innerHTML
+
+                        // There might be neighboring cm-url spans that belong to this link. Let's go find them!
+                        let scanBack = e.target
+                        do {
+                            scanBack = scanBack.previousSibling
+                            if (
+                                scanBack &&
+                                scanBack.classList &&
+                                scanBack.classList.contains("cm-url")
+                            ) {
+                                url = scanBack.innerHTML + url
+                            }
+                        } while (scanBack)
+
+                        let scanForward = e.target
+                        do {
+                            scanForward = scanForward.nextSibling
+                            if (
+                                scanForward &&
+                                scanForward.classList &&
+                                scanForward.classList.contains("cm-url")
+                            ) {
+                                url = url + scanForward.innerHTML
+                            }
+                        } while (scanForward)
+
                         window.open(url, "_blank")
+                    } else if (e.target.classList.contains("cm-link")) {
+                        let title = e.target.innerHTML
+                        dispatch("openPage", {title})
                     }
                 }
             })
