@@ -91,7 +91,7 @@
         provider = new WebsocketProvider(
             location.origin.replace(/^http/, "ws"),
             `${title}`,
-            ydoc,
+            ydoc
         )
         provider.on("status", (event) => {
             connectionStatus = event.status
@@ -196,14 +196,14 @@
             .sort(
                 (a, b) =>
                     a.get("title").toString().length -
-                    b.get("title").toString().length,
+                    b.get("title").toString().length
             )
             .filter((p) =>
                 p
                     .get("title")
                     .toString()
                     .toLowerCase()
-                    .includes(searchTerm.toLowerCase()),
+                    .includes(searchTerm.toLowerCase())
             )
         if (matchingPages.length > 0) {
             let targetPage = matchingPages[0]
@@ -236,7 +236,7 @@
                         .split("")
                         .reduce(
                             (a, b) => ((a << 5) - a + b.charCodeAt(0)) | 0,
-                            0,
+                            0
                         )
                 title = "invalid_title_" + hashCode(originalTitle) // Quick hack. :/
             }
@@ -269,7 +269,13 @@
 {#if title}
     <div class="flex flex-col h-full">
         <div class="flex flex-wrap bg-gray-200">
-            <div class="p-2 font-bold flex items-center text-lg cursor-pointer" on:click={() => {searchTerm = ""; currentPage = null}}>
+            <div
+                class="p-2 font-bold flex items-center text-lg cursor-pointer"
+                on:click={() => {
+                    searchTerm = ""
+                    currentPage = null
+                }}
+            >
                 🍃 {title}
             </div>
             <input
@@ -371,7 +377,7 @@
                 </ul>
             </div>
         </div>
-        <div class="flex flex-col flex-1">
+        <div class="flex flex-col flex-1 overflow-hidden">
             {#if currentPage}
                 <div class="flex border-b border-gray-300">
                     <div id="title" class="flex-grow flex flex-col">
@@ -384,7 +390,7 @@
                         🗑️
                     </div>
                 </div>
-                <div class="flex-grow flex flex-col">
+                <div class="flex-grow flex flex-col overflow-y-auto">
                     <Editor
                         ytext={currentPage.get("content")}
                         {awareness}
@@ -393,7 +399,7 @@
                     />
                 </div>
             {:else}
-                <div class="flex-grow flex flex-col">
+                <div class="flex-grow flex flex-col flex-wrap overflow-y-auto">
                     {#each titles as title}
                         <div
                             class="border-b border-gray-400 flex hover:bg-gray-200
