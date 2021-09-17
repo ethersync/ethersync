@@ -19,11 +19,14 @@
 
     function linkOverlay(titles) {
         const query = new RegExp(
-            "\\b("+titles.sort((a,b) => b.length - a.length)
-                .filter((t) => t.length > 0)
-                .map((t) => escapeRegex(t))
-                .join("|")+")",
-            "gi",
+            "\\b(" +
+                titles
+                    .sort((a, b) => b.length - a.length)
+                    .filter((t) => t.length > 0)
+                    .map((t) => escapeRegex(t))
+                    .join("|") +
+                ")",
+            "gi"
         )
 
         return {
@@ -97,6 +100,22 @@
             binding = new CodemirrorBinding(ytext, editor, awareness, {
                 yUndoManager,
             })
+
+            const selectOnNewPage = () => {
+                if (editor.getValue() === "New Page") {
+                    editor.doc.setSelection(
+                        {line: 0, ch: 0},
+                        {
+                            line: editor.doc.lastLine(),
+                            ch: editor.doc.getLine(editor.doc.lastLine())
+                                .length,
+                        }
+                    )
+                    editor.focus()
+                }
+            }
+            selectOnNewPage()
+            ytext.observe(selectOnNewPage)
         }
     }
 
@@ -149,7 +168,7 @@
                             console.log("Change selection bad pos")
                             editor.setSelection(
                                 editor.getSelection().index + 1,
-                                0,
+                                0
                             )
                         }
                     }, 30)
@@ -163,16 +182,21 @@
     class="editor flex-grow"
     bind:this={editorDiv}
     use:shortcut={{
+        control: true,
         code: "End",
         callback: () => {
-            quill.setSelection(quill.getLength(), 0)
+            editor.focus()
+            editor.doc.setCursor(
+                editor.doc.lastLine(),
+                editor.doc.getLine(editor.doc.lastLine()).length
+            )
         },
     }}
     use:shortcut={{
         code: "F9",
         callback: () => {
-            if (quill.hasFocus()) {
-                quill.insertText(quill.getSelection(), currentDate())
+            if (editor.hasFocus()) {
+                editor.replaceSelection(currentDate())
             }
         },
     }}
