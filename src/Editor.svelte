@@ -243,19 +243,22 @@
         color: darkblue !important;
         text-decoration: none !important;
     }
+    :global(.remote-caret:hover > div) {
+        visibility: visible;
+    }
     :global(.remote-caret) {
         position: absolute;
         border-left: black;
         border-left-style: solid;
-        border-left-width: 2px;
+        border-left-width: 3px;
         height: 1em;
     }
     :global(.remote-caret > div) {
+        visibility: hidden;
         position: relative;
         top: -1.05em;
         font-size: 13px;
         background-color: rgb(250, 129, 0);
-        font-family: serif;
         font-style: normal;
         font-weight: normal;
         line-height: normal;
