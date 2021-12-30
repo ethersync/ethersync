@@ -125,10 +125,14 @@ const backupWiki = (ydoc) => {
     })
     git.init().then((res) => {
         console.log(res)
-        git.add("./*").then((res) => {
-            console.log(res)
-            git.commit("Automatic commit").then((res) => console.log(res))
-        })
+        git.add("./*")
+            .then((res) => {
+                console.log(res)
+                git.commit("Automatic commit").then((res) => console.log(res))
+            })
+            .catch((error) => {
+                console.log(error)
+            })
     })
 }
 
