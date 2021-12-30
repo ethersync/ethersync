@@ -1,22 +1,24 @@
-const Y = require('yjs')
-const syncProtocol = require('y-protocols/dist/sync.cjs')
-const awarenessProtocol = require('y-protocols/dist/awareness.cjs')
+const Y = require("yjs")
+const syncProtocol = require("y-protocols/dist/sync.cjs")
+const awarenessProtocol = require("y-protocols/dist/awareness.cjs")
 
-const encoding = require('lib0/dist/encoding.cjs')
-const decoding = require('lib0/dist/decoding.cjs')
-const mutex = require('lib0/dist/mutex.cjs')
-const map = require('lib0/dist/map.cjs')
+const encoding = require("lib0/dist/encoding.cjs")
+const decoding = require("lib0/dist/decoding.cjs")
+const mutex = require("lib0/dist/mutex.cjs")
+const map = require("lib0/dist/map.cjs")
 
-const fs = require('fs-extra')
-const simpleGit = require('simple-git')
-const debounce = require('lodash.debounce')
-const sanitize = require('sanitize-filename')
+const fs = require("fs-extra")
+const simpleGit = require("simple-git")
+const debounce = require("lodash.debounce")
+const sanitize = require("sanitize-filename")
 
-const callbackHandler = require('./callback.js').callbackHandler
-const isCallbackSet = require('./callback.js').isCallbackSet
+const callbackHandler = require("./callback.js").callbackHandler
+const isCallbackSet = require("./callback.js").isCallbackSet
 
-const CALLBACK_DEBOUNCE_WAIT = parseInt(process.env.CALLBACK_DEBOUNCE_WAIT) || 2000
-const CALLBACK_DEBOUNCE_MAXWAIT = parseInt(process.env.CALLBACK_DEBOUNCE_MAXWAIT) || 10000
+const CALLBACK_DEBOUNCE_WAIT =
+    parseInt(process.env.CALLBACK_DEBOUNCE_WAIT) || 2000
+const CALLBACK_DEBOUNCE_MAXWAIT =
+    parseInt(process.env.CALLBACK_DEBOUNCE_MAXWAIT) || 10000
 
 const wsReadyStateConnecting = 0
 const wsReadyStateOpen = 1
@@ -24,13 +26,13 @@ const wsReadyStateClosing = 2 // eslint-disable-line
 const wsReadyStateClosed = 3 // eslint-disable-line
 
 // disable gc when using snapshots!
-const gcEnabled = process.env.GC !== 'false' && process.env.GC !== '0'
+const gcEnabled = process.env.GC !== "false" && process.env.GC !== "0"
 const persistenceDir = "persistence"
 
 let persistence = null
-if (typeof persistenceDir === 'string') {
+if (typeof persistenceDir === "string") {
     console.info('Persisting documents to "' + persistenceDir + '"')
-    const LeveldbPersistence = require('y-leveldb').LeveldbPersistence
+    const LeveldbPersistence = require("y-leveldb").LeveldbPersistence
     const ldb = new LeveldbPersistence(persistenceDir)
     persistence = {
         provider: ldb,
@@ -39,11 +41,11 @@ if (typeof persistenceDir === 'string') {
             const newUpdates = Y.encodeStateAsUpdate(ydoc)
             ldb.storeUpdate(docName, newUpdates)
             Y.applyUpdate(ydoc, Y.encodeStateAsUpdate(persistedYdoc))
-            ydoc.on('update', update => {
+            ydoc.on("update", (update) => {
                 ldb.storeUpdate(docName, update)
             })
         },
-        writeState: async (docName, ydoc) => { }
+        writeState: async (docName, ydoc) => {},
     }
 }
 
@@ -51,14 +53,14 @@ if (typeof persistenceDir === 'string') {
  * @param {{bindState: function(string,WSSharedDoc):void,
  * writeState:function(string,WSSharedDoc):Promise<any>,provider:any}|null} persistence_
  */
-exports.setPersistence = persistence_ => {
+exports.setPersistence = (persistence_) => {
     persistence = persistence_
 }
 
 /**
  * @return {null|{bindState: function(string,WSSharedDoc):void,
-  * writeState:function(string,WSSharedDoc):Promise<any>}|null} used persistence layer
-  */
+ * writeState:function(string,WSSharedDoc):Promise<any>}|null} used persistence layer
+ */
 exports.getPersistence = () => persistence
 
 /**
@@ -85,15 +87,17 @@ const updateHandler = (update, origin, doc) => {
     doc.conns.forEach((_, conn) => send(doc, conn, message))
 
     if (!doc.backupFunction) {
-        doc.backupFunction = debounce(backupWiki, 60 * 1000, { maxWait: 10 * 60 * 1000 })
+        doc.backupFunction = debounce(backupWiki, 5 * 60 * 1000, {
+            maxWait: 10 * 60 * 1000,
+        })
     }
     doc.backupFunction(doc)
 }
 
 const backupWiki = (ydoc) => {
     const wiki = ydoc.name
-    console.log('backup ' + wiki)
-    const pages = ydoc.getArray('pages')
+    console.log("backup " + wiki)
+    const pages = ydoc.getArray("pages")
     const backupDir = `./backups/${wiki}/`
     fs.ensureDirSync(backupDir)
     const files = fs.readdirSync(backupDir)
@@ -103,17 +107,29 @@ const backupWiki = (ydoc) => {
         }
     }
     for (const doc of pages) {
-        let originalTitle = doc.get('title').toString().split("\n")[0]
+        let originalTitle = doc.get("title").toString().split("\n")[0]
         let title = sanitize(originalTitle)
         if (title == "") {
-            const hashCode = s => s.split('').reduce((a, b) => (((a << 5) - a) + b.charCodeAt(0)) | 0, 0)
+            const hashCode = (s) =>
+                s
+                    .split("")
+                    .reduce((a, b) => ((a << 5) - a + b.charCodeAt(0)) | 0, 0)
             title = "invalid_title_" + hashCode(originalTitle) // Quick hack. :/
         }
-        const content = doc.get('content').toString()
+        const content = doc.get("content").toString()
         fs.outputFileSync(backupDir + title, content)
     }
-    const git = simpleGit({ baseDir: backupDir })
-    git.init().add('./*').commit("Automatic commit", { '--author': 'EtherWiki <>' })
+    const git = simpleGit({
+        baseDir: backupDir,
+        config: ["user.name=EtherWiki", "user.email="],
+    })
+    git.init().then((res) => {
+        console.log(res)
+        git.add("./*").then((res) => {
+            console.log(res)
+            git.commit("Automatic commit").then((res) => console.log(res))
+        })
+    })
 }
 
 class WSSharedDoc extends Y.Doc {
@@ -121,7 +137,7 @@ class WSSharedDoc extends Y.Doc {
      * @param {string} name
      */
     constructor(name) {
-        super({ gc: gcEnabled })
+        super({gc: gcEnabled})
         this.name = name
         this.mux = mutex.createMutex()
         /**
@@ -138,32 +154,45 @@ class WSSharedDoc extends Y.Doc {
          * @param {{ added: Array<number>, updated: Array<number>, removed: Array<number> }} changes
          * @param {Object | null} conn Origin is the connection that made the change
          */
-        const awarenessChangeHandler = ({ added, updated, removed }, conn) => {
+        const awarenessChangeHandler = ({added, updated, removed}, conn) => {
             const changedClients = added.concat(updated, removed)
             if (conn !== null) {
-                const connControlledIDs = /** @type {Set<number>} */ (this.conns.get(conn))
+                const connControlledIDs = /** @type {Set<number>} */ (
+                    this.conns.get(conn)
+                )
                 if (connControlledIDs !== undefined) {
-                    added.forEach(clientID => { connControlledIDs.add(clientID) })
-                    removed.forEach(clientID => { connControlledIDs.delete(clientID) })
+                    added.forEach((clientID) => {
+                        connControlledIDs.add(clientID)
+                    })
+                    removed.forEach((clientID) => {
+                        connControlledIDs.delete(clientID)
+                    })
                 }
             }
             // broadcast awareness update
             const encoder = encoding.createEncoder()
             encoding.writeVarUint(encoder, messageAwareness)
-            encoding.writeVarUint8Array(encoder, awarenessProtocol.encodeAwarenessUpdate(this.awareness, changedClients))
+            encoding.writeVarUint8Array(
+                encoder,
+                awarenessProtocol.encodeAwarenessUpdate(
+                    this.awareness,
+                    changedClients
+                )
+            )
             const buff = encoding.toUint8Array(encoder)
             this.conns.forEach((_, c) => {
                 send(this, c, buff)
             })
         }
-        this.awareness.on('update', awarenessChangeHandler)
-        this.on('update', updateHandler)
+        this.awareness.on("update", awarenessChangeHandler)
+        this.on("update", updateHandler)
         if (isCallbackSet) {
-            this.on('update', debounce(
-                callbackHandler,
-                CALLBACK_DEBOUNCE_WAIT,
-                { maxWait: CALLBACK_DEBOUNCE_MAXWAIT }
-            ))
+            this.on(
+                "update",
+                debounce(callbackHandler, CALLBACK_DEBOUNCE_WAIT, {
+                    maxWait: CALLBACK_DEBOUNCE_MAXWAIT,
+                })
+            )
         }
     }
 }
@@ -175,15 +204,16 @@ class WSSharedDoc extends Y.Doc {
  * @param {boolean} gc - whether to allow gc on the doc (applies only when created)
  * @return {WSSharedDoc}
  */
-const getYDoc = (docname, gc = true) => map.setIfUndefined(docs, docname, () => {
-    const doc = new WSSharedDoc(docname)
-    doc.gc = gc
-    if (persistence !== null) {
-        persistence.bindState(docname, doc)
-    }
-    docs.set(docname, doc)
-    return doc
-})
+const getYDoc = (docname, gc = true) =>
+    map.setIfUndefined(docs, docname, () => {
+        const doc = new WSSharedDoc(docname)
+        doc.gc = gc
+        if (persistence !== null) {
+            persistence.bindState(docname, doc)
+        }
+        docs.set(docname, doc)
+        return doc
+    })
 
 exports.getYDoc = getYDoc
 
@@ -205,7 +235,11 @@ const messageListener = (conn, doc, message) => {
             }
             break
         case messageAwareness: {
-            awarenessProtocol.applyAwarenessUpdate(doc.awareness, decoding.readVarUint8Array(decoder), conn)
+            awarenessProtocol.applyAwarenessUpdate(
+                doc.awareness,
+                decoding.readVarUint8Array(decoder),
+                conn
+            )
             break
         }
     }
@@ -223,7 +257,11 @@ const closeConn = (doc, conn) => {
         // @ts-ignore
         const controlledIds = doc.conns.get(conn)
         doc.conns.delete(conn)
-        awarenessProtocol.removeAwarenessStates(doc.awareness, Array.from(controlledIds), null)
+        awarenessProtocol.removeAwarenessStates(
+            doc.awareness,
+            Array.from(controlledIds),
+            null
+        )
         if (doc.conns.size === 0 && persistence !== null) {
             // if persisted, we store state and destroy ydocument
             persistence.writeState(doc.name, doc).then(() => {
@@ -241,11 +279,19 @@ const closeConn = (doc, conn) => {
  * @param {Uint8Array} m
  */
 const send = (doc, conn, m) => {
-    if (conn.readyState !== wsReadyStateConnecting && conn.readyState !== wsReadyStateOpen) {
+    if (
+        conn.readyState !== wsReadyStateConnecting &&
+        conn.readyState !== wsReadyStateOpen
+    ) {
         closeConn(doc, conn)
     }
     try {
-        conn.send(m, /** @param {any} err */ err => { err != null && closeConn(doc, conn) })
+        conn.send(
+            m,
+            /** @param {any} err */ (err) => {
+                err != null && closeConn(doc, conn)
+            }
+        )
     } catch (e) {
         closeConn(doc, conn)
     }
@@ -258,13 +304,21 @@ const pingTimeout = 30000
  * @param {any} req
  * @param {any} opts
  */
-exports.setupWSConnection = (conn, req, { docName = req.url.slice(1).split('?')[0], gc = true } = {}) => {
-    conn.binaryType = 'arraybuffer'
+exports.setupWSConnection = (
+    conn,
+    req,
+    {docName = req.url.slice(1).split("?")[0], gc = true} = {}
+) => {
+    conn.binaryType = "arraybuffer"
     // get doc, initialize if it does not exist yet
     const doc = getYDoc(docName, gc)
     doc.conns.set(conn, new Set())
     // listen and reply to events
-    conn.on('message', /** @param {ArrayBuffer} message */ message => messageListener(conn, doc, new Uint8Array(message)))
+    conn.on(
+        "message",
+        /** @param {ArrayBuffer} message */ (message) =>
+            messageListener(conn, doc, new Uint8Array(message))
+    )
 
     // Check if connection is still alive
     let pongReceived = true
@@ -284,11 +338,11 @@ exports.setupWSConnection = (conn, req, { docName = req.url.slice(1).split('?')[
             }
         }
     }, pingTimeout)
-    conn.on('close', () => {
+    conn.on("close", () => {
         closeConn(doc, conn)
         clearInterval(pingInterval)
     })
-    conn.on('pong', () => {
+    conn.on("pong", () => {
         pongReceived = true
     })
     // put the following in a variables in a block so the interval handlers don't keep in in
@@ -303,7 +357,13 @@ exports.setupWSConnection = (conn, req, { docName = req.url.slice(1).split('?')[
         if (awarenessStates.size > 0) {
             const encoder = encoding.createEncoder()
             encoding.writeVarUint(encoder, messageAwareness)
-            encoding.writeVarUint8Array(encoder, awarenessProtocol.encodeAwarenessUpdate(doc.awareness, Array.from(awarenessStates.keys())))
+            encoding.writeVarUint8Array(
+                encoder,
+                awarenessProtocol.encodeAwarenessUpdate(
+                    doc.awareness,
+                    Array.from(awarenessStates.keys())
+                )
+            )
             send(doc, conn, encoding.toUint8Array(encoder))
         }
     }
