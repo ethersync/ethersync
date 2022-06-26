@@ -91,7 +91,7 @@
         provider = new WebsocketProvider(
             location.origin.replace(/^http/, "ws"),
             `${title}`,
-            ydoc
+            ydoc,
         )
         provider.on("status", (event) => {
             connectionStatus = event.status
@@ -196,14 +196,14 @@
             .sort(
                 (a, b) =>
                     a.get("title").toString().length -
-                    b.get("title").toString().length
+                    b.get("title").toString().length,
             )
             .filter((p) =>
                 p
                     .get("title")
                     .toString()
                     .toLowerCase()
-                    .includes(searchTerm.toLowerCase())
+                    .includes(searchTerm.toLowerCase()),
             )
         if (matchingPages.length > 0) {
             let targetPage = matchingPages[0]
@@ -236,7 +236,7 @@
                         .split("")
                         .reduce(
                             (a, b) => ((a << 5) - a + b.charCodeAt(0)) | 0,
-                            0
+                            0,
                         )
                 title = "invalid_title_" + hashCode(originalTitle) // Quick hack. :/
             }
@@ -260,7 +260,7 @@
     />
     <link
         rel="stylesheet"
-        href="https://codemirror.net/lib/codemirror.css"
+        href="https://codemirror.net/5/lib/codemirror.css"
         async
         defer
     />
