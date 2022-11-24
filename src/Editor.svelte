@@ -46,6 +46,44 @@
         }
     }
 
+    function checkBoxEmptyOverlay() {
+        const query = /\[ \]/g
+
+        return {
+            token: function (stream) {
+                query.lastIndex = stream.pos
+                var match = query.exec(stream.string)
+                if (match && match.index == stream.pos) {
+                    stream.pos += match[0].length || 1
+                    return "checkbox-empty"
+                } else if (match) {
+                    stream.pos = match.index
+                } else {
+                    stream.skipToEnd()
+                }
+            },
+        }
+    }
+
+    function checkBoxFilledOverlay() {
+        const query = /\[x\]/g
+
+        return {
+            token: function (stream) {
+                query.lastIndex = stream.pos
+                var match = query.exec(stream.string)
+                if (match && match.index == stream.pos) {
+                    stream.pos += match[0].length || 1
+                    return "checkbox-filled"
+                } else if (match) {
+                    stream.pos = match.index
+                } else {
+                    stream.skipToEnd()
+                }
+            },
+        }
+    }
+
     function urlOverlay() {
         const query = /\b(https?:\/\/\S*\b)/g
 
@@ -74,6 +112,8 @@
             })
 
             editor.addOverlay(urlOverlay())
+            editor.addOverlay(checkBoxEmptyOverlay())
+            editor.addOverlay(checkBoxFilledOverlay())
 
             editor.getWrapperElement().addEventListener("mousedown", (e) => {
                 if (e.which == 1) {
@@ -242,6 +282,16 @@
         font-weight: bold;
         color: darkblue !important;
         text-decoration: none !important;
+    }
+    :global(.cm-checkbox-empty),
+    :global(.cm-checkbox-filled) {
+        cursor: pointer;
+        font-weight: bold;
+        text-decoration: none !important;
+    }
+    :global(.cm-checkbox-empty) {
+        color: white !important;
+        background: #c12f2f !important;
     }
     :global(.remote-caret:hover > div) {
         visibility: visible;
