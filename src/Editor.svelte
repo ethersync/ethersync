@@ -115,67 +115,72 @@
             editor.addOverlay(checkBoxEmptyOverlay())
             editor.addOverlay(checkBoxFilledOverlay())
 
-            editor.getWrapperElement().addEventListener("mousedown", (e) => {
-                if (e.which == 1) {
-                    if (e.target.classList.contains("cm-url")) {
-                        let url = e.target.innerHTML
+            let events = ["mousedown", "touchstart"]
+            events.forEach((event) =>
+                editor.getWrapperElement().addEventListener(event, (e) => {
+                    if (e.which == 1 || e.touches) {
+                        if (e.target.classList.contains("cm-url")) {
+                            let url = e.target.innerHTML
 
-                        // There might be neighboring cm-url spans that belong to this link. Let's go find them!
-                        let scanBack = e.target
-                        do {
-                            scanBack = scanBack.previousSibling
-                            if (
-                                scanBack &&
-                                scanBack.classList &&
-                                scanBack.classList.contains("cm-url")
-                            ) {
-                                url = scanBack.innerHTML + url
-                            }
-                        } while (scanBack)
+                            // There might be neighboring cm-url spans that belong to this link. Let's go find them!
+                            let scanBack = e.target
+                            do {
+                                scanBack = scanBack.previousSibling
+                                if (
+                                    scanBack &&
+                                    scanBack.classList &&
+                                    scanBack.classList.contains("cm-url")
+                                ) {
+                                    url = scanBack.innerHTML + url
+                                }
+                            } while (scanBack)
 
-                        let scanForward = e.target
-                        do {
-                            scanForward = scanForward.nextSibling
-                            if (
-                                scanForward &&
-                                scanForward.classList &&
-                                scanForward.classList.contains("cm-url")
-                            ) {
-                                url = url + scanForward.innerHTML
-                            }
-                        } while (scanForward)
+                            let scanForward = e.target
+                            do {
+                                scanForward = scanForward.nextSibling
+                                if (
+                                    scanForward &&
+                                    scanForward.classList &&
+                                    scanForward.classList.contains("cm-url")
+                                ) {
+                                    url = url + scanForward.innerHTML
+                                }
+                            } while (scanForward)
 
-                        window.open(url, "_blank")
-                    } else if (e.target.classList.contains("cm-link")) {
-                        let title = e.target.innerHTML
-                        dispatch("openPage", {title})
-                    } else if (
-                        e.target.classList.contains("cm-checkbox-empty")
-                    ) {
-                        let rect = e.target.getBoundingClientRect()
-                        let pos = editor.coordsChar({
-                            left: rect.x,
-                            top: rect.y,
-                        })
-                        editor.doc.replaceRange("[x]", pos, {
-                            line: pos.line,
-                            ch: pos.ch + 3,
-                        })
-                    } else if (
-                        e.target.classList.contains("cm-checkbox-filled")
-                    ) {
-                        let rect = e.target.getBoundingClientRect()
-                        let pos = editor.coordsChar({
-                            left: rect.x,
-                            top: rect.y,
-                        })
-                        editor.doc.replaceRange("[ ]", pos, {
-                            line: pos.line,
-                            ch: pos.ch + 3,
-                        })
+                            window.open(url, "_blank")
+                        } else if (e.target.classList.contains("cm-link")) {
+                            let title = e.target.innerHTML
+                            dispatch("openPage", {title})
+                        } else if (
+                            e.target.classList.contains("cm-checkbox-empty")
+                        ) {
+                            let rect = e.target.getBoundingClientRect()
+                            let pos = editor.coordsChar({
+                                left: rect.x,
+                                top: rect.y,
+                            })
+                            editor.doc.replaceRange("[x]", pos, {
+                                line: pos.line,
+                                ch: pos.ch + 3,
+                            })
+                            e.preventDefault()
+                        } else if (
+                            e.target.classList.contains("cm-checkbox-filled")
+                        ) {
+                            let rect = e.target.getBoundingClientRect()
+                            let pos = editor.coordsChar({
+                                left: rect.x,
+                                top: rect.y,
+                            })
+                            editor.doc.replaceRange("[ ]", pos, {
+                                line: pos.line,
+                                ch: pos.ch + 3,
+                            })
+                            e.preventDefault()
+                        }
                     }
-                }
-            })
+                })
+            )
         }
 
         if (binding && binding.doc === ytext) {
@@ -223,47 +228,6 @@
             "-" +
             today.getDate().toString().padStart(2, "0")
         )
-    }
-
-    function applyGoogleKeyboardWorkaround(editor) {
-        try {
-            if (editor.applyGoogleKeyboardWorkaround) {
-                return
-            }
-
-            editor.applyGoogleKeyboardWorkaround = true
-            editor.on("editor-change", function (eventName, ...args) {
-                if (eventName === "text-change") {
-                    // args[0] will be delta
-                    var ops = args[0]["ops"]
-                    var oldSelection = editor.getSelection()
-                    var oldPos = oldSelection.index
-                    var oldSelectionLength = oldSelection.length
-
-                    if (
-                        ops[0]["retain"] === undefined ||
-                        !ops[1] ||
-                        !ops[1]["insert"] ||
-                        !ops[1]["insert"] ||
-                        ops[1]["insert"] != "\n" ||
-                        oldSelectionLength > 0
-                    ) {
-                        return
-                    }
-
-                    setTimeout(function () {
-                        var newPos = editor.getSelection().index
-                        if (newPos === oldPos) {
-                            console.log("Change selection bad pos")
-                            editor.setSelection(
-                                editor.getSelection().index + 1,
-                                0
-                            )
-                        }
-                    }, 30)
-                }
-            })
-        } catch {}
     }
 </script>
 
