@@ -149,6 +149,30 @@
                     } else if (e.target.classList.contains("cm-link")) {
                         let title = e.target.innerHTML
                         dispatch("openPage", {title})
+                    } else if (
+                        e.target.classList.contains("cm-checkbox-empty")
+                    ) {
+                        let rect = e.target.getBoundingClientRect()
+                        let pos = editor.coordsChar({
+                            left: rect.x,
+                            top: rect.y,
+                        })
+                        editor.doc.replaceRange("[x]", pos, {
+                            line: pos.line,
+                            ch: pos.ch + 3,
+                        })
+                    } else if (
+                        e.target.classList.contains("cm-checkbox-filled")
+                    ) {
+                        let rect = e.target.getBoundingClientRect()
+                        let pos = editor.coordsChar({
+                            left: rect.x,
+                            top: rect.y,
+                        })
+                        editor.doc.replaceRange("[ ]", pos, {
+                            line: pos.line,
+                            ch: pos.ch + 3,
+                        })
                     }
                 }
             })
