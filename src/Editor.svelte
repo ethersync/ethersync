@@ -46,6 +46,25 @@
         }
     }
 
+    function checkBoxOverlay() {
+        const query = /\[ \]/g
+
+        return {
+            token: function (stream) {
+                query.lastIndex = stream.pos
+                var match = query.exec(stream.string)
+                if (match && match.index == stream.pos) {
+                    stream.pos += match[0].length || 1
+                    return "checkbox"
+                } else if (match) {
+                    stream.pos = match.index
+                } else {
+                    stream.skipToEnd()
+                }
+            },
+        }
+    }
+
     function urlOverlay() {
         const query = /\b(https?:\/\/\S*\b)/g
 
@@ -74,6 +93,7 @@
             })
 
             editor.addOverlay(urlOverlay())
+            editor.addOverlay(checkBoxOverlay())
 
             editor.getWrapperElement().addEventListener("mousedown", (e) => {
                 if (e.which == 1) {
@@ -241,6 +261,13 @@
         cursor: pointer;
         font-weight: bold;
         color: darkblue !important;
+        text-decoration: none !important;
+    }
+    :global(.cm-checkbox) {
+        cursor: pointer;
+        font-weight: bold;
+        color: white !important;
+        background: #c12f2f !important;
         text-decoration: none !important;
     }
     :global(.remote-caret:hover > div) {
