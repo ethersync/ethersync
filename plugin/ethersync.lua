@@ -2,6 +2,27 @@ ignored_ticks = {}
 
 local ns_id = vim.api.nvim_create_namespace('Ethersync')
 
+function indexToRowCol(index)
+    local row = vim.fn.byte2line(index+1) - 1
+    local col = index - vim.api.nvim_buf_get_offset(0, row)
+    return row, col
+end
+
+function rowColToIndex(row, col)
+    return vim.fn.line2byte(row+1) + col-1
+end
+
+function insert(index, content)
+    local row, col = indexToRowCol(index)
+    vim.api.nvim_buf_set_text(0, row, col, row, col, vim.split(content, "\n"))
+end
+
+function delete(index, length)
+    local row, col = indexToRowCol(index)
+    local rowEnd, colEnd = indexToRowCol(index + length)
+    vim.api.nvim_buf_set_text(0, row, col, rowEnd, colEnd, {""})
+end
+
 function EtherSync()
     print('Ethersync activated!')
 
@@ -31,18 +52,22 @@ function EtherSync()
             vim.schedule(function()
                 local nextTick = vim.api.nvim_buf_get_changedtick(buffer_handle)
                 ignored_ticks[nextTick] = true
+
                 local row, col = unpack(vim.api.nvim_buf_get_extmark_by_id(0, ns_id, virtual_cursor, {}))
+                local index = rowColToIndex(row, col)
 
                 if new_end_byte_length >= old_end_byte_length then
-                    vim.api.nvim_buf_set_text(buffer_handle, row, col, row, col+old_end_column, {changed_string})
+                    insert(index, changed_string)
                 else
-                    vim.api.nvim_buf_set_text(buffer_handle, row, col-1, row, col+old_end_column-1, {changed_string})
+                    local length = old_end_byte_length - new_end_byte_length
+                    delete(index-length, length)
+                    --vim.api.nvim_buf_set_text(buffer_handle, row, col-1, row, col+old_end_column-1, {changed_string})
                     -- Our extmark might have been destroyed, reset it. Probably not necessary in the final script?
-                    local virtual_cursor = vim.api.nvim_buf_set_extmark(0, ns_id, row, col, {
-                        hl_mode = 'combine',
-                        hl_group = 'TermCursor',
-                        end_col = col+1
-                    })
+                    --local virtual_cursor = vim.api.nvim_buf_set_extmark(0, ns_id, row, col, {
+                    --    hl_mode = 'combine',
+                    --    hl_group = 'TermCursor',
+                    --    end_col = col+1
+                    --})
                 end
             end)
         end
