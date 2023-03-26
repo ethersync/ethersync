@@ -25,7 +25,6 @@ function handleConnection(conn) {
     function onConnData(d) {
         console.log("connection data from %s: %j", remoteAddress, d)
 
-        // Forward to other clients.
         sockets.forEach(function (client) {
             if (client === conn) {
                 return
@@ -38,7 +37,6 @@ function handleConnection(conn) {
 
         var pos = sockets.indexOf(conn)
         if (pos > 0) {
-            //broadcast(conn.name + " has left the chat service\n")
             sockets.splice(pos, 1)
         }
     }
