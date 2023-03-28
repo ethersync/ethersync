@@ -1,6 +1,8 @@
 const Y = require("yjs")
 const Yws = require("y-websocket")
 const fs = require("fs")
+const {watch} = require("node:fs/promises")
+const diff = require("diff")
 
 let didFullSync = false
 
@@ -20,47 +22,85 @@ provider.awareness.setLocalStateField("user", {
 var ypages = ydoc.getArray("pages")
 
 ypages.observeDeep(function (events) {
-    if (!didFullSync) {
-        fullSync()
-        didFullSync = true
-    } else {
-        for (const event of events) {
-            let key = event.path[event.path.length - 1]
-            if (key == "content") {
-                file = event.target.parent.get("title").toString()
+    fullSync()
+    //if (!didFullSync) {
+    //    fullSync()
+    //    didFullSync = true
+    //} else {
+    //    for (const event of events) {
+    //        let key = event.path[event.path.length - 1]
+    //        if (key == "content") {
+    //            file = event.target.parent.get("title").toString()
 
-                console.log(event.delta)
+    //            console.log(event.delta)
 
-                let index = 0
-                if (event.delta[0]["retain"]) {
-                    index = event.delta[0]["retain"]
-                    event.delta.shift()
+    //            let index = 0
+    //            if (event.delta[0]["retain"]) {
+    //                index = event.delta[0]["retain"]
+    //                event.delta.shift()
+    //            }
+
+    //            if (event.delta[0]["insert"]) {
+    //                let text = event.delta[0]["insert"]
+    //                insertFS(file, index, text)
+    //            } else if (event.delta[0]["delete"]) {
+    //                let length = event.delta[0]["delete"]
+    //                deleteFS(file, index, length)
+    //            }
+    //        } else {
+    //            console.log("Unhandled event", key)
+    //        }
+    //    }
+    //}
+})
+;(async () => {
+    let watcher = watch("output")
+    for await (const event of watcher) {
+        console.log(event)
+        if (event.eventType == "change") {
+            let file = event.filename
+            if (file[file.length - 1] == "~") {
+                continue
+            }
+            console.log("File changed:", file)
+
+            let newContent = fs.readFileSync("output/" + file, "utf8")
+            let oldContent = ypages
+                .toArray()
+                .find((page) => {
+                    return page.get("title").toString() == file
+                })
+                .get("content")
+                .toString()
+
+            let parts = diff.diffChars(oldContent, newContent)
+
+            let index = 0
+            for (const part of parts) {
+                if (part.added) {
+                    insertY(file, index, part.value)
+                } else if (part.removed) {
+                    deleteY(file, index, part.value.length)
                 }
-
-                if (event.delta[0]["insert"]) {
-                    let text = event.delta[0]["insert"]
-                    insertIn(file, index, text)
-                } else if (event.delta[0]["delete"]) {
-                    let length = event.delta[0]["delete"]
-                    deleteIn(file, index, length)
-                }
-            } else {
-                console.log("Unhandled event", key)
+                index += part.value.length
             }
         }
     }
-})
+})()
 
 function fullSync() {
     for (const page of ypages) {
         let title = page.get("title").toString()
-        let content = page.get("content").toString()
-
-        fs.writeFileSync("output/" + title, content, "utf8")
+        let newContent = page.get("content").toString()
+        let oldContent = fs.readFileSync("output/" + title, "utf8")
+        if (oldContent !== newContent) {
+            fs.writeFileSync("output/" + title, newContent, "utf8")
+        }
     }
+    console.log("Full sync complete")
 }
 
-function insertIn(file, index, text) {
+function insertFS(file, index, text) {
     console.log("Inserting", text, "at", index, "in", file)
 
     let content = fs.readFileSync("output/" + file, "utf8")
@@ -68,10 +108,28 @@ function insertIn(file, index, text) {
     fs.writeFileSync("output/" + file, content, "utf8")
 }
 
-function deleteIn(file, index, length) {
+function deleteFS(file, index, length) {
     console.log("Deleting", length, "characters at", index, "in", file)
 
     let content = fs.readFileSync("output/" + file, "utf8")
     content = content.slice(0, index) + content.slice(index + length)
     fs.writeFileSync("output/" + file, content, "utf8")
+}
+
+function insertY(file, index, text) {
+    console.log("Y-Inserting", text, "at", index, "in", file)
+
+    let page = ypages.toArray().find((page) => {
+        return page.get("title").toString() == file
+    })
+    page.get("content").insert(index, text)
+}
+
+function deleteY(file, index, length) {
+    console.log("Y-Deleting", length, "characters at", index, "in", file)
+
+    let page = ypages.toArray().find((page) => {
+        return page.get("title").toString() == file
+    })
+    page.get("content").delete(index, length)
 }
