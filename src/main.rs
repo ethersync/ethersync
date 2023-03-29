@@ -3,6 +3,10 @@ use automerge::transaction::Transactable;
 use automerge::ReadDoc;
 use automerge::{Value,ObjId,Prop};
 
+use std::io::prelude::*;
+use std::net::{TcpListener, TcpStream};
+use std::thread;
+
 struct EthersyncObserver;
 
 impl automerge::OpObserver for EthersyncObserver {
@@ -90,11 +94,53 @@ fn main() {
 
     let mut doc2 = doc.fork();
 
-    doc.splice_text(&t, 1, 0, "1").unwrap();
-    doc2.splice_text(&t, 1, 1, "2").unwrap();
+    doc.splice_text(&t, 1, 0, "ho").unwrap();
+    doc2.splice_text(&t, 1, 0, "hey").unwrap();
 
     doc.merge(&mut doc2).unwrap();
 
     let s2 = doc.text(&t).unwrap();
     println!("{:?}", s2);
+
+    // Network stuff.
+
+    let clients = vec![];
+
+    let listener = TcpListener::bind("127.0.0.1:9000").unwrap();
+    println!("server listening to {}", listener.local_addr().unwrap());
+
+    for stream in listener.incoming() {
+        match stream {
+            Ok(stream) => {
+                thread::spawn(move || {
+                    handle_connection(stream, &mut clients);
+                });
+            }
+            Err(e) => {
+                println!("Error: {}", e);
+            }
+        }
+    }
+}
+
+fn handle_connection(mut stream: TcpStream, clients: &mut Vec<TcpStream>) {
+    let remote_address = stream.peer_addr().unwrap();
+    println!("new client connection from {}", remote_address);
+
+    let mut buffer = [0; 512];
+    loop {
+        match stream.read(&mut buffer) {
+            Ok(n) => {
+                if n == 0 {
+                    return;
+                }
+                println!("connection data from {}: {}", remote_address, String::from_utf8_lossy(&buffer[..n]));
+                stream.write(&buffer[..n]).unwrap();
+            }
+            Err(e) => {
+                println!("Error: {}", e);
+                return;
+            }
+        }
+    }
 }

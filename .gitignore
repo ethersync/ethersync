@@ -1,1 +1,3 @@
-/target
+/target/
+/node_modules/
+/output/
