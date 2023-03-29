@@ -48,7 +48,7 @@ function setCursor(index, length)
     })
 end
 
-function EtherSync()
+function Ethersync()
     print('Ethersync activated!')
 
     local row = 2
@@ -59,7 +59,7 @@ function EtherSync()
         end_col = col+1
     })
 
-    setCursor(12,10)
+    --setCursor(12,10)
 
     connect()
 
@@ -101,7 +101,7 @@ end
 
 function connect()
     server:connect("127.0.0.1", 9000, function (err)
-      -- check error and carry on.
+        print(err)
     end)
     server:read_start(function(err, data)
         if err then
@@ -128,13 +128,13 @@ function connect()
     end)
 end
 
--- When new buffer is loaded, run EtherSync.
+-- When new buffer is loaded, run Ethersync.
 vim.api.nvim_exec([[
-augroup EtherSync
+augroup Ethersync
     autocmd!
-    autocmd BufEnter *.ethersync lua EtherSync()
+    autocmd BufEnter *.ethersync lua Ethersync()
 augroup END
 ]], false)
 
-vim.api.nvim_create_user_command('EtherSync', EtherSync, {})
-vim.keymap.set('n', '<Leader>p', EtherSync)
+vim.api.nvim_create_user_command('Ethersync', Ethersync, {})
+vim.keymap.set('n', '<Leader>p', Ethersync)
