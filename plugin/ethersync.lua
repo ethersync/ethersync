@@ -34,29 +34,32 @@ function delete(index, length)
 end
 
 function setCursor(index, length)
-    if length == 0 or length == nil then
-        length = 1
-    end
-    local row, col = indexToRowCol(index)
-    local rowEnd, colEnd = indexToRowCol(index + length)
-    vim.api.nvim_buf_set_extmark(0, ns_id, row, col, {
-        id = virtual_cursor,
-        hl_mode = 'combine',
-        hl_group = 'TermCursor',
-        end_col = colEnd,
-        end_row = rowEnd
-    })
+    vim.schedule(function()
+        if length == 0 or length == nil then
+            length = 1
+        end
+        local row, col = indexToRowCol(index)
+        local rowEnd, colEnd = indexToRowCol(index + length)
+
+        vim.api.nvim_buf_set_extmark(0, ns_id, row, col, {
+            id = virtual_cursor,
+            hl_mode = 'combine',
+            hl_group = 'TermCursor',
+            end_col = colEnd,
+            end_row = rowEnd
+        })
+    end)
 end
 
 function Ethersync()
     print('Ethersync activated!')
 
-    local row = 2
-    local col = 2
+    local row = 0
+    local col = 0
     virtual_cursor = vim.api.nvim_buf_set_extmark(0, ns_id, row, col, {
         hl_mode = 'combine',
         hl_group = 'TermCursor',
-        end_col = col+1
+        end_col = col+0
     })
 
     --setCursor(12,10)
@@ -123,6 +126,9 @@ function connect()
                 vim.schedule(function()
                     delete(index, length)
                 end)
+            elseif parts[1] == "cursor" then
+                setCursor(tonumber(parts[2]), 1)
+                print("jo")
             end
         end
     end)
