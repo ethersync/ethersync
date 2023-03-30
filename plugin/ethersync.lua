@@ -1,6 +1,8 @@
 local ignored_ticks = {}
 local sep = "\t"
 
+local ethersyncClock = 0
+
 local ns_id = vim.api.nvim_create_namespace('Ethersync')
 local virtual_cursor
 local server = vim.loop.new_tcp()
@@ -53,6 +55,7 @@ end
 
 function Ethersync()
     print('Ethersync activated!')
+    --vim.opt.modifiable = false
 
     local row = 0
     local col = 0
@@ -79,10 +82,12 @@ function Ethersync()
             local new_content_lines = vim.api.nvim_buf_get_text(buffer_handle, start_row, start_column, start_row+new_end_row, start_column+new_end_column, {})
             local changed_string = table.concat(new_content_lines, "\n")
 
+            local filename = vim.api.nvim_buf_get_name(0)
+
             if new_end_byte_length >= old_end_byte_length then
-                server:write("insert" .. sep .. byte_offset .. sep .. changed_string)
+                server:write(vim.fn.join({"insert", filename, byte_offset, changed_string, vim.api.nvim_buf_get_changedtick(0), ethersyncClock}, sep))
             else
-                server:write("delete" .. sep .. byte_offset .. sep .. old_end_byte_length - new_end_byte_length)
+                server:write(vim.fn.join({"delete", filename, byte_offset, old_end_byte_length - new_end_byte_length, vim.api.nvim_buf_get_changedtick(0), ethersyncClock}, sep))
             end
 
             -- For testing, insert text at the virtual cursor.
@@ -117,18 +122,23 @@ function connect()
             if parts[1] == "insert" then
                 local index = tonumber(parts[2])
                 local content = parts[3]
+                local vimClock = tonumber(parts[4])
+                local ethersyncClock = tonumber(parts[5])
+                ethersyncClock = ethersyncClock + 1 -- next expected
                 vim.schedule(function()
                     insert(index, content)
                 end)
             elseif parts[1] == "delete" then
                 local index = tonumber(parts[2])
                 local length = tonumber(parts[3])
+                local vimClock = tonumber(parts[4])
+                local ethersyncClock = tonumber(parts[5])
+                ethersyncClock = ethersyncClock + 1
                 vim.schedule(function()
                     delete(index, length)
                 end)
             elseif parts[1] == "cursor" then
                 setCursor(tonumber(parts[2]), 1)
-                print("jo")
             end
         end
     end)
