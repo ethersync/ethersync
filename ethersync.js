@@ -10,6 +10,7 @@ const Yws = require("y-websocket")
 let didFullSync = false
 
 var ydoc = new Y.Doc()
+let ethersyncClock = 0
 
 function connectToServer() {
     var provider = new Yws.WebsocketProvider(
@@ -24,7 +25,7 @@ function connectToServer() {
         color: "#ff00ff",
     })
 
-    provider.awareness.on("change", () => {
+    /*provider.awareness.on("change", () => {
         console.log([...provider.awareness.getStates()])
         for (const [clientID, state] of provider.awareness.getStates()) {
             console.log(clientID, state)
@@ -39,12 +40,77 @@ function connectToServer() {
                 }
             }
         }
-    })
+    })*/
 }
 connectToServer()
 
 var ypages = ydoc.getArray("pages")
 
+ypages.observeDeep(async function (events) {
+    ethersyncClock += 1
+    for (const event of events) {
+        let clientID = event.transaction.origin
+        if (clientID == ydoc.clientID) {
+            // Don't feed our changes back to the editor.
+            continue
+        }
+
+        let key = event.path[event.path.length - 1]
+        if (key == "content") {
+            filename = event.target.parent.get("title").toString()
+            console.log("File changed via Y:", filename)
+
+            let index = 0
+            if (event.delta[0]["retain"]) {
+                index = event.delta[0]["retain"]
+                event.delta.shift()
+            }
+
+            if (event.delta[0]["insert"]) {
+                let text = event.delta[0]["insert"]
+                insertVim(filename, index, text)
+            } else if (event.delta[0]["delete"]) {
+                let length = event.delta[0]["delete"]
+                deleteVim(filename, index, length)
+            }
+        }
+    }
+})
+
+function insertVim(file, index, text) {
+    if (client) {
+        let vimClock = client.clock
+        let message = ["insert", index, text, vimClock, ethersyncClock].join(
+            "\t"
+        )
+        console.log("Sending message:", message)
+        client.socket.write(message)
+    }
+}
+
+function deleteVim(file, index, length) {
+    if (client) {
+        let vimClock = client.clock
+        let message = ["delete", index, length, vimClock, ethersyncClock].join(
+            "\t"
+        )
+        console.log("Sending message:", message)
+        client.socket.write(message)
+    }
+}
+
+/*function currentClock() {
+    console.log(ydoc.store.clients)
+    let structs = ydoc.store.clients.get(ydoc.clientID)
+    if (structs) {
+        let struct = structs[structs.length - 1]
+        return struct.id.clock
+    } else {
+        return 0
+    }
+}*/
+
+/*
 ypages.observeDeep(async function (events) {
     if (!didFullSync) {
         await fullSync()
@@ -79,6 +145,7 @@ ypages.observeDeep(async function (events) {
         }
     }
 })
+
 ;(async () => {
     let watcher = watch("output")
     for await (const event of watcher) {
@@ -98,6 +165,7 @@ ypages.observeDeep(async function (events) {
         }
     }
 })()
+*/
 
 function getDeltaOperations(initialText, finalText) {
     if (initialText === finalText) {
@@ -140,6 +208,7 @@ function findPage(filename) {
     return page
 }
 
+/*
 const mutex = new Mutex()
 async function syncFile(filename) {
     await mutex.runExclusive(() => {
@@ -186,6 +255,7 @@ async function syncFile(filename) {
         writeToFile(filename, newContent)
     })
 }
+*/
 
 function getCacheFile(filename) {
     let dirname = path.dirname(filename)
@@ -258,7 +328,7 @@ async function fullSync() {
 
 var net = require("net")
 
-var sockets = []
+var client = null
 
 var server = net.createServer()
 
@@ -271,7 +341,7 @@ server.listen(9000, function () {
 function handleConnection(conn) {
     var remoteAddress = conn.remoteAddress + ":" + conn.remotePort
 
-    sockets.push(conn)
+    client = {socket: conn, clock: 0}
 
     console.log("new client connection from %s", remoteAddress)
     conn.setEncoding("utf8")
@@ -281,22 +351,53 @@ function handleConnection(conn) {
     conn.on("error", onConnError)
 
     function onConnData(d) {
-        console.log("connection data from %s: %j", remoteAddress, d)
+        console.log("received", d)
 
-        sockets.forEach(function (client) {
-            if (client === conn) {
-                return
-            }
-            client.write(d)
-        })
+        let parts = d.split("\t")
+
+        if (parts[0] === "insert") {
+            let filename = parts[1]
+            let index = parseInt(parts[2])
+            let text = parts[3]
+            let vimClock = parseInt(parts[4])
+            let ethersyncClock = parseInt(parts[5])
+
+            client.clock = vimClock + 1 // next expected
+
+            ydoc.transact(() => {
+                findPage(filename).get("content").insert(index, text)
+            }, ydoc.clientID)
+        } else if (parts[0] === "delete") {
+            let filename = parts[1]
+            let index = parseInt(parts[2])
+            let length = parseInt(parts[3])
+            let vimClock = parseInt(parts[4])
+            let ethersyncClock = parseInt(parts[5])
+
+            client.clock = vimClock + 1 // next expected
+
+            ydoc.transact(() => {
+                findPage(filename).get("content").delete(index, length)
+            }, ydoc.clientID)
+        }
+
+        ethersyncClock += 1
+
+        //sockets.forEach(function (client) {
+        //    if (client === conn) {
+        //        return
+        //    }
+        //    client.write(d)
+        //})
     }
     function onConnClose() {
         console.log("connection from %s closed", remoteAddress)
 
-        var pos = sockets.indexOf(conn)
-        if (pos > 0) {
-            sockets.splice(pos, 1)
-        }
+        client = null
+        //var pos = sockets.indexOf(conn)
+        //if (pos > 0) {
+        //    sockets.splice(pos, 1)
+        //}
     }
     function onConnError(err) {
         console.log("Connection %s error: %s", remoteAddress, err.message)
@@ -304,7 +405,7 @@ function handleConnection(conn) {
 }
 
 function sendCursor(cursor) {
-    sockets.forEach(function (client) {
-        client.write("cursor\t" + cursor)
-    })
+    //sockets.forEach(function (client) {
+    //    client.write("cursor\t" + cursor)
+    //})
 }
