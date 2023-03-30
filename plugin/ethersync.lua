@@ -33,20 +33,25 @@ function delete(index, length)
     vim.api.nvim_buf_set_text(0, row, col, rowEnd, colEnd, {""})
 end
 
-function setCursor(index, length)
+function setCursor(head, anchor)
     vim.schedule(function()
-        if length == 0 or length == nil then
-            length = 1
+        if head == anchor then
+            anchor = head + 1
         end
-        local row, col = indexToRowCol(index)
-        local rowEnd, colEnd = indexToRowCol(index + length)
+
+        if head > anchor then
+            head, anchor = anchor, head
+        end
+
+        local row, col = indexToRowCol(head)
+        local rowAnchor, colAnchor = indexToRowCol(anchor)
 
         vim.api.nvim_buf_set_extmark(0, ns_id, row, col, {
             id = virtual_cursor,
             hl_mode = 'combine',
             hl_group = 'TermCursor',
-            end_col = colEnd,
-            end_row = rowEnd
+            end_col = colAnchor,
+            end_row = rowAnchor
         })
     end)
 end
@@ -92,6 +97,31 @@ function Ethersync()
             end
         end
     })
+
+    vim.api.nvim_create_autocmd({"CursorMoved", "CursorMovedI"}, {
+        callback = function()
+            local row, col = unpack(vim.api.nvim_win_get_cursor(0))
+            local head = rowColToIndex(row-1, col)
+
+            local length = 0
+            -- Is there a visual selection?
+            local visualSelection = vim.fn.mode() == 'v' or vim.fn.mode() == 'V' or vim.fn.mode() == ''
+
+            local anchor = head
+            if visualSelection then
+                local _, rowV, colV = unpack(vim.fn.getpos("v"))
+                anchor = rowColToIndex(rowV-1, colV) - 1
+                if head < anchor then
+                    anchor = anchor + 1
+                else
+                    head = head + 1
+                end
+            end
+
+            local filename = vim.fs.basename(vim.api.nvim_buf_get_name(0))
+
+            server:write(vim.fn.join({"cursor", filename, head, anchor}, sep))
+        end})
 end
 
 function connect()
@@ -131,10 +161,10 @@ function connect()
                 end)
             elseif parts[1] == "cursor" then
                 local filename = parts[2]
-                local index = tonumber(parts[3])
-                local length = tonumber(parts[4])
+                local head = tonumber(parts[3])
+                local anchor = tonumber(parts[4])
                 --if filename == vim.fs.basename(vim.api.nvim_buf_get_name(0)) then
-                setCursor(index, length)
+                setCursor(head, anchor)
                 --end
             end
         end
