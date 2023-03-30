@@ -2,7 +2,6 @@ const fs = require("fs")
 const path = require("path")
 const diff = require("diff")
 const {watch} = require("node:fs/promises")
-const Mutex = require("async-mutex").Mutex
 
 const Y = require("yjs")
 const Yws = require("y-websocket")
@@ -28,10 +27,6 @@ function connectToServer() {
 
     provider.awareness.on("change", () => {
         for (const [clientID, state] of provider.awareness.getStates()) {
-            //console.log(clientID, state)
-            if (state?.cursor) {
-                console.log(state.cursor)
-            }
             if (state?.cursor?.head) {
                 let head = Y.createAbsolutePositionFromRelativePosition(
                     JSON.parse(state.cursor.head),
@@ -41,7 +36,6 @@ function connectToServer() {
                     JSON.parse(state.cursor.anchor),
                     ydoc
                 )
-                //console.log(position)
                 if (clientID != provider.awareness.clientID) {
                     sendCursor(head.index, anchor.index)
                 }
@@ -64,7 +58,6 @@ ypages.observeDeep(async function (events) {
         let key = event.path[event.path.length - 1]
         if (key == "content") {
             filename = event.target.parent.get("title").toString()
-            console.log("File changed via Y:", filename)
 
             let index = 0
             if (event.delta[0]["retain"]) {
@@ -86,7 +79,6 @@ ypages.observeDeep(async function (events) {
 function insertVim(file, index, text) {
     if (client) {
         let message = ["insert", file, index, text].join("\t")
-        console.log("Sending message:", message)
         client.socket.write(message)
     }
 }
@@ -94,7 +86,6 @@ function insertVim(file, index, text) {
 function deleteVim(file, index, length) {
     if (client) {
         let message = ["delete", file, index, length].join("\t")
-        console.log("Sending message:", message)
         client.socket.write(message)
     }
 }
@@ -154,7 +145,6 @@ ypages.observeDeep(async function (events) {
         }
     }
 })()
-*/
 
 function getDeltaOperations(initialText, finalText) {
     if (initialText === finalText) {
@@ -188,6 +178,7 @@ function getDeltaOperations(initialText, finalText) {
     }
     return deltas
 }
+*/
 
 function findPage(filename) {
     filename = path.basename(filename)
@@ -244,7 +235,6 @@ async function syncFile(filename) {
         writeToFile(filename, newContent)
     })
 }
-*/
 
 function getCacheFile(filename) {
     let dirname = path.dirname(filename)
@@ -280,6 +270,7 @@ async function fullSync() {
     }
     console.log("Full sync complete")
 }
+*/
 
 //function insertFS(file, index, text) {
 //    console.log("Inserting", text, "at", index, "in", file)
@@ -340,8 +331,6 @@ function handleConnection(conn) {
     conn.on("error", onConnError)
 
     function onConnData(d) {
-        console.log("received", d)
-
         let parts = d.split("\t")
 
         if (parts[0] === "insert") {
@@ -383,22 +372,11 @@ function handleConnection(conn) {
                 head,
             })
         }
-
-        //sockets.forEach(function (client) {
-        //    if (client === conn) {
-        //        return
-        //    }
-        //    client.write(d)
-        //})
     }
     function onConnClose() {
         console.log("connection from %s closed", remoteAddress)
 
         client = null
-        //var pos = sockets.indexOf(conn)
-        //if (pos > 0) {
-        //    sockets.splice(pos, 1)
-        //}
     }
     function onConnError(err) {
         console.log("Connection %s error: %s", remoteAddress, err.message)
