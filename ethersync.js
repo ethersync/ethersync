@@ -23,6 +23,23 @@ function connectToServer() {
         name: process.env.USER + " (via ethersync)" || "anonymous",
         color: "#ff00ff",
     })
+
+    provider.awareness.on("change", () => {
+        console.log([...provider.awareness.getStates()])
+        for (const [clientID, state] of provider.awareness.getStates()) {
+            console.log(clientID, state)
+            if (state?.cursor?.head) {
+                let position = Y.createAbsolutePositionFromRelativePosition(
+                    JSON.parse(state.cursor.head),
+                    ydoc
+                )
+                console.log(position.index)
+                if (clientID != provider.awareness.clientID) {
+                    sendCursor(position.index)
+                }
+            }
+        }
+    })
 }
 connectToServer()
 
@@ -238,3 +255,56 @@ async function fullSync() {
 //    })
 //    page.get("content").delete(index, length)
 //}
+
+var net = require("net")
+
+var sockets = []
+
+var server = net.createServer()
+
+server.on("connection", handleConnection)
+
+server.listen(9000, function () {
+    console.log("server listening to %j", server.address())
+})
+
+function handleConnection(conn) {
+    var remoteAddress = conn.remoteAddress + ":" + conn.remotePort
+
+    sockets.push(conn)
+
+    console.log("new client connection from %s", remoteAddress)
+    conn.setEncoding("utf8")
+
+    conn.on("data", onConnData)
+    conn.once("close", onConnClose)
+    conn.on("error", onConnError)
+
+    function onConnData(d) {
+        console.log("connection data from %s: %j", remoteAddress, d)
+
+        sockets.forEach(function (client) {
+            if (client === conn) {
+                return
+            }
+            client.write(d)
+        })
+    }
+    function onConnClose() {
+        console.log("connection from %s closed", remoteAddress)
+
+        var pos = sockets.indexOf(conn)
+        if (pos > 0) {
+            sockets.splice(pos, 1)
+        }
+    }
+    function onConnError(err) {
+        console.log("Connection %s error: %s", remoteAddress, err.message)
+    }
+}
+
+function sendCursor(cursor) {
+    sockets.forEach(function (client) {
+        client.write("cursor\t" + cursor)
+    })
+}
