@@ -10,14 +10,16 @@ const Yws = require("y-websocket")
 let didFullSync = false
 
 var ydoc = new Y.Doc()
+var awareness
 
 function connectToServer() {
-    var provider = new Yws.WebsocketProvider(
+    provider = new Yws.WebsocketProvider(
         "wss://etherwiki.blinry.org",
         "playground",
         ydoc,
         {WebSocketPolyfill: require("ws")}
     )
+    awareness = provider.awareness
 
     provider.awareness.setLocalStateField("user", {
         name: process.env.USER + " (via ethersync)" || "anonymous",
@@ -25,9 +27,11 @@ function connectToServer() {
     })
 
     provider.awareness.on("change", () => {
-        //console.log([...provider.awareness.getStates()])
         for (const [clientID, state] of provider.awareness.getStates()) {
             //console.log(clientID, state)
+            if (state?.cursor) {
+                console.log(state.cursor)
+            }
             if (state?.cursor?.head) {
                 let head = Y.createAbsolutePositionFromRelativePosition(
                     JSON.parse(state.cursor.head),
@@ -39,11 +43,7 @@ function connectToServer() {
                 )
                 //console.log(position)
                 if (clientID != provider.awareness.clientID) {
-                    if (anchor.index < head.index) {
-                        sendCursor(anchor.index, head.index - anchor.index)
-                    } else {
-                        sendCursor(head.index, anchor.index - head.index)
-                    }
+                    sendCursor(head.index, anchor.index)
                 }
             }
         }
@@ -360,6 +360,28 @@ function handleConnection(conn) {
             ydoc.transact(() => {
                 findPage(filename).get("content").delete(index, length)
             }, ydoc.clientID)
+        } else if (parts[0] === "cursor") {
+            let filename = parts[1]
+            let headPos = parseInt(parts[2])
+            let anchorPos = parseInt(parts[3])
+
+            let anchor = JSON.stringify(
+                Y.createRelativePositionFromTypeIndex(
+                    findPage(filename).get("content"),
+                    anchorPos
+                )
+            )
+            let head = JSON.stringify(
+                Y.createRelativePositionFromTypeIndex(
+                    findPage(filename).get("content"),
+                    headPos
+                )
+            )
+
+            awareness.setLocalStateField("cursor", {
+                anchor,
+                head,
+            })
         }
 
         //sockets.forEach(function (client) {
@@ -383,8 +405,8 @@ function handleConnection(conn) {
     }
 }
 
-function sendCursor(index, length = 1) {
+function sendCursor(head, anchor) {
     if (client) {
-        client.socket.write(["cursor", "filenameTBD", index, length].join("\t"))
+        client.socket.write(["cursor", "filenameTBD", head, anchor].join("\t"))
     }
 }
