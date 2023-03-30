@@ -10,7 +10,6 @@ const Yws = require("y-websocket")
 let didFullSync = false
 
 var ydoc = new Y.Doc()
-let ethersyncClock = 0
 
 function connectToServer() {
     var provider = new Yws.WebsocketProvider(
@@ -25,33 +24,40 @@ function connectToServer() {
         color: "#ff00ff",
     })
 
-    /*provider.awareness.on("change", () => {
-        console.log([...provider.awareness.getStates()])
+    provider.awareness.on("change", () => {
+        //console.log([...provider.awareness.getStates()])
         for (const [clientID, state] of provider.awareness.getStates()) {
-            console.log(clientID, state)
+            //console.log(clientID, state)
             if (state?.cursor?.head) {
-                let position = Y.createAbsolutePositionFromRelativePosition(
+                let head = Y.createAbsolutePositionFromRelativePosition(
                     JSON.parse(state.cursor.head),
                     ydoc
                 )
-                console.log(position.index)
+                let anchor = Y.createAbsolutePositionFromRelativePosition(
+                    JSON.parse(state.cursor.anchor),
+                    ydoc
+                )
+                //console.log(position)
                 if (clientID != provider.awareness.clientID) {
-                    sendCursor(position.index)
+                    if (anchor.index < head.index) {
+                        sendCursor(anchor.index, head.index - anchor.index)
+                    } else {
+                        sendCursor(head.index, anchor.index - head.index)
+                    }
                 }
             }
         }
-    })*/
+    })
 }
 connectToServer()
 
 var ypages = ydoc.getArray("pages")
 
 ypages.observeDeep(async function (events) {
-    ethersyncClock += 1
     for (const event of events) {
         let clientID = event.transaction.origin
         if (clientID == ydoc.clientID) {
-            // Don't feed our changes back to the editor.
+            // Don't feed our own changes back to the editor.
             continue
         }
 
@@ -79,10 +85,7 @@ ypages.observeDeep(async function (events) {
 
 function insertVim(file, index, text) {
     if (client) {
-        let vimClock = client.clock
-        let message = ["insert", index, text, vimClock, ethersyncClock].join(
-            "\t"
-        )
+        let message = ["insert", file, index, text].join("\t")
         console.log("Sending message:", message)
         client.socket.write(message)
     }
@@ -90,25 +93,11 @@ function insertVim(file, index, text) {
 
 function deleteVim(file, index, length) {
     if (client) {
-        let vimClock = client.clock
-        let message = ["delete", index, length, vimClock, ethersyncClock].join(
-            "\t"
-        )
+        let message = ["delete", file, index, length].join("\t")
         console.log("Sending message:", message)
         client.socket.write(message)
     }
 }
-
-/*function currentClock() {
-    console.log(ydoc.store.clients)
-    let structs = ydoc.store.clients.get(ydoc.clientID)
-    if (structs) {
-        let struct = structs[structs.length - 1]
-        return struct.id.clock
-    } else {
-        return 0
-    }
-}*/
 
 /*
 ypages.observeDeep(async function (events) {
@@ -341,7 +330,7 @@ server.listen(9000, function () {
 function handleConnection(conn) {
     var remoteAddress = conn.remoteAddress + ":" + conn.remotePort
 
-    client = {socket: conn, clock: 0}
+    client = {socket: conn}
 
     console.log("new client connection from %s", remoteAddress)
     conn.setEncoding("utf8")
@@ -359,10 +348,6 @@ function handleConnection(conn) {
             let filename = parts[1]
             let index = parseInt(parts[2])
             let text = parts[3]
-            let vimClock = parseInt(parts[4])
-            let ethersyncClock = parseInt(parts[5])
-
-            client.clock = vimClock + 1 // next expected
 
             ydoc.transact(() => {
                 findPage(filename).get("content").insert(index, text)
@@ -371,17 +356,11 @@ function handleConnection(conn) {
             let filename = parts[1]
             let index = parseInt(parts[2])
             let length = parseInt(parts[3])
-            let vimClock = parseInt(parts[4])
-            let ethersyncClock = parseInt(parts[5])
-
-            client.clock = vimClock + 1 // next expected
 
             ydoc.transact(() => {
                 findPage(filename).get("content").delete(index, length)
             }, ydoc.clientID)
         }
-
-        ethersyncClock += 1
 
         //sockets.forEach(function (client) {
         //    if (client === conn) {
@@ -404,8 +383,8 @@ function handleConnection(conn) {
     }
 }
 
-function sendCursor(cursor) {
-    //sockets.forEach(function (client) {
-    //    client.write("cursor\t" + cursor)
-    //})
+function sendCursor(index, length = 1) {
+    if (client) {
+        client.socket.write(["cursor", "filenameTBD", index, length].join("\t"))
+    }
 }
