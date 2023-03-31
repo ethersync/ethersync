@@ -6,8 +6,16 @@ local virtual_cursor
 local server = vim.loop.new_tcp()
 
 function indexToRowCol(index)
+    -- Catch a special case: Querying the position after the last character.
+    local bufferLength = vim.fn.wordcount()["bytes"]
+    local afterLastChar = index >= bufferLength
+    if afterLastChar then
+        index = bufferLength - 1
+    end
+
     local row = vim.fn.byte2line(index+1) - 1
     local col = index - vim.api.nvim_buf_get_offset(0, row)
+
     return row, col
 end
 
@@ -128,9 +136,6 @@ function connect()
     server:connect("127.0.0.1", 9000, function (err)
         if err then
             print(err)
-            vim.schedule(function()
-                vim.opt.modifiable = false
-            end)
         end
     end)
     server:read_start(function(err, data)
