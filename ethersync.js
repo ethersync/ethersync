@@ -5,6 +5,7 @@ const {watch} = require("node:fs/promises")
 
 const Y = require("yjs")
 const Yws = require("y-websocket")
+const Ydb = require("y-leveldb")
 
 let didFullSync = false
 
@@ -43,50 +44,67 @@ function connectToServer() {
         }
     })
 }
-connectToServer()
+
+;(async () => {
+    await startPersistence()
+    await fullSync()
+    startObserving()
+    connectToServer()
+})()
 
 var ypages = ydoc.getArray("pages")
 
-ypages.observeDeep(async function (events) {
-    for (const event of events) {
-        let clientID = event.transaction.origin
-        if (clientID == ydoc.clientID) {
-            // Don't feed our own changes back to the editor.
-            continue
-        }
-
-        let key = event.path[event.path.length - 1]
-        if (key == "content") {
-            filename = event.target.parent.get("title").toString()
-
-            let index = 0
-            if (event.delta[0]["retain"]) {
-                index = event.delta[0]["retain"]
-                event.delta.shift()
+function startObserving() {
+    ypages.observeDeep(async function (events) {
+        for (const event of events) {
+            let clientID = event.transaction.origin
+            if (clientID == ydoc.clientID) {
+                // Don't feed our own changes back to the editor.
+                continue
             }
 
-            if (event.delta[0]["insert"]) {
-                let text = event.delta[0]["insert"]
-                insertVim(filename, index, text)
-            } else if (event.delta[0]["delete"]) {
-                let length = event.delta[0]["delete"]
-                deleteVim(filename, index, length)
+            let key = event.path[event.path.length - 1]
+            if (key == "content") {
+                filename = event.target.parent.get("title").toString()
+
+                let index = 0
+
+                while (event.delta[0]) {
+                    if (event.delta[0]["retain"]) {
+                        index += event.delta[0]["retain"]
+                    } else if (event.delta[0]["insert"]) {
+                        let text = event.delta[0]["insert"]
+                        insertLocally(filename, index, text)
+                    } else if (event.delta[0]["delete"]) {
+                        let length = event.delta[0]["delete"]
+                        deleteLocally(filename, index, length)
+                    }
+                    event.delta.shift()
+                }
             }
         }
-    }
-})
+    })
+}
 
-function insertVim(file, index, text) {
+function insertLocally(file, index, text) {
     if (client) {
         let message = ["insert", file, index, text].join("\t")
         client.socket.write(message)
+    } else {
+        let content = fs.readFileSync("output/" + file, "utf8")
+        content = content.slice(0, index) + text + content.slice(index)
+        fs.writeFileSync("output/" + file, content, "utf8")
     }
 }
 
-function deleteVim(file, index, length) {
+function deleteLocally(file, index, length) {
     if (client) {
         let message = ["delete", file, index, length].join("\t")
         client.socket.write(message)
+    } else {
+        let content = fs.readFileSync("output/" + file, "utf8")
+        content = content.slice(0, index) + content.slice(index + length)
+        fs.writeFileSync("output/" + file, content, "utf8")
     }
 }
 
@@ -145,6 +163,7 @@ ypages.observeDeep(async function (events) {
         }
     }
 })()
+*/
 
 function getDeltaOperations(initialText, finalText) {
     if (initialText === finalText) {
@@ -178,7 +197,6 @@ function getDeltaOperations(initialText, finalText) {
     }
     return deltas
 }
-*/
 
 function findPage(filename) {
     filename = path.basename(filename)
@@ -188,54 +206,71 @@ function findPage(filename) {
     return page
 }
 
-/*
-const mutex = new Mutex()
-async function syncFile(filename) {
-    await mutex.runExclusive(() => {
-        filename = path.join("output", filename)
-        let cacheFilename = getCacheFile(filename)
-
-        // Create the file if it doesn't exist.
-        if (!fs.existsSync(filename)) {
-            fs.writeFileSync(filename, "")
-        }
-
-        // Create the cache file if it doesn't exist.
-        if (!fs.existsSync(cacheFilename)) {
-            let dirname = path.dirname(cacheFilename)
-            if (!fs.existsSync(dirname)) {
-                fs.mkdir(dirname, {recursive: true})
-            }
-            let fileContent = fs.readFileSync(filename, "utf8")
-            fs.writeFileSync(cacheFilename, fileContent)
-
-            // Set modified time of cache file to that of other file.
-            const fileModTime = fs.statSync(filename).mtimeMs
-            const date = new Date(fileModTime)
-            fs.utimesSync(cacheFilename, date, date)
-        }
-
-        const fileModTime = fs.statSync(filename).mtimeMs
-        const cacheFileModTime = fs.statSync(cacheFilename).mtimeMs
-
-        let page = findPage(filename)
-
-        if (fileModTime > cacheFileModTime) {
-            // File was changed externally.
-            const fileContent = fs.readFileSync(filename, "utf8")
-            const cacheFileContent = fs.readFileSync(cacheFilename, "utf8")
-            const delta = getDeltaOperations(cacheFileContent, fileContent)
-            if (delta.length > 0) {
-                console.log("Applying delta", delta)
-                page.get("content").applyDelta(delta)
-            }
-        }
-
-        let newContent = page.get("content").toString()
-        writeToFile(filename, newContent)
-    })
+async function fullSync() {
+    for (const page of ypages) {
+        let title = page.get("title").toString()
+        await syncFile(title)
+    }
 }
 
+async function syncFile(filename) {
+    filename = path.join("output", filename)
+    console.log("Syncing", filename)
+
+    // Create the file if it doesn't exist.
+    if (!fs.existsSync(filename)) {
+        console.log("Creating file", filename)
+        fs.writeFileSync(filename, "")
+    }
+
+    //// Create the cache file if it doesn't exist.
+    //if (!fs.existsSync(cacheFilename)) {
+    //    let dirname = path.dirname(cacheFilename)
+    //    if (!fs.existsSync(dirname)) {
+    //        fs.mkdir(dirname, {recursive: true})
+    //    }
+    //    let fileContent = fs.readFileSync(filename, "utf8")
+    //    fs.writeFileSync(cacheFilename, fileContent)
+
+    //    // Set modified time of cache file to that of other file.
+    //    const fileModTime = fs.statSync(filename).mtimeMs
+    //    const date = new Date(fileModTime)
+    //    fs.utimesSync(cacheFilename, date, date)
+    //}
+
+    //const fileModTime = fs.statSync(filename).mtimeMs
+    //const cacheFileModTime = fs.statSync(cacheFilename).mtimeMs
+
+    let page = findPage(filename)
+    let contentY = page.get("content").toString()
+
+    let contentFile = fs.readFileSync(filename, "utf8")
+
+    if (contentY !== contentFile) {
+        const delta = getDeltaOperations(contentY, contentFile)
+        if (delta.length > 0) {
+            ydoc.transact(() => {
+                page.get("content").applyDelta(delta, {sanitize: false})
+            }, ydoc.clientID)
+        }
+    }
+
+    //if (fileModTime > cacheFileModTime) {
+    //    // File was changed externally.
+    //    const fileContent = fs.readFileSync(filename, "utf8")
+    //    const cacheFileContent = fs.readFileSync(cacheFilename, "utf8")
+    //    const delta = getDeltaOperations(cacheFileContent, fileContent)
+    //    if (delta.length > 0) {
+    //        console.log("Applying delta", delta)
+    //        page.get("content").applyDelta(delta)
+    //    }
+    //}
+
+    //let newContent = page.get("content").toString()
+    //writeToFile(filename, newContent)
+}
+
+/*
 function getCacheFile(filename) {
     let dirname = path.dirname(filename)
     let basename = path.basename(filename)
@@ -258,18 +293,6 @@ function writeToFile(filename, content) {
     console.log("Wrote", cacheFilename)
 }
 
-async function fullSync() {
-    for (const page of ypages) {
-        let title = page.get("title").toString()
-        await syncFile(title)
-        //let newContent = page.get("content").toString()
-        //let oldContent = fs.readFileSync("output/" + title, "utf8")
-        //if (oldContent !== newContent) {
-        //    fs.writeFileSync("output/" + title, newContent, "utf8")
-        //}
-    }
-    console.log("Full sync complete")
-}
 */
 
 //function insertFS(file, index, text) {
@@ -367,10 +390,12 @@ function handleConnection(conn) {
                 )
             )
 
-            awareness.setLocalStateField("cursor", {
-                anchor,
-                head,
-            })
+            if (awareness) {
+                awareness.setLocalStateField("cursor", {
+                    anchor,
+                    head,
+                })
+            }
         }
     }
     function onConnClose() {
@@ -387,4 +412,19 @@ function sendCursor(head, anchor) {
     if (client) {
         client.socket.write(["cursor", "filenameTBD", head, anchor].join("\t"))
     }
+}
+
+async function startPersistence() {
+    const persistenceDir = "output/.ethersync/persistence"
+    const LeveldbPersistence = require("y-leveldb").LeveldbPersistence
+    const ldb = new LeveldbPersistence(persistenceDir)
+
+    const persistedYdoc = await ldb.getYDoc("playground")
+    const newUpdates = Y.encodeStateAsUpdate(ydoc)
+    await ldb.storeUpdate("playground", newUpdates)
+    Y.applyUpdate(ydoc, Y.encodeStateAsUpdate(persistedYdoc))
+
+    ydoc.on("update", (update) => {
+        ldb.storeUpdate("playground", update)
+    })
 }
