@@ -5,27 +5,49 @@ local ns_id = vim.api.nvim_create_namespace('Ethersync')
 local virtual_cursor
 local server = vim.loop.new_tcp()
 
-function indexToRowCol(index)
-    -- Catch a special case: Querying the position after the last character.
-    local bufferLength = vim.fn.wordcount()["bytes"]
-    local afterLastChar = index >= bufferLength
-    if afterLastChar then
-        index = bufferLength - 1
-    end
+function byteOffsetToCharOffset(byteOffset)
+    local content = vim.fn.join(vim.api.nvim_buf_get_lines(0, 0, -1, true), "\n")
+    return vim.fn.charidx(content, byteOffset, true)
+end
 
-    local row = vim.fn.byte2line(index+1) - 1
-    local col = index - vim.api.nvim_buf_get_offset(0, row)
+function charOffsetToByteOffset(charOffset)
+    local content = vim.fn.join(vim.api.nvim_buf_get_lines(0, 0, -1, true), "\n")
+    if charOffset >= vim.fn.strchars(content) then
+        return vim.fn.strlen(content)
+    else
+        return vim.fn.byteidxcomp(content, charOffset)
+    end
+end
+
+function indexToRowCol(index)
+    -- First, calculate which byte the (UTF-16) index corresponds to.
+    print("index: " .. index)
+    local byte = charOffsetToByteOffset(index)
+
+    print("byte: " .. byte)
+
+    -- Catch a special case: Querying the position after the last character.
+    --local bufferLength = vim.fn.wordcount()["bytes"]
+    --local afterLastChar = byte >= bufferLength
+    --if afterLastChar then
+    --    byte = bufferLength - 1
+    --end
+
+    local row = vim.fn.byte2line(byte+1) - 1
+    --print("row: " .. row)
+    local col = byte - vim.api.nvim_buf_get_offset(0, row)
 
     return row, col
+end
+
+function rowColToIndex(row, col)
+    local byte = vim.fn.line2byte(row+1) + col-1
+    return byteOffsetToCharOffset(byte)
 end
 
 function ignoreNextUpdate()
     local nextTick = vim.api.nvim_buf_get_changedtick(0)
     ignored_ticks[nextTick] = true
-end
-
-function rowColToIndex(row, col)
-    return vim.fn.line2byte(row+1) + col-1
 end
 
 function insert(index, content)
@@ -49,6 +71,11 @@ function setCursor(head, anchor)
 
         if head > anchor then
             head, anchor = anchor, head
+        end
+
+        -- If the cursor is at the end of the buffer, don't show it.
+        if head == vim.fn.strchars(vim.fn.join(vim.api.nvim_buf_get_lines(0, 0, -1, true), "\n")) then
+            return
         end
 
         local row, col = indexToRowCol(head)
@@ -84,7 +111,6 @@ function Ethersync()
 
     connect()
 
-    local row, col = unpack(vim.api.nvim_win_get_cursor(0))
     vim.api.nvim_buf_attach(0, false, {
         on_bytes = function(the_string_bytes, buffer_handle, changedtick, start_row, start_column, byte_offset, old_end_row, old_end_column, old_end_byte_length, new_end_row, new_end_column, new_end_byte_length)
             -- Did the change come from us? If so, ignore it.
@@ -93,15 +119,26 @@ function Ethersync()
                 return
             end
 
+            print("start_row: " .. start_row)
+            print("num lines: " .. vim.fn.line('$'))
+            local num_rows = vim.fn.line('$')
+            if start_row == num_rows-1 and start_column == 0 and new_end_column == 0 then
+                -- Edit is after the end of the buffer. Ignore it.
+                return
+            end
+
             local new_content_lines = vim.api.nvim_buf_get_text(buffer_handle, start_row, start_column, start_row+new_end_row, start_column+new_end_column, {})
             local changed_string = table.concat(new_content_lines, "\n")
 
             local filename = vim.fs.basename(vim.api.nvim_buf_get_name(0))
 
+            local charOffset = byteOffsetToCharOffset(byte_offset)
+
             if new_end_byte_length >= old_end_byte_length then
-                server:write(vim.fn.join({"insert", filename, byte_offset, changed_string}, sep))
+                server:write(vim.fn.join({"insert", filename, charOffset, changed_string}, sep))
             else
-                server:write(vim.fn.join({"delete", filename, byte_offset, old_end_byte_length - new_end_byte_length}, sep))
+                local length = old_end_byte_length - new_end_byte_length -- TODO: Convert this to UTF-16 character length.
+                server:write(vim.fn.join({"delete", filename, charOffset, length}, sep))
             end
         end
     })
@@ -118,7 +155,7 @@ function Ethersync()
             local anchor = head
             if visualSelection then
                 local _, rowV, colV = unpack(vim.fn.getpos("v"))
-                anchor = rowColToIndex(rowV-1, colV) - 1
+                anchor = rowColToIndex(rowV-1, colV)
                 if head < anchor then
                     anchor = anchor + 1
                 else
