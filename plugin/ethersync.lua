@@ -119,13 +119,13 @@ function Ethersync()
                 return
             end
 
-            print("start_row: " .. start_row)
-            print("num lines: " .. vim.fn.line('$'))
-            local num_rows = vim.fn.line('$')
-            if start_row == num_rows-1 and start_column == 0 and new_end_column == 0 then
-                -- Edit is after the end of the buffer. Ignore it.
-                return
-            end
+            --print("start_row: " .. start_row)
+            --print("num lines: " .. vim.fn.line('$'))
+            --local num_rows = vim.fn.line('$')
+            --if start_row == num_rows-1 and start_column == 0 and new_end_column == 0 then
+            --    -- Edit is after the end of the buffer. Ignore it.
+            --    return
+            --end
 
             local new_content_lines = vim.api.nvim_buf_get_text(buffer_handle, start_row, start_column, start_row+new_end_row, start_column+new_end_column, {})
             local changed_string = table.concat(new_content_lines, "\n")
@@ -137,7 +137,7 @@ function Ethersync()
             if new_end_byte_length >= old_end_byte_length then
                 server:write(vim.fn.join({"insert", filename, charOffset, changed_string}, sep))
             else
-                local length = old_end_byte_length - new_end_byte_length -- TODO: Convert this to UTF-16 character length.
+                local length = old_end_byte_length - new_end_byte_length -- TODO: Convert this to character length.
                 server:write(vim.fn.join({"delete", filename, charOffset, length}, sep))
             end
         end
@@ -148,7 +148,11 @@ function Ethersync()
             local row, col = unpack(vim.api.nvim_win_get_cursor(0))
             local head = rowColToIndex(row-1, col)
 
-            local length = 0
+            if head == -1 then
+                -- TODO what happens here?
+                return
+            end
+
             -- Is there a visual selection?
             local visualSelection = vim.fn.mode() == 'v' or vim.fn.mode() == 'V' or vim.fn.mode() == ''
 
@@ -157,9 +161,9 @@ function Ethersync()
                 local _, rowV, colV = unpack(vim.fn.getpos("v"))
                 anchor = rowColToIndex(rowV-1, colV)
                 if head < anchor then
-                    anchor = anchor + 1
                 else
                     head = head + 1
+                    anchor = anchor - 1
                 end
             end
 
