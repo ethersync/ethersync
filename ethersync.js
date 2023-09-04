@@ -354,6 +354,7 @@ function handleConnection(conn) {
     conn.on("error", onConnError)
 
     function onConnData(d) {
+        console.log("received data: %s", d)
         let parts = d.split("\t")
 
         if (parts[0] === "insert") {
