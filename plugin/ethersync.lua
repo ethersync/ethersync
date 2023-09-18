@@ -33,7 +33,7 @@ function indexToRowCol(index)
     --    byte = bufferLength - 1
     --end
 
-    local row = vim.fn.byte2line(byte+1) - 1
+    local row = vim.fn.byte2line(byte + 1) - 1
     --print("row: " .. row)
     local col = byte - vim.api.nvim_buf_get_offset(0, row)
 
@@ -41,7 +41,7 @@ function indexToRowCol(index)
 end
 
 function rowColToIndex(row, col)
-    local byte = vim.fn.line2byte(row+1) + col-1
+    local byte = vim.fn.line2byte(row + 1) + col - 1
     return byteOffsetToCharOffset(byte)
 end
 
@@ -60,7 +60,7 @@ function delete(index, length)
     local row, col = indexToRowCol(index)
     local rowEnd, colEnd = indexToRowCol(index + length)
     ignoreNextUpdate()
-    vim.api.nvim_buf_set_text(0, row, col, rowEnd, colEnd, {""})
+    vim.api.nvim_buf_set_text(0, row, col, rowEnd, colEnd, { "" })
 end
 
 function setCursor(head, anchor)
@@ -93,6 +93,7 @@ end
 
 function Ethersync()
     if vim.fn.isdirectory(vim.fn.expand('%:p:h') .. '/.ethersync') ~= 1 then
+        print("Did not find .ethersync directory, quitting")
         return
     end
 
@@ -104,7 +105,7 @@ function Ethersync()
     virtual_cursor = vim.api.nvim_buf_set_extmark(0, ns_id, row, col, {
         hl_mode = 'combine',
         hl_group = 'TermCursor',
-        end_col = col+0
+        end_col = col + 0
     })
 
     --setCursor(12,10)
@@ -112,7 +113,9 @@ function Ethersync()
     connect()
 
     vim.api.nvim_buf_attach(0, false, {
-        on_bytes = function(the_string_bytes, buffer_handle, changedtick, start_row, start_column, byte_offset, old_end_row, old_end_column, old_end_byte_length, new_end_row, new_end_column, new_end_byte_length)
+        on_bytes = function(the_string_bytes, buffer_handle, changedtick, start_row, start_column, byte_offset,
+                            old_end_row, old_end_column, old_end_byte_length, new_end_row, new_end_column,
+                            new_end_byte_length)
             -- Did the change come from us? If so, ignore it.
             if ignored_ticks[changedtick] then
                 ignored_ticks[changedtick] = nil
@@ -127,7 +130,8 @@ function Ethersync()
             --    return
             --end
 
-            local new_content_lines = vim.api.nvim_buf_get_text(buffer_handle, start_row, start_column, start_row+new_end_row, start_column+new_end_column, {})
+            local new_content_lines = vim.api.nvim_buf_get_text(buffer_handle, start_row, start_column,
+                start_row + new_end_row, start_column + new_end_column, {})
             local changed_string = table.concat(new_content_lines, "\n")
 
             local filename = vim.fs.basename(vim.api.nvim_buf_get_name(0))
@@ -135,18 +139,18 @@ function Ethersync()
             local charOffset = byteOffsetToCharOffset(byte_offset)
 
             if new_end_byte_length >= old_end_byte_length then
-                server:write(vim.fn.join({"insert", filename, charOffset, changed_string}, sep))
+                server:write(vim.fn.join({ "insert", filename, charOffset, changed_string }, sep))
             else
                 local length = old_end_byte_length - new_end_byte_length -- TODO: Convert this to character length.
-                server:write(vim.fn.join({"delete", filename, charOffset, length}, sep))
+                server:write(vim.fn.join({ "delete", filename, charOffset, length }, sep))
             end
         end
     })
 
-    vim.api.nvim_create_autocmd({"CursorMoved", "CursorMovedI"}, {
+    vim.api.nvim_create_autocmd({ "CursorMoved", "CursorMovedI" }, {
         callback = function()
             local row, col = unpack(vim.api.nvim_win_get_cursor(0))
-            local head = rowColToIndex(row-1, col)
+            local head = rowColToIndex(row - 1, col)
 
             if head == -1 then
                 -- TODO what happens here?
@@ -159,7 +163,7 @@ function Ethersync()
             local anchor = head
             if visualSelection then
                 local _, rowV, colV = unpack(vim.fn.getpos("v"))
-                anchor = rowColToIndex(rowV-1, colV)
+                anchor = rowColToIndex(rowV - 1, colV)
                 if head < anchor then
                 else
                     head = head + 1
@@ -169,12 +173,12 @@ function Ethersync()
 
             local filename = vim.fs.basename(vim.api.nvim_buf_get_name(0))
 
-            server:write(vim.fn.join({"cursor", filename, head, anchor}, sep))
-        end})
+            server:write(vim.fn.join({ "cursor", filename, head, anchor }, sep))
+        end })
 end
 
 function connect()
-    server:connect("127.0.0.1", 9000, function (err)
+    server:connect("127.0.0.1", 9000, function(err)
         if err then
             print(err)
         end
