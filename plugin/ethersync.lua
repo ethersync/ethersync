@@ -101,7 +101,7 @@ function Ethersync()
     print('Ethersync activated!')
     --vim.opt.modifiable = false
 
-    local conn = connection.new()
+    local conn = connection.new_connection()
     conn:connect("127.0.0.1", 9000, function(err)
         if err then
             print("Could not connect to Ethersync daemon: " .. err)
@@ -117,14 +117,6 @@ function Ethersync()
             conn:send({ who = "blinry", type = "fu" })
         end
     end)
-
-
-    --local pipe = vim.loop.new_pipe(true)
-    --pipe:connect("/tmp/ethersync.sock", function(err)
-    --    if err then
-    --        print("Could not connect to Ethersync daemon: " .. err)
-    --    end
-    --end)
 
     if false then
         local row = 0
