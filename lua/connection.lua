@@ -44,7 +44,7 @@ function Connection:read(callback)
     end)
 end
 
-function Connection:send(message)
+function Connection:write(message)
     vim.schedule(function()
         local json = vim.fn.json_encode(message)
         self.tcp:write(json)

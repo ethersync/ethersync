@@ -5,7 +5,7 @@ local sep = "\t"
 
 local ns_id = vim.api.nvim_create_namespace('Ethersync')
 local virtual_cursor
-local server = vim.loop.new_tcp()
+local conn = connection.new_connection()
 
 function byteOffsetToCharOffset(byteOffset)
     local content = vim.fn.join(vim.api.nvim_buf_get_lines(0, 0, -1, true), "\n")
@@ -93,6 +93,43 @@ function setCursor(head, anchor)
     end)
 end
 
+local function start_read()
+    conn:read(function(err, message)
+        if err then
+            print("Error: " .. err)
+        else
+            local pretty_printed = vim.fn.json_encode(message)
+            print("Received message: " .. pretty_printed)
+            if message[1] == "insert" then
+                local filename = message[2]
+                local index = tonumber(message[3])
+                local content = message[4]
+                vim.schedule(function()
+                    if filename == vim.fs.basename(vim.api.nvim_buf_get_name(0)) then
+                        insert(index, content)
+                    end
+                end)
+            elseif message[1] == "delete" then
+                local filename = message[2]
+                local index = tonumber(message[3])
+                local length = tonumber(message[4])
+                vim.schedule(function()
+                    if filename == vim.fs.basename(vim.api.nvim_buf_get_name(0)) then
+                        delete(index, length)
+                    end
+                end)
+            elseif message[1] == "cursor" then
+                local filename = message[2]
+                local head = tonumber(message[3])
+                local anchor = tonumber(message[4])
+                --if filename == vim.fs.basename(vim.api.nvim_buf_get_name(0)) then
+                setCursor(head, anchor)
+                --end
+            end
+        end
+    end)
+end
+
 function Ethersync()
     if vim.fn.isdirectory(vim.fn.expand('%:p:h') .. '/.ethersync') ~= 1 then
         return
@@ -101,144 +138,87 @@ function Ethersync()
     print('Ethersync activated!')
     --vim.opt.modifiable = false
 
-    local conn = connection.new_connection()
     conn:connect("127.0.0.1", 9000, function(err)
         if err then
             print("Could not connect to Ethersync daemon: " .. err)
         else
-            conn:read(function(err2, message)
-                if err2 then
-                    print("Error: " .. err2)
-                else
-                    local pretty_printed = vim.fn.json_encode(message)
-                    print("Received message: " .. pretty_printed)
-                end
-            end)
-            conn:send({ who = "blinry", type = "fu" })
+            start_read()
         end
     end)
 
-    if false then
-        local row = 0
-        local col = 0
-        virtual_cursor = vim.api.nvim_buf_set_extmark(0, ns_id, row, col, {
-            hl_mode = 'combine',
-            hl_group = 'TermCursor',
-            end_col = col + 0
-        })
+    --local row = 0
+    --local col = 0
+    --virtual_cursor = vim.api.nvim_buf_set_extmark(0, ns_id, row, col, {
+    --    hl_mode = 'combine',
+    --    hl_group = 'TermCursor',
+    --    end_col = col + 0
+    --})
 
-        --setCursor(12,10)
+    --setCursor(12,10)
 
-        connect()
+    --connect()
 
-        vim.api.nvim_buf_attach(0, false, {
-            on_bytes = function(the_string_bytes, buffer_handle, changedtick, start_row, start_column, byte_offset,
-                                old_end_row, old_end_column, old_end_byte_length, new_end_row, new_end_column,
-                                new_end_byte_length)
-                -- Did the change come from us? If so, ignore it.
-                if ignored_ticks[changedtick] then
-                    ignored_ticks[changedtick] = nil
-                    return
-                end
-
-                --print("start_row: " .. start_row)
-                --print("num lines: " .. vim.fn.line('$'))
-                --local num_rows = vim.fn.line('$')
-                --if start_row == num_rows-1 and start_column == 0 and new_end_column == 0 then
-                --    -- Edit is after the end of the buffer. Ignore it.
-                --    return
-                --end
-
-                local new_content_lines = vim.api.nvim_buf_get_text(buffer_handle, start_row, start_column,
-                    start_row + new_end_row, start_column + new_end_column, {})
-                local changed_string = table.concat(new_content_lines, "\n")
-
-                local filename = vim.fs.basename(vim.api.nvim_buf_get_name(0))
-
-                local charOffset = byteOffsetToCharOffset(byte_offset)
-
-                if new_end_byte_length >= old_end_byte_length then
-                    server:write(vim.fn.join({ "insert", filename, charOffset, changed_string }, sep))
-                else
-                    local length = old_end_byte_length - new_end_byte_length -- TODO: Convert this to character length.
-                    server:write(vim.fn.join({ "delete", filename, charOffset, length }, sep))
-                end
+    vim.api.nvim_buf_attach(0, false, {
+        on_bytes = function(the_string_bytes, buffer_handle, changedtick, start_row, start_column, byte_offset,
+                            old_end_row, old_end_column, old_end_byte_length, new_end_row, new_end_column,
+                            new_end_byte_length)
+            -- Did the change come from us? If so, ignore it.
+            if ignored_ticks[changedtick] then
+                ignored_ticks[changedtick] = nil
+                return
             end
-        })
 
-        vim.api.nvim_create_autocmd({ "CursorMoved", "CursorMovedI" }, {
-            callback = function()
-                local row, col = unpack(vim.api.nvim_win_get_cursor(0))
-                local head = rowColToIndex(row - 1, col)
+            --print("start_row: " .. start_row)
+            --print("num lines: " .. vim.fn.line('$'))
+            --local num_rows = vim.fn.line('$')
+            --if start_row == num_rows-1 and start_column == 0 and new_end_column == 0 then
+            --    -- Edit is after the end of the buffer. Ignore it.
+            --    return
+            --end
 
-                if head == -1 then
-                    -- TODO what happens here?
-                    return
-                end
+            local new_content_lines = vim.api.nvim_buf_get_text(buffer_handle, start_row, start_column,
+                start_row + new_end_row, start_column + new_end_column, {})
+            local changed_string = table.concat(new_content_lines, "\n")
 
-                -- Is there a visual selection?
-                local visualSelection = vim.fn.mode() == 'v' or vim.fn.mode() == 'V' or vim.fn.mode() == ''
+            local charOffset = byteOffsetToCharOffset(byte_offset)
 
-                local anchor = head
-                if visualSelection then
-                    local _, rowV, colV = unpack(vim.fn.getpos("v"))
-                    anchor = rowColToIndex(rowV - 1, colV)
-                    if head < anchor then
-                    else
-                        head = head + 1
-                        anchor = anchor - 1
-                    end
-                end
+            local filename = vim.fs.basename(vim.api.nvim_buf_get_name(0))
 
-                local filename = vim.fs.basename(vim.api.nvim_buf_get_name(0))
-
-                server:write(vim.fn.join({ "cursor", filename, head, anchor }, sep))
-            end })
-    end
-end
-
-function connect()
-    server:connect("127.0.0.1", 9000, function(err)
-        if err then
-            print("Could not connect to Ethersync daemon: " .. err)
-        end
-    end)
-    server:read_start(function(err, data)
-        if err then
-            print(err)
-            return
-        end
-        if data then
-            print(data)
-            local parts = vim.split(data, sep)
-            if parts[1] == "insert" then
-                local filename = parts[2]
-                local index = tonumber(parts[3])
-                local content = parts[4]
-                vim.schedule(function()
-                    if filename == vim.fs.basename(vim.api.nvim_buf_get_name(0)) then
-                        insert(index, content)
-                    end
-                end)
-            elseif parts[1] == "delete" then
-                local filename = parts[2]
-                local index = tonumber(parts[3])
-                local length = tonumber(parts[4])
-                vim.schedule(function()
-                    if filename == vim.fs.basename(vim.api.nvim_buf_get_name(0)) then
-                        delete(index, length)
-                    end
-                end)
-            elseif parts[1] == "cursor" then
-                local filename = parts[2]
-                local head = tonumber(parts[3])
-                local anchor = tonumber(parts[4])
-                --if filename == vim.fs.basename(vim.api.nvim_buf_get_name(0)) then
-                setCursor(head, anchor)
-                --end
+            if new_end_byte_length >= old_end_byte_length then
+                conn:write({ "insert", filename, charOffset, changed_string })
+            else
+                local length = old_end_byte_length - new_end_byte_length -- TODO: Convert this to character length.
+                conn:write({ "delete", filename, charOffset, length })
             end
         end
-    end)
+    })
+
+    vim.api.nvim_create_autocmd({ "CursorMoved", "CursorMovedI" }, {
+        callback = function()
+            local row, col = unpack(vim.api.nvim_win_get_cursor(0))
+            local head = rowColToIndex(row - 1, col)
+
+            if head == -1 then
+                -- TODO what happens here?
+                return
+            end
+
+            -- Is there a visual selection?
+            local visualSelection = vim.fn.mode() == 'v' or vim.fn.mode() == 'V' or vim.fn.mode() == ''
+
+            local anchor = head
+            if visualSelection then
+                local _, rowV, colV = unpack(vim.fn.getpos("v"))
+                anchor = rowColToIndex(rowV - 1, colV)
+                if head < anchor then
+                else
+                    head = head + 1
+                    anchor = anchor - 1
+                end
+            end
+            local filename = vim.fs.basename(vim.api.nvim_buf_get_name(0))
+            conn:write({ "cursor", filename, head, anchor })
+        end })
 end
 
 -- When new buffer is loaded, run Ethersync.
