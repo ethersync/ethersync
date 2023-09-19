@@ -102,11 +102,11 @@ function Ethersync()
     --vim.opt.modifiable = false
 
     local conn = connection.new()
-    connection.connect(conn, "127.0.0.1", 9000, function(err)
+    conn:connect("127.0.0.1", 9000, function(err)
         if err then
             print("Could not connect to Ethersync daemon: " .. err)
         else
-            connection.read(conn, function(err2, message)
+            conn:read(function(err2, message)
                 if err2 then
                     print("Error: " .. err2)
                 else
@@ -114,7 +114,7 @@ function Ethersync()
                     print("Received message: " .. pretty_printed)
                 end
             end)
-            connection.send(conn, { who = "blinry", type = "fu" })
+            conn:send({ who = "blinry", type = "fu" })
         end
     end)
 

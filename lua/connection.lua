@@ -1,22 +1,18 @@
-local function new()
-    return {}
-end
+local Connection = {}
 
-local function connect(conn, addr, port, callback)
-    local tcp = vim.loop.new_tcp()
-    tcp:connect(addr, port, function(err)
+function Connection:connect(addr, port, callback)
+    self.tcp = vim.loop.new_tcp()
+    self.tcp:connect(addr, port, function(err)
         if err then
             callback(err)
         else
-            conn.tcp = tcp
-
             callback(nil)
         end
     end)
 end
 
-local function read(conn, callback)
-    conn.tcp:read_start(function(err2, data)
+function Connection:read(callback)
+    self.tcp:read_start(function(err2, data)
         if err2 then
             callback(err2, nil)
         else
@@ -33,17 +29,18 @@ local function read(conn, callback)
     end)
 end
 
-local function send(conn, message)
+function Connection:send(message)
     vim.schedule(function()
         local json = vim.fn.json_encode(message)
-        conn.tcp:write(json)
-        conn.tcp:write("\n")
+        self.tcp:write(json)
+        self.tcp:write("\n")
     end)
 end
 
-return {
-    new = new,
-    connect = connect,
-    send = send,
-    read = read
-}
+local M = {}
+
+function M.new()
+    return setmetatable({}, { __index = Connection })
+end
+
+return M
