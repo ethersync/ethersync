@@ -1,71 +1,32 @@
 local connection = require("connection")
+local utils = require("utils")
 
 local ignored_ticks = {}
-local sep = "\t"
 
 local ns_id = vim.api.nvim_create_namespace('Ethersync')
 local virtual_cursor
 local conn = connection.new_connection()
 
-function byteOffsetToCharOffset(byteOffset)
-    local content = vim.fn.join(vim.api.nvim_buf_get_lines(0, 0, -1, true), "\n")
-    return vim.fn.charidx(content, byteOffset, true)
-end
 
-function charOffsetToByteOffset(charOffset)
-    local content = vim.fn.join(vim.api.nvim_buf_get_lines(0, 0, -1, true), "\n")
-    if charOffset >= vim.fn.strchars(content) then
-        return vim.fn.strlen(content)
-    else
-        return vim.fn.byteidxcomp(content, charOffset)
-    end
-end
-
-function indexToRowCol(index)
-    -- First, calculate which byte the (UTF-16) index corresponds to.
-    print("index: " .. index)
-    local byte = charOffsetToByteOffset(index)
-
-    print("byte: " .. byte)
-
-    -- Catch a special case: Querying the position after the last character.
-    --local bufferLength = vim.fn.wordcount()["bytes"]
-    --local afterLastChar = byte >= bufferLength
-    --if afterLastChar then
-    --    byte = bufferLength - 1
-    --end
-
-    local row = vim.fn.byte2line(byte + 1) - 1
-    --print("row: " .. row)
-    local col = byte - vim.api.nvim_buf_get_offset(0, row)
-
-    return row, col
-end
-
-function rowColToIndex(row, col)
-    local byte = vim.fn.line2byte(row + 1) + col - 1
-    return byteOffsetToCharOffset(byte)
-end
-
-function ignoreNextUpdate()
+local function ignoreNextUpdate()
     local nextTick = vim.api.nvim_buf_get_changedtick(0)
     ignored_ticks[nextTick] = true
 end
 
-function insert(index, content)
-    local row, col = indexToRowCol(index)
+local function insert(index, content)
+    local row, col = utils.indexToRowCol(index)
     ignoreNextUpdate()
     vim.api.nvim_buf_set_text(0, row, col, row, col, vim.split(content, "\n"))
 end
 
-function delete(index, length)
-    local row, col = indexToRowCol(index)
-    local rowEnd, colEnd = indexToRowCol(index + length)
+local function delete(index, length)
+    local row, col = utils.indexToRowCol(index)
+    local rowEnd, colEnd = utils.indexToRowCol(index + length)
     ignoreNextUpdate()
     vim.api.nvim_buf_set_text(0, row, col, rowEnd, colEnd, { "" })
 end
 
-function setCursor(head, anchor)
+local function setCursor(head, anchor)
     vim.schedule(function()
         if head == anchor then
             anchor = head + 1
@@ -176,19 +137,35 @@ function Ethersync()
             --    return
             --end
 
-            local new_content_lines = vim.api.nvim_buf_get_text(buffer_handle, start_row, start_column,
-                start_row + new_end_row, start_column + new_end_column, {})
-            local changed_string = table.concat(new_content_lines, "\n")
+            --local new_content_lines = vim.api.nvim_buf_get_text(buffer_handle, start_row, start_column, start_row + new_end_row, start_column + new_end_column, {})
 
-            local charOffset = byteOffsetToCharOffset(byte_offset)
+            conn:write({ byte_offset = byte_offset, new_end_byte_length = new_end_byte_length,
+                old_end_byte_length = old_end_byte_length })
 
             local filename = vim.fs.basename(vim.api.nvim_buf_get_name(0))
+            local content = utils.contentOfCurrentBuffer()
+
+            if byte_offset == vim.fn.strlen(content) and new_end_byte_length > 0 then
+                -- Tried to insert something *after* the end of the (resulting) file.
+                -- I think this is probably a bug, that happens when you use the 'o' command, for example.
+                byte_offset = vim.fn.strlen(content) - 1
+            end
+
+            local charOffset = utils.byteOffsetToCharOffset(byte_offset)
+            local oldEndChar = utils.byteOffsetToCharOffset(byte_offset + old_end_byte_length)
+            local newEndChar = utils.byteOffsetToCharOffset(byte_offset + new_end_byte_length)
+            local oldEndCharLength = oldEndChar - charOffset
+            local newEndCharLength = newEndChar - charOffset
+
+            --conn:write({ content = content })
+            --conn:write({ charOffset = charOffset, oldEndChar = oldEndChar, newEndChar = newEndChar, oldEndCharLength = oldEndCharLength, newEndCharLength = newEndCharLength })
 
             if new_end_byte_length >= old_end_byte_length then
+                local changed_string = vim.fn.strcharpart(content, charOffset, newEndCharLength)
                 conn:write({ "insert", filename, charOffset, changed_string })
             else
-                local length = old_end_byte_length - new_end_byte_length -- TODO: Convert this to character length.
-                conn:write({ "delete", filename, charOffset, length })
+                local charLength = oldEndCharLength - newEndCharLength
+                conn:write({ "delete", filename, charOffset, charLength })
             end
         end
     })
@@ -196,7 +173,7 @@ function Ethersync()
     vim.api.nvim_create_autocmd({ "CursorMoved", "CursorMovedI" }, {
         callback = function()
             local row, col = unpack(vim.api.nvim_win_get_cursor(0))
-            local head = rowColToIndex(row - 1, col)
+            local head = utils.rowColToIndex(row - 1, col)
 
             if head == -1 then
                 -- TODO what happens here?
@@ -209,7 +186,7 @@ function Ethersync()
             local anchor = head
             if visualSelection then
                 local _, rowV, colV = unpack(vim.fn.getpos("v"))
-                anchor = rowColToIndex(rowV - 1, colV)
+                anchor = utils.rowColToIndex(rowV - 1, colV)
                 if head < anchor then
                 else
                     head = head + 1
