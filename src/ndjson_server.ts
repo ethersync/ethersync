@@ -1,16 +1,20 @@
-import net from "net"
+import { createServer } from "net"
 
 export class NDJSONServer {
-    constructor(port) {
-        this.server = net.createServer()
+    server: any
+    connectionCallback = (_: any) => { }
+    messageCallback = (_: any, __: any) => { }
+    closeCallback = (_: any) => { }
+
+    constructor(port: number) {
+        this.server = createServer()
         this.server.listen(port)
-        this.connectionCallback = () => { }
-        this.server.on("connection", (conn) => {
+        this.server.on("connection", (conn: any) => {
             conn.setEncoding("utf8")
             this.connectionCallback(conn)
 
             let buffer = ""
-            conn.on("data", (chunk) => {
+            conn.on("data", (chunk: string) => {
                 buffer += chunk
                 while (true) {
                     let i = buffer.indexOf("\n")
@@ -29,16 +33,16 @@ export class NDJSONServer {
             })
         })
     }
-    onConnection(callback) {
+    onConnection(callback: any) {
         this.connectionCallback = callback
     }
-    onMessage(callback) {
+    onMessage(callback: any) {
         this.messageCallback = callback
     }
-    onClose(callback) {
+    onClose(callback: any) {
         this.closeCallback = callback
     }
-    write(client, message) {
+    write(client: any, message: any) {
         let data = JSON.stringify(message) + "\n"
         client.write(data)
     }

@@ -1,5 +1,5 @@
 var sockets = []
-import {NDJSONServer} from "./ndjson_server.js"
+import { NDJSONServer } from "./ndjson_server.js"
 
 var server = new NDJSONServer(9000)
 
@@ -10,7 +10,7 @@ server.onConnection((conn) => {
 
 server.onMessage((conn, message) => {
     console.log("received %j", message)
-    sockets.forEach(function (client) {
+    sockets.forEach(function(client) {
         if (client === conn) {
             return
         }

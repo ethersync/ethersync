@@ -3,8 +3,10 @@
     "version": "1.0.0",
     "description": "",
     "main": "yjs.js",
-    "type": "module",
     "author": "",
+    "scripts": {
+        "run": "tsc src/*.ts; node src/ot.js"
+    },
     "dependencies": {
         "async-mutex": "^0.4.0",
         "diff": "^5.1.0",
