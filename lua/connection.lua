@@ -1,4 +1,4 @@
-local Connection = {}
+local Connection = { connected = false }
 
 function Connection:connect(addr, port, callback)
     self.tcp = vim.loop.new_tcp()
@@ -6,6 +6,7 @@ function Connection:connect(addr, port, callback)
         if err then
             callback(err)
         else
+            self.connected = true
             callback(nil)
         end
     end)

@@ -7,7 +7,6 @@ local ns_id = vim.api.nvim_create_namespace('Ethersync')
 local virtual_cursor
 local conn = connection.new_connection()
 
-
 local function ignoreNextUpdate()
     local nextTick = vim.api.nvim_buf_get_changedtick(0)
     ignored_ticks[nextTick] = true
@@ -41,8 +40,8 @@ local function setCursor(head, anchor)
             return
         end
 
-        local row, col = indexToRowCol(head)
-        local rowAnchor, colAnchor = indexToRowCol(anchor)
+        local row, col = utils.indexToRowCol(head)
+        local rowAnchor, colAnchor = utils.indexToRowCol(anchor)
 
         vim.api.nvim_buf_set_extmark(0, ns_id, row, col, {
             id = virtual_cursor,
@@ -83,9 +82,9 @@ local function start_read()
                 local filename = message[2]
                 local head = tonumber(message[3])
                 local anchor = tonumber(message[4])
-                --if filename == vim.fs.basename(vim.api.nvim_buf_get_name(0)) then
-                setCursor(head, anchor)
-                --end
+                if filename == vim.fs.basename(vim.api.nvim_buf_get_name(0)) then
+                    setCursor(head, anchor)
+                end
             end
         end
     end)
@@ -145,10 +144,10 @@ function Ethersync()
             local filename = vim.fs.basename(vim.api.nvim_buf_get_name(0))
             local content = utils.contentOfCurrentBuffer()
 
-            if byte_offset == vim.fn.strlen(content) and new_end_byte_length > 0 then
+            if byte_offset + new_end_byte_length > vim.fn.strlen(content) then
                 -- Tried to insert something *after* the end of the (resulting) file.
                 -- I think this is probably a bug, that happens when you use the 'o' command, for example.
-                byte_offset = vim.fn.strlen(content) - 1
+                byte_offset = vim.fn.strlen(content) - new_end_byte_length
             end
 
             local charOffset = utils.byteOffsetToCharOffset(byte_offset)
@@ -157,15 +156,19 @@ function Ethersync()
             local oldEndCharLength = oldEndChar - charOffset
             local newEndCharLength = newEndChar - charOffset
 
-            --conn:write({ content = content })
-            --conn:write({ charOffset = charOffset, oldEndChar = oldEndChar, newEndChar = newEndChar, oldEndCharLength = oldEndCharLength, newEndCharLength = newEndCharLength })
+            conn:write({ content = content })
+            conn:write({ charOffset = charOffset, oldEndChar = oldEndChar, newEndChar = newEndChar,
+                oldEndCharLength = oldEndCharLength, newEndCharLength = newEndCharLength })
 
-            if new_end_byte_length >= old_end_byte_length then
-                local changed_string = vim.fn.strcharpart(content, charOffset, newEndCharLength)
-                conn:write({ "insert", filename, charOffset, changed_string })
-            else
-                local charLength = oldEndCharLength - newEndCharLength
-                conn:write({ "delete", filename, charOffset, charLength })
+            -- TODO: For snippet expansion, for example, a deletion (of the snippet text) takes place, which is not accounted for here.
+
+            if oldEndCharLength > 0 then
+                conn:write({ "delete", filename, charOffset, oldEndCharLength })
+            end
+
+            if newEndCharLength > 0 then
+                local insertedString = vim.fn.strcharpart(content, charOffset, newEndCharLength)
+                conn:write({ "insert", filename, charOffset, insertedString })
             end
         end
     })
@@ -194,7 +197,7 @@ function Ethersync()
                 end
             end
             local filename = vim.fs.basename(vim.api.nvim_buf_get_name(0))
-            conn:write({ "cursor", filename, head, anchor })
+            --conn:write({ "cursor", filename, head, anchor })
         end })
 end
 

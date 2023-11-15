@@ -13,8 +13,16 @@ function M.byteOffsetToCharOffset(byteOffset)
     local content = M.contentOfCurrentBuffer()
     local value = vim.fn.charidx(content, byteOffset, true)
     if value == -1 then
-        -- TODO: This seems important for 'o' operations. But why?
-        value = vim.fn.strchars(content)
+        -- In cases where the specified location is outside of the current content,
+        -- we try to give a reasonable value, but (TODO) we don't actually know how many
+        -- *characters* we need to add. For now, we use bytes.
+
+        -- This case seems to trigger when deleting at the end of the file,
+        -- and when using the 'o' command.
+        local charLength = vim.fn.strchars(content)
+        local byteLength = vim.fn.strlen(content)
+        local bytesAfterContent = byteOffset - byteLength
+        return charLength + bytesAfterContent
     end
     return value
 end
@@ -41,7 +49,8 @@ function M.indexToRowCol(index)
     --end
 
     local row = vim.fn.byte2line(byte + 1) - 1
-    local col = byte - vim.api.nvim_buf_get_offset(0, row)
+    local byteOffsetOfLine = vim.api.nvim_buf_get_offset(0, row)
+    local col = byte - byteOffsetOfLine
 
     return row, col
 end
