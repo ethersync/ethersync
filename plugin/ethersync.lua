@@ -1,6 +1,9 @@
 local connection = require("connection")
 local utils = require("utils")
 
+-- Used to store the changedtick of the buffer when we make changes to it.
+-- We do this to avoid infinite loops, where we make a change, which would
+-- trigger normally an "on_bytes" event.
 local ignored_ticks = {}
 
 local ns_id = vim.api.nvim_create_namespace("Ethersync")
@@ -12,12 +15,14 @@ local function ignoreNextUpdate()
     ignored_ticks[nextTick] = true
 end
 
+-- Insert a string into the current buffer at a specified Unicode character index.
 local function insert(index, content)
     local row, col = utils.indexToRowCol(index)
     ignoreNextUpdate()
     vim.api.nvim_buf_set_text(0, row, col, row, col, vim.split(content, "\n"))
 end
 
+-- Delete a string from the current buffer at a specified Unicode character index.
 local function delete(index, length)
     local row, col = utils.indexToRowCol(index)
     local rowEnd, colEnd = utils.indexToRowCol(index + length)
@@ -25,6 +30,8 @@ local function delete(index, length)
     vim.api.nvim_buf_set_text(0, row, col, rowEnd, colEnd, { "" })
 end
 
+-- Set the cursor position in the current buffer. If head and anchor are different,
+-- a visual selection is created.
 local function setCursor(head, anchor)
     vim.schedule(function()
         if head == anchor then
@@ -53,6 +60,7 @@ local function setCursor(head, anchor)
     end)
 end
 
+-- Start a read loop, which reads messages from the Ethersync daemon.
 local function start_read()
     conn:read(function(err, message)
         if err then
@@ -90,6 +98,7 @@ local function start_read()
     end)
 end
 
+-- Initialization function.
 function Ethersync()
     if vim.fn.isdirectory(vim.fn.expand("%:p:h") .. "/.ethersync") ~= 1 then
         return

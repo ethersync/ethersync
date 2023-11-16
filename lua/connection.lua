@@ -1,3 +1,4 @@
+-- Represents a newline-delimited JSON connection to a server.
 local Connection = { connected = false }
 
 function Connection:connect(addr, port, callback)

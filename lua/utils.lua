@@ -9,6 +9,7 @@ function M.contentOfCurrentBuffer()
     return vim.fn.join(lines, "\n")
 end
 
+-- Converts a UTF-8 byte offset to a Unicode character offset.
 function M.byteOffsetToCharOffset(byteOffset)
     local content = M.contentOfCurrentBuffer()
     local value = vim.fn.charidx(content, byteOffset, true)
@@ -27,6 +28,7 @@ function M.byteOffsetToCharOffset(byteOffset)
     return value
 end
 
+-- Converts a Unicode character offset to a UTF-8 byte offset.
 function M.charOffsetToByteOffset(charOffset)
     local content = M.contentOfCurrentBuffer()
     if charOffset >= vim.fn.strchars(content) then
@@ -37,6 +39,7 @@ function M.charOffsetToByteOffset(charOffset)
     end
 end
 
+-- Converts a Unicode character offset in the current buffer to a row and column.
 function M.indexToRowCol(index)
     -- First, calculate which byte the (UTF-16) index corresponds to.
     local byte = M.charOffsetToByteOffset(index)
@@ -55,6 +58,7 @@ function M.indexToRowCol(index)
     return row, col
 end
 
+-- Converts a row and column in the current buffer to a Unicode character offset.
 function M.rowColToIndex(row, col)
     local byte = vim.fn.line2byte(row + 1) + col - 1
     return M.byteOffsetToCharOffset(byte)
