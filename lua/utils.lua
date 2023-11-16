@@ -1,5 +1,19 @@
 local M = {}
 
+-- This file provides helper functions to convert between a number of ways to index a buffer:
+
+-- * Byte offset: The number of UTF-8 bytes from the start of the buffer.
+--   This is what Neovim uses internally.
+
+-- * Character offset: The number of Unicode characters from the start of the buffer.
+--   Neovim provides functions to output this, as well. These usually contain "char" in their name.
+
+-- * UTF-16 code unit offset: The number of UTF-16 code units from the start of the buffer.
+--   This is what Y.js uses internally. Neovim doesn't provide helper functions for this,
+--   but we can iterate over the buffer content and calculate it ourselves.
+--   Assumption: All Unicode codepoints under 0x10000 are encoded as a single UTF-16 code unit,
+--   and all others as two.
+
 function M.contentOfCurrentBuffer()
     local buffer = 0 -- Current buffer.
     local start = 0 -- First line.
