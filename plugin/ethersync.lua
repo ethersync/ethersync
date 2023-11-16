@@ -174,6 +174,8 @@ function Ethersync()
             local oldEndChar = utils.byteOffsetToCharOffset(byte_offset + old_end_byte_length)
             local newEndChar = utils.byteOffsetToCharOffset(byte_offset + new_end_byte_length)
 
+            local newEndCharLength = newEndChar - charOffset
+
             local charOffsetUTF16CodeUnits = utils.charOffsetToUTF16CodeUnitOffset(charOffset)
             local oldEndCharUTF16CodeUnits = utils.charOffsetToUTF16CodeUnitOffset(oldEndChar)
             local newEndCharUTF16CodeUnits = utils.charOffsetToUTF16CodeUnitOffset(newEndChar)
@@ -183,7 +185,7 @@ function Ethersync()
 
             conn:write({ content = content })
             conn:write({
-                charOffset = charOffset,
+                charOffset = charOffsetUTF16CodeUnits,
                 oldEndChar = oldEndCharUTF16CodeUnits,
                 newEndChar = newEndCharUTF16CodeUnits,
                 oldEndCharLength = oldEndCharUTF16CodeUnitsLength,
@@ -197,8 +199,7 @@ function Ethersync()
             end
 
             if newEndCharUTF16CodeUnitsLength > 0 then
-                local insertedString =
-                    vim.fn.strcharpart(content, charOffsetUTF16CodeUnits, newEndCharUTF16CodeUnitsLength)
+                local insertedString = vim.fn.strcharpart(content, charOffset, newEndCharLength)
                 conn:write({ "insert", filename, charOffsetUTF16CodeUnits, insertedString })
             end
         end,
