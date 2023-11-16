@@ -29,6 +29,14 @@ function M.byteOffsetToCharOffset(byteOffset, content)
     return value
 end
 
+-- Converts a UTF-8 byte offset to a UTF-16 code unit offset.
+-- TODO: Speed up?
+function M.byteOffsetToUTF16CodeUnitOffset(byteOffset, content)
+    content = content or M.contentOfCurrentBuffer()
+    local charOffset = M.byteOffsetToCharOffset(byteOffset, content)
+    return M.charOffsetToUTF16CodeUnitOffset(charOffset, content)
+end
+
 -- Converts a Unicode character offset to a UTF-8 byte offset.
 function M.charOffsetToByteOffset(charOffset)
     local content = M.contentOfCurrentBuffer()
@@ -95,6 +103,13 @@ function M.UTF16CodeUnitOffsetToCharOffset(utf16CodeUnitOffset)
     end
 
     return pos
+end
+
+-- Converts a UTF-16 code unit offset to a row and column.
+-- TODO: Speed up?
+function M.UTF16CodeUnitOffsetToRowCol(utf16CodeUnitOffset)
+    local charOffset = M.UTF16CodeUnitOffsetToCharOffset(utf16CodeUnitOffset)
+    return M.indexToRowCol(charOffset)
 end
 
 -- Converts a Unicode character offset in the current buffer to a row and column.

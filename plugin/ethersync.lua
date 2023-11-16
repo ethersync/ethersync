@@ -21,18 +21,15 @@ end
 
 -- Insert a string into the current buffer at a specified UTF-16 code unit index.
 local function insert(index, content)
-    local charIndex = utils.UTF16CodeUnitOffsetToCharOffset(index)
-    local row, col = utils.indexToRowCol(charIndex)
+    local row, col = utils.UTF16CodeUnitOffsetToRowCol(index)
     ignoreNextUpdate()
     vim.api.nvim_buf_set_text(0, row, col, row, col, vim.split(content, "\n"))
 end
 
 -- Delete a string from the current buffer at a specified UTF-16 code unit index.
 local function delete(index, length)
-    local charIndex = utils.UTF16CodeUnitOffsetToCharOffset(index)
-    local row, col = utils.indexToRowCol(charIndex)
-    local charIndexEnd = utils.UTF16CodeUnitOffsetToCharOffset(index + length)
-    local rowEnd, colEnd = utils.indexToRowCol(charIndexEnd)
+    local row, col = utils.UTF16CodeUnitOffsetToRowCol(index)
+    local rowEnd, colEnd = utils.UTF16CodeUnitOffsetToRowCol(index + length)
     ignoreNextUpdate()
     vim.api.nvim_buf_set_text(0, row, col, rowEnd, colEnd, { "" })
 end
@@ -65,10 +62,8 @@ local function setCursor(head, anchor)
             return
         end
 
-        local headChar = utils.UTF16CodeUnitOffsetToCharOffset(head)
-        local row, col = utils.indexToRowCol(headChar)
-        local anchorChar = utils.UTF16CodeUnitOffsetToCharOffset(anchor)
-        local rowAnchor, colAnchor = utils.indexToRowCol(anchorChar)
+        local row, col = utils.UTF16CodeUnitOffsetToRowCol(head)
+        local rowAnchor, colAnchor = utils.UTF16CodeUnitOffsetToRowCol(anchor)
 
         vim.api.nvim_buf_set_extmark(0, ns_id, row, col, {
             id = virtual_cursor,
@@ -162,52 +157,28 @@ function Ethersync()
                 return
             end
 
-            conn:write({
-                byte_offset = byte_offset,
-                new_end_byte_length = new_end_byte_length,
-                old_end_byte_length = old_end_byte_length,
-            })
-
             local filename = vim.fs.basename(vim.api.nvim_buf_get_name(0))
 
-            -- TODO: Calculate in UTF-16 code units.
             if byte_offset + new_end_byte_length > vim.fn.strlen(content) then
                 -- Tried to insert something *after* the end of the (resulting) file.
                 -- I think this is probably a bug, that happens when you use the 'o' command, for example.
                 byte_offset = vim.fn.strlen(content) - new_end_byte_length
             end
 
-            local charOffset = utils.byteOffsetToCharOffset(byte_offset)
-            local oldEndChar = utils.byteOffsetToCharOffset(byte_offset + old_end_byte_length, previousContent)
-            conn:write({ oldEndChar = oldEndChar, previousContent = previousContent })
-            local newEndChar = utils.byteOffsetToCharOffset(byte_offset + new_end_byte_length)
-
-            local newEndCharLength = newEndChar - charOffset
-
-            local charOffsetUTF16CodeUnits = utils.charOffsetToUTF16CodeUnitOffset(charOffset)
-            local oldEndCharUTF16CodeUnits = utils.charOffsetToUTF16CodeUnitOffset(oldEndChar, previousContent)
-            local newEndCharUTF16CodeUnits = utils.charOffsetToUTF16CodeUnitOffset(newEndChar)
+            local charOffsetUTF16CodeUnits = utils.byteOffsetToUTF16CodeUnitOffset(byte_offset)
+            local oldEndCharUTF16CodeUnits =
+                utils.byteOffsetToUTF16CodeUnitOffset(byte_offset + old_end_byte_length, previousContent)
+            local newEndCharUTF16CodeUnits = utils.byteOffsetToUTF16CodeUnitOffset(byte_offset + new_end_byte_length)
 
             local oldEndCharUTF16CodeUnitsLength = oldEndCharUTF16CodeUnits - charOffsetUTF16CodeUnits
             local newEndCharUTF16CodeUnitsLength = newEndCharUTF16CodeUnits - charOffsetUTF16CodeUnits
-
-            conn:write({ content = content })
-            conn:write({
-                charOffset = charOffsetUTF16CodeUnits,
-                oldEndChar = oldEndCharUTF16CodeUnits,
-                newEndChar = newEndCharUTF16CodeUnits,
-                oldEndCharLength = oldEndCharUTF16CodeUnitsLength,
-                newEndCharLength = newEndCharUTF16CodeUnitsLength,
-            })
-
-            -- TODO: For snippet expansion, for example, a deletion (of the snippet text) takes place, which is not accounted for here.
 
             if oldEndCharUTF16CodeUnitsLength > 0 then
                 conn:write({ "delete", filename, charOffsetUTF16CodeUnits, oldEndCharUTF16CodeUnitsLength })
             end
 
             if newEndCharUTF16CodeUnitsLength > 0 then
-                local insertedString = vim.fn.strcharpart(content, charOffset, newEndCharLength)
+                local insertedString = vim.fn.strpart(content, byte_offset, new_end_byte_length)
                 conn:write({ "insert", filename, charOffsetUTF16CodeUnits, insertedString })
             end
 
