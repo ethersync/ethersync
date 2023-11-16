@@ -39,6 +39,63 @@ function M.charOffsetToByteOffset(charOffset)
     end
 end
 
+function M.UTF16CodeUnits(string)
+    local chars = vim.fn.strchars(string)
+    local pos = 0
+    local utf16CodeUnitOffset = 0
+
+    while pos < chars do
+        local char = vim.fn.strgetchar(string, pos)
+        if char < 0x10000 then
+            utf16CodeUnitOffset = utf16CodeUnitOffset + 1
+        else
+            utf16CodeUnitOffset = utf16CodeUnitOffset + 2
+        end
+        pos = pos + 1
+    end
+
+    return utf16CodeUnitOffset
+end
+
+-- Converts a Unicode character offset to a UTF-16 code unit offset.
+function M.charOffsetToUTF16CodeUnitOffset(charOffset)
+    local content = M.contentOfCurrentBuffer()
+
+    if charOffset > vim.fn.strchars(content) then
+        -- In cases where the specified location is outside of the current content,
+        -- we try to give a reasonable value, but (TODO) we don't actually know how many
+        -- *UTF-16 code units* we need to add. For now, we use bytes.
+
+        -- This case seems to trigger when deleting at the end of the file,
+        -- and when using the 'o' command.
+        local charLength = vim.fn.strchars(content)
+        local utf16Length = M.UTF16CodeUnits(content)
+        local bytesAfterContent = charOffset - charLength
+        return utf16Length + bytesAfterContent
+    end
+
+    return M.UTF16CodeUnits(vim.fn.strcharpart(content, 0, charOffset))
+end
+
+function M.UTF16CodeUnitOffsetToCharOffset(utf16CodeUnitOffset)
+    local content = M.contentOfCurrentBuffer()
+
+    local pos = 0
+    local UTF16CodeUnitsRemaining = utf16CodeUnitOffset
+
+    while UTF16CodeUnitsRemaining > 0 do
+        local char = vim.fn.strgetchar(content, pos)
+        if char < 0x10000 then
+            UTF16CodeUnitsRemaining = UTF16CodeUnitsRemaining - 1
+        else
+            UTF16CodeUnitsRemaining = UTF16CodeUnitsRemaining - 2
+        end
+        pos = pos + 1
+    end
+
+    return pos
+end
+
 -- Converts a Unicode character offset in the current buffer to a row and column.
 function M.indexToRowCol(index)
     -- First, calculate which byte the (UTF-16) index corresponds to.
