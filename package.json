@@ -1,13 +1,13 @@
 {
     "name": "ethersync",
-    "version": "1.0.0",
+    "version": "0.1.0",
     "description": "",
-    "main": "yjs.js",
     "author": "",
     "scripts": {
-        "run": "tsc src/*.ts; node src/ot.js"
+        "receiver": "tsc; node dist/receiver.js"
     },
     "dependencies": {
+        "@types/node": "^20.9.0",
         "async-mutex": "^0.4.0",
         "diff": "^5.1.0",
         "ws": "^8.13.0",

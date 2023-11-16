@@ -1,17 +1,21 @@
-import { createServer } from "net"
+import {createServer, Server, Socket} from "net"
 
+// A simple server that communicates with clients using newline-delimited JSON.
 export class NDJSONServer {
-    server: any
-    connectionCallback = (_: any) => { }
-    messageCallback = (_: any, __: any) => { }
-    closeCallback = (_: any) => { }
+    server: Server
+    client?: Socket // TODO: support multiple clients
+
+    connectionCallback = () => {}
+    messageCallback = (_: any) => {}
+    closeCallback = () => {}
 
     constructor(port: number) {
         this.server = createServer()
         this.server.listen(port)
-        this.server.on("connection", (conn: any) => {
+        this.server.on("connection", (conn: Socket) => {
             conn.setEncoding("utf8")
-            this.connectionCallback(conn)
+            this.client = conn
+            this.connectionCallback()
 
             let buffer = ""
             conn.on("data", (chunk: string) => {
@@ -21,29 +25,29 @@ export class NDJSONServer {
                     if (i == -1) {
                         break
                     }
-                    let json = buffer.substr(0, i)
-                    buffer = buffer.substr(i + 1)
+                    let json = buffer.slice(0, i)
+                    buffer = buffer.slice(i + 1)
                     let data = JSON.parse(json)
-                    this.messageCallback(conn, data)
+                    this.messageCallback(data)
                 }
             })
 
             conn.on("close", () => {
-                this.closeCallback(conn)
+                this.closeCallback()
             })
         })
     }
-    onConnection(callback: any) {
+    onConnection(callback: () => void) {
         this.connectionCallback = callback
     }
-    onMessage(callback: any) {
+    onMessage(callback: (message: any) => void) {
         this.messageCallback = callback
     }
-    onClose(callback: any) {
+    onClose(callback: () => void) {
         this.closeCallback = callback
     }
-    write(client: any, message: any) {
+    write(message: any) {
         let data = JSON.stringify(message) + "\n"
-        client.write(data)
+        this.client?.write(data)
     }
 }
