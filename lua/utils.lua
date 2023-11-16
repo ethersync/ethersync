@@ -118,7 +118,8 @@ end
 
 -- Converts a row and column in the current buffer to a Unicode character offset.
 function M.rowColToIndex(row, col)
-    local byte = vim.fn.line2byte(row + 1) + col - 1
+    -- Note: line2byte returns 1 for the first line.
+    local byte = vim.fn.line2byte(row) + col - 1
     return M.byteOffsetToCharOffset(byte)
 end
 

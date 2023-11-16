@@ -215,10 +215,10 @@ function Ethersync()
         end,
     })
 
-    vim.api.nvim_create_autocmd({ "CursorMoved", "CursorMovedI", "ModeChanged" }, {
+    vim.api.nvim_create_autocmd({ "CursorMoved", "CursorMovedI" }, {
         callback = function()
             local row, col = unpack(vim.api.nvim_win_get_cursor(0))
-            local head = utils.rowColToIndex(row - 1, col)
+            local head = utils.rowColToIndex(row, col)
             local headUTF16CodeUnits = utils.charOffsetToUTF16CodeUnitOffset(head)
 
             if headUTF16CodeUnits == -1 then
@@ -231,14 +231,17 @@ function Ethersync()
 
             local anchorUTF16CodeUnits = headUTF16CodeUnits
             if visualSelection then
+                -- Note: colV is the *byte* position, starting at *1*!
                 local _, rowV, colV = unpack(vim.fn.getpos("v"))
-                local anchor = utils.rowColToIndex(rowV - 1, colV)
-                anchorUTF16CodeUnits = utils.charOffsetToUTF16CodeUnitOffset(anchor)
-                if headUTF16CodeUnits > anchorUTF16CodeUnits then
+                local anchor = utils.rowColToIndex(rowV, colV - 1)
+                if head >= anchor then
+                    head = head + 1
                 else
-                    headUTF16CodeUnits = headUTF16CodeUnits + 1
-                    anchorUTF16CodeUnits = anchorUTF16CodeUnits + 1
+                    anchor = anchor + 1
                 end
+                headUTF16CodeUnits = utils.charOffsetToUTF16CodeUnitOffset(head)
+                anchorUTF16CodeUnits = utils.charOffsetToUTF16CodeUnitOffset(anchor)
+                conn:write({ rowV = rowV, colV = colV, anchor = anchor, anchorUTF16CodeUnits = anchorUTF16CodeUnits })
             end
             local filename = vim.fs.basename(vim.api.nvim_buf_get_name(0))
             conn:write({ "cursor", filename, headUTF16CodeUnits, anchorUTF16CodeUnits })
