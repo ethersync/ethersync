@@ -30,6 +30,16 @@ local function delete(index, length)
     vim.api.nvim_buf_set_text(0, row, col, rowEnd, colEnd, { "" })
 end
 
+local function createCursor()
+    local row = 0
+    local col = 0
+    virtual_cursor = vim.api.nvim_buf_set_extmark(0, ns_id, row, col, {
+        hl_mode = "combine",
+        hl_group = "TermCursor",
+        end_col = col + 0,
+    })
+end
+
 -- Set the cursor position in the current buffer. If head and anchor are different,
 -- a visual selection is created.
 local function setCursor(head, anchor)
@@ -87,12 +97,13 @@ local function start_read()
                     end
                 end)
             elseif message[1] == "cursor" then
-                local filename = message[2]
+                --local filename = message[2]
                 local head = tonumber(message[3])
                 local anchor = tonumber(message[4])
-                if filename == vim.fs.basename(vim.api.nvim_buf_get_name(0)) then
-                    setCursor(head, anchor)
-                end
+                -- TODO: Check filename.
+                --if filename == vim.fs.basename(vim.api.nvim_buf_get_name(0)) then
+                setCursor(head, anchor)
+                --end
             end
         end
     end)
@@ -105,7 +116,6 @@ function Ethersync()
     end
 
     print("Ethersync activated!")
-    --vim.opt.modifiable = false
 
     conn:connect("127.0.0.1", 9000, function(err)
         if err then
@@ -115,17 +125,7 @@ function Ethersync()
         end
     end)
 
-    --local row = 0
-    --local col = 0
-    --virtual_cursor = vim.api.nvim_buf_set_extmark(0, ns_id, row, col, {
-    --    hl_mode = 'combine',
-    --    hl_group = 'TermCursor',
-    --    end_col = col + 0
-    --})
-
-    --setCursor(12,10)
-
-    --connect()
+    createCursor()
 
     vim.api.nvim_buf_attach(0, false, {
         on_bytes = function(
@@ -147,16 +147,6 @@ function Ethersync()
                 ignored_ticks[changedtick] = nil
                 return
             end
-
-            --print("start_row: " .. start_row)
-            --print("num lines: " .. vim.fn.line('$'))
-            --local num_rows = vim.fn.line('$')
-            --if start_row == num_rows-1 and start_column == 0 and new_end_column == 0 then
-            --    -- Edit is after the end of the buffer. Ignore it.
-            --    return
-            --end
-
-            --local new_content_lines = vim.api.nvim_buf_get_text(buffer_handle, start_row, start_column, start_row + new_end_row, start_column + new_end_column, {})
 
             conn:write({
                 byte_offset = byte_offset,
@@ -225,7 +215,7 @@ function Ethersync()
                 end
             end
             local filename = vim.fs.basename(vim.api.nvim_buf_get_name(0))
-            --conn:write({ "cursor", filename, head, anchor })
+            conn:write({ "cursor", filename, head, anchor })
         end,
     })
 end
