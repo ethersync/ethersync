@@ -26,7 +26,9 @@ function Connection:read(callback)
 
                     if start then
                         local json = buffer:sub(1, start - 1)
-                        local success, result = pcall(function() return vim.fn.json_decode(json) end)
+                        local success, result = pcall(function()
+                            return vim.fn.json_decode(json)
+                        end)
                         if success then
                             callback(nil, result)
                         else

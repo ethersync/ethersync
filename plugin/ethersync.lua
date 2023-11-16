@@ -3,7 +3,7 @@ local utils = require("utils")
 
 local ignored_ticks = {}
 
-local ns_id = vim.api.nvim_create_namespace('Ethersync')
+local ns_id = vim.api.nvim_create_namespace("Ethersync")
 local virtual_cursor
 local conn = connection.new_connection()
 
@@ -45,10 +45,10 @@ local function setCursor(head, anchor)
 
         vim.api.nvim_buf_set_extmark(0, ns_id, row, col, {
             id = virtual_cursor,
-            hl_mode = 'combine',
-            hl_group = 'TermCursor',
+            hl_mode = "combine",
+            hl_group = "TermCursor",
             end_col = colAnchor,
-            end_row = rowAnchor
+            end_row = rowAnchor,
         })
     end)
 end
@@ -91,11 +91,11 @@ local function start_read()
 end
 
 function Ethersync()
-    if vim.fn.isdirectory(vim.fn.expand('%:p:h') .. '/.ethersync') ~= 1 then
+    if vim.fn.isdirectory(vim.fn.expand("%:p:h") .. "/.ethersync") ~= 1 then
         return
     end
 
-    print('Ethersync activated!')
+    print("Ethersync activated!")
     --vim.opt.modifiable = false
 
     conn:connect("127.0.0.1", 9000, function(err)
@@ -119,9 +119,20 @@ function Ethersync()
     --connect()
 
     vim.api.nvim_buf_attach(0, false, {
-        on_bytes = function(the_string_bytes, buffer_handle, changedtick, start_row, start_column, byte_offset,
-                            old_end_row, old_end_column, old_end_byte_length, new_end_row, new_end_column,
-                            new_end_byte_length)
+        on_bytes = function(
+            the_string_bytes,
+            buffer_handle,
+            changedtick,
+            start_row,
+            start_column,
+            byte_offset,
+            old_end_row,
+            old_end_column,
+            old_end_byte_length,
+            new_end_row,
+            new_end_column,
+            new_end_byte_length
+        )
             -- Did the change come from us? If so, ignore it.
             if ignored_ticks[changedtick] then
                 ignored_ticks[changedtick] = nil
@@ -138,8 +149,11 @@ function Ethersync()
 
             --local new_content_lines = vim.api.nvim_buf_get_text(buffer_handle, start_row, start_column, start_row + new_end_row, start_column + new_end_column, {})
 
-            conn:write({ byte_offset = byte_offset, new_end_byte_length = new_end_byte_length,
-                old_end_byte_length = old_end_byte_length })
+            conn:write({
+                byte_offset = byte_offset,
+                new_end_byte_length = new_end_byte_length,
+                old_end_byte_length = old_end_byte_length,
+            })
 
             local filename = vim.fs.basename(vim.api.nvim_buf_get_name(0))
             local content = utils.contentOfCurrentBuffer()
@@ -157,8 +171,13 @@ function Ethersync()
             local newEndCharLength = newEndChar - charOffset
 
             conn:write({ content = content })
-            conn:write({ charOffset = charOffset, oldEndChar = oldEndChar, newEndChar = newEndChar,
-                oldEndCharLength = oldEndCharLength, newEndCharLength = newEndCharLength })
+            conn:write({
+                charOffset = charOffset,
+                oldEndChar = oldEndChar,
+                newEndChar = newEndChar,
+                oldEndCharLength = oldEndCharLength,
+                newEndCharLength = newEndCharLength,
+            })
 
             -- TODO: For snippet expansion, for example, a deletion (of the snippet text) takes place, which is not accounted for here.
 
@@ -170,7 +189,7 @@ function Ethersync()
                 local insertedString = vim.fn.strcharpart(content, charOffset, newEndCharLength)
                 conn:write({ "insert", filename, charOffset, insertedString })
             end
-        end
+        end,
     })
 
     vim.api.nvim_create_autocmd({ "CursorMoved", "CursorMovedI" }, {
@@ -184,7 +203,7 @@ function Ethersync()
             end
 
             -- Is there a visual selection?
-            local visualSelection = vim.fn.mode() == 'v' or vim.fn.mode() == 'V' or vim.fn.mode() == ''
+            local visualSelection = vim.fn.mode() == "v" or vim.fn.mode() == "V" or vim.fn.mode() == ""
 
             local anchor = head
             if visualSelection then
@@ -198,17 +217,21 @@ function Ethersync()
             end
             local filename = vim.fs.basename(vim.api.nvim_buf_get_name(0))
             --conn:write({ "cursor", filename, head, anchor })
-        end })
+        end,
+    })
 end
 
 -- When new buffer is loaded, run Ethersync.
-vim.api.nvim_exec([[
+vim.api.nvim_exec(
+    [[
 augroup Ethersync
     autocmd!
     autocmd BufEnter * lua Ethersync()
 augroup END
-]], false)
+]],
+    false
+)
 
 -- Here are two other ways to run Ethersync:
-vim.api.nvim_create_user_command('Ethersync', Ethersync, {})
-vim.keymap.set('n', '<Leader>p', Ethersync)
+vim.api.nvim_create_user_command("Ethersync", Ethersync, {})
+vim.keymap.set("n", "<Leader>p", Ethersync)
