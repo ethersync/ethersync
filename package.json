@@ -4,7 +4,8 @@
     "description": "",
     "author": "",
     "scripts": {
-        "receiver": "tsc; node dist/receiver.js"
+        "receiver": "tsc; node dist/receiver.js",
+        "ethersync": "tsc; node dist/ethersync.js"
     },
     "dependencies": {
         "@types/node": "^20.9.0",
