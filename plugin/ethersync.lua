@@ -10,6 +10,10 @@ local ns_id = vim.api.nvim_create_namespace("Ethersync")
 local virtual_cursor
 local conn = connection.new_connection()
 
+-- Used to remember the previous content of the buffer, so that we can
+-- calculate the difference between the previous and the current content.
+local previousContent
+
 local function ignoreNextUpdate()
     local nextTick = vim.api.nvim_buf_get_changedtick(0)
     ignored_ticks[nextTick] = true
@@ -132,6 +136,7 @@ function Ethersync()
     end)
 
     createCursor()
+    previousContent = utils.contentOfCurrentBuffer()
 
     vim.api.nvim_buf_attach(0, false, {
         on_bytes = function(
@@ -148,9 +153,12 @@ function Ethersync()
             new_end_column,
             new_end_byte_length
         )
+            local content = utils.contentOfCurrentBuffer()
+
             -- Did the change come from us? If so, ignore it.
             if ignored_ticks[changedtick] then
                 ignored_ticks[changedtick] = nil
+                previousContent = content
                 return
             end
 
@@ -161,7 +169,6 @@ function Ethersync()
             })
 
             local filename = vim.fs.basename(vim.api.nvim_buf_get_name(0))
-            local content = utils.contentOfCurrentBuffer()
 
             -- TODO: Calculate in UTF-16 code units.
             if byte_offset + new_end_byte_length > vim.fn.strlen(content) then
@@ -171,13 +178,14 @@ function Ethersync()
             end
 
             local charOffset = utils.byteOffsetToCharOffset(byte_offset)
-            local oldEndChar = utils.byteOffsetToCharOffset(byte_offset + old_end_byte_length)
+            local oldEndChar = utils.byteOffsetToCharOffset(byte_offset + old_end_byte_length, previousContent)
+            conn:write({ oldEndChar = oldEndChar, previousContent = previousContent })
             local newEndChar = utils.byteOffsetToCharOffset(byte_offset + new_end_byte_length)
 
             local newEndCharLength = newEndChar - charOffset
 
             local charOffsetUTF16CodeUnits = utils.charOffsetToUTF16CodeUnitOffset(charOffset)
-            local oldEndCharUTF16CodeUnits = utils.charOffsetToUTF16CodeUnitOffset(oldEndChar)
+            local oldEndCharUTF16CodeUnits = utils.charOffsetToUTF16CodeUnitOffset(oldEndChar, previousContent)
             local newEndCharUTF16CodeUnits = utils.charOffsetToUTF16CodeUnitOffset(newEndChar)
 
             local oldEndCharUTF16CodeUnitsLength = oldEndCharUTF16CodeUnits - charOffsetUTF16CodeUnits
@@ -202,6 +210,8 @@ function Ethersync()
                 local insertedString = vim.fn.strcharpart(content, charOffset, newEndCharLength)
                 conn:write({ "insert", filename, charOffsetUTF16CodeUnits, insertedString })
             end
+
+            previousContent = content
         end,
     })
 

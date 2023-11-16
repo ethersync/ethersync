@@ -10,8 +10,9 @@ function M.contentOfCurrentBuffer()
 end
 
 -- Converts a UTF-8 byte offset to a Unicode character offset.
-function M.byteOffsetToCharOffset(byteOffset)
-    local content = M.contentOfCurrentBuffer()
+function M.byteOffsetToCharOffset(byteOffset, content)
+    content = content or M.contentOfCurrentBuffer()
+
     local value = vim.fn.charidx(content, byteOffset, true)
     if value == -1 then
         -- In cases where the specified location is outside of the current content,
@@ -58,8 +59,8 @@ function M.UTF16CodeUnits(string)
 end
 
 -- Converts a Unicode character offset to a UTF-16 code unit offset.
-function M.charOffsetToUTF16CodeUnitOffset(charOffset)
-    local content = M.contentOfCurrentBuffer()
+function M.charOffsetToUTF16CodeUnitOffset(charOffset, content)
+    content = content or M.contentOfCurrentBuffer()
 
     if charOffset > vim.fn.strchars(content) then
         -- In cases where the specified location is outside of the current content,
