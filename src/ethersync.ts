@@ -1,3 +1,5 @@
+import * as fs from "fs"
+import * as path from "path"
 import {NDJSONServer} from "./ndjson_server.js"
 import * as Y from "yjs"
 import {WebsocketProvider} from "y-websocket"
@@ -152,6 +154,28 @@ function startObserving() {
     })
 }
 
+async function pullAllPages() {
+    for (const page of ydoc.getArray("pages").toArray()) {
+        let filename = (page as any).get("title").toString()
+        filename = path.join("output", filename)
+        console.log("Syncing", filename)
+
+        // Create the file if it doesn't exist.
+        if (!fs.existsSync(filename)) {
+            console.log("Creating file", filename)
+            fs.writeFileSync(filename, "")
+        }
+
+        let contentY = (page as any).get("content").toString()
+        let contentFile = fs.readFileSync(filename, "utf8")
+
+        if (contentY !== contentFile) {
+            // TODO: Incorporate changes that have been made while the daemon was offline.
+            fs.writeFileSync(filename, contentY)
+        }
+    }
+}
+
 function editorInsert(filename: string, index: number, text: string) {
     server.write(["insert", filename, index, text])
 }
@@ -164,6 +188,12 @@ function editorCursor(filename: string, head: number, anchor: number) {
     server.write(["cursor", filename, head, anchor])
 }
 
-connectToEtherwikiServer()
-setupEditorServer()
-startObserving()
+;(async () => {
+    connectToEtherwikiServer()
+    setTimeout(() => {
+        pullAllPages()
+        setupEditorServer()
+        startObserving()
+        console.log("Started.")
+    }, 1000)
+})()
