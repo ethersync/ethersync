@@ -191,7 +191,7 @@ function Ethersync()
         end,
     })
 
-    vim.api.nvim_create_autocmd({ "CursorMoved", "CursorMovedI" }, {
+    vim.api.nvim_create_autocmd({ "CursorMoved", "CursorMovedI", "ModeChanged" }, {
         callback = function()
             local row, col = unpack(vim.api.nvim_win_get_cursor(0))
             local head = utils.rowColToIndex(row - 1, col)
