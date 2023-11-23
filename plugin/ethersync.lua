@@ -4,6 +4,8 @@ local utils = require("utils")
 -- Used to store the changedtick of the buffer when we make changes to it.
 -- We do this to avoid infinite loops, where we make a change, which would
 -- trigger normally an "on_bytes" event.
+--
+-- TODO: how big will this list get? should we optimize it?
 local ignored_ticks = {}
 
 local ns_id = vim.api.nvim_create_namespace("Ethersync")
@@ -40,39 +42,37 @@ local function createCursor()
     virtual_cursor = vim.api.nvim_buf_set_extmark(0, ns_id, row, col, {
         hl_mode = "combine",
         hl_group = "TermCursor",
-        end_col = col + 0,
+        end_col = col,
     })
 end
 
 -- Set the cursor position in the current buffer. If head and anchor are different,
 -- a visual selection is created. head and anchor are in UTF-16 code units.
 local function setCursor(head, anchor)
-    vim.schedule(function()
-        if head == anchor then
-            anchor = head + 1
-        end
+    if head == anchor then
+        anchor = head + 1
+    end
 
-        if head > anchor then
-            head, anchor = anchor, head
-        end
+    if head > anchor then
+        head, anchor = anchor, head
+    end
 
-        -- If the cursor is at the end of the buffer, don't show it.
-        -- TODO: Calculate in UTF-16 code units.
-        if head == vim.fn.strchars(vim.fn.join(vim.api.nvim_buf_get_lines(0, 0, -1, true), "\n")) then
-            return
-        end
+    -- If the cursor is at the end of the buffer, don't show it.
+    -- TODO: Calculate in UTF-16 code units.
+    if head == vim.fn.strchars(vim.fn.join(vim.api.nvim_buf_get_lines(0, 0, -1, true), "\n")) then
+        return
+    end
 
-        local row, col = utils.UTF16CodeUnitOffsetToRowCol(head)
-        local rowAnchor, colAnchor = utils.UTF16CodeUnitOffsetToRowCol(anchor)
+    local row, col = utils.UTF16CodeUnitOffsetToRowCol(head)
+    local rowAnchor, colAnchor = utils.UTF16CodeUnitOffsetToRowCol(anchor)
 
-        vim.api.nvim_buf_set_extmark(0, ns_id, row, col, {
-            id = virtual_cursor,
-            hl_mode = "combine",
-            hl_group = "TermCursor",
-            end_col = colAnchor,
-            end_row = rowAnchor,
-        })
-    end)
+    vim.api.nvim_buf_set_extmark(0, ns_id, row, col, {
+        id = virtual_cursor,
+        hl_mode = "combine",
+        hl_group = "TermCursor",
+        end_col = colAnchor,
+        end_row = rowAnchor,
+    })
 end
 
 -- Start a read loop, which reads messages from the Ethersync daemon.
@@ -105,10 +105,12 @@ local function start_read()
                 --local filename = message[2]
                 local head = tonumber(message[3])
                 local anchor = tonumber(message[4])
-                -- TODO: Check filename.
-                --if filename == vim.fs.basename(vim.api.nvim_buf_get_name(0)) then
-                setCursor(head, anchor)
-                --end
+                vim.schedule(function()
+                    -- TODO: check filename, as soon as daemon sends filename correctly
+                    -- if filename == vim.fs.basename(vim.api.nvim_buf_get_name(0)) then
+                    setCursor(head, anchor)
+                    --end
+                end)
             end
         end
     end)
@@ -135,17 +137,17 @@ function Ethersync()
 
     vim.api.nvim_buf_attach(0, false, {
         on_bytes = function(
-            the_string_bytes,
-            buffer_handle,
+            _the_string_bytes,
+            _buffer_handle,
             changedtick,
-            start_row,
-            start_column,
+            _start_row,
+            _start_column,
             byte_offset,
-            old_end_row,
-            old_end_column,
+            _old_end_row,
+            _old_end_column,
             old_end_byte_length,
-            new_end_row,
-            new_end_column,
+            _new_end_row,
+            _new_end_column,
             new_end_byte_length
         )
             local content = utils.contentOfCurrentBuffer()
