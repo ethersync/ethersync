@@ -13,6 +13,7 @@ local M = {}
 --   but we can iterate over the buffer content and calculate it ourselves.
 --   Assumption: All Unicode codepoints under 0x10000 are encoded as a single UTF-16 code unit,
 --   and all others as two.
+--   https://en.wikipedia.org/wiki/UTF-16#Code_points_from_U+010000_to_U+10FFFF
 
 function M.contentOfCurrentBuffer()
     local buffer = 0 -- Current buffer.
@@ -20,25 +21,17 @@ function M.contentOfCurrentBuffer()
     local end_ = -1 -- Last line.
     local strict_indexing = true -- Don't automatically clamp indices to be in a valid range.
     local lines = vim.api.nvim_buf_get_lines(buffer, start, end_, strict_indexing)
+    -- TODO: might be brittle to rely on \n as line delimiter?
+    -- TODO: what happens if we open a latin-1 encoded file?
     return vim.fn.join(lines, "\n")
 end
 
 -- Converts a UTF-8 byte offset to a Unicode character offset.
 function M.byteOffsetToCharOffset(byteOffset, content)
     content = content or M.contentOfCurrentBuffer()
-
     local value = vim.fn.charidx(content, byteOffset, true)
     if value == -1 then
-        -- In cases where the specified location is outside of the current content,
-        -- we try to give a reasonable value, but (TODO) we don't actually know how many
-        -- *characters* we need to add. For now, we use bytes.
-
-        -- This case seems to trigger when deleting at the end of the file,
-        -- and when using the 'o' command.
-        local charLength = vim.fn.strchars(content)
-        local byteLength = vim.fn.strlen(content)
-        local bytesAfterContent = byteOffset - byteLength
-        return charLength + bytesAfterContent
+        error("Could not look up byte offset " .. tostring(byteOffset) .. " in given content.")
     end
     return value
 end
@@ -52,8 +45,8 @@ function M.byteOffsetToUTF16CodeUnitOffset(byteOffset, content)
 end
 
 -- Converts a Unicode character offset to a UTF-8 byte offset.
-function M.charOffsetToByteOffset(charOffset)
-    local content = M.contentOfCurrentBuffer()
+function M.charOffsetToByteOffset(charOffset, content)
+    content = content or M.contentOfCurrentBuffer()
     if charOffset >= vim.fn.strchars(content) then
         -- TODO: When can this happen?
         return vim.fn.strlen(content)
@@ -100,14 +93,17 @@ function M.charOffsetToUTF16CodeUnitOffset(charOffset, content)
     return M.UTF16CodeUnits(vim.fn.strcharpart(content, 0, charOffset))
 end
 
-function M.UTF16CodeUnitOffsetToCharOffset(utf16CodeUnitOffset)
-    local content = M.contentOfCurrentBuffer()
+function M.UTF16CodeUnitOffsetToCharOffset(utf16CodeUnitOffset, content)
+    content = content or M.contentOfCurrentBuffer()
 
     local pos = 0
     local UTF16CodeUnitsRemaining = utf16CodeUnitOffset
 
     while UTF16CodeUnitsRemaining > 0 do
         local char = vim.fn.strgetchar(content, pos)
+        if char == -1 then
+            error("Could not look up UTF-16 offset " .. tostring(utf16CodeUnitOffset) .. " in given content.")
+        end
         if char < 0x10000 then
             UTF16CodeUnitsRemaining = UTF16CodeUnitsRemaining - 1
         else
@@ -150,6 +146,56 @@ function M.rowColToIndex(row, col)
     -- Note: line2byte returns 1 for the first line.
     local byte = vim.fn.line2byte(row) + col - 1
     return M.byteOffsetToCharOffset(byte)
+end
+
+function assertEqual(left, right)
+    assert(left == right, "not equal: " .. tostring(left) .. " != " .. tostring(right))
+end
+
+function assertFail(call)
+    local status, err = pcall(call)
+    assert(not status, "Call did not fail, although it should have.")
+end
+
+function M.testAllUnits()
+    -- TODO: refactor: pull out tests per function
+    assertEqual(M.UTF16CodeUnits("hello"), 5)
+    -- 🥕 == U+1F955
+    assertEqual(M.UTF16CodeUnits("🥕"), 2)
+
+    -- utf8 1 byte, utf16 1 unit
+    assertEqual(M.byteOffsetToUTF16CodeUnitOffset(4, "world"), 4)
+    -- utf8 2 byte, utf16 1 unit
+    assertEqual(M.byteOffsetToUTF16CodeUnitOffset(4, "äworld"), 3)
+    assertEqual(M.byteOffsetToUTF16CodeUnitOffset(4, "ääworld"), 2)
+    -- utf8 3 byte, utf16 1 unit
+    -- ⚽ == U+26BD
+    assertEqual(M.byteOffsetToUTF16CodeUnitOffset(4, "⚽world"), 2)
+    -- utf8 3 byte, utf16 2 units
+    -- does it exit? TODO
+    -- utf8 4 byte, utf16 2 units
+    assertEqual(M.byteOffsetToUTF16CodeUnitOffset(4, "🥕world"), 2)
+    assertEqual(M.byteOffsetToUTF16CodeUnitOffset(5, "🥕world"), 3)
+    assertFail(function()
+        M.byteOffsetToUTF16CodeUnitOffset(6, "world")
+    end)
+    assertFail(function()
+        M.byteOffsetToUTF16CodeUnitOffset(-1, "world")
+    end)
+    -- TODO: what happens if byteOffset doesn't match cleanly into a unit offset?
+    -- TODO: handle more edge cases / catch more invalid input
+
+    assertEqual(M.UTF16CodeUnitOffsetToCharOffset(2, "world"), 2)
+    assertEqual(M.UTF16CodeUnitOffsetToCharOffset(2, "🥕world"), 1)
+    assertEqual(M.UTF16CodeUnitOffsetToCharOffset(4, "🥕world"), 3)
+    assertEqual(M.UTF16CodeUnitOffsetToCharOffset(5, "🥕wörld"), 4)
+    assertEqual(M.UTF16CodeUnitOffsetToCharOffset(4, "⚽world"), 4)
+
+    assertFail(function()
+        M.UTF16CodeUnitOffsetToCharOffset(6, "world")
+    end)
+
+    print("Ethersync tests successful!")
 end
 
 return M

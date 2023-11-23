@@ -235,4 +235,5 @@ augroup END
 
 -- Here are two other ways to run Ethersync:
 vim.api.nvim_create_user_command("Ethersync", Ethersync, {})
+vim.api.nvim_create_user_command("EthersyncRunTests", utils.testAllUnits, {})
 vim.keymap.set("n", "<Leader>p", Ethersync)
