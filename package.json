@@ -5,15 +5,22 @@
     "author": "",
     "scripts": {
         "receiver": "tsc; node dist/receiver.js",
-        "ethersync": "tsc; node dist/ethersync.js"
+        "ethersync": "tsc; node dist/ethersync.js",
+        "jsonrpc": "tsc; node dist/jsonrpc.js"
     },
     "dependencies": {
         "@types/node": "^20.9.0",
         "async-mutex": "^0.4.0",
         "diff": "^5.1.0",
+        "express": "^4.18.2",
+        "json-rpc-2.0": "^1.7.0",
         "ws": "^8.13.0",
         "y-leveldb": "^0.1.2",
         "y-websocket": "^1.5.0",
         "yjs": "^13.5.51"
+    },
+    "devDependencies": {
+        "@types/body-parser": "^1.19.5",
+        "@types/express": "^4.17.21"
     }
 }
