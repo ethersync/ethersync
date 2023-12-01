@@ -12,6 +12,8 @@ local ns_id = vim.api.nvim_create_namespace("Ethersync")
 local virtual_cursor
 local conn = connection.new_connection()
 
+local client
+
 -- Used to remember the previous content of the buffer, so that we can
 -- calculate the difference between the previous and the current content.
 local previousContent
@@ -118,16 +120,38 @@ function Ethersync()
 
     print("Ethersync activated!")
 
-    conn:connect("127.0.0.1", 9000, function(err)
-        if err then
-            print("Could not connect to Ethersync daemon: " .. err)
-        else
-            start_read()
-        end
-    end)
+    local cmd = vim.lsp.rpc.connect("127.0.0.1", 9000)
+    --local client_id = vim.lsp.start({ name = "ethersync", cmd = cmd })
+    client = cmd()
 
-    createCursor()
-    previousContent = utils.contentOfCurrentBuffer()
+    --lsp.notify("ping", { name = "blinry" })
+
+    --local lsp = vim.lsp.get_client_by_id(client_id)
+    ----lsp.request_sync("log", { message = "hello" })
+    --local response, err = lsp.request_sync("ping", { name = "blinry" })
+    --print("Response: " .. vim.inspect(response))
+    --print("Error: " .. vim.inspect(err))
+
+    --local lsp = vim.lsp.rpc.start("node", { "/home/blinry/wip/ethersync-daemon/dist/jsonrpc.js" })
+
+    --lsp.request("ping", { name = "blinry" }, function(err, response)
+    --    if err then
+    --        print("Error: " .. err)
+    --    else
+    --        print("Response: " .. vim.inspect(response))
+    --    end
+    --end)
+
+    --conn:connect("127.0.0.1", 9000, function(err)
+    --    if err then
+    --        print("Could not connect to Ethersync daemon: " .. err)
+    --    else
+    --        start_read()
+    --    end
+    --end)
+
+    --createCursor()
+    --previousContent = utils.contentOfCurrentBuffer()
 
     vim.api.nvim_buf_attach(0, false, {
         on_bytes = function(
@@ -170,50 +194,78 @@ function Ethersync()
             local newEndCharUTF16CodeUnitsLength = newEndCharUTF16CodeUnits - charOffsetUTF16CodeUnits
 
             if oldEndCharUTF16CodeUnitsLength > 0 then
-                conn:write({ "delete", filename, charOffsetUTF16CodeUnits, oldEndCharUTF16CodeUnitsLength })
+                --conn:write({ "delete", filename, charOffsetUTF16CodeUnits, oldEndCharUTF16CodeUnitsLength })
+                RequestSync("delete", { filename, charOffsetUTF16CodeUnits, oldEndCharUTF16CodeUnitsLength })
             end
 
             if newEndCharUTF16CodeUnitsLength > 0 then
                 local insertedString = vim.fn.strpart(content, byte_offset, new_end_byte_length)
-                conn:write({ "insert", filename, charOffsetUTF16CodeUnits, insertedString })
+                --conn:write({ "insert", filename, charOffsetUTF16CodeUnits, insertedString })
+                RequestSync("insert", { filename, charOffsetUTF16CodeUnits, insertedString })
             end
 
             previousContent = content
         end,
     })
 
-    vim.api.nvim_create_autocmd({ "CursorMoved", "CursorMovedI" }, {
-        callback = function()
-            local row, col = unpack(vim.api.nvim_win_get_cursor(0))
-            local head = utils.rowColToIndex(row, col)
-            local headUTF16CodeUnits = utils.charOffsetToUTF16CodeUnitOffset(head)
+    --vim.api.nvim_create_autocmd({ "CursorMoved", "CursorMovedI" }, {
+    --    callback = function()
+    --        local row, col = unpack(vim.api.nvim_win_get_cursor(0))
+    --        local head = utils.rowColToIndex(row, col)
+    --        local headUTF16CodeUnits = utils.charOffsetToUTF16CodeUnitOffset(head)
 
-            if headUTF16CodeUnits == -1 then
-                -- TODO what happens here?
-                return
-            end
+    --        if headUTF16CodeUnits == -1 then
+    --            -- TODO what happens here?
+    --            return
+    --        end
 
-            -- Is there a visual selection?
-            local visualSelection = vim.fn.mode() == "v" or vim.fn.mode() == "V" or vim.fn.mode() == ""
+    --        -- Is there a visual selection?
+    --        local visualSelection = vim.fn.mode() == "v" or vim.fn.mode() == "V" or vim.fn.mode() == ""
 
-            local anchorUTF16CodeUnits = headUTF16CodeUnits
-            if visualSelection then
-                -- Note: colV is the *byte* position, starting at *1*!
-                local _, rowV, colV = unpack(vim.fn.getpos("v"))
-                local anchor = utils.rowColToIndex(rowV, colV - 1)
-                if head >= anchor then
-                    head = head + 1
-                else
-                    anchor = anchor + 1
-                end
-                headUTF16CodeUnits = utils.charOffsetToUTF16CodeUnitOffset(head)
-                anchorUTF16CodeUnits = utils.charOffsetToUTF16CodeUnitOffset(anchor)
-                conn:write({ rowV = rowV, colV = colV, anchor = anchor, anchorUTF16CodeUnits = anchorUTF16CodeUnits })
-            end
-            local filename = vim.fs.basename(vim.api.nvim_buf_get_name(0))
-            conn:write({ "cursor", filename, headUTF16CodeUnits, anchorUTF16CodeUnits })
-        end,
-    })
+    --        local anchorUTF16CodeUnits = headUTF16CodeUnits
+    --        if visualSelection then
+    --            -- Note: colV is the *byte* position, starting at *1*!
+    --            local _, rowV, colV = unpack(vim.fn.getpos("v"))
+    --            local anchor = utils.rowColToIndex(rowV, colV - 1)
+    --            if head >= anchor then
+    --                head = head + 1
+    --            else
+    --                anchor = anchor + 1
+    --            end
+    --            headUTF16CodeUnits = utils.charOffsetToUTF16CodeUnitOffset(head)
+    --            anchorUTF16CodeUnits = utils.charOffsetToUTF16CodeUnitOffset(anchor)
+    --            conn:write({ rowV = rowV, colV = colV, anchor = anchor, anchorUTF16CodeUnits = anchorUTF16CodeUnits })
+    --        end
+    --        local filename = vim.fs.basename(vim.api.nvim_buf_get_name(0))
+    --        conn:write({ "cursor", filename, headUTF16CodeUnits, anchorUTF16CodeUnits })
+    --    end,
+    --})
+end
+
+-- Stolen from Neovim.
+function RequestSync(method, params, timeout_ms, bufnr)
+    local request_result = nil
+    local function _sync_handler(err, result)
+        request_result = { err = err, result = result }
+    end
+
+    local success, request_id = client.request(method, params, _sync_handler, bufnr)
+    if not success then
+        return nil
+    end
+
+    local wait_result, reason = vim.wait(timeout_ms or 1000, function()
+        return request_result ~= nil
+    end, 10)
+
+    if not wait_result then
+        if request_id then
+            client.cancel_request(request_id)
+        end
+        local wait_result_reason = { [-1] = "timeout", [-2] = "interrupted", [-3] = "error" }
+        return nil, wait_result_reason[reason]
+    end
+    return request_result
 end
 
 -- When new buffer is loaded, run Ethersync.
