@@ -57,11 +57,11 @@ local function setCursor(head, anchor)
         head, anchor = anchor, head
     end
 
-    -- If the cursor is at the end of the buffer, don't show it.
-    -- TODO: Calculate in UTF-16 code units.
-    if head == vim.fn.strchars(vim.fn.join(vim.api.nvim_buf_get_lines(0, 0, -1, true), "\n")) then
-        return
-    end
+    ---- If the cursor is at the end of the buffer, don't show it.
+    ---- TODO: Calculate in UTF-16 code units.
+    --if head == vim.fn.strchars(vim.fn.join(vim.api.nvim_buf_get_lines(0, 0, -1, true), "\n")) then
+    --    return
+    --end
 
     local row, col = utils.UTF16CodeUnitOffsetToRowCol(head)
     local rowAnchor, colAnchor = utils.UTF16CodeUnitOffsetToRowCol(anchor)
@@ -77,43 +77,37 @@ end
 
 -- Start a read loop, which reads messages from the Ethersync daemon.
 local function start_read()
-    conn:read(function(err, message)
+    conn:read(vim.schedule_wrap(function(err, message)
         if err then
             print("Error: " .. err)
         else
-            local pretty_printed = vim.fn.json_encode(message)
+            local pretty_printed = vim.json.encode(message)
             print("Received message: " .. pretty_printed)
             if message[1] == "insert" then
                 local filename = message[2]
                 local index = tonumber(message[3])
                 local content = message[4]
-                vim.schedule(function()
-                    if filename == vim.fs.basename(vim.api.nvim_buf_get_name(0)) then
-                        insert(index, content)
-                    end
-                end)
+                if filename == vim.fs.basename(vim.api.nvim_buf_get_name(0)) then
+                    insert(index, content)
+                end
             elseif message[1] == "delete" then
                 local filename = message[2]
                 local index = tonumber(message[3])
                 local length = tonumber(message[4])
-                vim.schedule(function()
-                    if filename == vim.fs.basename(vim.api.nvim_buf_get_name(0)) then
-                        delete(index, length)
-                    end
-                end)
+                if filename == vim.fs.basename(vim.api.nvim_buf_get_name(0)) then
+                    delete(index, length)
+                end
             elseif message[1] == "cursor" then
                 --local filename = message[2]
                 local head = tonumber(message[3])
                 local anchor = tonumber(message[4])
-                vim.schedule(function()
-                    -- TODO: check filename, as soon as daemon sends filename correctly
-                    -- if filename == vim.fs.basename(vim.api.nvim_buf_get_name(0)) then
-                    setCursor(head, anchor)
-                    --end
-                end)
+                -- TODO: check filename, as soon as daemon sends filename correctly
+                -- if filename == vim.fs.basename(vim.api.nvim_buf_get_name(0)) then
+                setCursor(head, anchor)
+                --end
             end
         end
-    end)
+    end))
 end
 
 -- Initialization function.
