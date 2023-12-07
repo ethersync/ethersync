@@ -7,11 +7,13 @@
         "ethersync": "tsc; node dist/ethersync.js"
     },
     "dependencies": {
+        "@types/lodash": "^4.14.202",
         "@types/node": "^20.9.0",
         "async-mutex": "^0.4.0",
         "diff": "^5.1.0",
         "express": "^4.18.2",
         "json-rpc-2.0": "^1.7.0",
+        "lodash": "^4.17.21",
         "ws": "^8.13.0",
         "y-leveldb": "^0.1.2",
         "y-websocket": "^1.5.0",
