@@ -4,16 +4,77 @@ import {JSONRPCServer} from "./jsonrpc_server.js"
 import * as Y from "yjs"
 import {WebsocketProvider} from "y-websocket"
 
-import {JSONRPCServer as JSONRPCServerLib} from "json-rpc-2.0"
+import {
+    JSONRPCServer as JSONRPCServerLib,
+    JSONRPCClient as JSONRPCClientLib,
+    JSONRPCServerAndClient,
+} from "json-rpc-2.0"
 
-const serverLib = new JSONRPCServerLib()
-serverLib.addMethod("ping", ({name}) => "Hello, " + name + "!")
-
-//var ydoc = new Y.Doc()
+var ydoc = new Y.Doc()
 var server = new JSONRPCServer(9000)
-//var provider: WebsocketProvider
+var provider: WebsocketProvider
 
-/*function connectToEtherwikiServer() {
+const serverAndClient = new JSONRPCServerAndClient(
+    new JSONRPCServerLib(),
+    new JSONRPCClientLib((request) => {
+        try {
+            server.write(request)
+            return Promise.resolve()
+        } catch (error) {
+            return Promise.reject(error)
+        }
+    }),
+)
+serverAndClient.addMethod("ping", ({name}) => "Hello, " + name + "!")
+
+serverAndClient.addMethod("insert", (params: any) => {
+    let filename = params[0]
+    let index = params[1]
+    let text = params[2]
+
+    ydoc.transact(() => {
+        findPage(filename).get("content").insert(index, text)
+    }, ydoc.clientID)
+    return ["ok"]
+})
+
+serverAndClient.addMethod("delete", (params: any) => {
+    let filename = params[0]
+    let index = params[1]
+    let length = params[2]
+
+    ydoc.transact(() => {
+        findPage(filename).get("content").delete(index, length)
+    }, ydoc.clientID)
+})
+
+serverAndClient.addMethod("cursor", (params: any) => {
+    let filename = params[0]
+    let headPos = parseInt(params[1])
+    let anchorPos = parseInt(params[2])
+
+    let anchor = JSON.stringify(
+        Y.createRelativePositionFromTypeIndex(
+            findPage(filename).get("content"),
+            anchorPos,
+        ),
+    )
+    let head = JSON.stringify(
+        Y.createRelativePositionFromTypeIndex(
+            findPage(filename).get("content"),
+            headPos,
+        ),
+    )
+
+    if (provider.awareness) {
+        provider.awareness.setLocalStateField("cursor", {
+            anchor,
+            head,
+        })
+    }
+})
+
+function connectToEtherwikiServer() {
     provider = new WebsocketProvider(
         "wss://etherwiki.blinry.org",
         "playground",
@@ -28,7 +89,7 @@ var server = new JSONRPCServer(9000)
         color: "#ff00ff",
     })
 
-    provider.awareness.on("change", () => {
+    provider.awareness.on("change", async () => {
         for (const [clientID, state] of provider.awareness.getStates()) {
             if (state?.cursor?.head) {
                 let head = Y.createAbsolutePositionFromRelativePosition(
@@ -41,14 +102,17 @@ var server = new JSONRPCServer(9000)
                 )
                 if (head && anchor) {
                     if (clientID != provider.awareness.clientID) {
-                        editorCursor("filenameTBD", head.index, anchor.index)
+                        await editorCursor(
+                            "filenameTBD",
+                            head.index,
+                            anchor.index,
+                        )
                     }
                 }
             }
         }
     })
 }
-*/
 
 function setupEditorServer() {
     server.onConnection(() => {
@@ -57,14 +121,7 @@ function setupEditorServer() {
 
     server.onMessage((message: any) => {
         console.log(message)
-        serverLib.receive(message).then((response) => {
-            if (response) {
-                server.write(response)
-            } else {
-                // This was a notification method, send HTTP 204.
-                // TODO
-            }
-        })
+        serverAndClient.receiveAndSend(message)
     })
 
     server.onClose(() => {
@@ -72,7 +129,6 @@ function setupEditorServer() {
     })
 }
 
-/*
 function findPage(name: string): any {
     let page = ydoc
         .getArray("pages")
@@ -83,61 +139,8 @@ function findPage(name: string): any {
     return page
 }
 
-function parseMessage(message: any) {
-    // If it's not an array, its a debug messge. No need to interpret it.
-    if (!Array.isArray(message)) {
-        return
-    }
-
-    // Otherwise, it's a proper message for us.
-    let parts: any[] = message
-    if (parts[0] === "insert") {
-        let filename = parts[1]
-        let index = parts[2]
-        let text = parts[3]
-
-        ydoc.transact(() => {
-            findPage(filename).get("content").insert(index, text)
-        }, ydoc.clientID)
-    } else if (parts[0] === "delete") {
-        let filename = parts[1]
-        let index = parts[2]
-        let length = parts[3]
-
-        ydoc.transact(() => {
-            findPage(filename).get("content").delete(index, length)
-        }, ydoc.clientID)
-    } else if (parts[0] === "cursor") {
-        let filename = parts[1]
-        let headPos = parseInt(parts[2])
-        let anchorPos = parseInt(parts[3])
-
-        let anchor = JSON.stringify(
-            Y.createRelativePositionFromTypeIndex(
-                findPage(filename).get("content"),
-                anchorPos,
-            ),
-        )
-        let head = JSON.stringify(
-            Y.createRelativePositionFromTypeIndex(
-                findPage(filename).get("content"),
-                headPos,
-            ),
-        )
-
-        if (provider.awareness) {
-            provider.awareness.setLocalStateField("cursor", {
-                anchor,
-                head,
-            })
-        }
-    } else {
-        console.log("unknown message type: %s", parts[0])
-    }
-}
-
 function startObserving() {
-    ydoc.getArray("pages").observeDeep(function (events: any) {
+    ydoc.getArray("pages").observeDeep(async function (events: any) {
         for (const event of events) {
             let clientID = event.transaction.origin
             if (clientID == ydoc.clientID) {
@@ -156,10 +159,10 @@ function startObserving() {
                         index += event.delta[0]["retain"]
                     } else if (event.delta[0]["insert"]) {
                         let text = event.delta[0]["insert"]
-                        editorInsert(filename, index, text)
+                        await editorInsert(filename, index, text)
                     } else if (event.delta[0]["delete"]) {
                         let length = event.delta[0]["delete"]
-                        editorDelete(filename, index, length)
+                        await editorDelete(filename, index, length)
                     }
                     event.delta.shift()
                 }
@@ -190,25 +193,39 @@ async function pullAllPages() {
     }
 }
 
-function editorInsert(filename: string, index: number, text: string) {
-    server.write(["insert", filename, index, text])
+async function editorInsert(filename: string, index: number, text: string) {
+    let result = await serverAndClient.request("insert", [
+        filename,
+        index,
+        text,
+    ])
+    console.log(result)
 }
 
-function editorDelete(filename: string, index: number, length: number) {
-    server.write(["delete", filename, index, length])
+async function editorDelete(filename: string, index: number, length: number) {
+    let result = await serverAndClient.request("delete", [
+        filename,
+        index,
+        length,
+    ])
+    console.log(result)
 }
 
-function editorCursor(filename: string, head: number, anchor: number) {
-    server.write(["cursor", filename, head, anchor])
+async function editorCursor(filename: string, head: number, anchor: number) {
+    let result = await serverAndClient.request("cursor", [
+        filename,
+        head,
+        anchor,
+    ])
+    console.log(result)
 }
-*/
 
 ;(async () => {
-    //connectToEtherwikiServer()
+    connectToEtherwikiServer()
     setTimeout(() => {
-        //pullAllPages()
+        pullAllPages()
         setupEditorServer()
-        //startObserving()
+        startObserving()
         console.log("Started.")
     }, 1000)
 })()
