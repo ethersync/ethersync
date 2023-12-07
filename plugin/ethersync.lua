@@ -59,11 +59,12 @@ local function setCursor(head, anchor)
         head, anchor = anchor, head
     end
 
-    ---- If the cursor is at the end of the buffer, don't show it.
-    ---- TODO: Calculate in UTF-16 code units.
-    --if head == vim.fn.strchars(vim.fn.join(vim.api.nvim_buf_get_lines(0, 0, -1, true), "\n")) then
-    --    return
-    --end
+    -- If the cursor is at the end of the buffer, don't show it.
+    -- This is because otherwise, the calculation that follows (to find the location for head+1 would fail.
+    -- TODO: Find a way to display the cursor nevertheless.
+    if head == utils.UTF16CodeUnits(utils.contentOfCurrentBuffer()) then
+        return
+    end
 
     local row, col = utils.UTF16CodeUnitOffsetToRowCol(head)
     local rowAnchor, colAnchor = utils.UTF16CodeUnitOffsetToRowCol(anchor)
@@ -77,41 +78,6 @@ local function setCursor(head, anchor)
     })
 end
 
--- Start a read loop, which reads messages from the Ethersync daemon.
-local function start_read()
-    conn:read(vim.schedule_wrap(function(err, message)
-        if err then
-            print("Error: " .. err)
-        else
-            local pretty_printed = vim.json.encode(message)
-            print("Received message: " .. pretty_printed)
-            if message[1] == "insert" then
-                local filename = message[2]
-                local index = tonumber(message[3])
-                local content = message[4]
-                if filename == vim.fs.basename(vim.api.nvim_buf_get_name(0)) then
-                    insert(index, content)
-                end
-            elseif message[1] == "delete" then
-                local filename = message[2]
-                local index = tonumber(message[3])
-                local length = tonumber(message[4])
-                if filename == vim.fs.basename(vim.api.nvim_buf_get_name(0)) then
-                    delete(index, length)
-                end
-            elseif message[1] == "cursor" then
-                --local filename = message[2]
-                local head = tonumber(message[3])
-                local anchor = tonumber(message[4])
-                -- TODO: check filename, as soon as daemon sends filename correctly
-                -- if filename == vim.fs.basename(vim.api.nvim_buf_get_name(0)) then
-                setCursor(head, anchor)
-                --end
-            end
-        end
-    end))
-end
-
 -- Initialization function.
 function Ethersync()
     if vim.fn.isdirectory(vim.fn.expand("%:p:h") .. "/.ethersync") ~= 1 then
@@ -122,36 +88,38 @@ function Ethersync()
 
     local cmd = vim.lsp.rpc.connect("127.0.0.1", 9000)
     --local client_id = vim.lsp.start({ name = "ethersync", cmd = cmd })
-    client = cmd()
+    client = cmd({
+        server_request = function(method, params)
+            print("Server request: " .. method .. " " .. vim.inspect(params))
 
-    --lsp.notify("ping", { name = "blinry" })
+            if method == "insert" then
+                local filename = params[1]
+                local index = tonumber(params[2])
+                local content = params[3]
+                if filename == vim.fs.basename(vim.api.nvim_buf_get_name(0)) then
+                    insert(index, content)
+                end
+            elseif method == "delete" then
+                local filename = params[1]
+                local index = tonumber(params[2])
+                local length = tonumber(params[3])
+                if filename == vim.fs.basename(vim.api.nvim_buf_get_name(0)) then
+                    delete(index, length)
+                end
+            elseif method == "cursor" then
+                --local filename = params[1]
+                local head = tonumber(params[2])
+                local anchor = tonumber(params[3])
+                -- TODO: check filename, as soon as daemon sends filename correctly
+                -- if filename == vim.fs.basename(vim.api.nvim_buf_get_name(0)) then
+                setCursor(head, anchor)
+                --end
+            end
+            return { "ok" }
+        end,
+    })
 
-    --local lsp = vim.lsp.get_client_by_id(client_id)
-    ----lsp.request_sync("log", { message = "hello" })
-    --local response, err = lsp.request_sync("ping", { name = "blinry" })
-    --print("Response: " .. vim.inspect(response))
-    --print("Error: " .. vim.inspect(err))
-
-    --local lsp = vim.lsp.rpc.start("node", { "/home/blinry/wip/ethersync-daemon/dist/jsonrpc.js" })
-
-    --lsp.request("ping", { name = "blinry" }, function(err, response)
-    --    if err then
-    --        print("Error: " .. err)
-    --    else
-    --        print("Response: " .. vim.inspect(response))
-    --    end
-    --end)
-
-    --conn:connect("127.0.0.1", 9000, function(err)
-    --    if err then
-    --        print("Could not connect to Ethersync daemon: " .. err)
-    --    else
-    --        start_read()
-    --    end
-    --end)
-
-    --createCursor()
-    --previousContent = utils.contentOfCurrentBuffer()
+    createCursor()
 
     vim.api.nvim_buf_attach(0, false, {
         on_bytes = function(
@@ -194,13 +162,11 @@ function Ethersync()
             local newEndCharUTF16CodeUnitsLength = newEndCharUTF16CodeUnits - charOffsetUTF16CodeUnits
 
             if oldEndCharUTF16CodeUnitsLength > 0 then
-                --conn:write({ "delete", filename, charOffsetUTF16CodeUnits, oldEndCharUTF16CodeUnitsLength })
                 RequestSync("delete", { filename, charOffsetUTF16CodeUnits, oldEndCharUTF16CodeUnitsLength })
             end
 
             if newEndCharUTF16CodeUnitsLength > 0 then
                 local insertedString = vim.fn.strpart(content, byte_offset, new_end_byte_length)
-                --conn:write({ "insert", filename, charOffsetUTF16CodeUnits, insertedString })
                 RequestSync("insert", { filename, charOffsetUTF16CodeUnits, insertedString })
             end
 
@@ -208,41 +174,40 @@ function Ethersync()
         end,
     })
 
-    --vim.api.nvim_create_autocmd({ "CursorMoved", "CursorMovedI" }, {
-    --    callback = function()
-    --        local row, col = unpack(vim.api.nvim_win_get_cursor(0))
-    --        local head = utils.rowColToIndex(row, col)
-    --        local headUTF16CodeUnits = utils.charOffsetToUTF16CodeUnitOffset(head)
+    vim.api.nvim_create_autocmd({ "CursorMoved", "CursorMovedI" }, {
+        callback = function()
+            local row, col = unpack(vim.api.nvim_win_get_cursor(0))
+            local head = utils.rowColToIndex(row, col)
+            local headUTF16CodeUnits = utils.charOffsetToUTF16CodeUnitOffset(head)
 
-    --        if headUTF16CodeUnits == -1 then
-    --            -- TODO what happens here?
-    --            return
-    --        end
+            if headUTF16CodeUnits == -1 then
+                -- TODO what happens here?
+                return
+            end
 
-    --        -- Is there a visual selection?
-    --        local visualSelection = vim.fn.mode() == "v" or vim.fn.mode() == "V" or vim.fn.mode() == ""
+            -- Is there a visual selection?
+            local visualSelection = vim.fn.mode() == "v" or vim.fn.mode() == "V" or vim.fn.mode() == ""
 
-    --        local anchorUTF16CodeUnits = headUTF16CodeUnits
-    --        if visualSelection then
-    --            -- Note: colV is the *byte* position, starting at *1*!
-    --            local _, rowV, colV = unpack(vim.fn.getpos("v"))
-    --            local anchor = utils.rowColToIndex(rowV, colV - 1)
-    --            if head >= anchor then
-    --                head = head + 1
-    --            else
-    --                anchor = anchor + 1
-    --            end
-    --            headUTF16CodeUnits = utils.charOffsetToUTF16CodeUnitOffset(head)
-    --            anchorUTF16CodeUnits = utils.charOffsetToUTF16CodeUnitOffset(anchor)
-    --            conn:write({ rowV = rowV, colV = colV, anchor = anchor, anchorUTF16CodeUnits = anchorUTF16CodeUnits })
-    --        end
-    --        local filename = vim.fs.basename(vim.api.nvim_buf_get_name(0))
-    --        conn:write({ "cursor", filename, headUTF16CodeUnits, anchorUTF16CodeUnits })
-    --    end,
-    --})
+            local anchorUTF16CodeUnits = headUTF16CodeUnits
+            if visualSelection then
+                -- Note: colV is the *byte* position, starting at *1*!
+                local _, rowV, colV = unpack(vim.fn.getpos("v"))
+                local anchor = utils.rowColToIndex(rowV, colV - 1)
+                if head >= anchor then
+                    head = head + 1
+                else
+                    anchor = anchor + 1
+                end
+                headUTF16CodeUnits = utils.charOffsetToUTF16CodeUnitOffset(head)
+                anchorUTF16CodeUnits = utils.charOffsetToUTF16CodeUnitOffset(anchor)
+            end
+            local filename = vim.fs.basename(vim.api.nvim_buf_get_name(0))
+            RequestSync("cursor", { filename, headUTF16CodeUnits, anchorUTF16CodeUnits })
+        end,
+    })
 end
 
--- Stolen from Neovim.
+-- Stolen from Neovim source code.
 function RequestSync(method, params, timeout_ms, bufnr)
     local request_result = nil
     local function _sync_handler(err, result)

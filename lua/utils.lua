@@ -31,7 +31,15 @@ function M.byteOffsetToCharOffset(byteOffset, content)
     content = content or M.contentOfCurrentBuffer()
     local value = vim.fn.charidx(content, byteOffset, true)
     if value == -1 then
-        error("Could not look up byte offset " .. tostring(byteOffset) .. " in given content.")
+        -- charidx returns -1 if we specify the byte position directly after the string,
+        -- but we think that's a valid position.
+
+        value = vim.fn.charidx(content, byteOffset - 1, true)
+        if value ~= -1 then
+            return value + 1
+        else
+            error("Could not look up byte offset " .. tostring(byteOffset) .. " in given content.")
+        end
     end
     return value
 end
@@ -176,6 +184,7 @@ function M.testAllUnits()
     -- utf8 4 byte, utf16 2 units
     assertEqual(M.byteOffsetToUTF16CodeUnitOffset(4, "🥕world"), 2)
     assertEqual(M.byteOffsetToUTF16CodeUnitOffset(5, "🥕world"), 3)
+    assertEqual(M.byteOffsetToUTF16CodeUnitOffset(5, "world"), 5)
     assertFail(function()
         M.byteOffsetToUTF16CodeUnitOffset(6, "world")
     end)
@@ -191,8 +200,14 @@ function M.testAllUnits()
     assertEqual(M.UTF16CodeUnitOffsetToCharOffset(5, "🥕wörld"), 4)
     assertEqual(M.UTF16CodeUnitOffsetToCharOffset(4, "⚽world"), 4)
 
+    assertEqual(M.UTF16CodeUnitOffsetToCharOffset(5, "world"), 5)
     assertFail(function()
         M.UTF16CodeUnitOffsetToCharOffset(6, "world")
+    end)
+
+    assertEqual(M.byteOffsetToCharOffset(5, "world"), 5)
+    assertFail(function()
+        M.byteOffsetToCharOffset(6, "world")
     end)
 
     print("Ethersync tests successful!")
