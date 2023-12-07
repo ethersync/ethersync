@@ -1,4 +1,3 @@
-local connection = require("connection")
 local utils = require("utils")
 
 -- Used to store the changedtick of the buffer when we make changes to it.
@@ -10,7 +9,6 @@ local ignored_ticks = {}
 
 local ns_id = vim.api.nvim_create_namespace("Ethersync")
 local virtual_cursor
-local conn = connection.new_connection()
 
 local client
 
