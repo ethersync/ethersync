@@ -7,11 +7,26 @@ export class OTServer {
         private sendToClient: (o: Operation) => void,
     ) {}
 
+    applyChange(change: Change) {
+        if (change instanceof Insertion) {
+            this.document =
+                this.document.slice(0, change.position) +
+                change.content +
+                this.document.slice(change.position)
+        } else {
+            // Deletion
+            this.document =
+                this.document.slice(0, change.position) +
+                this.document.slice(change.position + change.length)
+        }
+    }
+
     applyCRDTChange(change: Change) {
         let operation = new Operation("daemon", this.operations.length, [
             change,
         ])
         this.operations.push(operation)
+        this.applyChange(change)
         this.sendToClient(operation)
     }
 
@@ -20,27 +35,17 @@ export class OTServer {
             operation = this.transformThroughAllOperations(operation)
         }
         for (let change of operation.changes) {
-            if (change instanceof Insertion) {
-                this.document =
-                    this.document.slice(0, change.position) +
-                    change.content +
-                    this.document.slice(change.position)
-            } else {
-                // Deletion
-                this.document =
-                    this.document.slice(0, change.position) +
-                    this.document.slice(change.position + change.length)
-            }
+            this.applyChange(change)
         }
 
         this.operations.push(operation)
-        // confirm operation + broadcast
+        this.sendToClient(operation)
     }
 
     transformThroughAllOperations(operation: Operation): Operation {
         let theirOp = operation
         for (
-            let revision = operation.revision + 1;
+            let revision = operation.revision;
             revision < this.operations.length;
             revision++
         ) {
