@@ -53,6 +53,57 @@ test("transforms individual changes", () => {
     )
 })
 
+test("transforms insertions that apply to the same position", () => {
+    let ot = new OTServer("hello", () => {})
+
+    expect(
+        ot.transformChange(new Insertion(1, "d"), new Insertion(1, "e"), true),
+    ).toEqual([new Insertion(1, "d")])
+
+    expect(
+        ot.transformChange(new Insertion(1, "e"), new Insertion(1, "d"), false),
+    ).toEqual([new Insertion(2, "e")])
+})
+
+test("transforms deletions that apply to the same position", () => {
+    let ot = new OTServer("hello", () => {})
+
+    expect(
+        ot.transformChange(new Deletion(1, 1), new Deletion(1, 1), true),
+    ).toEqual([new Deletion(1, 1)])
+    expect(
+        ot.transformChange(new Deletion(1, 1), new Deletion(1, 1), false),
+    ).toEqual([])
+
+    expect(
+        ot.transformChange(new Deletion(0, 3), new Deletion(1, 3), true),
+    ).toEqual([new Deletion(0, 3)])
+    expect(
+        ot.transformChange(new Deletion(0, 3), new Deletion(1, 3), false),
+    ).toEqual([new Deletion(0, 1)])
+
+    expect(
+        ot.transformChange(new Deletion(1, 3), new Deletion(0, 3), true),
+    ).toEqual([new Deletion(0, 3)])
+    expect(
+        ot.transformChange(new Deletion(1, 3), new Deletion(0, 3), false),
+    ).toEqual([new Deletion(0, 1)])
+
+    expect(
+        ot.transformChange(new Deletion(2, 1), new Deletion(0, 5), true),
+    ).toEqual([new Deletion(0, 1)])
+    expect(
+        ot.transformChange(new Deletion(2, 1), new Deletion(0, 5), false),
+    ).toEqual([])
+
+    expect(
+        ot.transformChange(new Deletion(0, 5), new Deletion(2, 1), true),
+    ).toEqual([new Deletion(0, 5)])
+    expect(
+        ot.transformChange(new Deletion(0, 5), new Deletion(2, 1), false),
+    ).toEqual([new Deletion(0, 4)])
+})
+
 test("transforms two lists of changes", () => {
     let ot = new OTServer("hello", () => {})
 
@@ -164,4 +215,23 @@ test("routes operations through server", () => {
         new Operation("daemon", 2, [new Insertion(3, "z")]),
         new Operation("editor", 3, [new Deletion(1, 2), new Deletion(2, 2)]),
     ])
+})
+
+test("routes operations at same position through server", () => {
+    let ot = new OTServer("hello", () => {})
+
+    ot.applyCRDTChange(new Insertion(1, "x"))
+    ot.applyEditorOperation(new Operation("editor", 0, [new Insertion(1, "y")]))
+
+    expect(ot.document).toEqual("hxyello")
+
+    ot.applyEditorOperation(new Operation("editor", 2, [new Insertion(4, "y")]))
+    ot.applyCRDTChange(new Insertion(4, "x"))
+
+    expect(ot.document).toEqual("hxyexyllo")
+
+    ot.applyCRDTChange(new Deletion(2, 4))
+    ot.applyEditorOperation(new Operation("editor", 4, [new Deletion(1, 4)]))
+
+    expect(ot.document).toEqual("hllo")
 })

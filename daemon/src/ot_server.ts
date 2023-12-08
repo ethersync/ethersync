@@ -109,10 +109,12 @@ export class OTServer {
             let transformedTheirChanges = this.transformChange(
                 theirChange,
                 myChange,
+                false,
             )
             let transformedMyChanges = this.transformChange(
                 myChange,
                 theirChange,
+                true,
             )
 
             // Recursively transform the rest.
@@ -126,9 +128,16 @@ export class OTServer {
         throw new Error("We should never get here.")
     }
 
-    transformChange(theirChange: Change, myChange: Change): Change[] {
+    transformChange(
+        theirChange: Change,
+        myChange: Change,
+        theyGoFirst = false,
+    ): Change[] {
         if (myChange instanceof Deletion) {
-            if (myChange.position > theirChange.position) {
+            if (
+                myChange.position > theirChange.position ||
+                (myChange.position === theirChange.position && theyGoFirst)
+            ) {
                 if (theirChange instanceof Deletion) {
                     let theirChange2 = cloneDeep(theirChange)
 
@@ -136,15 +145,20 @@ export class OTServer {
                         theirChange.position + theirChange.length
                     let endOfMyChange = myChange.position + myChange.length
 
-                    if (endOfTheirChange > myChange.position) {
-                        if (endOfTheirChange > endOfMyChange) {
-                            theirChange2.length -= myChange.length
-                        } else {
-                            theirChange2.length -=
-                                endOfTheirChange - myChange.position
+                    if (theyGoFirst) {
+                        // They win, and we don't need to shorten them.
+                        return [theirChange2]
+                    } else {
+                        if (endOfTheirChange > myChange.position) {
+                            if (endOfTheirChange > endOfMyChange) {
+                                theirChange2.length -= myChange.length
+                            } else {
+                                theirChange2.length -=
+                                    endOfTheirChange - myChange.position
+                            }
                         }
+                        return [theirChange2]
                     }
-                    return [theirChange2]
                 } else {
                     // No need to transform.
                     return [cloneDeep(theirChange)]
@@ -162,17 +176,22 @@ export class OTServer {
                         let endOfTheirChange =
                             theirChange.position + theirChange.length
 
-                        if (endOfMyChange > endOfTheirChange) {
-                            theirChange2.length -= myChange.length
-                        } else {
-                            theirChange2.length -=
-                                endOfMyChange - theirChange.position
-                        }
-
-                        if (theirChange2.length > 0) {
+                        if (theyGoFirst) {
+                            // They win, and we don't need to shorten them.
                             return [theirChange2]
                         } else {
-                            return []
+                            if (endOfMyChange > endOfTheirChange) {
+                                theirChange2.length -= myChange.length
+                            } else {
+                                theirChange2.length -=
+                                    endOfMyChange - theirChange.position
+                            }
+
+                            if (theirChange2.length > 0) {
+                                return [theirChange2]
+                            } else {
+                                return []
+                            }
                         }
                     } else {
                         let endOfMyChange = myChange.position + myChange.length
@@ -194,7 +213,10 @@ export class OTServer {
             }
         } else {
             // myChange is an Insertion
-            if (myChange.position > theirChange.position) {
+            if (
+                myChange.position > theirChange.position ||
+                (myChange.position === theirChange.position && theyGoFirst)
+            ) {
                 if (theirChange instanceof Insertion) {
                     // No need to transform.
                     return [cloneDeep(theirChange)]
