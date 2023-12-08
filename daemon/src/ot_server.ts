@@ -51,24 +51,29 @@ export class OTServer {
     }
 
     transformOperation(theirOp: Operation, myOp: Operation): Operation {
-        let changes: Change[] = [] // These will be part of the resulting op.
-        for (let theirChange of theirOp.changes) {
-            let currentChange = {...theirChange}
+        let inputChanges = theirOp.changes
+        let outputChanges: Change[] = []
+        while (inputChanges.length > 0) {
+            let currentChange = cloneDeep(inputChanges.shift())
             for (let myChange of myOp.changes) {
-                currentChange = this.transformChange(currentChange, myChange)
+                let resultingChanges = this.transformChange(
+                    currentChange,
+                    myChange,
+                )
+                currentChange = resultingChanges.shift()
+                inputChanges = [...resultingChanges, ...inputChanges]
             }
-            changes.push(currentChange)
+            outputChanges.push(currentChange)
         }
 
-        return new Operation(theirOp.sourceID, myOp.revision + 1, changes)
+        return new Operation(theirOp.sourceID, myOp.revision + 1, outputChanges)
     }
 
     transformChange(theirChange: Change, myChange: Change): Change[] {
         if (myChange instanceof Deletion) {
             if (myChange.position > theirChange.position) {
-                // do nothing for insertion :D
                 if (theirChange instanceof Deletion) {
-                    let theirChange2 = {...theirChange}
+                    let theirChange2 = cloneDeep(theirChange)
                     if (
                         theirChange.position + theirChange.length >
                         myChange.position
@@ -85,72 +90,75 @@ export class OTServer {
                         }
                     }
                     return [theirChange2]
+                } else {
+                    // No need to transform.
+                    return [cloneDeep(theirChange)]
                 }
             } else {
-                /*
-        "Transformation Algorithmus" (my_chg, their_chg)
-	if my_chg is a delete(pos, n): 
-		if my_chg.pos > their_chg.pos:
-        ...
-        else:
-        	if my_chg.pos == their_chg.pos:
-            	# TODO: dealbreaker (siehe unten...)
-            else: # my_chg.pos < their_chg.pos
-            	my_chg2 = my_chg
-                their_chg2 = their_chg
-                their_chg2.pos -= my_chg.n
-                if my_chg.pos + my_chg.n > their_chg.pos:
-                	# Kürze den chg, der vom editor kommt
-
-                hello
-                myChange: delete(0,4) -> o
-                theirChange: delete(1,2) -> hlo
-                OR theirChange: insert()
-*/
                 // myChange.position <= theirChange.position
-                let theirChange2 = {...theirChange}
-                theirChange2.position -= myChange.position
                 if (
                     myChange.position + myChange.length >
                     theirChange.position
                 ) {
-                    // unsere
+                    if (theirChange instanceof Deletion) {
+                        let theirChange2 = {...theirChange}
+                        theirChange2.position -= myChange.position
+                        let endOfMyChange = myChange.position + myChange.length
+                        let endOfTheirChange =
+                            theirChange.position + theirChange.length
+
+                        if (endOfMyChange > endOfTheirChange) {
+                            theirChange2.length -= myChange.length
+                        } else {
+                            theirChange2.length -=
+                                endOfMyChange - theirChange.position
+                        }
+                        return [theirChange2]
+                    } else {
+                        let theirChange2 = {...theirChange}
+                        theirChange2.position -= myChange.position
+                        return [theirChange2]
+                    }
                 }
             }
+        } else {
+            // myChange is an Insertion
+            if (myChange.position > theirChange.position) {
+                if (theirChange instanceof Insertion) {
+                    // No need to transform.
+                    return [cloneDeep(theirChange)]
+                } else {
+                    if (
+                        theirChange.position + theirChange.length >
+                        myChange.position
+                    ) {
+                        // Split their deletion into two parts.
+                        // Example: "abcde"
+                        // myChange: insert(2, "x")
+                        // theirChange: delete(1, 3)
+                        // result: [delete(1, 1), delete(3, 2)]
+                        let theirChange2 = cloneDeep(theirChange)
+                        let theirChange3 = cloneDeep(theirChange)
+                        theirChange2.length =
+                            myChange.position - theirChange.position
+                        theirChange3.position =
+                            myChange.position + myChange.content.length
+                        theirChange3.length -= theirChange2.length
+                        return [theirChange2, theirChange3]
+                    } else {
+                        // No need to transform.
+                        return [cloneDeep(theirChange)]
+                    }
+                }
+            } else {
+                // myChange.position <= theirChange.position
+                let theirChange2 = cloneDeep(theirChange)
+                theirChange2.position += myChange.content.length
+                return [theirChange2]
+            }
         }
-
-        /*
-    else: # my_chg is an insert(pos, content)
-    	if my_chg.pos > their_chg.pos:
-        	their_chg2 = their_chg
-            if their_chg is an insert:
-            	my_chg2 = my_chg
-                my_chg2.pos += their_chg.content.length
-			else if their_chg is a delete:
-            	my_chg2 = my_chg
-                my_chg2.pos -= their_chg.n
-                # Hier kann es passieren, dass die fremde Löschung uns überlappt, und wir die Löschung in ZWEI STÜCKE splitten müssen...
-        else:
-        	if my_chg.pos == their_chg.pos:
-            	if my_id=='daemon':
-                	my_chg2 = my_chg
-                    their_chg2 = their_chg
-                    their_chg2.pos += my_chg.content.length 
-                else: # my_id == 'editor'
-                	# Ich muss nach hinten rücken
-                    their_chg2 = their_chg
-                    my_chg2 = my_chg
-                    if their_chg is insert:
-                    	my_chg2.pos += their_chg.content.length
-                    if their_chg is delete:
-                    	# Könnte uns überlappen -> Löschung muss evt. gesplitted werden
-            else: # my_chg.pos < their_chg.pos
-				my_chg2 = my_chg
-                their_chg2 = their_chg
-                their_chg2.pos += my_chg.content.length
-	return my_chg2, their_chg2
-    */
-        return []
+        // We should never get here.
+        throw new Error("transformChange: unreachable")
     }
 }
 
