@@ -4,7 +4,8 @@
     "description": "",
     "author": "",
     "scripts": {
-        "ethersync": "tsc; node dist/ethersync.js"
+        "ethersync": "tsc; node dist/ethersync.js",
+        "test": "vitest"
     },
     "dependencies": {
         "@types/lodash": "^4.14.202",
@@ -21,6 +22,7 @@
     },
     "devDependencies": {
         "@types/body-parser": "^1.19.5",
-        "@types/express": "^4.17.21"
+        "@types/express": "^4.17.21",
+        "vitest": "^1.0.2"
     }
 }
