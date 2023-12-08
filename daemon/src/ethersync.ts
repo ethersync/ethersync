@@ -1,6 +1,7 @@
 import * as fs from "fs"
 import * as path from "path"
 import {JSONRPCServer} from "./jsonrpc_server.js"
+import {OTServer, Operation, Deletion, Insertion} from "./ot_server.js"
 import * as Y from "yjs"
 import {WebsocketProvider} from "y-websocket"
 
@@ -25,6 +26,11 @@ const serverAndClient = new JSONRPCServerAndClient(
         }
     }),
 )
+
+var ot = new OTServer("", (editorRevision: number, operation: Operation) => {
+    serverAndClient.request("operation", [editorRevision, operation.changes])
+})
+
 serverAndClient.addMethod("ping", ({name}) => "Hello, " + name + "!")
 
 serverAndClient.addMethod("insert", (params: any) => {
@@ -48,7 +54,7 @@ serverAndClient.addMethod("delete", (params: any) => {
     }, ydoc.clientID)
 })
 
-serverAndClient.addMethod("cursor", (params: any) => {
+/*serverAndClient.addMethod("cursor", (params: any) => {
     let filename = params[0]
     let headPos = parseInt(params[1])
     let anchorPos = parseInt(params[2])
@@ -72,7 +78,7 @@ serverAndClient.addMethod("cursor", (params: any) => {
             head,
         })
     }
-})
+})*/
 
 function connectToEtherwikiServer() {
     provider = new WebsocketProvider(
@@ -89,7 +95,7 @@ function connectToEtherwikiServer() {
         color: "#ff00ff",
     })
 
-    provider.awareness.on("change", async () => {
+    /*provider.awareness.on("change", async () => {
         for (const [clientID, state] of provider.awareness.getStates()) {
             if (state?.cursor?.head) {
                 let head = Y.createAbsolutePositionFromRelativePosition(
@@ -111,7 +117,7 @@ function connectToEtherwikiServer() {
                 }
             }
         }
-    })
+    })*/
 }
 
 function setupEditorServer() {
@@ -150,7 +156,7 @@ function startObserving() {
 
             let key = event.path[event.path.length - 1]
             if (key == "content") {
-                let filename = event.target.parent.get("title").toString()
+                //let filename = event.target.parent.get("title").toString()
 
                 let index = 0
 
@@ -159,10 +165,10 @@ function startObserving() {
                         index += event.delta[0]["retain"]
                     } else if (event.delta[0]["insert"]) {
                         let text = event.delta[0]["insert"]
-                        await editorInsert(filename, index, text)
+                        ot.applyCRDTChange(new Insertion(index, text))
                     } else if (event.delta[0]["delete"]) {
                         let length = event.delta[0]["delete"]
-                        await editorDelete(filename, index, length)
+                        ot.applyCRDTChange(new Deletion(index, length))
                     }
                     event.delta.shift()
                 }
@@ -193,7 +199,7 @@ async function pullAllPages() {
     }
 }
 
-async function editorInsert(filename: string, index: number, text: string) {
+/*async function editorInsert(filename: string, index: number, text: string) {
     let result = await serverAndClient.request("insert", [
         filename,
         index,
@@ -209,16 +215,16 @@ async function editorDelete(filename: string, index: number, length: number) {
         length,
     ])
     console.log(result)
-}
+}*/
 
-async function editorCursor(filename: string, head: number, anchor: number) {
+/*async function editorCursor(filename: string, head: number, anchor: number) {
     let result = await serverAndClient.request("cursor", [
         filename,
         head,
         anchor,
     ])
     console.log(result)
-}
+}*/
 
 ;(async () => {
     connectToEtherwikiServer()

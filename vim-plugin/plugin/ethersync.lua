@@ -91,38 +91,21 @@ function Ethersync()
     --local client_id = vim.lsp.start({ name = "ethersync", cmd = cmd })
     client = cmd({
         server_request = function(method, params)
-            print("Server request: " .. method .. " " .. vim.inspect(params))
+            if method == "operation" then
+                local theEditorRevision = tonumber(params[0])
+                local changes = params[1]
 
-            if method == "insert" then
-                local filename = params[1]
-                local theEditorRevision = tonumber(params[2])
-                local index = tonumber(params[3])
-                local content = params[4]
-                if
-                    theEditorRevision == editorRevision
-                    and filename == vim.fs.basename(vim.api.nvim_buf_get_name(0))
-                then
-                    insert(index, content)
+                if theEditorRevision == editorRevision then
+                    for _, change in ipairs(changes) do
+                        if changes.length ~= nil then
+                            delete(change.position, change.length)
+                        else
+                            insert(change.position, change.content)
+                        end
+                    end
+                else
+                    print("Skipping operation, " .. theEditorRevision .. " != " .. editorRevision)
                 end
-            elseif method == "delete" then
-                local filename = params[1]
-                local theEditorRevision = tonumber(params[2])
-                local index = tonumber(params[3])
-                local length = tonumber(params[4])
-                if
-                    theEditorRevision == editorRevision
-                    and filename == vim.fs.basename(vim.api.nvim_buf_get_name(0))
-                then
-                    delete(index, length)
-                end
-            elseif method == "cursor" then
-                --local filename = params[1]
-                local head = tonumber(params[2])
-                local anchor = tonumber(params[3])
-                -- TODO: check filename, as soon as daemon sends filename correctly
-                -- if filename == vim.fs.basename(vim.api.nvim_buf_get_name(0)) then
-                setCursor(head, anchor)
-                --end
             end
             return { "ok" }
         end,
@@ -154,7 +137,7 @@ function Ethersync()
                 return
             end
 
-            local filename = vim.fs.basename(vim.api.nvim_buf_get_name(0))
+            local filename = "file" --vim.fs.basename(vim.api.nvim_buf_get_name(0))
 
             if byte_offset + new_end_byte_length > vim.fn.strlen(content) then
                 -- Tried to insert something *after* the end of the (resulting) file.
@@ -186,37 +169,37 @@ function Ethersync()
         end,
     })
 
-    vim.api.nvim_create_autocmd({ "CursorMoved", "CursorMovedI" }, {
-        callback = function()
-            local row, col = unpack(vim.api.nvim_win_get_cursor(0))
-            local head = utils.rowColToIndex(row, col)
-            local headUTF16CodeUnits = utils.charOffsetToUTF16CodeUnitOffset(head)
+    --vim.api.nvim_create_autocmd({ "CursorMoved", "CursorMovedI" }, {
+    --    callback = function()
+    --        local row, col = unpack(vim.api.nvim_win_get_cursor(0))
+    --        local head = utils.rowColToIndex(row, col)
+    --        local headUTF16CodeUnits = utils.charOffsetToUTF16CodeUnitOffset(head)
 
-            if headUTF16CodeUnits == -1 then
-                -- TODO what happens here?
-                return
-            end
+    --        if headUTF16CodeUnits == -1 then
+    --            -- TODO what happens here?
+    --            return
+    --        end
 
-            -- Is there a visual selection?
-            local visualSelection = vim.fn.mode() == "v" or vim.fn.mode() == "V" or vim.fn.mode() == ""
+    --        -- Is there a visual selection?
+    --        local visualSelection = vim.fn.mode() == "v" or vim.fn.mode() == "V" or vim.fn.mode() == ""
 
-            local anchorUTF16CodeUnits = headUTF16CodeUnits
-            if visualSelection then
-                -- Note: colV is the *byte* position, starting at *1*!
-                local _, rowV, colV = unpack(vim.fn.getpos("v"))
-                local anchor = utils.rowColToIndex(rowV, colV - 1)
-                if head >= anchor then
-                    head = head + 1
-                else
-                    anchor = anchor + 1
-                end
-                headUTF16CodeUnits = utils.charOffsetToUTF16CodeUnitOffset(head)
-                anchorUTF16CodeUnits = utils.charOffsetToUTF16CodeUnitOffset(anchor)
-            end
-            local filename = vim.fs.basename(vim.api.nvim_buf_get_name(0))
-            RequestSync("cursor", { filename, headUTF16CodeUnits, anchorUTF16CodeUnits })
-        end,
-    })
+    --        local anchorUTF16CodeUnits = headUTF16CodeUnits
+    --        if visualSelection then
+    --            -- Note: colV is the *byte* position, starting at *1*!
+    --            local _, rowV, colV = unpack(vim.fn.getpos("v"))
+    --            local anchor = utils.rowColToIndex(rowV, colV - 1)
+    --            if head >= anchor then
+    --                head = head + 1
+    --            else
+    --                anchor = anchor + 1
+    --            end
+    --            headUTF16CodeUnits = utils.charOffsetToUTF16CodeUnitOffset(head)
+    --            anchorUTF16CodeUnits = utils.charOffsetToUTF16CodeUnitOffset(anchor)
+    --        end
+    --        local filename = vim.fs.basename(vim.api.nvim_buf_get_name(0))
+    --        RequestSync("cursor", { filename, headUTF16CodeUnits, anchorUTF16CodeUnits })
+    --    end,
+    --})
 end
 
 -- Stolen from Neovim source code.
