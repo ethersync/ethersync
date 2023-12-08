@@ -2,6 +2,8 @@ import {cloneDeep} from "lodash"
 
 export class OTServer {
     operations: Operation[] = []
+    editorQueue: Operation[] = []
+
     constructor(
         public document: string,
         private sendToClient: (o: Operation) => void,
@@ -22,37 +24,68 @@ export class OTServer {
     }
 
     applyCRDTChange(change: Change) {
-        let operation = new Operation("daemon", this.operations.length, [
-            change,
-        ])
+        let operation = new Operation("daemon", [change])
         this.operations.push(operation)
+        this.editorQueue.push(operation)
         this.applyChange(change)
         this.sendToClient(operation)
     }
 
-    applyEditorOperation(operation: Operation) {
-        if (operation.revision <= this.operations.length) {
-            operation = this.transformThroughAllOperations(operation)
+    applyEditorOperation(daemonRevision: number, operation: Operation) {
+        // Find the current daemon revision. This is the number of daemon-source operations in this.operations.
+        let currentDaemonRevision = this.operations.filter(
+            (o) => o.sourceID === "daemon",
+        ).length
+        if (daemonRevision === currentDaemonRevision) {
+            // The sent operation applies to the current daemon revision. We can apply it immediately.
+            this.operations.push(operation)
+            for (let change of operation.changes) {
+                this.applyChange(change)
+            }
+        } else {
+            let daemonOperationsToTransform =
+                currentDaemonRevision - daemonRevision
+            this.editorQueue.splice(
+                0,
+                this.editorQueue.length - daemonOperationsToTransform,
+            )
+            let [transformedOperation, transformedQueue] =
+                this.transformThroughOperations(operation, this.editorQueue)
+            this.operations.push(transformedOperation)
+            for (let change of transformedOperation.changes) {
+                this.applyChange(change)
+            }
+            this.editorQueue = transformedQueue
         }
-        for (let change of operation.changes) {
-            this.applyChange(change)
-        }
-
-        this.operations.push(operation)
-        this.sendToClient(operation)
     }
 
-    transformThroughAllOperations(operation: Operation): Operation {
-        let theirOp = operation
-        for (
-            let revision = operation.revision;
-            revision < this.operations.length;
-            revision++
-        ) {
-            let myOp = this.operations[revision]
-            theirOp = this.transformOperation(theirOp, myOp)
+    transformThroughOperations(
+        theirOperation: Operation,
+        myOperations: Operation[],
+    ): [Operation, Operation[]] {
+        let theirOp = cloneDeep(theirOperation)
+        let transformedMyOperations: Operation[] = []
+        for (let myOperation of myOperations) {
+            let [theirTransformedOp, myTransformedOp] =
+                this.transformOperationPair(theirOp, myOperation)
+            theirOp = theirTransformedOp
+            transformedMyOperations.push(myTransformedOp)
         }
-        return theirOp
+        return [theirOp, transformedMyOperations]
+    }
+
+    transformOperationPair(
+        theirOp: Operation,
+        myOp: Operation,
+    ): [Operation, Operation] {
+        let theirChanges = cloneDeep(theirOp.changes)
+        let myChanges = cloneDeep(myOp.changes)
+        let [transformedTheirChanges, transformedMyChanges] =
+            this.transformChanges(theirChanges, myChanges)
+        return [
+            new Operation(theirOp.sourceID, transformedTheirChanges),
+            new Operation(theirOp.sourceID, transformedMyChanges),
+        ]
     }
 
     transformOperation(theirOp: Operation, myOp: Operation): Operation {
@@ -62,11 +95,7 @@ export class OTServer {
             theirChanges,
             myChanges,
         )
-        return new Operation(
-            theirOp.sourceID,
-            myOp.revision + 1,
-            transformedTheirChanges,
-        )
+        return new Operation(theirOp.sourceID, transformedTheirChanges)
     }
 
     // Transforms theirOps by myOps, and return the transformed theirOps and the transformed myOps.
@@ -260,7 +289,6 @@ export class OTServer {
 export class Operation {
     constructor(
         public sourceID: string,
-        public revision: number,
         public changes: Change[],
     ) {}
 

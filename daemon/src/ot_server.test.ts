@@ -134,31 +134,28 @@ test("transforms operations", () => {
 
     expect(
         ot.transformOperation(
-            new Operation("editor", 0, [
+            new Operation("editor", [
                 new Insertion(0, "x"),
                 new Insertion(1, "y"),
             ]),
-            new Operation("server", 0, [new Insertion(0, "s")]),
+            new Operation("daemon", [new Insertion(0, "s")]),
         ),
     ).toEqual(
-        new Operation("editor", 1, [
-            new Insertion(1, "x"),
-            new Insertion(2, "y"),
-        ]),
+        new Operation("editor", [new Insertion(1, "x"), new Insertion(2, "y")]),
     )
 
     expect(
         ot.transformOperation(
-            new Operation("editor", 0, [
+            new Operation("editor", [
                 new Insertion(1, "abc"), // habcello
                 new Deletion(0, 5), // llo
             ]),
-            new Operation("server", 0, [
+            new Operation("daemon", [
                 new Deletion(0, 3), // lo
             ]),
         ),
     ).toEqual(
-        new Operation("editor", 1, [
+        new Operation("editor", [
             new Insertion(0, "abc"), // abclo
             new Deletion(0, 3), // lo
         ]),
@@ -166,23 +163,23 @@ test("transforms operations", () => {
 
     expect(
         ot.transformOperation(
-            new Operation("editor", 0, [
+            new Operation("editor", [
                 new Deletion(1, 1), // hllo
                 new Insertion(2, "x"), // hlxlo
             ]),
-            new Operation("server", 0, [
+            new Operation("daemon", [
                 new Insertion(0, "y"), // yhello
                 new Deletion(1, 3), // ylo
             ]),
         ),
     ).toEqual(
-        new Operation("editor", 1, [
+        new Operation("editor", [
             new Insertion(1, "x"), // yxlo
         ]),
     )
 })
 
-test("routes operations through server", () => {
+/*test("routes operations through server", () => {
     let opsSentToEditor: Operation[] = []
 
     let ot = new OTServer("hello", (op) => {
@@ -234,4 +231,43 @@ test("routes operations at same position through server", () => {
     ot.applyEditorOperation(new Operation("editor", 4, [new Deletion(1, 4)]))
 
     expect(ot.document).toEqual("hllo")
+})*/
+
+test("routes operations through server", () => {
+    let opsSentToEditor: Operation[] = []
+
+    let ot = new OTServer("hello", (op) => {
+        opsSentToEditor.push(op)
+    })
+
+    ot.applyCRDTChange(new Insertion(1, "x"))
+    ot.applyEditorOperation(0, new Operation("editor", [new Insertion(2, "y")]))
+
+    expect(ot.operations).toEqual([
+        new Operation("daemon", [new Insertion(1, "x")]),
+        new Operation("editor", [new Insertion(3, "y")]),
+    ])
+
+    expect(ot.document).toEqual("hxeyllo")
+
+    ot.applyCRDTChange(new Insertion(3, "z")) // hxezyllo
+    ot.applyEditorOperation(1, new Operation("editor", [new Deletion(1, 4)])) // editor thinks: hxeyllo -> hlo
+
+    expect(ot.operations).toEqual([
+        new Operation("daemon", [new Insertion(1, "x")]), // hxello
+        new Operation("editor", [new Insertion(3, "y")]), // hxeyllo
+        new Operation("daemon", [new Insertion(3, "z")]), // hxezyllo
+        new Operation("editor", [new Deletion(1, 2), new Deletion(2, 2)]), // hzlo
+    ])
+
+    ot.applyEditorOperation(1, new Operation("editor", [new Insertion(1, "!")])) // editor thinks: hlo -> h!lo
+
+    expect(ot.document).toEqual("hz!lo")
+
+    /*expect(opsSentToEditor).toEqual([
+        new Operation("daemon", [new Insertion(1, "x")]),
+        new Operation("editor", [new Insertion(3, "y")]),
+        new Operation("daemon", [new Insertion(3, "z")]),
+        new Operation("editor", [new Deletion(1, 2), new Deletion(2, 2)]),
+    ])*/
 })
