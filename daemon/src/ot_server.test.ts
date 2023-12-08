@@ -234,10 +234,10 @@ test("routes operations at same position through server", () => {
 })*/
 
 test("routes operations through server", () => {
-    let opsSentToEditor: Operation[] = []
+    let opsSentToEditor: [number, Operation][] = []
 
-    let ot = new OTServer("hello", (op) => {
-        opsSentToEditor.push(op)
+    let ot = new OTServer("hello", (editorRevision, op) => {
+        opsSentToEditor.push([editorRevision, op])
     })
 
     ot.applyCRDTChange(new Insertion(1, "x"))
@@ -250,6 +250,11 @@ test("routes operations through server", () => {
 
     expect(ot.document).toEqual("hxeyllo")
 
+    expect(opsSentToEditor).toEqual([
+        [0, new Operation("daemon", [new Insertion(1, "x")])],
+        [1, new Operation("daemon", [new Insertion(1, "x")])],
+    ])
+
     ot.applyCRDTChange(new Insertion(3, "z")) // hxezyllo
     ot.applyEditorOperation(1, new Operation("editor", [new Deletion(1, 4)])) // editor thinks: hxeyllo -> hlo
 
@@ -260,14 +265,14 @@ test("routes operations through server", () => {
         new Operation("editor", [new Deletion(1, 2), new Deletion(2, 2)]), // hzlo
     ])
 
+    expect(opsSentToEditor).toEqual([
+        [0, new Operation("daemon", [new Insertion(1, "x")])],
+        [1, new Operation("daemon", [new Insertion(1, "x")])],
+        [1, new Operation("daemon", [new Insertion(3, "z")])],
+        [2, new Operation("daemon", [new Insertion(1, "z")])],
+    ])
+
     ot.applyEditorOperation(1, new Operation("editor", [new Insertion(1, "!")])) // editor thinks: hlo -> h!lo
 
     expect(ot.document).toEqual("hz!lo")
-
-    /*expect(opsSentToEditor).toEqual([
-        new Operation("daemon", [new Insertion(1, "x")]),
-        new Operation("editor", [new Insertion(3, "y")]),
-        new Operation("daemon", [new Insertion(3, "z")]),
-        new Operation("editor", [new Deletion(1, 2), new Deletion(2, 2)]),
-    ])*/
 })

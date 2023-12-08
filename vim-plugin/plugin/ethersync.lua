@@ -12,6 +12,9 @@ local virtual_cursor
 
 local client
 
+local daemonRevision = 0
+local editorRevision = 0
+
 -- Used to remember the previous content of the buffer, so that we can
 -- calculate the difference between the previous and the current content.
 local previousContent
@@ -92,16 +95,24 @@ function Ethersync()
 
             if method == "insert" then
                 local filename = params[1]
-                local index = tonumber(params[2])
-                local content = params[3]
-                if filename == vim.fs.basename(vim.api.nvim_buf_get_name(0)) then
+                local theEditorRevision = tonumber(params[2])
+                local index = tonumber(params[3])
+                local content = params[4]
+                if
+                    theEditorRevision == editorRevision
+                    and filename == vim.fs.basename(vim.api.nvim_buf_get_name(0))
+                then
                     insert(index, content)
                 end
             elseif method == "delete" then
                 local filename = params[1]
-                local index = tonumber(params[2])
-                local length = tonumber(params[3])
-                if filename == vim.fs.basename(vim.api.nvim_buf_get_name(0)) then
+                local theEditorRevision = tonumber(params[2])
+                local index = tonumber(params[3])
+                local length = tonumber(params[4])
+                if
+                    theEditorRevision == editorRevision
+                    and filename == vim.fs.basename(vim.api.nvim_buf_get_name(0))
+                then
                     delete(index, length)
                 end
             elseif method == "cursor" then
@@ -160,12 +171,15 @@ function Ethersync()
             local newEndCharUTF16CodeUnitsLength = newEndCharUTF16CodeUnits - charOffsetUTF16CodeUnits
 
             if oldEndCharUTF16CodeUnitsLength > 0 then
-                RequestSync("delete", { filename, charOffsetUTF16CodeUnits, oldEndCharUTF16CodeUnitsLength })
+                RequestSync(
+                    "delete",
+                    { filename, daemonRevision, charOffsetUTF16CodeUnits, oldEndCharUTF16CodeUnitsLength }
+                )
             end
 
             if newEndCharUTF16CodeUnitsLength > 0 then
                 local insertedString = vim.fn.strpart(content, byte_offset, new_end_byte_length)
-                RequestSync("insert", { filename, charOffsetUTF16CodeUnits, insertedString })
+                RequestSync("insert", { filename, daemonRevision, charOffsetUTF16CodeUnits, insertedString })
             end
 
             previousContent = content

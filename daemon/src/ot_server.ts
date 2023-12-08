@@ -6,7 +6,7 @@ export class OTServer {
 
     constructor(
         public document: string,
-        private sendToClient: (o: Operation) => void,
+        private sendToClient: (editorRevision: number, o: Operation) => void,
     ) {}
 
     applyChange(change: Change) {
@@ -28,7 +28,10 @@ export class OTServer {
         this.operations.push(operation)
         this.editorQueue.push(operation)
         this.applyChange(change)
-        this.sendToClient(operation)
+        let editorRevision = this.operations.filter(
+            (o) => o.sourceID === "editor",
+        ).length
+        this.sendToClient(editorRevision, operation)
     }
 
     applyEditorOperation(daemonRevision: number, operation: Operation) {
@@ -56,6 +59,13 @@ export class OTServer {
                 this.applyChange(change)
             }
             this.editorQueue = transformedQueue
+
+            let editorRevision = this.operations.filter(
+                (o) => o.sourceID === "editor",
+            ).length
+            for (let op of this.editorQueue) {
+                this.sendToClient(editorRevision, op)
+            }
         }
     }
 
@@ -84,7 +94,7 @@ export class OTServer {
             this.transformChanges(theirChanges, myChanges)
         return [
             new Operation(theirOp.sourceID, transformedTheirChanges),
-            new Operation(theirOp.sourceID, transformedMyChanges),
+            new Operation(myOp.sourceID, transformedMyChanges),
         ]
     }
 
