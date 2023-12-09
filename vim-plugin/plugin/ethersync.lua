@@ -90,14 +90,15 @@ function Ethersync()
     local cmd = vim.lsp.rpc.connect("127.0.0.1", 9000)
     --local client_id = vim.lsp.start({ name = "ethersync", cmd = cmd })
     client = cmd({
-        server_request = function(method, params)
+        notification = function(method, params)
             if method == "operation" then
-                local theEditorRevision = tonumber(params[0])
-                local changes = params[1]
+                print("Received operation: " .. vim.inspect(params))
+                local theEditorRevision = tonumber(params[1])
+                local changes = params[2]
 
                 if theEditorRevision == editorRevision then
                     for _, change in ipairs(changes) do
-                        if changes.length ~= nil then
+                        if change.length ~= nil then
                             delete(change.position, change.length)
                         else
                             insert(change.position, change.content)
@@ -107,7 +108,6 @@ function Ethersync()
                     print("Skipping operation, " .. theEditorRevision .. " != " .. editorRevision)
                 end
             end
-            return { "ok" }
         end,
     })
 
@@ -154,15 +154,17 @@ function Ethersync()
             local newEndCharUTF16CodeUnitsLength = newEndCharUTF16CodeUnits - charOffsetUTF16CodeUnits
 
             if oldEndCharUTF16CodeUnitsLength > 0 then
-                RequestSync(
+                editorRevision = editorRevision + 1
+                client.notify(
                     "delete",
                     { filename, daemonRevision, charOffsetUTF16CodeUnits, oldEndCharUTF16CodeUnitsLength }
                 )
             end
 
             if newEndCharUTF16CodeUnitsLength > 0 then
+                editorRevision = editorRevision + 1
                 local insertedString = vim.fn.strpart(content, byte_offset, new_end_byte_length)
-                RequestSync("insert", { filename, daemonRevision, charOffsetUTF16CodeUnits, insertedString })
+                client.notify("insert", { filename, daemonRevision, charOffsetUTF16CodeUnits, insertedString })
             end
 
             previousContent = content

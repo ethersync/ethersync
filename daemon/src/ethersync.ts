@@ -27,31 +27,57 @@ const serverAndClient = new JSONRPCServerAndClient(
     }),
 )
 
-var ot = new OTServer("", (editorRevision: number, operation: Operation) => {
-    serverAndClient.request("operation", [editorRevision, operation.changes])
-})
+var ot = new OTServer(
+    "",
+    (editorRevision: number, operation: Operation) => {
+        let parameters = [editorRevision, operation.changes]
+        console.log("Sending op: ", JSON.stringify(parameters))
+        serverAndClient.notify("operation", parameters)
+    },
+    (operation: Operation) => {
+        console.log("Applying op to document: ", JSON.stringify(operation))
+        for (const change of operation.changes) {
+            if (change instanceof Insertion) {
+                ydoc.transact(() => {
+                    findPage("file")
+                        .get("content")
+                        .insert(change.position, change.content)
+                }, ydoc.clientID)
+            } else if (change instanceof Deletion) {
+                ydoc.transact(() => {
+                    findPage("file")
+                        .get("content")
+                        .delete(change.position, change.length)
+                }, ydoc.clientID)
+            }
+        }
+    },
+)
 
 serverAndClient.addMethod("ping", ({name}) => "Hello, " + name + "!")
 
 serverAndClient.addMethod("insert", (params: any) => {
-    let filename = params[0]
-    let index = params[1]
-    let text = params[2]
+    //let filename = params[0]
+    let daemonRevision = params[1]
+    let index = params[2]
+    let text = params[3]
 
-    ydoc.transact(() => {
-        findPage(filename).get("content").insert(index, text)
-    }, ydoc.clientID)
-    return ["ok"]
+    ot.applyEditorOperation(
+        daemonRevision,
+        new Operation("editor", [new Insertion(index, text)]),
+    )
 })
 
 serverAndClient.addMethod("delete", (params: any) => {
-    let filename = params[0]
-    let index = params[1]
-    let length = params[2]
+    //let filename = params[0]
+    let daemonRevision = params[1]
+    let index = params[2]
+    let length = params[3]
 
-    ydoc.transact(() => {
-        findPage(filename).get("content").delete(index, length)
-    }, ydoc.clientID)
+    ot.applyEditorOperation(
+        daemonRevision,
+        new Operation("editor", [new Deletion(index, length)]),
+    )
 })
 
 /*serverAndClient.addMethod("cursor", (params: any) => {
@@ -122,7 +148,8 @@ function connectToEtherwikiServer() {
 
 function setupEditorServer() {
     server.onConnection(() => {
-        console.log("new connection")
+        console.log("new connection, resetting OT")
+        ot.reset()
     })
 
     server.onMessage((message: any) => {

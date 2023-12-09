@@ -7,7 +7,13 @@ export class OTServer {
     constructor(
         public document: string,
         private sendToClient: (editorRevision: number, o: Operation) => void,
+        private sendToCRDT: (o: Operation) => void = () => {},
     ) {}
+
+    reset() {
+        this.operations = []
+        this.editorQueue = []
+    }
 
     applyChange(change: Change) {
         if (change instanceof Insertion) {
@@ -34,6 +40,14 @@ export class OTServer {
         this.sendToClient(editorRevision, operation)
     }
 
+    addOperation(operation: Operation) {
+        this.operations.push(operation)
+        this.sendToCRDT(operation)
+        for (let change of operation.changes) {
+            this.applyChange(change)
+        }
+    }
+
     applyEditorOperation(daemonRevision: number, operation: Operation) {
         // Find the current daemon revision. This is the number of daemon-source operations in this.operations.
         let currentDaemonRevision = this.operations.filter(
@@ -41,10 +55,7 @@ export class OTServer {
         ).length
         if (daemonRevision === currentDaemonRevision) {
             // The sent operation applies to the current daemon revision. We can apply it immediately.
-            this.operations.push(operation)
-            for (let change of operation.changes) {
-                this.applyChange(change)
-            }
+            this.addOperation(operation)
         } else {
             let daemonOperationsToTransform =
                 currentDaemonRevision - daemonRevision
@@ -54,10 +65,7 @@ export class OTServer {
             )
             let [transformedOperation, transformedQueue] =
                 this.transformThroughOperations(operation, this.editorQueue)
-            this.operations.push(transformedOperation)
-            for (let change of transformedOperation.changes) {
-                this.applyChange(change)
-            }
+            this.addOperation(transformedOperation)
             this.editorQueue = transformedQueue
 
             let editorRevision = this.operations.filter(
