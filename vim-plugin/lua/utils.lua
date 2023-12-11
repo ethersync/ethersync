@@ -29,6 +29,12 @@ end
 -- Converts a UTF-8 byte offset to a Unicode character offset.
 function M.byteOffsetToCharOffset(byteOffset, content)
     content = content or M.contentOfCurrentBuffer()
+
+    -- Special case: If the content is empty, looking up offset 0 should work.
+    if content == "" and byteOffset == 0 then
+        return 0
+    end
+
     local value = vim.fn.charidx(content, byteOffset, true)
     if value == -1 then
         -- charidx returns -1 if we specify the byte position directly after the string,
@@ -209,6 +215,10 @@ function M.testAllUnits()
     assertFail(function()
         M.byteOffsetToCharOffset(6, "world")
     end)
+
+    assertEqual(M.byteOffsetToCharOffset(0, ""), 0)
+    assertEqual(M.UTF16CodeUnitOffsetToCharOffset(0, ""), 0)
+    assertEqual(M.byteOffsetToUTF16CodeUnitOffset(0, "world"), 0)
 
     print("Ethersync tests successful!")
 end
