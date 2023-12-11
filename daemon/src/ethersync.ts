@@ -1,23 +1,25 @@
 import * as fs from "fs"
 import * as path from "path"
-import {JSONRPCServer} from "./jsonrpc_server.js"
-import {OTServer, Operation, Deletion, Insertion} from "./ot_server.js"
 import * as Y from "yjs"
 import {WebsocketProvider} from "y-websocket"
-
+// TODO: Convert to import syntax?
+const LeveldbPersistence = require("y-leveldb").LeveldbPersistence
 import {
-    JSONRPCServer as JSONRPCServerLib,
-    JSONRPCClient as JSONRPCClientLib,
+    JSONRPCServer,
+    JSONRPCClient,
     JSONRPCServerAndClient,
 } from "json-rpc-2.0"
 
+import {JSONServer} from "./json_server.js"
+import {OTServer, Operation, Deletion, Insertion} from "./ot_server.js"
+
 var ydoc = new Y.Doc()
-var server = new JSONRPCServer(9000)
+var server = new JSONServer(9000)
 var provider: WebsocketProvider
 
 const serverAndClient = new JSONRPCServerAndClient(
-    new JSONRPCServerLib(),
-    new JSONRPCClientLib((request) => {
+    new JSONRPCServer(),
+    new JSONRPCClient((request) => {
         try {
             server.write(request)
             return Promise.resolve()
@@ -55,12 +57,12 @@ var ot = new OTServer(
 )
 
 serverAndClient.addMethod("debug", (params: any) => {
-    console.log("DEBUG FROM EDITOR:")
+    console.log("DEBUG MESSAGE FROM EDITOR:")
     console.log(JSON.stringify(params, null, 2))
 })
 
 serverAndClient.addMethod("insert", (params: any) => {
-    //let filename = params[0]
+    // TODO: Implement filename support...
     let daemonRevision = params[1]
     let index = params[2]
     let text = params[3]
@@ -72,7 +74,7 @@ serverAndClient.addMethod("insert", (params: any) => {
 })
 
 serverAndClient.addMethod("delete", (params: any) => {
-    //let filename = params[0]
+    // TODO: Implement filename support...
     let daemonRevision = params[1]
     let index = params[2]
     let length = params[3]
@@ -231,7 +233,6 @@ async function pullAllPages() {
 
 async function startPersistence() {
     const persistenceDir = "output/.ethersync/persistence"
-    const LeveldbPersistence = require("y-leveldb").LeveldbPersistence
     const ldb = new LeveldbPersistence(persistenceDir)
 
     const persistedYdoc = await ldb.getYDoc("playground")
@@ -244,40 +245,13 @@ async function startPersistence() {
     })
 }
 
-/*async function editorInsert(filename: string, index: number, text: string) {
-    let result = await serverAndClient.request("insert", [
-        filename,
-        index,
-        text,
-    ])
-    console.log(result)
-}
+connectToEtherwikiServer()
+startPersistence()
 
-async function editorDelete(filename: string, index: number, length: number) {
-    let result = await serverAndClient.request("delete", [
-        filename,
-        index,
-        length,
-    ])
-    console.log(result)
-}*/
-
-/*async function editorCursor(filename: string, head: number, anchor: number) {
-    let result = await serverAndClient.request("cursor", [
-        filename,
-        head,
-        anchor,
-    ])
-    console.log(result)
-}*/
-
-;(async () => {
-    connectToEtherwikiServer()
-    setTimeout(() => {
-        startPersistence()
-        pullAllPages()
-        setupEditorServer()
-        startObserving()
-        console.log("Started.")
-    }, 1000)
-})()
+// TODO: Time timeout is a hack we use to have "more content" before we write it to disk.
+setTimeout(() => {
+    pullAllPages()
+    setupEditorServer()
+    startObserving()
+    console.log("Started.")
+}, 1000)

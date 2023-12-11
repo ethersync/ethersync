@@ -1,12 +1,19 @@
 import {cloneDeep} from "lodash"
 
+// Can receive operations from both the CRDT world, and one editor.
+// It will make sure to send the correct operations back to them using the provided callbacks.
 export class OTServer {
+    // "Source of truth" operations.
     operations: Operation[] = []
+
+    // Operations that we have sent to the editor, but we're not sure whether it has
+    // accepted them. We have to keep them around until we know for sure, so that we
+    // can correctly transform operations for the editor.
     editorQueue: Operation[] = []
 
     constructor(
         public document: string,
-        private sendToClient: (editorRevision: number, o: Operation) => void,
+        private sendToEditor: (editorRevision: number, o: Operation) => void,
         private sendToCRDT: (o: Operation) => void = () => {},
     ) {}
 
@@ -15,39 +22,24 @@ export class OTServer {
         this.editorQueue = []
     }
 
-    applyChange(change: Change) {
-        if (change instanceof Insertion) {
-            this.document =
-                this.document.slice(0, change.position) +
-                change.content +
-                this.document.slice(change.position)
-        } else {
-            // Deletion
-            this.document =
-                this.document.slice(0, change.position) +
-                this.document.slice(change.position + change.length)
-        }
-    }
-
+    // Called when the CRDT world makes a change to the document.
     applyCRDTChange(change: Change) {
+        // We can apply the change immediately.
         let operation = new Operation("daemon", [change])
         this.operations.push(operation)
         this.editorQueue.push(operation)
-        this.applyChange(change)
+        this.applyChangeToDocument(change)
+
+        // We assume that the editor is up-to-date, and send the operation to it.
+        // If it can't accept it, we will transform and send it later.
         let editorRevision = this.operations.filter(
             (o) => o.sourceID === "editor",
         ).length
-        this.sendToClient(editorRevision, operation)
+        this.sendToEditor(editorRevision, operation)
     }
 
-    addOperation(operation: Operation) {
-        this.operations.push(operation)
-        this.sendToCRDT(operation)
-        for (let change of operation.changes) {
-            this.applyChange(change)
-        }
-    }
-
+    // Called when the editor sends us an operation.
+    // daemonRevision is the revision this operation applies to.
     applyEditorOperation(daemonRevision: number, operation: Operation) {
         // Find the current daemon revision. This is the number of daemon-source operations in this.operations.
         let currentDaemonRevision = this.operations.filter(
@@ -55,96 +47,285 @@ export class OTServer {
         ).length
         if (daemonRevision === currentDaemonRevision) {
             // The sent operation applies to the current daemon revision. We can apply it immediately.
-            this.addOperation(operation)
+            this.addEditorOperation(operation)
         } else {
+            // The operation applies to an older daemon revision.
+            // We need to transform it through the daemon operations that have happened since then.
+
+            // But we at least we know that the editor has seen all daemon operations until
+            // daemonOperation. So we can remove them from the editor queue.
             let daemonOperationsToTransform =
                 currentDaemonRevision - daemonRevision
             this.editorQueue.splice(
                 0,
                 this.editorQueue.length - daemonOperationsToTransform,
             )
+
+            // Do the transformation!
             let [transformedOperation, transformedQueue] =
-                this.transformThroughOperations(operation, this.editorQueue)
-            this.addOperation(transformedOperation)
+                this.transformOperationThroughOperations(
+                    operation,
+                    this.editorQueue,
+                )
+            // Apply the transformed operation to the document.
+            this.addEditorOperation(transformedOperation)
+            // And replace the editor queue with the transformed queue.
             this.editorQueue = transformedQueue
 
+            // Find the editor revision. This is the number of editor-source operations in this.operations.
             let editorRevision = this.operations.filter(
                 (o) => o.sourceID === "editor",
             ).length
+            // Send the transformed queue to the editor.
             for (let op of this.editorQueue) {
-                this.sendToClient(editorRevision, op)
+                this.sendToEditor(editorRevision, op)
             }
         }
     }
 
-    transformThroughOperations(
-        theirOperation: Operation,
-        myOperations: Operation[],
-    ): [Operation, Operation[]] {
-        let theirOp = cloneDeep(theirOperation)
-        let transformedMyOperations: Operation[] = []
-        for (let myOperation of myOperations) {
-            let [theirTransformedOp, myTransformedOp] =
-                this.transformOperationPair(theirOp, myOperation)
-            theirOp = theirTransformedOp
-            transformedMyOperations.push(myTransformedOp)
-        }
-        return [theirOp, transformedMyOperations]
-    }
-
-    transformOperationPair(
-        theirOp: Operation,
-        myOp: Operation,
-    ): [Operation, Operation] {
-        let theirChanges = cloneDeep(theirOp.changes)
-        let myChanges = cloneDeep(myOp.changes)
-        let [transformedTheirChanges, transformedMyChanges] =
-            this.transformChanges(theirChanges, myChanges)
-        return [
-            new Operation(theirOp.sourceID, transformedTheirChanges),
-            new Operation(myOp.sourceID, transformedMyChanges),
-        ]
-    }
-
-    transformOperation(theirOp: Operation, myOp: Operation): Operation {
-        let theirChanges = cloneDeep(theirOp.changes)
-        let myChanges = cloneDeep(myOp.changes)
-        let [transformedTheirChanges, _] = this.transformChanges(
-            theirChanges,
-            myChanges,
-        )
-        return new Operation(theirOp.sourceID, transformedTheirChanges)
-    }
-
-    // Transforms theirOps by myOps, and return the transformed theirOps and the transformed myOps.
-    transformChanges(
-        theirChanges: Change[],
-        myChanges: Change[],
-    ): [Change[], Change[]] {
-        if (theirChanges.length === 0) {
-            return [[], cloneDeep(myChanges)]
-        } else if (myChanges.length === 0) {
-            return [cloneDeep(theirChanges), []]
+    // Applies a change to the document content.
+    private applyChangeToDocument(change: Change) {
+        if (change instanceof Insertion) {
+            this.document =
+                this.document.slice(0, change.position) +
+                change.content +
+                this.document.slice(change.position)
         } else {
-            // Take first theirChange, and transform it through all myChanges.
-            let currentTheirChange = theirChanges.shift() as Change
-            let [transformedCurrentTheirChanges, transformedMyChanges] =
-                this.transformOneChange(currentTheirChange, myChanges)
-
-            // Recursively transform the rest.
-            let [transformedRemainingTheirChanges, transformedFinalMyChanges] =
-                this.transformChanges(theirChanges, transformedMyChanges)
-            return [
-                transformedCurrentTheirChanges.concat(
-                    transformedRemainingTheirChanges,
-                ),
-                transformedFinalMyChanges,
-            ]
+            // change is a Deletion!
+            this.document =
+                this.document.slice(0, change.position) +
+                this.document.slice(change.position + change.length)
         }
-        throw new Error("We should never get here.")
     }
 
-    transformOneChange(
+    // Adds an editor operation to the document.
+    // Sends it to the CRDT world.
+    private addEditorOperation(operation: Operation) {
+        this.operations.push(operation)
+        this.sendToCRDT(operation)
+        for (let change of operation.changes) {
+            this.applyChangeToDocument(change)
+        }
+    }
+
+    /*
+        This function takes changes t1 and m1, and returns changes t1',
+        so that t1 + m1' is equivalent to m1 + t1'.
+
+        Note that t1' can be multiple changes (in case of a split deletion).
+
+           t1
+        * ----> *
+        |       |
+     m1 |       | m1'
+        v  t1'  v
+        * ----> *
+
+        If theyGoFirst is true, then:
+
+        - If two inserts apply to the same position, the first change goes first.
+        - If two deletes overlap, the first change is the one that isn't shortened.
+
+    */
+    transformChange(
+        theirChange: Change,
+        myChange: Change,
+        theyGoFirst = false,
+    ): Change[] {
+        if (theirChange instanceof Insertion) {
+            if (myChange instanceof Insertion) {
+                return this.transformInsertInsert(
+                    theirChange,
+                    myChange,
+                    theyGoFirst,
+                )
+            } else {
+                return this.transformInsertDelete(
+                    theirChange,
+                    myChange,
+                    theyGoFirst,
+                )
+            }
+        } else {
+            if (myChange instanceof Insertion) {
+                return this.transformDeleteInsert(
+                    theirChange,
+                    myChange,
+                    theyGoFirst,
+                )
+            } else {
+                return this.transformDeleteDelete(
+                    theirChange,
+                    myChange,
+                    theyGoFirst,
+                )
+            }
+        }
+    }
+
+    // The following four helper fuction define the transformation rules.
+    private transformInsertInsert(
+        theirChange: Insertion,
+        myChange: Insertion,
+        theyGoFirst = false,
+    ): Change[] {
+        if (
+            myChange.position > theirChange.position ||
+            (myChange.position === theirChange.position && theyGoFirst)
+        ) {
+            // No need to transform.
+            return [cloneDeep(theirChange)]
+        } else {
+            // myChange.position <= theirChange.position
+            let theirChange2 = cloneDeep(theirChange)
+            theirChange2.position += myChange.content.length
+            return [theirChange2]
+        }
+    }
+
+    private transformInsertDelete(
+        theirChange: Insertion,
+        myChange: Deletion,
+        theyGoFirst = false,
+    ): Change[] {
+        if (
+            myChange.position > theirChange.position ||
+            (myChange.position === theirChange.position && theyGoFirst)
+        ) {
+            // No need to transform.
+            return [cloneDeep(theirChange)]
+        } else if (myChange.position + myChange.length > theirChange.position) {
+            let endOfMyChange = myChange.position + myChange.length
+            if (endOfMyChange > theirChange.position) {
+                let theirChange2 = cloneDeep(theirChange)
+                theirChange2.position = myChange.position
+                return [theirChange2]
+            } else {
+                let theirChange2 = cloneDeep(theirChange)
+                theirChange2.position -= myChange.length
+                return [theirChange2]
+            }
+        } else {
+            let theirChange2 = cloneDeep(theirChange)
+            theirChange2.position -= myChange.length
+            return [theirChange2]
+        }
+    }
+
+    private transformDeleteInsert(
+        theirChange: Deletion,
+        myChange: Insertion,
+        theyGoFirst = false,
+    ): Change[] {
+        if (
+            myChange.position > theirChange.position ||
+            (myChange.position === theirChange.position && theyGoFirst)
+        ) {
+            if (theirChange.position + theirChange.length > myChange.position) {
+                // Split their deletion into two parts.
+                // Example: "abcde"
+                // myChange: insert(2, "x")
+                // theirChange: delete(1, 3)
+                // result: [delete(1, 1), delete(2, 2)]
+                let theirChange2 = cloneDeep(theirChange)
+                let theirChange3 = cloneDeep(theirChange)
+                theirChange2.length = myChange.position - theirChange.position
+                theirChange3.position =
+                    myChange.position +
+                    myChange.content.length -
+                    theirChange2.length
+                theirChange3.length -= theirChange2.length
+                return [theirChange2, theirChange3]
+            } else {
+                // No need to transform.
+                return [cloneDeep(theirChange)]
+            }
+        } else {
+            // myChange.position <= theirChange.position
+            let theirChange2 = cloneDeep(theirChange)
+            theirChange2.position += myChange.content.length
+            return [theirChange2]
+        }
+    }
+
+    private transformDeleteDelete(
+        theirChange: Deletion,
+        myChange: Deletion,
+        theyGoFirst = false,
+    ): Change[] {
+        if (
+            myChange.position > theirChange.position ||
+            (myChange.position === theirChange.position && theyGoFirst)
+        ) {
+            let theirChange2 = cloneDeep(theirChange)
+
+            let endOfTheirChange = theirChange.position + theirChange.length
+            let endOfMyChange = myChange.position + myChange.length
+
+            if (theyGoFirst) {
+                // They win, and we don't need to shorten them.
+                return [theirChange2]
+            } else {
+                if (endOfTheirChange > myChange.position) {
+                    if (endOfTheirChange > endOfMyChange) {
+                        theirChange2.length -= myChange.length
+                    } else {
+                        theirChange2.length -=
+                            endOfTheirChange - myChange.position
+                    }
+                }
+                return [theirChange2]
+            }
+        } else if (myChange.position + myChange.length > theirChange.position) {
+            let theirChange2 = cloneDeep(theirChange)
+            theirChange2.position = myChange.position
+            let endOfMyChange = myChange.position + myChange.length
+            let endOfTheirChange = theirChange.position + theirChange.length
+
+            if (theyGoFirst) {
+                // They win, and we don't need to shorten them.
+                return [theirChange2]
+            } else {
+                if (endOfMyChange > endOfTheirChange) {
+                    theirChange2.length -= myChange.length
+                } else {
+                    theirChange2.length -= endOfMyChange - theirChange.position
+                }
+
+                if (theirChange2.length > 0) {
+                    return [theirChange2]
+                } else {
+                    return []
+                }
+            }
+        } else {
+            let theirChange2 = cloneDeep(theirChange)
+            theirChange2.position -= myChange.length
+            return [theirChange2]
+        }
+    }
+
+    /*
+        This function takes changes t1 and m1 ... m_n,
+        and returns changes t1' and m1' ... m_n'.
+
+           t1
+        * ----> *
+        |       |
+     m1 |       | m1'
+        v       v
+        * ----> *
+        |       |
+     m2 |       | m2'
+        v       v
+        * ----> *
+        |       |
+     m3 |       | m3'
+        v  t1'  v
+        * ----> *
+
+    */
+    transformChangeThroughChanges(
         theirChange: Change,
         myChanges: Change[],
     ): [Change[], Change[]] {
@@ -172,135 +353,120 @@ export class OTServer {
                 transformedMyChanges.concat(transformedRemainingMyChanges),
             ]
         }
-        throw new Error("We should never get here.")
     }
 
-    transformChange(
-        theirChange: Change,
-        myChange: Change,
-        theyGoFirst = false,
-    ): Change[] {
-        if (myChange instanceof Deletion) {
-            if (
-                myChange.position > theirChange.position ||
-                (myChange.position === theirChange.position && theyGoFirst)
-            ) {
-                if (theirChange instanceof Deletion) {
-                    let theirChange2 = cloneDeep(theirChange)
+    /*
+        This function takes changes t1 ... t_n and m1 ... m_n,
+        and returns changes t1' ... t_n' and m1' ... m_n'.
 
-                    let endOfTheirChange =
-                        theirChange.position + theirChange.length
-                    let endOfMyChange = myChange.position + myChange.length
+           t1      t2      t3
+        * ----> * ----> * ----> *
+        |       |       |       |
+     m1 |       |       |       | m1'
+        v       v       v       v
+        * ----> * ----> * ----> *
+        |       |       |       |
+     m2 |       |       |       | m2'
+        v       v       v       v
+        * ----> * ----> * ----> *
+        |       |       |       |
+     m3 |       |       |       | m3'
+        v  t1'  v  t2'  v  t3'  v
+        * ----> * ----> * ----> *
 
-                    if (theyGoFirst) {
-                        // They win, and we don't need to shorten them.
-                        return [theirChange2]
-                    } else {
-                        if (endOfTheirChange > myChange.position) {
-                            if (endOfTheirChange > endOfMyChange) {
-                                theirChange2.length -= myChange.length
-                            } else {
-                                theirChange2.length -=
-                                    endOfTheirChange - myChange.position
-                            }
-                        }
-                        return [theirChange2]
-                    }
-                } else {
-                    // No need to transform.
-                    return [cloneDeep(theirChange)]
-                }
-            } else {
-                // myChange.position <= theirChange.position
-                if (
-                    myChange.position + myChange.length >
-                    theirChange.position
-                ) {
-                    if (theirChange instanceof Deletion) {
-                        let theirChange2 = cloneDeep(theirChange)
-                        theirChange2.position = myChange.position
-                        let endOfMyChange = myChange.position + myChange.length
-                        let endOfTheirChange =
-                            theirChange.position + theirChange.length
+    */
 
-                        if (theyGoFirst) {
-                            // They win, and we don't need to shorten them.
-                            return [theirChange2]
-                        } else {
-                            if (endOfMyChange > endOfTheirChange) {
-                                theirChange2.length -= myChange.length
-                            } else {
-                                theirChange2.length -=
-                                    endOfMyChange - theirChange.position
-                            }
-
-                            if (theirChange2.length > 0) {
-                                return [theirChange2]
-                            } else {
-                                return []
-                            }
-                        }
-                    } else {
-                        let endOfMyChange = myChange.position + myChange.length
-                        if (endOfMyChange > theirChange.position) {
-                            let theirChange2 = cloneDeep(theirChange)
-                            theirChange2.position = myChange.position
-                            return [theirChange2]
-                        } else {
-                            let theirChange2 = cloneDeep(theirChange)
-                            theirChange2.position -= myChange.length
-                            return [theirChange2]
-                        }
-                    }
-                } else {
-                    let theirChange2 = cloneDeep(theirChange)
-                    theirChange2.position -= myChange.length
-                    return [theirChange2]
-                }
-            }
+    transformChanges(
+        theirChanges: Change[],
+        myChanges: Change[],
+    ): [Change[], Change[]] {
+        if (theirChanges.length === 0) {
+            return [[], cloneDeep(myChanges)]
+        } else if (myChanges.length === 0) {
+            return [cloneDeep(theirChanges), []]
         } else {
-            // myChange is an Insertion
-            if (
-                myChange.position > theirChange.position ||
-                (myChange.position === theirChange.position && theyGoFirst)
-            ) {
-                if (theirChange instanceof Insertion) {
-                    // No need to transform.
-                    return [cloneDeep(theirChange)]
-                } else {
-                    if (
-                        theirChange.position + theirChange.length >
-                        myChange.position
-                    ) {
-                        // Split their deletion into two parts.
-                        // Example: "abcde"
-                        // myChange: insert(2, "x")
-                        // theirChange: delete(1, 3)
-                        // result: [delete(1, 1), delete(2, 2)]
-                        let theirChange2 = cloneDeep(theirChange)
-                        let theirChange3 = cloneDeep(theirChange)
-                        theirChange2.length =
-                            myChange.position - theirChange.position
-                        theirChange3.position =
-                            myChange.position +
-                            myChange.content.length -
-                            theirChange2.length
-                        theirChange3.length -= theirChange2.length
-                        return [theirChange2, theirChange3]
-                    } else {
-                        // No need to transform.
-                        return [cloneDeep(theirChange)]
-                    }
-                }
-            } else {
-                // myChange.position <= theirChange.position
-                let theirChange2 = cloneDeep(theirChange)
-                theirChange2.position += myChange.content.length
-                return [theirChange2]
-            }
+            // Take first theirChange, and transform it through all myChanges.
+            let currentTheirChange = theirChanges.shift() as Change
+            let [transformedCurrentTheirChanges, transformedMyChanges] =
+                this.transformChangeThroughChanges(
+                    currentTheirChange,
+                    myChanges,
+                )
+
+            // Recursively transform the rest.
+            let [transformedRemainingTheirChanges, transformedFinalMyChanges] =
+                this.transformChanges(theirChanges, transformedMyChanges)
+            return [
+                transformedCurrentTheirChanges.concat(
+                    transformedRemainingTheirChanges,
+                ),
+                transformedFinalMyChanges,
+            ]
         }
-        // We should never get here.
-        throw new Error("transformChange: unreachable")
+    }
+
+    /*
+        This function takes operations t1 and m1, and returns operations t1',
+        so that t1 + m1' is equivalent to m1 + t1'.
+
+           t1
+        * ----> *
+        |       |
+     m1 |       | m1'
+        v  t1'  v
+        * ----> *
+
+    */
+
+    transformOperation(
+        theirOp: Operation,
+        myOp: Operation,
+    ): [Operation, Operation] {
+        let theirChanges = cloneDeep(theirOp.changes)
+        let myChanges = cloneDeep(myOp.changes)
+        let [transformedTheirChanges, transformedMyChanges] =
+            this.transformChanges(theirChanges, myChanges)
+        return [
+            new Operation(theirOp.sourceID, transformedTheirChanges),
+            new Operation(myOp.sourceID, transformedMyChanges),
+        ]
+    }
+
+    /*
+        This function takes operations t1 and m1 ... m_n,
+        and returns operations t1' and m1' ... m_n'.
+
+           t1
+        * ----> *
+        |       |
+     m1 |       | m1'
+        v       v
+        * ----> *
+        |       |
+     m2 |       | m2'
+        v       v
+        * ----> *
+        |       |
+     m3 |       | m3'
+        v  t1'  v
+        * ----> *
+
+    */
+    transformOperationThroughOperations(
+        theirOperation: Operation,
+        myOperations: Operation[],
+    ): [Operation, Operation[]] {
+        let theirOp = cloneDeep(theirOperation)
+        let transformedMyOperations: Operation[] = []
+        for (let myOperation of myOperations) {
+            let [theirTransformedOp, myTransformedOp] = this.transformOperation(
+                theirOp,
+                myOperation,
+            )
+            theirOp = theirTransformedOp
+            transformedMyOperations.push(myTransformedOp)
+        }
+        return [theirOp, transformedMyOperations]
     }
 }
 

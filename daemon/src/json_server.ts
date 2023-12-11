@@ -1,7 +1,8 @@
 import {createServer, Server, Socket} from "net"
 
-// A simple server that communicates with clients using JSON-RPC over TCP.
-export class JSONRPCServer {
+// A simple server that communicates with clients using JSON messages over TCP.
+// This follows the message format used by JSON-RPC.
+export class JSONServer {
     server: Server
     client?: Socket // TODO: support multiple clients
 
@@ -12,6 +13,8 @@ export class JSONRPCServer {
     constructor(port: number) {
         this.server = createServer()
         this.server.listen(port)
+
+        // Called when the client sends us a JSON message.
         this.server.on("connection", (conn: Socket) => {
             conn.setEncoding("utf8")
             this.client = conn
@@ -25,9 +28,6 @@ export class JSONRPCServer {
 
                 while (true) {
                     // For a complete message, we expect a Content-Length: <int> header, a \r\n\r\n, and some content of the given length.
-                    // Check that the header is there, and if we have enough content.
-                    // Shorten the buffer to remove the message we just parsed.
-                    // Then, parse JSON and call the message callback.
 
                     let headerEnd = buffer.indexOf("\r\n\r\n")
                     if (headerEnd < 0) {
@@ -62,15 +62,20 @@ export class JSONRPCServer {
             })
         })
     }
+
     onConnection(callback: () => void) {
         this.connectionCallback = callback
     }
+
     onMessage(callback: (message: any) => void) {
         this.messageCallback = callback
     }
+
     onClose(callback: () => void) {
         this.closeCallback = callback
     }
+
+    // Send a JSON message to the client.
     write(message: any) {
         let payload = JSON.stringify(message)
         let length = Buffer.byteLength(payload, "utf8")
