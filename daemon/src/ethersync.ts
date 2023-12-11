@@ -226,6 +226,21 @@ async function pullAllPages() {
     }
 }
 
+async function startPersistence() {
+    const persistenceDir = "output/.ethersync/persistence"
+    const LeveldbPersistence = require("y-leveldb").LeveldbPersistence
+    const ldb = new LeveldbPersistence(persistenceDir)
+
+    const persistedYdoc = await ldb.getYDoc("playground")
+    const newUpdates = Y.encodeStateAsUpdate(ydoc)
+    await ldb.storeUpdate("playground", newUpdates)
+    Y.applyUpdate(ydoc, Y.encodeStateAsUpdate(persistedYdoc))
+
+    ydoc.on("update", (update) => {
+        ldb.storeUpdate("playground", update)
+    })
+}
+
 /*async function editorInsert(filename: string, index: number, text: string) {
     let result = await serverAndClient.request("insert", [
         filename,
@@ -256,6 +271,7 @@ async function editorDelete(filename: string, index: number, length: number) {
 ;(async () => {
     connectToEtherwikiServer()
     setTimeout(() => {
+        startPersistence()
         pullAllPages()
         setupEditorServer()
         startObserving()
