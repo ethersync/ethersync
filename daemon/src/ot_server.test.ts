@@ -276,3 +276,20 @@ test("routes operations through server", () => {
 
     expect(ot.document).toEqual("hz!lo")
 })
+
+test("sends correct messages to editor", () => {
+    let opsSentToEditor: [number, Operation][] = []
+
+    let ot = new OTServer("12345", (editorRevision, op) => {
+        opsSentToEditor.push([editorRevision, op])
+    })
+
+    ot.applyCRDTChange(new Insertion(2, "x"))
+    ot.applyEditorOperation(1, new Operation("editor", [new Insertion(5, "y")]))
+
+    expect(ot.document).toEqual("12x34y5")
+
+    expect(opsSentToEditor).toEqual([
+        [0, new Operation("daemon", [new Insertion(2, "x")])],
+    ])
+})
