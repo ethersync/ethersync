@@ -10,15 +10,20 @@ local ignored_ticks = {}
 local ns_id = vim.api.nvim_create_namespace("Ethersync")
 local virtual_cursor
 
+-- JSON-RPC connection.
 local client
+
+-- Toggle to simulate the editor going offline.
+local online = false
+
+-- Queues filled during simulated "offline" mode, and consumed when we go online again.
 local opQueueForDaemon = {}
 local opQueueForEditor = {}
 
+-- Number of operations the daemon has made.
 local daemonRevision = 0
+-- Number of operations we have made.
 local editorRevision = 0
-
--- Toggle to simulate the editor going offline.
-local online = true
 
 -- Used to remember the previous content of the buffer, so that we can
 -- calculate the difference between the previous and the current content.
@@ -44,6 +49,7 @@ local function delete(index, length)
     vim.api.nvim_buf_set_text(0, row, col, rowEnd, colEnd, { "" })
 end
 
+-- Creates a virtual cursor.
 local function createCursor()
     local row = 0
     local col = 0
@@ -84,28 +90,8 @@ local function setCursor(head, anchor)
     })
 end
 
-function Connect()
-    local cmd = vim.lsp.rpc.connect("127.0.0.1", 9000)
-
-    for _, op in ipairs(opQueueForDaemon) do
-        local method = op[1]
-        local params = op[2]
-        cmd.notify(method, params)
-    end
-
-    client = cmd({
-        notification = function(method, params)
-            if online then
-                ProcessOperationForEditor(method, params)
-            else
-                table.insert(opQueueForEditor, { method, params })
-            end
-        end,
-    })
-    online = true
-end
-
-function ProcessOperationForEditor(method, parameters)
+-- Take an operation from the daemon and apply it to the editor.
+local function processOperationForEditor(method, parameters)
     if method == "operation" then
         local theEditorRevision = tonumber(parameters[1])
         local changes = parameters[2]
@@ -120,16 +106,42 @@ function ProcessOperationForEditor(method, parameters)
                 daemonRevision = daemonRevision + 1
             end
         else
-            -- Skip operation!
+            -- Operation is not up-to-date to our content, skip it!
+            -- The daemon will send a transformed one later.
         end
     end
 end
 
-function GoOffline()
+-- Connect to the daemon.
+local function connect()
+    local cmd = vim.lsp.rpc.connect("127.0.0.1", 9000)
+
+    for _, op in ipairs(opQueueForDaemon) do
+        local method = op[1]
+        local params = op[2]
+        cmd.notify(method, params)
+    end
+
+    client = cmd({
+        notification = function(method, params)
+            if online then
+                processOperationForEditor(method, params)
+            else
+                table.insert(opQueueForEditor, { method, params })
+            end
+        end,
+    })
+    online = true
+end
+
+-- Simulate disconnecting from the daemon.
+local function goOffline()
     online = false
 end
 
-function GoOnline()
+-- Simulate connecting to the daemon again.
+-- Apply both queues.
+local function goOnline()
     for _, op in ipairs(opQueueForDaemon) do
         local method = op[1]
         local params = op[2]
@@ -139,7 +151,7 @@ function GoOnline()
     for _, op in ipairs(opQueueForEditor) do
         local method = op[1]
         local params = op[2]
-        ProcessOperationForEditor(method, params)
+        processOperationForEditor(method, params)
     end
 
     online = true
@@ -153,12 +165,11 @@ function Ethersync()
 
     print("Ethersync activated!")
 
-    Connect()
+    connect()
 
     createCursor()
 
-    local content = utils.contentOfCurrentBuffer()
-    previousContent = content
+    previousContent = utils.contentOfCurrentBuffer()
 
     vim.api.nvim_buf_attach(0, false, {
         on_bytes = function(
@@ -277,6 +288,7 @@ augroup END
 )
 
 vim.api.nvim_create_user_command("Ethersync", Ethersync, {})
+
 vim.api.nvim_create_user_command("EthersyncRunTests", utils.testAllUnits, {})
-vim.api.nvim_create_user_command("EthersyncGoOffline", GoOffline, {})
-vim.api.nvim_create_user_command("EthersyncGoOnline", GoOnline, {})
+vim.api.nvim_create_user_command("EthersyncGoOffline", goOffline, {})
+vim.api.nvim_create_user_command("EthersyncGoOnline", goOnline, {})

@@ -51,7 +51,6 @@ function M.byteOffsetToCharOffset(byteOffset, content)
 end
 
 -- Converts a UTF-8 byte offset to a UTF-16 code unit offset.
--- TODO: Speed up?
 function M.byteOffsetToUTF16CodeUnitOffset(byteOffset, content)
     content = content or M.contentOfCurrentBuffer()
     local charOffset = M.byteOffsetToCharOffset(byteOffset, content)
@@ -69,6 +68,7 @@ function M.charOffsetToByteOffset(charOffset, content)
     end
 end
 
+-- Returns the number of UTF-16 code units in the given string.
 function M.UTF16CodeUnits(string)
     local chars = vim.fn.strchars(string)
     local pos = 0
@@ -107,6 +107,7 @@ function M.charOffsetToUTF16CodeUnitOffset(charOffset, content)
     return M.UTF16CodeUnits(vim.fn.strcharpart(content, 0, charOffset))
 end
 
+-- Converts a UTF-16 code unit offset to a Unicode character offset.
 function M.UTF16CodeUnitOffsetToCharOffset(utf16CodeUnitOffset, content)
     content = content or M.contentOfCurrentBuffer()
 
@@ -130,7 +131,6 @@ function M.UTF16CodeUnitOffsetToCharOffset(utf16CodeUnitOffset, content)
 end
 
 -- Converts a UTF-16 code unit offset to a row and column.
--- TODO: Speed up?
 function M.UTF16CodeUnitOffsetToRowCol(utf16CodeUnitOffset)
     local charOffset = M.UTF16CodeUnitOffsetToCharOffset(utf16CodeUnitOffset)
     return M.indexToRowCol(charOffset)
@@ -140,13 +140,6 @@ end
 function M.indexToRowCol(index)
     -- First, calculate which byte the (UTF-16) index corresponds to.
     local byte = M.charOffsetToByteOffset(index)
-
-    -- Catch a special case: Querying the position after the last character.
-    --local bufferLength = vim.fn.wordcount()["bytes"]
-    --local afterLastChar = byte >= bufferLength
-    --if afterLastChar then
-    --    byte = bufferLength - 1
-    --end
 
     local row = vim.fn.byte2line(byte + 1) - 1
     local byteOffsetOfLine = vim.api.nvim_buf_get_offset(0, row)
@@ -162,12 +155,14 @@ function M.rowColToIndex(row, col)
     return M.byteOffsetToCharOffset(byte)
 end
 
-function assertEqual(left, right)
+-- TEST SUITE
+
+local function assertEqual(left, right)
     assert(left == right, "not equal: " .. tostring(left) .. " != " .. tostring(right))
 end
 
-function assertFail(call)
-    local status, err = pcall(call)
+local function assertFail(call)
+    local status, _ = pcall(call)
     assert(not status, "Call did not fail, although it should have.")
 end
 
