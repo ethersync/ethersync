@@ -11,9 +11,14 @@ local ns_id = vim.api.nvim_create_namespace("Ethersync")
 local virtual_cursor
 
 local client
+local opQueueForDaemon = {}
+local opQueueForEditor = {}
 
 local daemonRevision = 0
 local editorRevision = 0
+
+-- Toggle to simulate the editor going offline.
+local online = true
 
 -- Used to remember the previous content of the buffer, so that we can
 -- calculate the difference between the previous and the current content.
@@ -79,6 +84,68 @@ local function setCursor(head, anchor)
     })
 end
 
+function Connect()
+    local cmd = vim.lsp.rpc.connect("127.0.0.1", 9000)
+
+    for _, op in ipairs(opQueueForDaemon) do
+        local method = op[1]
+        local params = op[2]
+        cmd.notify(method, params)
+    end
+
+    client = cmd({
+        notification = function(method, params)
+            if online then
+                ProcessOperationForEditor(method, params)
+            else
+                table.insert(opQueueForEditor, { method, params })
+            end
+        end,
+    })
+    online = true
+end
+
+function ProcessOperationForEditor(method, parameters)
+    if method == "operation" then
+        print("Received operation: " .. vim.inspect(parameters))
+        local theEditorRevision = tonumber(parameters[1])
+        local changes = parameters[2]
+
+        if theEditorRevision == editorRevision then
+            for _, change in ipairs(changes) do
+                if change.length ~= nil then
+                    delete(change.position, change.length)
+                else
+                    insert(change.position, change.content)
+                end
+                daemonRevision = daemonRevision + 1
+            end
+        else
+            print("Skipping operation, " .. theEditorRevision .. " != " .. editorRevision)
+        end
+    end
+end
+
+function GoOffline()
+    online = false
+end
+
+function GoOnline()
+    for _, op in ipairs(opQueueForDaemon) do
+        local method = op[1]
+        local params = op[2]
+        client.notify(method, params)
+    end
+
+    for _, op in ipairs(opQueueForEditor) do
+        local method = op[1]
+        local params = op[2]
+        ProcessOperationForEditor(method, params)
+    end
+
+    online = true
+end
+
 -- Initialization function.
 function Ethersync()
     if vim.fn.isdirectory(vim.fn.expand("%:p:h") .. "/.ethersync") ~= 1 then
@@ -87,31 +154,12 @@ function Ethersync()
 
     print("Ethersync activated!")
 
-    local cmd = vim.lsp.rpc.connect("127.0.0.1", 9000)
-    --local client_id = vim.lsp.start({ name = "ethersync", cmd = cmd })
-    client = cmd({
-        notification = function(method, params)
-            if method == "operation" then
-                print("Received operation: " .. vim.inspect(params))
-                local theEditorRevision = tonumber(params[1])
-                local changes = params[2]
-
-                if theEditorRevision == editorRevision then
-                    for _, change in ipairs(changes) do
-                        if change.length ~= nil then
-                            delete(change.position, change.length)
-                        else
-                            insert(change.position, change.content)
-                        end
-                    end
-                else
-                    print("Skipping operation, " .. theEditorRevision .. " != " .. editorRevision)
-                end
-            end
-        end,
-    })
+    Connect()
 
     createCursor()
+
+    local content = utils.contentOfCurrentBuffer()
+    previousContent = content
 
     vim.api.nvim_buf_attach(0, false, {
         on_bytes = function(
@@ -155,16 +203,30 @@ function Ethersync()
 
             if oldEndCharUTF16CodeUnitsLength > 0 then
                 editorRevision = editorRevision + 1
-                client.notify(
-                    "delete",
-                    { filename, daemonRevision, charOffsetUTF16CodeUnits, oldEndCharUTF16CodeUnitsLength }
-                )
+                if online then
+                    client.notify(
+                        "delete",
+                        { filename, daemonRevision, charOffsetUTF16CodeUnits, oldEndCharUTF16CodeUnitsLength }
+                    )
+                else
+                    table.insert(opQueueForDaemon, {
+                        "delete",
+                        { filename, daemonRevision, charOffsetUTF16CodeUnits, oldEndCharUTF16CodeUnitsLength },
+                    })
+                end
             end
 
             if newEndCharUTF16CodeUnitsLength > 0 then
                 editorRevision = editorRevision + 1
                 local insertedString = vim.fn.strpart(content, byte_offset, new_end_byte_length)
-                client.notify("insert", { filename, daemonRevision, charOffsetUTF16CodeUnits, insertedString })
+                if online then
+                    client.notify("insert", { filename, daemonRevision, charOffsetUTF16CodeUnits, insertedString })
+                else
+                    table.insert(opQueueForDaemon, {
+                        "insert",
+                        { filename, daemonRevision, charOffsetUTF16CodeUnits, insertedString },
+                    })
+                end
             end
 
             previousContent = content
@@ -199,38 +261,12 @@ function Ethersync()
     --            anchorUTF16CodeUnits = utils.charOffsetToUTF16CodeUnitOffset(anchor)
     --        end
     --        local filename = vim.fs.basename(vim.api.nvim_buf_get_name(0))
-    --        RequestSync("cursor", { filename, headUTF16CodeUnits, anchorUTF16CodeUnits })
+    --        client:notify("cursor", { filename, headUTF16CodeUnits, anchorUTF16CodeUnits })
     --    end,
     --})
 end
 
--- Stolen from Neovim source code.
-function RequestSync(method, params, timeout_ms, bufnr)
-    local request_result = nil
-    local function _sync_handler(err, result)
-        request_result = { err = err, result = result }
-    end
-
-    local success, request_id = client.request(method, params, _sync_handler, bufnr)
-    if not success then
-        return nil
-    end
-
-    local wait_result, reason = vim.wait(timeout_ms or 1000, function()
-        return request_result ~= nil
-    end, 10)
-
-    if not wait_result then
-        if request_id then
-            client.cancel_request(request_id)
-        end
-        local wait_result_reason = { [-1] = "timeout", [-2] = "interrupted", [-3] = "error" }
-        return nil, wait_result_reason[reason]
-    end
-    return request_result
-end
-
--- When new buffer is loaded, run Ethersync.
+-- When new buffer is loaded, run Ethersync automatically.
 vim.api.nvim_exec(
     [[
 augroup Ethersync
@@ -241,7 +277,7 @@ augroup END
     false
 )
 
--- Here are two other ways to run Ethersync:
 vim.api.nvim_create_user_command("Ethersync", Ethersync, {})
 vim.api.nvim_create_user_command("EthersyncRunTests", utils.testAllUnits, {})
-vim.keymap.set("n", "<Leader>p", Ethersync)
+vim.api.nvim_create_user_command("EthersyncGoOffline", GoOffline, {})
+vim.api.nvim_create_user_command("EthersyncGoOnline", GoOnline, {})
