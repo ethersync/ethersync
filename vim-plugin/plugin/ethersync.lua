@@ -107,7 +107,6 @@ end
 
 function ProcessOperationForEditor(method, parameters)
     if method == "operation" then
-        print("Received operation: " .. vim.inspect(parameters))
         local theEditorRevision = tonumber(parameters[1])
         local changes = parameters[2]
 
@@ -121,7 +120,7 @@ function ProcessOperationForEditor(method, parameters)
                 daemonRevision = daemonRevision + 1
             end
         else
-            print("Skipping operation, " .. theEditorRevision .. " != " .. editorRevision)
+            -- Skip operation!
         end
     end
 end

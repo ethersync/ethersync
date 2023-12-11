@@ -17,9 +17,12 @@ export class JSONRPCServer {
             this.client = conn
             this.connectionCallback()
 
-            let buffer = ""
+            let buffer = Buffer.alloc(0)
+
             conn.on("data", (chunk: string) => {
-                buffer += chunk
+                let chunkBuffer = Buffer.from(chunk, "utf8")
+                buffer = Buffer.concat([buffer, chunkBuffer])
+
                 while (true) {
                     // For a complete message, we expect a Content-Length: <int> header, a \r\n\r\n, and some content of the given length.
                     // Check that the header is there, and if we have enough content.
@@ -31,19 +34,25 @@ export class JSONRPCServer {
                         break
                     }
                     let header = buffer.slice(0, headerEnd)
-                    let match = header.match(/Content-Length: (\d+)/)
+                    let headerString = header.toString("utf8")
+                    let match = headerString.match(/Content-Length: (\d+)/)
                     if (!match) {
                         break
                     }
+
+                    // Note: This length is in UTF-8 bytes!
                     let contentLength = parseInt(match[1])
                     let messageLength = headerEnd + 4 + contentLength
-                    if (buffer.length < messageLength) {
+                    let bufferLength = buffer.length
+                    if (bufferLength < messageLength) {
                         break
                     }
+
                     let json = buffer.slice(headerEnd + 4, messageLength)
                     buffer = buffer.slice(messageLength)
 
-                    let data = JSON.parse(json)
+                    let jsonString = json.toString("utf8")
+                    let data = JSON.parse(jsonString)
                     this.messageCallback(data)
                 }
             })
@@ -64,7 +73,9 @@ export class JSONRPCServer {
     }
     write(message: any) {
         let payload = JSON.stringify(message)
-        let header = `Content-Length: ${payload.length}\r\n\r\n`
+        let length = Buffer.byteLength(payload, "utf8")
+        let header = `Content-Length: ${length}\r\n\r\n`
+
         this.client?.write(header)
         this.client?.write(payload)
     }

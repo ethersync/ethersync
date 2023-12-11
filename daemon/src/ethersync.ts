@@ -54,7 +54,10 @@ var ot = new OTServer(
     },
 )
 
-serverAndClient.addMethod("ping", ({name}) => "Hello, " + name + "!")
+serverAndClient.addMethod("debug", (params: any) => {
+    console.log("DEBUG FROM EDITOR:")
+    console.log(JSON.stringify(params, null, 2))
+})
 
 serverAndClient.addMethod("insert", (params: any) => {
     //let filename = params[0]
