@@ -97,11 +97,14 @@ local function processOperationForEditor(method, parameters)
         local changes = parameters[2]
 
         if theEditorRevision == editorRevision then
-            for _, change in ipairs(changes) do
-                if change.length ~= nil then
-                    delete(change.position, change.length)
-                else
-                    insert(change.position, change.content)
+            local position = 0
+            for change in changes do
+                if type(change) == "number" then
+                    position = position + change
+                elseif type(change) == "string" then
+                    insert(position, change)
+                elseif type(change) == "table" then
+                    delete(position, change.d)
                 end
                 daemonRevision = daemonRevision + 1
             end
