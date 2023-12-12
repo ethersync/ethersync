@@ -5,24 +5,28 @@ test("transforms individual changes", () => {
     let ot = new OTServer("hello", () => {})
 
     expect(
-        ot.transformChange(new Deletion(1, 3), new Insertion(2, "x")),
-    ).toEqual([new Deletion(1, 1), new Deletion(2, 2)])
-
-    expect(
-        ot.transformChange(new Insertion(1, "x"), new Insertion(0, "x")),
+        ot.transformChange(new Insertion(1, "x"), new Insertion(0, "y")),
     ).toEqual([new Insertion(2, "x")])
 
     expect(
-        ot.transformChange(new Insertion(1, "x"), new Insertion(2, "x")),
+        ot.transformChange(new Insertion(1, "x"), new Insertion(2, "y")),
     ).toEqual([new Insertion(1, "x")])
 
     expect(
-        ot.transformChange(new Insertion(1, "x"), new Insertion(0, "xxx")),
+        ot.transformChange(new Insertion(1, "x"), new Insertion(0, "yyy")),
     ).toEqual([new Insertion(4, "x")])
 
     expect(
-        ot.transformChange(new Insertion(0, "x"), new Insertion(0, "x")),
+        ot.transformChange(new Insertion(0, "x"), new Insertion(0, "y")),
     ).toEqual([new Insertion(1, "x")])
+
+    expect(
+        ot.transformChange(new Insertion(0, "xxx"), new Insertion(0, "y")),
+    ).toEqual([new Insertion(1, "xxx")])
+
+    expect(
+        ot.transformChange(new Insertion(0, "x"), new Insertion(0, "yyy")),
+    ).toEqual([new Insertion(3, "x")])
 
     expect(
         ot.transformChange(new Insertion(1, "abc"), new Deletion(0, 3)),
@@ -31,6 +35,14 @@ test("transforms individual changes", () => {
     expect(
         ot.transformChange(new Deletion(2, 1), new Insertion(0, "x")),
     ).toEqual([new Deletion(3, 1)])
+
+    expect(
+        ot.transformChange(new Deletion(2, 1), new Insertion(3, "x")),
+    ).toEqual([new Deletion(2, 1)])
+
+    expect(
+        ot.transformChange(new Deletion(1, 3), new Insertion(2, "x")),
+    ).toEqual([new Deletion(1, 1), new Deletion(2, 2)])
 
     expect(ot.transformChange(new Deletion(1, 5), new Deletion(1, 3))).toEqual([
         new Deletion(1, 2),
