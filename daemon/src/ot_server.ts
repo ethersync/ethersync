@@ -300,52 +300,38 @@ export class OTServer {
     private transformDeleteDelete(
         theirChange: Deletion,
         myChange: Deletion,
-        theyGoFirst = false,
+        _theyGoFirst = false,
     ): Change[] {
-        if (
-            myChange.position > theirChange.position ||
-            (myChange.position === theirChange.position && theyGoFirst)
-        ) {
+        if (myChange.position > theirChange.position) {
             let theirChange2 = cloneDeep(theirChange)
 
             let endOfTheirChange = theirChange.position + theirChange.length
             let endOfMyChange = myChange.position + myChange.length
 
-            if (theyGoFirst) {
-                // They win, and we don't need to shorten them.
-                return [theirChange2]
-            } else {
-                if (endOfTheirChange > myChange.position) {
-                    if (endOfTheirChange > endOfMyChange) {
-                        theirChange2.length -= myChange.length
-                    } else {
-                        theirChange2.length -=
-                            endOfTheirChange - myChange.position
-                    }
+            if (endOfTheirChange > myChange.position) {
+                if (endOfTheirChange > endOfMyChange) {
+                    theirChange2.length -= myChange.length
+                } else {
+                    theirChange2.length -= endOfTheirChange - myChange.position
                 }
-                return [theirChange2]
             }
+            return [theirChange2]
         } else if (myChange.position + myChange.length > theirChange.position) {
             let theirChange2 = cloneDeep(theirChange)
             theirChange2.position = myChange.position
             let endOfMyChange = myChange.position + myChange.length
             let endOfTheirChange = theirChange.position + theirChange.length
 
-            if (theyGoFirst) {
-                // They win, and we don't need to shorten them.
+            if (endOfMyChange > endOfTheirChange) {
+                theirChange2.length -= myChange.length
+            } else {
+                theirChange2.length -= endOfMyChange - theirChange.position
+            }
+
+            if (theirChange2.length > 0) {
                 return [theirChange2]
             } else {
-                if (endOfMyChange > endOfTheirChange) {
-                    theirChange2.length -= myChange.length
-                } else {
-                    theirChange2.length -= endOfMyChange - theirChange.position
-                }
-
-                if (theirChange2.length > 0) {
-                    return [theirChange2]
-                } else {
-                    return []
-                }
+                return []
             }
         } else {
             let theirChange2 = cloneDeep(theirChange)

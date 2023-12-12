@@ -82,35 +82,35 @@ test("transforms deletions that apply to the same position", () => {
 
     expect(
         ot.transformChange(new Deletion(1, 1), new Deletion(1, 1), true),
-    ).toEqual([new Deletion(1, 1)])
+    ).toEqual([])
     expect(
         ot.transformChange(new Deletion(1, 1), new Deletion(1, 1), false),
     ).toEqual([])
 
     expect(
         ot.transformChange(new Deletion(0, 3), new Deletion(1, 3), true),
-    ).toEqual([new Deletion(0, 3)])
+    ).toEqual([new Deletion(0, 1)])
     expect(
         ot.transformChange(new Deletion(0, 3), new Deletion(1, 3), false),
     ).toEqual([new Deletion(0, 1)])
 
     expect(
         ot.transformChange(new Deletion(1, 3), new Deletion(0, 3), true),
-    ).toEqual([new Deletion(0, 3)])
+    ).toEqual([new Deletion(0, 1)])
     expect(
         ot.transformChange(new Deletion(1, 3), new Deletion(0, 3), false),
     ).toEqual([new Deletion(0, 1)])
 
     expect(
         ot.transformChange(new Deletion(2, 1), new Deletion(0, 5), true),
-    ).toEqual([new Deletion(0, 1)])
+    ).toEqual([])
     expect(
         ot.transformChange(new Deletion(2, 1), new Deletion(0, 5), false),
     ).toEqual([])
 
     expect(
         ot.transformChange(new Deletion(0, 5), new Deletion(2, 1), true),
-    ).toEqual([new Deletion(0, 5)])
+    ).toEqual([new Deletion(0, 4)])
     expect(
         ot.transformChange(new Deletion(0, 5), new Deletion(2, 1), false),
     ).toEqual([new Deletion(0, 4)])
@@ -157,8 +157,17 @@ test("transforms operations", () => {
         new Operation("daemon", [new Insertion(0, "s")]),
     ])
 
-    /*
-        TODO: fix these tests! Are they correct?
+    expect(
+        ot.transformOperation(
+            new Operation("editor", [
+                new Deletion(0, 3), // llo
+            ]),
+            new Operation("daemon", [
+                new Deletion(0, 1), // ello
+                new Deletion(0, 2), // lo
+            ]),
+        ),
+    ).toEqual([new Operation("editor", []), new Operation("daemon", [])])
 
     expect(
         ot.transformOperation(
@@ -200,7 +209,6 @@ test("transforms operations", () => {
             new Deletion(1, 2), // yxlo
         ]),
     ])
-    */
 })
 
 test("routes operations through server", () => {
