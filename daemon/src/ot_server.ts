@@ -18,7 +18,7 @@ import {cloneDeep} from "lodash"
     5. The daemon transforms e1 and e2 through d2 and d3, creating e1' and e2', and applies them
        to the document. It sends d2' and d3' to the editor, along with the editor revision (2).
     6. The editor receives d2' and applies it, but then makes edit e3, and sends it to the daemon.
-       It rejects d3' which it receives later.
+       The editor rejects d3', because it is received after e3 was created.
     7. The daemon meanwhile makes edit d4. Upon reciving e3, it transforms it against d3' and d4,
        and sends d3'' and d4' to the editor. It applies d4 and e3'' to the document.
     8. The editor receives d3'' and d4', and applies them. Both sides now have the same document.
@@ -59,17 +59,25 @@ export class OTServer {
     // Operations that we have sent to the editor, but we're not sure whether it has
     // accepted them. We have to keep them around until we know for sure, so that we
     // can correctly transform operations for the editor.
+    //
+    // Design Note: The daemon should do the transformation because we want to spare
+    // the overhead of implementing the tranformation per editor plugin. In our case
+    // there's a small number of editors, so transforming it in the daemon is feasible.
     editorQueue: Operation[] = []
 
     constructor(
         public document: string,
         private sendToEditor: (editorRevision: number, o: Operation) => void,
         private sendToCRDT: (o: Operation) => void = () => {},
+        private editorRevision: number = 0,
+        private daemonRevision: number = 0,
     ) {}
 
     reset() {
         this.operations = []
         this.editorQueue = []
+        this.editorRevision = 0
+        this.daemonRevision = 0
     }
 
     // Called when the CRDT world makes a change to the document.
@@ -78,24 +86,18 @@ export class OTServer {
         let operation = new Operation("daemon", [change])
         this.operations.push(operation)
         this.editorQueue.push(operation)
+        this.daemonRevision++
         this.applyChangeToDocument(change)
 
         // We assume that the editor is up-to-date, and send the operation to it.
         // If it can't accept it, we will transform and send it later.
-        let editorRevision = this.operations.filter(
-            (o) => o.sourceID === "editor",
-        ).length
-        this.sendToEditor(editorRevision, operation)
+        this.sendToEditor(this.editorRevision, operation)
     }
 
     // Called when the editor sends us an operation.
     // daemonRevision is the revision this operation applies to.
     applyEditorOperation(daemonRevision: number, operation: Operation) {
-        // Find the current daemon revision. This is the number of daemon-source operations in this.operations.
-        let currentDaemonRevision = this.operations.filter(
-            (o) => o.sourceID === "daemon",
-        ).length
-        if (daemonRevision === currentDaemonRevision) {
+        if (daemonRevision === this.daemonRevision) {
             // The sent operation applies to the current daemon revision. We can apply it immediately.
             this.addEditorOperation(operation)
         } else {
@@ -105,7 +107,7 @@ export class OTServer {
             // But we at least we know that the editor has seen all daemon operations until
             // daemonOperation. So we can remove them from the editor queue.
             let daemonOperationsToTransform =
-                currentDaemonRevision - daemonRevision
+                this.daemonRevision - daemonRevision
             this.editorQueue.splice(
                 0,
                 this.editorQueue.length - daemonOperationsToTransform,
@@ -122,13 +124,9 @@ export class OTServer {
             // And replace the editor queue with the transformed queue.
             this.editorQueue = transformedQueue
 
-            // Find the editor revision. This is the number of editor-source operations in this.operations.
-            let editorRevision = this.operations.filter(
-                (o) => o.sourceID === "editor",
-            ).length
             // Send the transformed queue to the editor.
             for (let op of this.editorQueue) {
-                this.sendToEditor(editorRevision, op)
+                this.sendToEditor(this.editorRevision, op)
             }
         }
     }
@@ -152,6 +150,7 @@ export class OTServer {
     // Sends it to the CRDT world.
     private addEditorOperation(operation: Operation) {
         this.operations.push(operation)
+        this.editorRevision++
         this.sendToCRDT(operation)
         for (let change of operation.changes) {
             this.applyChangeToDocument(change)
@@ -425,7 +424,6 @@ export class OTServer {
         * ----> * ----> * ----> *
 
     */
-
     transformChanges(
         theirChanges: Change[],
         myChanges: Change[],
@@ -467,7 +465,6 @@ export class OTServer {
         * ----> *
 
     */
-
     transformOperation(
         theirOp: Operation,
         myOp: Operation,
@@ -525,8 +522,6 @@ export class Operation {
         public sourceID: string,
         public changes: Change[],
     ) {}
-
-    public static fromJSON() {}
 }
 
 export type Change = Insertion | Deletion

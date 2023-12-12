@@ -2,16 +2,15 @@ import * as fs from "fs"
 import * as path from "path"
 import * as Y from "yjs"
 import {WebsocketProvider} from "y-websocket"
-// TODO: Convert to import syntax?
-const LeveldbPersistence = require("y-leveldb").LeveldbPersistence
+import {LeveldbPersistence} from "y-leveldb"
 import {
     JSONRPCServer,
     JSONRPCClient,
     JSONRPCServerAndClient,
 } from "json-rpc-2.0"
 
-import {JSONServer} from "./json_server.js"
-import {OTServer, Operation, Deletion, Insertion} from "./ot_server.js"
+import {JSONServer} from "./json_server"
+import {OTServer, Operation, Deletion, Insertion} from "./ot_server"
 
 var ydoc = new Y.Doc()
 var server = new JSONServer(9000)
