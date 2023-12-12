@@ -98,7 +98,7 @@ local function processOperationForEditor(method, parameters)
 
         if theEditorRevision == editorRevision then
             local position = 0
-            for change in changes do
+            for _, change in ipairs(changes) do
                 if type(change) == "number" then
                     position = position + change
                 elseif type(change) == "string" then
