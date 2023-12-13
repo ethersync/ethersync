@@ -32,13 +32,15 @@ const serverAndClient = new JSONRPCServerAndClient(
 var ot_documents: {[filename: string]: OTServer} = {}
 
 function initializeOTDocumentServer(filename: string) {
-    // TODO: what if it's already there?
+    let fsFilename = path.join("output", filename)
+    let content = fs.readFileSync(fsFilename, "utf8")
     ot_documents[filename] = new OTServer(
-        "",
+        content,
         // sendToEditor
         (editorRevision: number, operation: TextOp) => {
             let parameters = [editorRevision, operation]
             // TODO: add filename, s.t. it applies to a certain buffer?
+            // we first need plugin support for that, I guess.
             console.log("Sending op: ", JSON.stringify(parameters))
             serverAndClient.notify("operation", parameters)
         },
