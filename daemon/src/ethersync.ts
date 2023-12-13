@@ -29,39 +29,47 @@ const serverAndClient = new JSONRPCServerAndClient(
     }),
 )
 
-var ot = new OTServer(
-    "",
-    // sendToEditor
-    (editorRevision: number, operation: TextOp) => {
-        let parameters = [editorRevision, operation]
-        console.log("Sending op: ", JSON.stringify(parameters))
-        serverAndClient.notify("operation", parameters)
-    },
-    // sendToCRDT
-    (operation: TextOp) => {
-        console.log("Applying op to document: ", JSON.stringify(operation))
-        let position = 0
-        for (const change of operation) {
-            switch (typeof change) {
-                case "number":
-                    position += change
-                    break
-                case "string":
-                    ydoc.transact(() => {
-                        findPage("file").get("content").insert(position, change)
-                    }, ydoc.clientID)
-                    break
-                case "object":
-                    ydoc.transact(() => {
-                        findPage("file")
-                            .get("content")
-                            .delete(position, change.d)
-                    }, ydoc.clientID)
-                    break
+var ot_documents: {[filename: string]: OTServer} = {}
+
+function initializeOTDocumentServer(filename: string) {
+    // TODO: what if it's already there?
+    ot_documents[filename] = new OTServer(
+        "",
+        // sendToEditor
+        (editorRevision: number, operation: TextOp) => {
+            let parameters = [editorRevision, operation]
+            // TODO: add filename, s.t. it applies to a certain buffer?
+            console.log("Sending op: ", JSON.stringify(parameters))
+            serverAndClient.notify("operation", parameters)
+        },
+        // sendToCRDT
+        (operation: TextOp) => {
+            console.log("Applying op to document: ", JSON.stringify(operation))
+            let position = 0
+            for (const change of operation) {
+                switch (typeof change) {
+                    case "number":
+                        position += change
+                        break
+                    case "string":
+                        ydoc.transact(() => {
+                            findPage(filename)
+                                .get("content")
+                                .insert(position, change)
+                        }, ydoc.clientID)
+                        break
+                    case "object":
+                        ydoc.transact(() => {
+                            findPage(filename)
+                                .get("content")
+                                .delete(position, change.d)
+                        }, ydoc.clientID)
+                        break
+                }
             }
-        }
-    },
-)
+        },
+    )
+}
 
 serverAndClient.addMethod("debug", (params: any) => {
     console.log("DEBUG MESSAGE FROM EDITOR:")
@@ -69,21 +77,32 @@ serverAndClient.addMethod("debug", (params: any) => {
 })
 
 serverAndClient.addMethod("insert", (params: any) => {
-    // TODO: Implement filename support...
+    let filename = params[0]
     let daemonRevision = params[1]
     let index = params[2]
     let text = params[3]
 
-    ot.applyEditorOperation(daemonRevision, insert(index, text))
+    ot_documents[filename].applyEditorOperation(
+        daemonRevision,
+        insert(index, text),
+    )
 })
 
 serverAndClient.addMethod("delete", (params: any) => {
-    // TODO: Implement filename support...
+    let filename = params[0]
     let daemonRevision = params[1]
     let index = params[2]
     let length = params[3]
 
-    ot.applyEditorOperation(daemonRevision, remove(index, length))
+    ot_documents[filename].applyEditorOperation(
+        daemonRevision,
+        remove(index, length),
+    )
+})
+
+serverAndClient.addMethod("open", (params: any) => {
+    let filename = params[0]
+    initializeOTDocumentServer(filename)
 })
 
 /*serverAndClient.addMethod("cursor", (params: any) => {
@@ -154,8 +173,7 @@ function connectToEtherwikiServer() {
 
 function setupEditorServer() {
     server.onConnection(() => {
-        console.log("new connection, resetting OT")
-        ot.reset()
+        console.log("new connection")
     })
 
     server.onMessage((message: any) => {
@@ -189,7 +207,7 @@ function startObserving() {
 
             let key = event.path[event.path.length - 1]
             if (key == "content") {
-                //let filename = event.target.parent.get("title").toString()
+                let filename = event.target.parent.get("title").toString()
 
                 let index = 0
 
@@ -198,10 +216,14 @@ function startObserving() {
                         index += event.delta[0]["retain"]
                     } else if (event.delta[0]["insert"]) {
                         let text = event.delta[0]["insert"]
-                        ot.applyCRDTChange(insert(index, text))
+                        ot_documents[filename].applyCRDTChange(
+                            insert(index, text),
+                        )
                     } else if (event.delta[0]["delete"]) {
                         let length = event.delta[0]["delete"]
-                        ot.applyCRDTChange(remove(index, length))
+                        ot_documents[filename].applyCRDTChange(
+                            remove(index, length),
+                        )
                     }
                     event.delta.shift()
                 }

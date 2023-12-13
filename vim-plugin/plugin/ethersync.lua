@@ -119,6 +119,7 @@ end
 local function connect()
     local cmd = vim.lsp.rpc.connect("127.0.0.1", 9000)
 
+    -- does this actually work?
     for _, op in ipairs(opQueueForDaemon) do
         local method = op[1]
         local params = op[2]
@@ -174,6 +175,9 @@ function Ethersync()
 
     previousContent = utils.contentOfCurrentBuffer()
 
+    local filename = vim.fs.basename(vim.api.nvim_buf_get_name(0))
+    client.notify("open", { filename })
+
     vim.api.nvim_buf_attach(0, false, {
         on_bytes = function(
             _the_string_bytes,
@@ -197,8 +201,6 @@ function Ethersync()
                 previousContent = content
                 return
             end
-
-            local filename = "file" --vim.fs.basename(vim.api.nvim_buf_get_name(0))
 
             if byte_offset + new_end_byte_length > vim.fn.strlen(content) then
                 -- Tried to insert something *after* the end of the (resulting) file.
