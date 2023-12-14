@@ -237,12 +237,6 @@ export class Daemon {
     startObserving() {
         this.ydoc.getArray("pages").observeDeep(async (events: any) => {
             for (const event of events) {
-                console.log(
-                    "observed event from ydoc:" +
-                        JSON.stringify(event.delta) +
-                        " with id " +
-                        event.transaction.origin,
-                )
                 let clientID = event.transaction.origin
                 if (clientID == this.clientID) {
                     // Don't feed our own changes back to the editor.
