@@ -119,13 +119,6 @@ end
 local function connect()
     local cmd = vim.lsp.rpc.connect("127.0.0.1", 9000)
 
-    -- does this actually work?
-    for _, op in ipairs(opQueueForDaemon) do
-        local method = op[1]
-        local params = op[2]
-        cmd.notify(method, params)
-    end
-
     client = cmd({
         notification = function(method, params)
             if online then
