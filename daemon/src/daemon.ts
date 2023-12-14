@@ -234,6 +234,16 @@ export class Daemon {
         this.ydoc.getArray("pages").insert(0, [page])
     }
 
+    dropPage(filename: string) {
+        let page = this.findPage(filename)
+        if (page === undefined) {
+            return
+        }
+        let pages = this.ydoc.getArray("pages")
+        let i = pages.toArray().indexOf(page)
+        pages.delete(i)
+    }
+
     startObserving() {
         this.ydoc.getArray("pages").observeDeep(async (events: any) => {
             for (const event of events) {

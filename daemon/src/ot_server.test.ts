@@ -2,6 +2,24 @@ import {expect, test} from "vitest"
 import {OTServer} from "./ot_server"
 import {type, insert, remove, TextOp} from "ot-text-unicode"
 
+test("op transformation does what we think", () => {
+    let a = insert(2, "x")
+    let b = remove(1, 3)
+    let c = insert(2, "y")
+
+    expect(type.transform(a, b, "right")).toEqual(insert(1, "x"))
+    expect(type.transform(a, b, "left")).toEqual(insert(1, "x"))
+    expect(type.transform(b, a, "right")).toEqual(
+        type.compose(remove(1, 1), remove(2, 2)),
+    )
+    expect(type.transform(b, a, "left")).toEqual(
+        type.compose(remove(1, 1), remove(2, 2)),
+    )
+
+    expect(type.transform(a, c, "right")).toEqual(insert(3, "x"))
+    expect(type.transform(a, c, "left")).toEqual(insert(2, "x"))
+})
+
 test("routes operations through server", () => {
     let opsSentToEditor: [number, TextOp][] = []
 
@@ -41,4 +59,32 @@ test("routes operations through server", () => {
     ot.applyEditorOperation(1, insert(1, "!")) // editor thinks: hlo -> h!lo
 
     expect(ot.document).toEqual("hz!lo")
+})
+
+test("does not have any bugs", () => {
+    let opsSentToEditor: [number, TextOp][] = []
+
+    let ot = new OTServer("hello", (editorRevision, op) => {
+        opsSentToEditor.push([editorRevision, op])
+    })
+
+    ot.applyCRDTChange(remove(1, 3)) // crdt: hello -> ho
+
+    expect(opsSentToEditor).toEqual([
+        [0, remove(1, 3)], // But the editor rejects it.
+    ])
+
+    ot.applyEditorOperation(0, insert(2, "x")) // editor thinks: hello -> hexllo
+
+    expect(ot.operations).toEqual([
+        remove(1, 3), // ho
+        insert(1, "x"), // hxo
+    ])
+
+    expect(opsSentToEditor).toEqual([
+        [0, remove(1, 3)], // But the editor rejects it.
+        [1, type.compose(remove(1, 1), remove(2, 2))],
+    ])
+
+    expect(ot.document).toEqual("hxo")
 })
