@@ -1,5 +1,5 @@
 import {expect, test} from "vitest"
-import {OTServer, Insertion, Deletion, Operation} from "./ot_server"
+import {OTServer} from "./ot_server"
 import {type, insert, remove, TextOp} from "ot-text-unicode"
 
 test("routes operations through server", () => {
