@@ -9,6 +9,7 @@ let nvim: NeovimClient
 function delay(time: number) {
     return new Promise((resolve) => setTimeout(resolve, time))
 }
+
 beforeAll(async () => {
     await daemon.start()
 
@@ -18,13 +19,16 @@ beforeAll(async () => {
     // Allow some wakeup time for vim.
     await delay(500)
 })
+
 beforeEach(async () => {
     daemon.dropPage("integrationtest")
     daemon.createPage("integrationtest", "hallo")
     daemon.pullAllPages()
     await nvim.command("edit! output/integrationtest")
+    await nvim.command("EthersyncReload")
     await delay(100)
 })
+
 afterAll(async () => {
     nvim.quit()
     // nvim_proc.disconnect()

@@ -171,15 +171,15 @@ export class OTServer {
     ): [TextOp, TextOp[]] {
         let transformedMyOperations: TextOp[] = []
         for (let myOperation of myOperations) {
-            theirOperation = type.transform(
-                theirOperation,
-                myOperation,
-                "right",
-            )
             let myTransformedOp = type.transform(
                 myOperation,
                 theirOperation,
                 "left",
+            )
+            theirOperation = type.transform(
+                theirOperation,
+                myOperation,
+                "right",
             )
             transformedMyOperations.push(myTransformedOp)
         }

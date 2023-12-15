@@ -106,8 +106,8 @@ local function processOperationForEditor(method, parameters)
                 elseif type(change) == "table" then
                     delete(position, change.d)
                 end
-                daemonRevision = daemonRevision + 1
             end
+            daemonRevision = daemonRevision + 1
         else
             -- Operation is not up-to-date to our content, skip it!
             -- The daemon will send a transformed one later.
@@ -137,7 +137,7 @@ local function goOffline()
 end
 
 -- Simulate connecting to the daemon again.
--- Apply both queues.
+-- Apply both queues, then reset them.
 local function goOnline()
     for _, op in ipairs(opQueueForDaemon) do
         local method = op[1]
@@ -151,7 +151,21 @@ local function goOnline()
         processOperationForEditor(method, params)
     end
 
+    opQueueForDaemon = {}
+    opQueueForEditor = {}
     online = true
+end
+
+-- Reset the state on editor side and re-open the current buffer
+--
+-- (this is to be called on buffer change, once we have the ability to detect that)
+local function resetState()
+    daemonRevision = 0
+    editorRevision = 0
+    opQueueForDaemon = {}
+    opQueueForEditor = {}
+    local filename = vim.fs.basename(vim.api.nvim_buf_get_name(0))
+    client.notify("open", { filename })
 end
 
 -- Initialization function.
@@ -290,3 +304,4 @@ vim.api.nvim_create_user_command("Ethersync", Ethersync, {})
 vim.api.nvim_create_user_command("EthersyncRunTests", utils.testAllUnits, {})
 vim.api.nvim_create_user_command("EthersyncGoOffline", goOffline, {})
 vim.api.nvim_create_user_command("EthersyncGoOnline", goOnline, {})
+vim.api.nvim_create_user_command("EthersyncReload", resetState, {})

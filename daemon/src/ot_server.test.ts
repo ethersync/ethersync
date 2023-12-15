@@ -16,6 +16,8 @@ test("op transformation does what we think", () => {
         type.compose(remove(1, 1), remove(2, 2)),
     )
 
+    // with inserts at the same position it makes a difference whether
+    // you pass in "left" or "right"
     expect(type.transform(a, c, "right")).toEqual(insert(3, "x"))
     expect(type.transform(a, c, "left")).toEqual(insert(2, "x"))
 })
@@ -59,6 +61,17 @@ test("routes operations through server", () => {
     ot.applyEditorOperation(1, insert(1, "!")) // editor thinks: hlo -> h!lo
 
     expect(ot.document).toEqual("hz!lo")
+})
+
+test("transforms operations correctly", () => {
+    let ot = new OTServer("hello", (editorRevision, op) => {})
+    let editorOp = insert(2, "x")
+    let unacknowledgedOps = [remove(1, 3)]
+
+    let [transformedOperation, transformedQueue] =
+        ot.transformOperationThroughOperations(editorOp, unacknowledgedOps)
+    expect(transformedOperation).toEqual(insert(1, "x"))
+    expect(transformedQueue).toEqual([type.compose(remove(1, 1), remove(2, 2))])
 })
 
 test("does not have any bugs", () => {
