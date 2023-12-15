@@ -16,7 +16,8 @@ import {OTServer} from "./ot_server"
 import parse from "ini-simple-parser"
 
 export class Daemon {
-    etherwikiURL: string
+    etherwikiURL: string | null = null
+
     ydoc = new Y.Doc()
     server = new JSONServer(9000)
     clientID = Math.floor(Math.random() * Number.MAX_SAFE_INTEGER)
@@ -193,6 +194,10 @@ export class Daemon {
     }
 
     connectToEtherwikiServer() {
+        if (this.etherwikiURL === null) {
+            throw new Error("Can't connect to Etherwiki without a URL.")
+        }
+
         let url = new URL(this.etherwikiURL)
         let domain = url.host
         let room = url.hash.slice(1)
@@ -322,9 +327,13 @@ export class Daemon {
     }
 
     async pullAllPages() {
+        if (this.etherwikiURL === null || this.directory === null) {
+            throw new Error("Can't pull all pages without a directory and URL.")
+        }
+
         for (const page of this.ydoc.getArray("pages").toArray()) {
             let filename = (page as any).get("title").toString()
-            filename = path.join("output", filename)
+            filename = path.join(this.directory, filename)
             console.log("Syncing", filename)
 
             // Create the file if it doesn't exist.
@@ -344,7 +353,17 @@ export class Daemon {
     }
 
     async startPersistence() {
-        const persistenceDir = "output/.ethersync/persistence"
+        if (this.etherwikiURL === null || this.directory === null) {
+            throw new Error(
+                "Can't start persistence without a directory and URL.",
+            )
+        }
+
+        const persistenceDir = path.join(
+            this.directory,
+            ".ethersync",
+            "persistence",
+        )
         const ldb = new LeveldbPersistence(persistenceDir)
 
         const room = new URL(this.etherwikiURL).hash.slice(1)
