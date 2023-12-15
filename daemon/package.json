@@ -5,7 +5,8 @@
     "author": "",
     "scripts": {
         "ethersync": "vite-node src/ethersync.ts",
-        "test": "vitest"
+        "test": "vitest",
+        "fuzzing": "vite-node src/fuzzing.ts"
     },
     "dependencies": {
         "@types/lodash": "^4.14.202",

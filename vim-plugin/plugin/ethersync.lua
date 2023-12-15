@@ -34,21 +34,6 @@ local function ignoreNextUpdate()
     ignored_ticks[nextTick] = true
 end
 
--- Insert a string into the current buffer at a specified UTF-16 code unit index.
-local function insert(index, content)
-    local row, col = utils.UTF16CodeUnitOffsetToRowCol(index)
-    ignoreNextUpdate()
-    vim.api.nvim_buf_set_text(0, row, col, row, col, vim.split(content, "\n"))
-end
-
--- Delete a string from the current buffer at a specified UTF-16 code unit index.
-local function delete(index, length)
-    local row, col = utils.UTF16CodeUnitOffsetToRowCol(index)
-    local rowEnd, colEnd = utils.UTF16CodeUnitOffsetToRowCol(index + length)
-    ignoreNextUpdate()
-    vim.api.nvim_buf_set_text(0, row, col, rowEnd, colEnd, { "" })
-end
-
 -- Creates a virtual cursor.
 local function createCursor()
     local row = 0
@@ -102,9 +87,11 @@ local function processOperationForEditor(method, parameters)
                 if type(change) == "number" then
                     position = position + change
                 elseif type(change) == "string" then
-                    insert(position, change)
+                    ignoreNextUpdate()
+                    utils.insert(position, change)
                 elseif type(change) == "table" then
-                    delete(position, change.d)
+                    ignoreNextUpdate()
+                    utils.delete(position, change.d)
                 end
             end
             daemonRevision = daemonRevision + 1
