@@ -1,4 +1,6 @@
 import {Daemon} from "./daemon"
 
-let daemon = new Daemon()
+let dir = process.env.npm_config_directory || "./output"
+
+let daemon = new Daemon(dir)
 await daemon.start()

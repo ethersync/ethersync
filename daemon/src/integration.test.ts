@@ -3,7 +3,7 @@ import cp from "child_process"
 import {attach, NeovimClient} from "neovim"
 import {Daemon} from "./daemon"
 
-let daemon = new Daemon(false)
+let daemon = new Daemon()
 let nvim: NeovimClient
 
 function delay(time: number) {

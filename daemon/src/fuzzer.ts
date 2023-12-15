@@ -95,7 +95,7 @@ class Fuzzer {
     }
 
     async run() {
-        this.daemon = new Daemon(false)
+        this.daemon = new Daemon()
         await this.daemon.start()
 
         const nvim_proc = cp.spawn("nvim", ["--embed", "--headless"], {})

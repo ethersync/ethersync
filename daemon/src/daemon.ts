@@ -13,7 +13,10 @@ import {insert, remove, TextOp} from "ot-text-unicode"
 import {JSONServer} from "./json_server"
 import {OTServer} from "./ot_server"
 
+import parse from "ini-simple-parser"
+
 export class Daemon {
+    etherwikiURL: string
     ydoc = new Y.Doc()
     server = new JSONServer(9000)
     clientID = Math.floor(Math.random() * Number.MAX_SAFE_INTEGER)
@@ -31,12 +34,39 @@ export class Daemon {
     )
 
     ot_documents: {[filename: string]: OTServer} = {}
-    constructor(public shouldConnect = true) {}
+
+    // Provide an "Ethersync directory", which should contain an .ethersync/config file.
+    constructor(public directory: string | null = null) {
+        if (directory === null) {
+            console.log("No directory provided, not connecting to Etherwiki.")
+            return
+        }
+
+        let configPath = path.join(directory, ".ethersync/config")
+        if (!fs.existsSync(configPath)) {
+            throw new Error(`No config file found at ${configPath}.`)
+        }
+
+        let config = parse(fs.readFileSync(configPath, "utf8"))
+        if (!config["etherwiki"]) {
+            throw new Error(
+                `No etherwiki property found in config file at ${configPath}.`,
+            )
+        }
+
+        if (typeof config["etherwiki"] !== "string") {
+            throw new Error(
+                `Property 'etherwiki' in config file at ${configPath} is not a string.`,
+            )
+        }
+
+        this.etherwikiURL = config["etherwiki"]
+    }
 
     start(): Promise<void> {
-        return new Promise((resolve, reject) => {
+        return new Promise((resolve, _) => {
             this.addMethods()
-            if (this.shouldConnect) {
+            if (this.etherwikiURL) {
                 this.connectToEtherwikiServer()
                 this.startPersistence()
             }
@@ -163,9 +193,15 @@ export class Daemon {
     }
 
     connectToEtherwikiServer() {
+        let url = new URL(this.etherwikiURL)
+        let domain = url.host
+        let room = url.hash.slice(1)
+
+        console.log(`Connecting to Etherwiki server at ${domain}#${room}`)
+
         let provider = new WebsocketProvider(
-            "wss://etherwiki.blinry.org",
-            "playground",
+            `wss://${domain}`,
+            room,
             this.ydoc,
             {
                 WebSocketPolyfill: require("ws"),
@@ -311,13 +347,14 @@ export class Daemon {
         const persistenceDir = "output/.ethersync/persistence"
         const ldb = new LeveldbPersistence(persistenceDir)
 
-        const persistedYdoc = await ldb.getYDoc("playground")
+        const room = new URL(this.etherwikiURL).hash.slice(1)
+        const persistedYdoc = await ldb.getYDoc(room)
         const newUpdates = Y.encodeStateAsUpdate(this.ydoc)
-        await ldb.storeUpdate("playground", newUpdates)
+        await ldb.storeUpdate(room, newUpdates)
         Y.applyUpdate(this.ydoc, Y.encodeStateAsUpdate(persistedYdoc))
 
         this.ydoc.on("update", (update) => {
-            ldb.storeUpdate("playground", update)
+            ldb.storeUpdate(room, update)
         })
     }
 }

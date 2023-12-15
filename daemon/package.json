@@ -13,6 +13,7 @@
         "@types/node": "^20.9.0",
         "async-mutex": "^0.4.0",
         "diff": "^5.1.0",
+        "ini-simple-parser": "^1.0.0",
         "json-rpc-2.0": "^1.7.0",
         "lodash": "^4.17.21",
         "ot-text-unicode": "^4.0.0",
