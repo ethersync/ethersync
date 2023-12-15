@@ -22,6 +22,32 @@ test("op transformation does what we think", () => {
     expect(type.transform(a, c, "left")).toEqual(insert(2, "x"))
 })
 
+test("op transformation does what we think, unicode edition", () => {
+    let a = insert(2, "ö")
+    let b = remove(1, 3)
+
+    expect(type.transform(a, b, "right")).toEqual(insert(1, "ö"))
+    expect(type.transform(a, b, "left")).toEqual(insert(1, "ö"))
+    expect(type.transform(b, a, "right")).toEqual(
+        type.compose(remove(1, 1), remove(2, 2)),
+    )
+    expect(type.transform(b, a, "left")).toEqual(
+        type.compose(remove(1, 1), remove(2, 2)),
+    )
+
+    let c = insert(2, "🥕")
+    let d = insert(2, "字")
+    let e = insert(2, "👩‍❤️‍💋‍👩")
+    // with inserts at the same position it makes a difference whether
+    // you pass in "left" or "right"
+    expect(type.transform(a, c, "right")).toEqual(insert(3, "ö"))
+    expect(type.transform(a, c, "left")).toEqual(insert(2, "ö"))
+    expect(type.transform(a, d, "right")).toEqual(insert(3, "ö"))
+    expect(type.transform(a, d, "left")).toEqual(insert(2, "ö"))
+    expect(type.transform(a, e, "right")).toEqual(insert(2 + 8, "ö"))
+    expect(type.transform(a, e, "left")).toEqual(insert(2, "ö"))
+})
+
 test("routes operations through server", () => {
     let opsSentToEditor: [number, TextOp][] = []
 
