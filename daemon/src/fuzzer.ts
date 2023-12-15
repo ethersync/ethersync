@@ -15,26 +15,23 @@ class Fuzzer {
 
     constructor() {}
 
-    // length is in UTF-16 code units.
+    // length is in Unicode characters.
     randomString(length: number): string {
-        let chars = ["x", "ö", "🥕", "字", " "]
+        // TODO: Add back in the carrot after the UTF-16 to Unicode character conversion!
+        //let chars = ["x", "ö", "🥕", "字", " "]
+        let chars = ["x", "ö", "字", " ", "\n"]
         let result = ""
-        while (result.length < length) {
-            let char = chars[Math.floor(Math.random() * chars.length)]
-            if (result.length + char.length > length) {
-                continue
-            }
-            result += char
+        for (let i = 0; i < length; i++) {
+            result += chars[Math.floor(Math.random() * chars.length)]
         }
         return result
     }
 
     randomDaemonEdit() {
         let content = this.daemonContent()
-        let documentLength = content.length
+        let documentLength = [...content].length
         if (Math.random() < 0.5) {
             let start = Math.floor(Math.random() * documentLength)
-            console.log("documentLength", documentLength)
             let maxDeleteLength = Math.floor(documentLength - start - 1)
             if (maxDeleteLength > 0) {
                 let length =
@@ -45,7 +42,7 @@ class Fuzzer {
             }
         } else {
             let start = Math.floor(Math.random() * documentLength)
-            let length = Math.floor(Math.random() * 10)
+            let length = Math.floor(Math.random() * 20)
             let text = this.randomString(length)
             console.log(`daemon: insert(${start}, ${text}) in ${content}`)
             this.daemon.findPage(PAGE).get("content").insert(start, text)
@@ -54,7 +51,7 @@ class Fuzzer {
 
     async randomVimEdit() {
         let content = await this.vimContent()
-        let documentLength = content.length
+        let documentLength = [...content].length
         if (Math.random() < 0.5) {
             let start = Math.floor(Math.random() * documentLength)
             let maxDeleteLength = Math.floor(documentLength - start - 1)
@@ -62,22 +59,21 @@ class Fuzzer {
                 let length =
                     1 + Math.floor(Math.random() * (maxDeleteLength - 1))
                 console.log(`editor: delete(${start}, ${length}) in ${content}`)
-                await this.nvim.request("nvim_exec_lua", [
+                this.nvim.request("nvim_exec_lua", [
                     "require('utils').delete(select(1, ...), select(2, ...))",
                     [start, length],
                 ])
             }
         } else {
             let start = Math.floor(Math.random() * documentLength)
-            let length = Math.floor(Math.random() * 10)
+            let length = Math.floor(Math.random() * 20)
             let text = this.randomString(length)
             console.log(`editor: insert(${start}, ${text}) in ${content}`)
-            await this.nvim.request("nvim_exec_lua", [
+            this.nvim.request("nvim_exec_lua", [
                 "require('utils').insert(select(1, ...), select(2, ...))",
                 [start, text],
             ])
         }
-        //await delay(200)
     }
 
     async vimContent(): Promise<string> {
@@ -86,6 +82,16 @@ class Fuzzer {
 
     daemonContent(): string {
         return this.daemon.findPage(PAGE).get("content").toString()
+    }
+
+    async vimGoOffline() {
+        console.log("editor: going offline")
+        await this.nvim.command("EthersyncGoOffline")
+    }
+
+    async vimGoOnline() {
+        console.log("editor: going online")
+        await this.nvim.command("EthersyncGoOnline")
     }
 
     async run() {
@@ -108,14 +114,31 @@ class Fuzzer {
             } else {
                 await this.randomVimEdit()
             }
+
+            let r = Math.random()
+            if (r < 0.1) {
+                await this.vimGoOffline()
+            } else if (r < 0.2) {
+                await this.vimGoOnline()
+            }
         }
 
+        this.vimGoOnline()
         await delay(500)
 
         let vimContent = await this.vimContent()
         let daemonContent = this.daemonContent()
-        console.log("vim:", vimContent)
-        console.log("daemon:", daemonContent)
+
+        console.log("vim:")
+        console.log("-----------------------")
+        console.log(vimContent)
+        console.log("-----------------------")
+
+        console.log("daemon:")
+        console.log("-----------------------")
+        console.log(daemonContent)
+        console.log("-----------------------")
+
         if (vimContent !== daemonContent) {
             console.log("Fuzzing failed!")
         } else {
