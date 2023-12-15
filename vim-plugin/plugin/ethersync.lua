@@ -59,12 +59,12 @@ local function setCursor(head, anchor)
     -- If the cursor is at the end of the buffer, don't show it.
     -- This is because otherwise, the calculation that follows (to find the location for head+1 would fail.
     -- TODO: Find a way to display the cursor nevertheless.
-    if head == utils.UTF16CodeUnits(utils.contentOfCurrentBuffer()) then
+    if head == utils.contentOfCurrentBuffer() then
         return
     end
 
-    local row, col = utils.UTF16CodeUnitOffsetToRowCol(head)
-    local rowAnchor, colAnchor = utils.UTF16CodeUnitOffsetToRowCol(anchor)
+    local row, col = utils.indexToRowCol(head)
+    local rowAnchor, colAnchor = utils.indexToRowCol(anchor)
 
     vim.api.nvim_buf_set_extmark(0, ns_id, row, col, {
         id = virtual_cursor,
@@ -199,41 +199,38 @@ function Ethersync()
             if byte_offset + new_end_byte_length > vim.fn.strlen(content) then
                 -- Tried to insert something *after* the end of the (resulting) file.
                 -- I think this is probably a bug, that happens when you use the 'o' command, for example.
+                -- See for example https://github.com/neovim/neovim/issues/25966.
                 byte_offset = vim.fn.strlen(content) - new_end_byte_length
             end
 
-            local charOffsetUTF16CodeUnits = utils.byteOffsetToUTF16CodeUnitOffset(byte_offset)
-            local oldEndCharUTF16CodeUnits =
-                utils.byteOffsetToUTF16CodeUnitOffset(byte_offset + old_end_byte_length, previousContent)
-            local newEndCharUTF16CodeUnits = utils.byteOffsetToUTF16CodeUnitOffset(byte_offset + new_end_byte_length)
+            local charOffset = vim.fn.charidx(content, byte_offset)
+            local oldCharEnd = vim.fn.charidx(previousContent, byte_offset + old_end_byte_length)
+            local newCharEnd = vim.fn.charidx(content, byte_offset + new_end_byte_length)
 
-            local oldEndCharUTF16CodeUnitsLength = oldEndCharUTF16CodeUnits - charOffsetUTF16CodeUnits
-            local newEndCharUTF16CodeUnitsLength = newEndCharUTF16CodeUnits - charOffsetUTF16CodeUnits
+            local oldCharLength = oldCharEnd - charOffset
+            local newCharLength = newCharEnd - charOffset
 
-            if oldEndCharUTF16CodeUnitsLength > 0 then
+            if oldCharLength > 0 then
                 editorRevision = editorRevision + 1
                 if online then
-                    client.notify(
-                        "delete",
-                        { filename, daemonRevision, charOffsetUTF16CodeUnits, oldEndCharUTF16CodeUnitsLength }
-                    )
+                    client.notify("delete", { filename, daemonRevision, charOffset, oldCharLength })
                 else
                     table.insert(opQueueForDaemon, {
                         "delete",
-                        { filename, daemonRevision, charOffsetUTF16CodeUnits, oldEndCharUTF16CodeUnitsLength },
+                        { filename, daemonRevision, charOffset, oldCharLength },
                     })
                 end
             end
 
-            if newEndCharUTF16CodeUnitsLength > 0 then
+            if newCharLength > 0 then
                 editorRevision = editorRevision + 1
-                local insertedString = vim.fn.strpart(content, byte_offset, new_end_byte_length)
+                local insertedString = vim.fn.strcharpart(content, charOffset, newCharLength)
                 if online then
-                    client.notify("insert", { filename, daemonRevision, charOffsetUTF16CodeUnits, insertedString })
+                    client.notify("insert", { filename, daemonRevision, charOffset, insertedString })
                 else
                     table.insert(opQueueForDaemon, {
                         "insert",
-                        { filename, daemonRevision, charOffsetUTF16CodeUnits, insertedString },
+                        { filename, daemonRevision, charOffset, insertedString },
                     })
                 end
             end
