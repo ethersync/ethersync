@@ -48,6 +48,29 @@ test("can make edits in nvim", async () => {
     expect(newLines).toEqual(["xallo"])
 })
 
+test("can execute Lua in NVim", async () => {
+    expect(await nvim.request("nvim_exec_lua", ["return 1+1", []])).toEqual(2)
+
+    expect(
+        await nvim.request("nvim_exec_lua", [
+            "return vim.api.nvim_get_color_by_name('Pink')",
+            [],
+        ]),
+    ).toEqual(0xffc0cb)
+
+    await nvim.request("nvim_exec_lua", [
+        "require('utils').insert(select(1, ...), select(2, ...))",
+        [1, "bla"],
+    ])
+    expect(await nvim.buffer.lines).toEqual(["hblaallo"])
+
+    await nvim.request("nvim_exec_lua", [
+        "require('utils').delete(select(1, ...), select(2, ...))",
+        [2, 3],
+    ])
+    expect(await nvim.buffer.lines).toEqual(["hbllo"])
+})
+
 test("can make edits in parallel", async () => {
     nvim.command("EthersyncGoOffline")
     await nvim.request("nvim_buf_set_text", [0, 0, 2, 0, 2, ["x"]])
