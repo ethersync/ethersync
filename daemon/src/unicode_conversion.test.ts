@@ -1,8 +1,5 @@
 import {expect, test} from "vitest"
-import {
-    UTF16CodeUnitOffsetToCharOffset,
-    charOffsetToUTF16CodeUnitOffset,
-} from "./unicode_conversion"
+import {UTF16CodeUnitOffsetToCharOffset, charOffsetToUTF16CodeUnitOffset} from "./unicode_conversion"
 
 test("UTF16 to char conversion", () => {
     expect(UTF16CodeUnitOffsetToCharOffset(0, "")).toBe(0)
@@ -13,9 +10,7 @@ test("UTF16 to char conversion", () => {
     expect(UTF16CodeUnitOffsetToCharOffset(4, "⚽world")).toBe(4)
     expect(UTF16CodeUnitOffsetToCharOffset(5, "world")).toBe(5)
 
-    expect(() => UTF16CodeUnitOffsetToCharOffset(6, "world")).toThrowError(
-        "Out of bounds",
-    )
+    expect(() => UTF16CodeUnitOffsetToCharOffset(6, "world")).toThrowError("Out of bounds")
 })
 
 test("char to UTF16 conversion", () => {
@@ -27,7 +22,5 @@ test("char to UTF16 conversion", () => {
     // the carrot has two UTF16 code units
     expect(charOffsetToUTF16CodeUnitOffset(4, "w🥕rld")).toBe(5)
 
-    expect(() => charOffsetToUTF16CodeUnitOffset(6, "world")).toThrowError(
-        "Out of bounds",
-    )
+    expect(() => charOffsetToUTF16CodeUnitOffset(6, "world")).toThrowError("Out of bounds")
 })

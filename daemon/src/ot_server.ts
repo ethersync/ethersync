@@ -106,19 +106,14 @@ export class OTServer {
 
             // But we at least we know that the editor has seen all daemon operations until
             // daemonOperation. So we can remove them from the editor queue.
-            let daemonOperationsToTransform =
-                this.daemonRevision - daemonRevision
-            this.editorQueue.splice(
-                0,
-                this.editorQueue.length - daemonOperationsToTransform,
-            )
+            let daemonOperationsToTransform = this.daemonRevision - daemonRevision
+            this.editorQueue.splice(0, this.editorQueue.length - daemonOperationsToTransform)
 
             // Do the transformation!
-            let [transformedOperation, transformedQueue] =
-                this.transformOperationThroughOperations(
-                    operation,
-                    this.editorQueue,
-                )
+            let [transformedOperation, transformedQueue] = this.transformOperationThroughOperations(
+                operation,
+                this.editorQueue,
+            )
             // Apply the transformed operation to the document.
             this.addEditorOperation(transformedOperation)
             // And replace the editor queue with the transformed queue.
@@ -165,22 +160,11 @@ export class OTServer {
         * ----> *
 
     */
-    transformOperationThroughOperations(
-        theirOperation: TextOp,
-        myOperations: TextOp[],
-    ): [TextOp, TextOp[]] {
+    transformOperationThroughOperations(theirOperation: TextOp, myOperations: TextOp[]): [TextOp, TextOp[]] {
         let transformedMyOperations: TextOp[] = []
         for (let myOperation of myOperations) {
-            let myTransformedOp = type.transform(
-                myOperation,
-                theirOperation,
-                "left",
-            )
-            theirOperation = type.transform(
-                theirOperation,
-                myOperation,
-                "right",
-            )
+            let myTransformedOp = type.transform(myOperation, theirOperation, "left")
+            theirOperation = type.transform(theirOperation, myOperation, "right")
             transformedMyOperations.push(myTransformedOp)
         }
         return [theirOperation, transformedMyOperations]

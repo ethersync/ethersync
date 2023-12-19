@@ -18,7 +18,7 @@ export class Fuzzer {
     // length is in Unicode characters.
     randomString(length: number): string {
         //let chars = ["x", "ö", "🥕", "字", " ", "\n"]
-        let chars = ["x", "ö",  "字", " ", "\n"]
+        let chars = ["x", "ö", "字", " ", "\n"]
         let result = ""
         for (let i = 0; i < length; i++) {
             result += chars[Math.floor(Math.random() * chars.length)]
@@ -47,8 +47,7 @@ export class Fuzzer {
             let start = Math.floor(Math.random() * documentLength)
             let maxDeleteLength = Math.floor(documentLength - start - 1)
             if (maxDeleteLength > 0) {
-                let length =
-                    1 + Math.floor(Math.random() * (maxDeleteLength - 1))
+                let length = 1 + Math.floor(Math.random() * (maxDeleteLength - 1))
 
                 console.log(`daemon: delete(${start}, ${length}) in ${content}`)
                 this.daemon.findPage(PAGE).get("content").delete(start, length)
@@ -69,8 +68,7 @@ export class Fuzzer {
             let start = Math.floor(Math.random() * documentLength)
             let maxDeleteLength = Math.floor(documentLength - start - 1)
             if (maxDeleteLength > 0) {
-                let length =
-                    1 + Math.floor(Math.random() * (maxDeleteLength - 1))
+                let length = 1 + Math.floor(Math.random() * (maxDeleteLength - 1))
                 console.log(`editor: delete(${start}, ${length}) in ${content}`)
                 this.nvim.request("nvim_exec_lua", [
                     "require('utils').delete(select(1, ...), select(2, ...))",

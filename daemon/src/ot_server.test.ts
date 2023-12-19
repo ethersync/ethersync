@@ -9,12 +9,8 @@ test("op transformation does what we think", () => {
 
     expect(type.transform(a, b, "right")).toEqual(insert(1, "x"))
     expect(type.transform(a, b, "left")).toEqual(insert(1, "x"))
-    expect(type.transform(b, a, "right")).toEqual(
-        type.compose(remove(1, 1), remove(2, 2)),
-    )
-    expect(type.transform(b, a, "left")).toEqual(
-        type.compose(remove(1, 1), remove(2, 2)),
-    )
+    expect(type.transform(b, a, "right")).toEqual(type.compose(remove(1, 1), remove(2, 2)))
+    expect(type.transform(b, a, "left")).toEqual(type.compose(remove(1, 1), remove(2, 2)))
 
     // with inserts at the same position it makes a difference whether
     // you pass in "left" or "right"
@@ -28,12 +24,8 @@ test("op transformation does what we think, unicode edition", () => {
 
     expect(type.transform(a, b, "right")).toEqual(insert(1, "ö"))
     expect(type.transform(a, b, "left")).toEqual(insert(1, "ö"))
-    expect(type.transform(b, a, "right")).toEqual(
-        type.compose(remove(1, 1), remove(2, 2)),
-    )
-    expect(type.transform(b, a, "left")).toEqual(
-        type.compose(remove(1, 1), remove(2, 2)),
-    )
+    expect(type.transform(b, a, "right")).toEqual(type.compose(remove(1, 1), remove(2, 2)))
+    expect(type.transform(b, a, "left")).toEqual(type.compose(remove(1, 1), remove(2, 2)))
 
     let c = insert(2, "🥕")
     let d = insert(2, "字")
@@ -94,8 +86,7 @@ test("transforms operations correctly", () => {
     let editorOp = insert(2, "x")
     let unacknowledgedOps = [remove(1, 3)]
 
-    let [transformedOperation, transformedQueue] =
-        ot.transformOperationThroughOperations(editorOp, unacknowledgedOps)
+    let [transformedOperation, transformedQueue] = ot.transformOperationThroughOperations(editorOp, unacknowledgedOps)
     expect(transformedOperation).toEqual(insert(1, "x"))
     expect(transformedQueue).toEqual([type.compose(remove(1, 1), remove(2, 2))])
 })

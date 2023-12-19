@@ -3,11 +3,7 @@ import * as path from "path"
 import * as Y from "yjs"
 import {WebsocketProvider} from "y-websocket"
 import {LeveldbPersistence} from "y-leveldb"
-import {
-    JSONRPCServer,
-    JSONRPCClient,
-    JSONRPCServerAndClient,
-} from "json-rpc-2.0"
+import {JSONRPCServer, JSONRPCClient, JSONRPCServerAndClient} from "json-rpc-2.0"
 import {insert, remove, type, TextOp} from "ot-text-unicode"
 
 import {JSONServer} from "./json_server"
@@ -49,15 +45,11 @@ export class Daemon {
 
         let config = parse(fs.readFileSync(configPath, "utf8"))
         if (!config["etherwiki"]) {
-            throw new Error(
-                `No etherwiki property found in config file at ${configPath}.`,
-            )
+            throw new Error(`No etherwiki property found in config file at ${configPath}.`)
         }
 
         if (typeof config["etherwiki"] !== "string") {
-            throw new Error(
-                `Property 'etherwiki' in config file at ${configPath} is not a string.`,
-            )
+            throw new Error(`Property 'etherwiki' in config file at ${configPath} is not a string.`)
         }
 
         this.etherwikiURL = config["etherwiki"]
@@ -96,10 +88,7 @@ export class Daemon {
             },
             // sendToCRDT
             (operation: TextOp) => {
-                console.log(
-                    "Applying op to document: ",
-                    JSON.stringify(operation),
-                )
+                console.log("Applying op to document: ", JSON.stringify(operation))
                 this.applyTextOpToCRDT(operation, this.findPage(filename).get("content"))
             },
         )
@@ -117,10 +106,7 @@ export class Daemon {
             let index = params[2]
             let text = params[3]
 
-            this.ot_documents[filename].applyEditorOperation(
-                daemonRevision,
-                insert(index, text),
-            )
+            this.ot_documents[filename].applyEditorOperation(daemonRevision, insert(index, text))
         })
 
         this.serverAndClient.addMethod("delete", (params: any) => {
@@ -129,10 +115,7 @@ export class Daemon {
             let index = params[2]
             let length = params[3]
 
-            this.ot_documents[filename].applyEditorOperation(
-                daemonRevision,
-                remove(index, length),
-            )
+            this.ot_documents[filename].applyEditorOperation(daemonRevision, remove(index, length))
         })
 
         this.serverAndClient.addMethod("open", (params: any) => {
@@ -178,14 +161,9 @@ export class Daemon {
 
         console.log(`Connecting to Etherwiki server at ${domain}#${room}`)
 
-        let provider = new WebsocketProvider(
-            `wss://${domain}`,
-            room,
-            this.ydoc,
-            {
-                WebSocketPolyfill: require("ws"),
-            },
-        )
+        let provider = new WebsocketProvider(`wss://${domain}`, room, this.ydoc, {
+            WebSocketPolyfill: require("ws"),
+        })
 
         provider.awareness.setLocalStateField("user", {
             name: process.env.USER + " (via ethersync)" || "anonymous",
@@ -279,7 +257,6 @@ export class Daemon {
 
                     let operation = this.crdtEventToTextOp(event.delta, (event.target as Y.Text).toString())
                     this.ot_documents[filename].applyCRDTChange(operation)
-
                 }
             }
         })
