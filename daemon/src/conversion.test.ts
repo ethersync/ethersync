@@ -44,12 +44,19 @@ const transfomationTestcases = [
     {string: "h🥕llo", yjsDelta: [{retain: 3}, {insert: "x"}], otOperation: insert(2, "x")},
     {string: "hello", yjsDelta: [{retain: 3}, {delete: 2}], otOperation: remove(3, 2)},
     {string: "helöo", yjsDelta: [{retain: 3}, {delete: 2}], otOperation: remove(3, 2)},
+    {string: "æöäüß", yjsDelta: [{retain: 3}, {delete: 2}], otOperation: remove(3, 2)},
     {string: "hel🥕o", yjsDelta: [{retain: 3}, {delete: 2}], otOperation: remove(3, 1)},
     {string: "h🥕🥒o", yjsDelta: [{retain: 3}, {delete: 2}], otOperation: remove(2, 1)},
+    {string: "hello", yjsDelta: [{insert: "x"}, {retain: 1}, {insert: "y"}], otOperation: ["x", 1, "y"]},
     {
         string: "h🥕🥒ox",
         yjsDelta: [{retain: 3}, {delete: 2}, {retain: 1}, {delete: 1}],
         otOperation: [2, {d: 1}, 1, {d: 1}],
+    },
+    {
+        string: "h🥕🥒ox",
+        yjsDelta: [{retain: 3}, {insert: "ö"}, {retain: 1}, {delete: 1}],
+        otOperation: [2, "ö", 1, {d: 1}],
     },
 ]
 

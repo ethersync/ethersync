@@ -44,6 +44,7 @@ export function yjsDeltaToTextOp(delta: YjsDelta, content: string): TextOp {
                 throw new Error("Can only handle string insertions.")
             }
             operation = type.compose(operation, insert(index, text))
+            index += text.length
         } else if (delta[0]["delete"]) {
             let length = UTF16CodeUnitOffsetToCharOffset(delta[0]["delete"], content.slice(indexUTF16))
             indexUTF16 += delta[0]["delete"]
