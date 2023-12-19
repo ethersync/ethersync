@@ -8,7 +8,7 @@ import {
     JSONRPCClient,
     JSONRPCServerAndClient,
 } from "json-rpc-2.0"
-import {insert, remove, TextOp} from "ot-text-unicode"
+import {insert, remove, type, TextOp} from "ot-text-unicode"
 
 import {JSONServer} from "./json_server"
 import {OTServer} from "./ot_server"
@@ -100,28 +100,7 @@ export class Daemon {
                     "Applying op to document: ",
                     JSON.stringify(operation),
                 )
-                let position = 0
-                for (const change of operation) {
-                    switch (typeof change) {
-                        case "number":
-                            position += change
-                            break
-                        case "string":
-                            this.ydoc.transact(() => {
-                                this.findPage(filename)
-                                    .get("content")
-                                    .insert(position, change)
-                            }, this.clientID)
-                            break
-                        case "object":
-                            this.ydoc.transact(() => {
-                                this.findPage(filename)
-                                    .get("content")
-                                    .delete(position, change.d)
-                            }, this.clientID)
-                            break
-                    }
-                }
+                this.applyTextOpToCRDT(operation, this.findPage(filename).get("content"))
             },
         )
     }
@@ -298,27 +277,68 @@ export class Daemon {
                         continue
                     }
 
-                    let index = 0
+                    let operation = this.crdtEventToTextOp(event.delta, (event.target as Y.Text).toString())
+                    this.ot_documents[filename].applyCRDTChange(operation)
 
-                    while (event.delta[0]) {
-                        if (event.delta[0]["retain"]) {
-                            index += event.delta[0]["retain"]
-                        } else if (event.delta[0]["insert"]) {
-                            let text = event.delta[0]["insert"]
-                            this.ot_documents[filename].applyCRDTChange(
-                                insert(index, text),
-                            )
-                        } else if (event.delta[0]["delete"]) {
-                            let length = event.delta[0]["delete"]
-                            this.ot_documents[filename].applyCRDTChange(
-                                remove(index, length),
-                            )
-                        }
-                        event.delta.shift()
-                    }
                 }
             }
         })
+    }
+
+    // Applies a TextOp to a Yjs CRDT.
+    // We have to convert TextOp's counting in Unicode code points to Yjs's
+    // counting in UTF-16 code units.
+    applyTextOpToCRDT(operation: TextOp, ytext: Y.Text) {
+        let index = 0 // in Unicode code points
+        let indexUTF16 = 0 // in UTF-16 code units
+        let content = ytext.toString()
+
+        for (const change of operation) {
+            switch (typeof change) {
+                case "number":
+                    index += change
+                    indexUTF16 += change
+                    break
+                case "string":
+                    ytext.insert(indexUTF16, change)
+                    index += [...change].length
+                    indexUTF16 += change.length
+                    content = content.slice(0, indexUTF16) + change + content.slice(indexUTF16)
+                    break
+                case "object":
+                    let length = [...content.slice(indexUTF16, indexUTF16 + change.d)].length
+                    ytext.delete(indexUTF16, length)
+                    index += length
+                    indexUTF16 += change.d
+                    content = content.slice(0, indexUTF16) + content.slice(indexUTF16 + change.d)
+                    break
+            }
+        }
+    }
+
+    // delta is a Yjs update (counting in UTF-16 code units).
+    // We convert it to an OT operation (counting in Unicode code points).
+    // content is the document content before the update.
+    crdtEventToTextOp(delta: any, content: string): TextOp {
+        let operation: TextOp = []
+
+        let index = 0 // in Unicode code points
+        let indexUTF16 = 0 // in UTF-16 code units
+
+        while (delta[0]) {
+            if (delta[0]["retain"]) {
+                index += [...content.slice(indexUTF16, indexUTF16 + delta[0]["retain"])].length
+                indexUTF16 += delta[0]["retain"]
+            } else if (delta[0]["insert"]) {
+                let text = delta[0]["insert"]
+                operation = type.compose(operation, insert(index, text))
+            } else if (delta[0]["delete"]) {
+                let length = [...content.slice(indexUTF16, indexUTF16 + delta[0]["delete"])].length
+                operation = type.compose(operation, remove(index, length))
+            }
+            delta.shift()
+        }
+        return operation
     }
 
     async pullAllPages() {

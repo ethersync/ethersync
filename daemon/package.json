@@ -6,7 +6,7 @@
     "scripts": {
         "ethersync": "vite-node src/ethersync.ts",
         "test": "vitest",
-        "fuzzer": "vite-node src/fuzzer.ts"
+        "fuzzer": "vite-node src/run_fuzzer.ts"
     },
     "dependencies": {
         "@types/lodash": "^4.14.202",

@@ -8,7 +8,7 @@ function delay(time: number) {
     return new Promise((resolve) => setTimeout(resolve, time))
 }
 
-class Fuzzer {
+export class Fuzzer {
     // TODO: Give proper types.
     daemon: any = undefined
     nvim: any = undefined
@@ -17,9 +17,8 @@ class Fuzzer {
 
     // length is in Unicode characters.
     randomString(length: number): string {
-        // TODO: Add back in the carrot after the UTF-16 to Unicode character conversion!
-        //let chars = ["x", "ö", "🥕", "字", " "]
-        let chars = ["x", "ö", "字", " ", "\n"]
+        //let chars = ["x", "ö", "🥕", "字", " ", "\n"]
+        let chars = ["x", "ö",  "字", " ", "\n"]
         let result = ""
         for (let i = 0; i < length; i++) {
             result += chars[Math.floor(Math.random() * chars.length)]
@@ -27,9 +26,23 @@ class Fuzzer {
         return result
     }
 
+    // length is in UTF-16 code units.
+    randomUTF16String(length: number): string {
+        let chars = ["x", "ö", "🥕", "字", " ", "\n"]
+        let result = ""
+        while (result.length < length) {
+            let char = chars[Math.floor(Math.random() * chars.length)]
+            if (result.length + char.length > length) {
+                continue
+            }
+            result += char
+        }
+        return result
+    }
+
     randomDaemonEdit() {
         let content = this.daemonContent()
-        let documentLength = [...content].length
+        let documentLength = content.length
         if (Math.random() < 0.5) {
             let start = Math.floor(Math.random() * documentLength)
             let maxDeleteLength = Math.floor(documentLength - start - 1)
@@ -43,7 +56,7 @@ class Fuzzer {
         } else {
             let start = Math.floor(Math.random() * documentLength)
             let length = Math.floor(Math.random() * 20)
-            let text = this.randomString(length)
+            let text = this.randomUTF16String(length)
             console.log(`daemon: insert(${start}, ${text}) in ${content}`)
             this.daemon.findPage(PAGE).get("content").insert(start, text)
         }
@@ -147,5 +160,3 @@ class Fuzzer {
         return
     }
 }
-
-await new Fuzzer().run()
