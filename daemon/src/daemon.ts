@@ -260,7 +260,8 @@ export class Daemon {
                         continue
                     }
 
-                    let operation = yjsDeltaToTextOp(event.delta, (event.target as Y.Text).toString())
+                    let content = this.ot_documents[filename].document
+                    let operation = yjsDeltaToTextOp(event.delta, content)
                     this.ot_documents[filename].applyCRDTChange(operation)
                 }
             }
