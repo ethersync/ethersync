@@ -1,6 +1,7 @@
 import cp from "child_process"
-import {attach, NeovimClient} from "neovim"
+import {attach} from "neovim"
 import {Daemon} from "./daemon"
+import {charOffsetToUTF16CodeUnitOffset} from "./conversion"
 
 const PAGE = "fuzzing"
 
@@ -17,8 +18,7 @@ export class Fuzzer {
 
     // length is in Unicode characters.
     randomString(length: number): string {
-        //let chars = ["x", "ö", "🥕", "字", " ", "\n"]
-        let chars = ["x", "ö", "字", " ", "\n"]
+        let chars = ["x", "ö", "🥕", "字", " ", "\n"]
         let result = ""
         for (let i = 0; i < length; i++) {
             result += chars[Math.floor(Math.random() * chars.length)]
@@ -26,38 +26,31 @@ export class Fuzzer {
         return result
     }
 
-    // length is in UTF-16 code units.
-    randomUTF16String(length: number): string {
-        let chars = ["x", "ö", "🥕", "字", " ", "\n"]
-        let result = ""
-        while (result.length < length) {
-            let char = chars[Math.floor(Math.random() * chars.length)]
-            if (result.length + char.length > length) {
-                continue
-            }
-            result += char
-        }
-        return result
-    }
-
     randomDaemonEdit() {
-        let content = this.daemonContent()
-        let documentLength = content.length
+        let ytext = this.daemon.findPage(PAGE).get("content")
+        let content = ytext.toString()
+        let documentLength = [...content].length // in Unicode characters
         if (Math.random() < 0.5) {
             let start = Math.floor(Math.random() * documentLength)
-            let maxDeleteLength = Math.floor(documentLength - start - 1)
+            let maxDeleteLength = documentLength - start
             if (maxDeleteLength > 0) {
                 let length = 1 + Math.floor(Math.random() * (maxDeleteLength - 1))
 
-                console.log(`daemon: delete(${start}, ${length}) in ${content}`)
-                this.daemon.findPage(PAGE).get("content").delete(start, length)
+                console.log(`daemon: delete(${start}, ${length}) in '${content}'`)
+
+                let utf16Start = charOffsetToUTF16CodeUnitOffset(start, content)
+                let utf16Length = charOffsetToUTF16CodeUnitOffset(start + length, content) - utf16Start
+                ytext.delete(utf16Start, utf16Length)
             }
         } else {
             let start = Math.floor(Math.random() * documentLength)
             let length = Math.floor(Math.random() * 20)
-            let text = this.randomUTF16String(length)
+            let text = this.randomString(length)
+
             console.log(`daemon: insert(${start}, ${text}) in ${content}`)
-            this.daemon.findPage(PAGE).get("content").insert(start, text)
+
+            let utf16Start = charOffsetToUTF16CodeUnitOffset(start, content)
+            ytext.insert(utf16Start, text)
         }
     }
 
@@ -66,7 +59,7 @@ export class Fuzzer {
         let documentLength = [...content].length
         if (Math.random() < 0.5) {
             let start = Math.floor(Math.random() * documentLength)
-            let maxDeleteLength = Math.floor(documentLength - start - 1)
+            let maxDeleteLength = documentLength - start
             if (maxDeleteLength > 0) {
                 let length = 1 + Math.floor(Math.random() * (maxDeleteLength - 1))
                 console.log(`editor: delete(${start}, ${length}) in ${content}`)
@@ -120,7 +113,7 @@ export class Fuzzer {
         await this.nvim.command(`edit! output/${PAGE}`)
         await this.nvim.command("EthersyncReload")
 
-        for (let i = 0; i < 100; i++) {
+        for (let i = 0; i < 1000; i++) {
             if (Math.random() < 0.5) {
                 this.randomDaemonEdit()
             } else {
@@ -136,7 +129,7 @@ export class Fuzzer {
         }
 
         this.vimGoOnline()
-        await delay(500)
+        await delay(1000)
 
         let vimContent = await this.vimContent()
         let daemonContent = this.daemonContent()
