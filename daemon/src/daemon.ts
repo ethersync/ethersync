@@ -10,7 +10,7 @@ import {JSONServer} from "./json_server"
 import {OTServer} from "./ot_server"
 
 import parse from "ini-simple-parser"
-import {crdtEventToTextOp} from "./conversion"
+import {yjsDeltaToTextOp} from "./conversion"
 
 export class Daemon {
     etherwikiURL: string
@@ -256,7 +256,7 @@ export class Daemon {
                         continue
                     }
 
-                    let operation = crdtEventToTextOp(event.delta, (event.target as Y.Text).toString())
+                    let operation = yjsDeltaToTextOp(event.delta, (event.target as Y.Text).toString())
                     this.ot_documents[filename].applyCRDTChange(operation)
                 }
             }

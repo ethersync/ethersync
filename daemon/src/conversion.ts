@@ -22,7 +22,7 @@ export function charOffsetToUTF16CodeUnitOffset(charOffset: number, content: str
 // delta is a Yjs update (counting in UTF-16 code units).
 // We convert it to an OT operation (counting in Unicode code points).
 // content is the document content before the update.
-export function crdtEventToTextOp(delta: any, content: string): TextOp {
+export function yjsDeltaToTextOp(delta: any, content: string): TextOp {
     let operation: TextOp = []
 
     let index = 0 // in Unicode code points
