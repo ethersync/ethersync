@@ -268,9 +268,10 @@ export class Daemon {
         })
     }
 
-    async pullAllPages() {
+    pullAllPages() {
         for (const page of this.ydoc.getArray("pages").toArray()) {
             let filename = (page as any).get("title").toString()
+
             filename = path.join("output", filename)
             console.log("Syncing", filename)
 
