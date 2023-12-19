@@ -4,12 +4,13 @@ import * as Y from "yjs"
 import {WebsocketProvider} from "y-websocket"
 import {LeveldbPersistence} from "y-leveldb"
 import {JSONRPCServer, JSONRPCClient, JSONRPCServerAndClient} from "json-rpc-2.0"
-import {insert, remove, type, TextOp} from "ot-text-unicode"
+import {insert, remove, TextOp} from "ot-text-unicode"
 
 import {JSONServer} from "./json_server"
 import {OTServer} from "./ot_server"
 
 import parse from "ini-simple-parser"
+import {crdtEventToTextOp} from "./conversion"
 
 export class Daemon {
     etherwikiURL: string
@@ -255,7 +256,7 @@ export class Daemon {
                         continue
                     }
 
-                    let operation = this.crdtEventToTextOp(event.delta, (event.target as Y.Text).toString())
+                    let operation = crdtEventToTextOp(event.delta, (event.target as Y.Text).toString())
                     this.ot_documents[filename].applyCRDTChange(operation)
                 }
             }
@@ -291,31 +292,6 @@ export class Daemon {
                     break
             }
         }
-    }
-
-    // delta is a Yjs update (counting in UTF-16 code units).
-    // We convert it to an OT operation (counting in Unicode code points).
-    // content is the document content before the update.
-    crdtEventToTextOp(delta: any, content: string): TextOp {
-        let operation: TextOp = []
-
-        let index = 0 // in Unicode code points
-        let indexUTF16 = 0 // in UTF-16 code units
-
-        while (delta[0]) {
-            if (delta[0]["retain"]) {
-                index += [...content.slice(indexUTF16, indexUTF16 + delta[0]["retain"])].length
-                indexUTF16 += delta[0]["retain"]
-            } else if (delta[0]["insert"]) {
-                let text = delta[0]["insert"]
-                operation = type.compose(operation, insert(index, text))
-            } else if (delta[0]["delete"]) {
-                let length = [...content.slice(indexUTF16, indexUTF16 + delta[0]["delete"])].length
-                operation = type.compose(operation, remove(index, length))
-            }
-            delta.shift()
-        }
-        return operation
     }
 
     async pullAllPages() {
