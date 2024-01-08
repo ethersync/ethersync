@@ -1,4 +1,8 @@
+import fs from "node:fs"
+import {join} from "node:path"
+import {tmpdir} from "node:os"
 import cp from "child_process"
+
 import {attach} from "neovim"
 import {Daemon} from "./daemon"
 import {charOffsetToUTF16CodeUnitOffset} from "./conversion"
@@ -99,7 +103,12 @@ export class Fuzzer {
     }
 
     async run() {
-        this.daemon = new Daemon()
+        let directory = fs.mkdtempSync(join(tmpdir(), "ethersync-"))
+        const configDir = join(directory, ".ethersync")
+        fs.mkdirSync(configDir)
+        fs.writeFileSync(join(configDir, "config"), "etherwiki=")
+
+        this.daemon = new Daemon(directory)
         await this.daemon.start()
 
         const nvim_proc = cp.spawn("nvim", ["--embed", "--headless"], {})
@@ -110,7 +119,7 @@ export class Fuzzer {
         this.daemon.createPage(PAGE, "hello")
         this.daemon.pullAllPages()
 
-        await this.nvim.command(`edit! output/${PAGE}`)
+        await this.nvim.command(`edit! ${this.daemon.directory}/${PAGE}`)
         await this.nvim.command("EthersyncReload")
 
         for (let i = 0; i < 5000; i++) {
@@ -149,6 +158,11 @@ export class Fuzzer {
         } else {
             console.log("Fuzzing successful!")
         }
+
+        if (this.daemon.directory) {
+            fs.rmSync(this.daemon.directory, {recursive: true})
+        }
+
         return
     }
 }
