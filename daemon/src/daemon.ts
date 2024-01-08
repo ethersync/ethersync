@@ -47,14 +47,12 @@ export class Daemon {
 
         let config = parse(fs.readFileSync(configPath, "utf8"))
         if (!config["etherwiki"]) {
-            throw new Error(`No etherwiki property found in config file at ${configPath}.`)
-        }
-
-        if (typeof config["etherwiki"] !== "string") {
+            console.log(`[WARNING] No etherwiki property found in config file at ${configPath}. No sync with server.`)
+        } else if (typeof config["etherwiki"] !== "string") {
             throw new Error(`Property 'etherwiki' in config file at ${configPath} is not a string.`)
+        } else {
+            this.etherwikiURL = config["etherwiki"]
         }
-
-        this.etherwikiURL = config["etherwiki"]
     }
 
     start(): Promise<void> {
@@ -277,9 +275,11 @@ export class Daemon {
         })
     }
 
+    // TODO: this method might be a misnomer? There's nothing that's necessarily depending on a server ("pull").
+    // It's basically writing the YDoc state on disk, i think?
     pullAllPages() {
-        if (this.etherwikiURL === null || this.directory === null) {
-            throw new Error("Can't pull all pages without a directory and URL.")
+        if (this.directory === null) {
+            throw new Error("Can't pull all pages without a directory.")
         }
 
         for (const page of this.ydoc.getArray("pages").toArray()) {
