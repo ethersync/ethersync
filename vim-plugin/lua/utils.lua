@@ -15,16 +15,16 @@ local M = {}
 --   and all others as two.
 --   https://en.wikipedia.org/wiki/UTF-16#Code_points_from_U+010000_to_U+10FFFF
 
--- Insert a string into the current buffer at a specified UTF-16 code unit index.
+-- Insert a string into the current buffer at a specified UTF-8 char index.
 function M.insert(index, content)
-    local row, col = M.UTF16CodeUnitOffsetToRowCol(index)
+    local row, col = M.indexToRowCol(index)
     vim.api.nvim_buf_set_text(0, row, col, row, col, vim.split(content, "\n"))
 end
 
 -- Delete a string from the current buffer at a specified UTF-16 code unit index.
 function M.delete(index, length)
-    local row, col = M.UTF16CodeUnitOffsetToRowCol(index)
-    local rowEnd, colEnd = M.UTF16CodeUnitOffsetToRowCol(index + length)
+    local row, col = M.indexToRowCol(index)
+    local rowEnd, colEnd = M.indexToRowCol(index + length)
     vim.api.nvim_buf_set_text(0, row, col, rowEnd, colEnd, { "" })
 end
 
@@ -63,13 +63,6 @@ function M.byteOffsetToCharOffset(byteOffset, content)
     return value
 end
 
--- Converts a UTF-8 byte offset to a UTF-16 code unit offset.
-function M.byteOffsetToUTF16CodeUnitOffset(byteOffset, content)
-    content = content or M.contentOfCurrentBuffer()
-    local charOffset = M.byteOffsetToCharOffset(byteOffset, content)
-    return M.charOffsetToUTF16CodeUnitOffset(charOffset, content)
-end
-
 -- Converts a Unicode character offset to a UTF-8 byte offset.
 function M.charOffsetToByteOffset(charOffset, content)
     content = content or M.contentOfCurrentBuffer()
@@ -79,74 +72,6 @@ function M.charOffsetToByteOffset(charOffset, content)
     else
         return vim.fn.byteidxcomp(content, charOffset)
     end
-end
-
--- Returns the number of UTF-16 code units in the given string.
-function M.UTF16CodeUnits(string)
-    local chars = vim.fn.strchars(string)
-    local pos = 0
-    local utf16CodeUnitOffset = 0
-
-    while pos < chars do
-        local char = vim.fn.strgetchar(string, pos)
-        if char < 0x10000 then
-            utf16CodeUnitOffset = utf16CodeUnitOffset + 1
-        else
-            utf16CodeUnitOffset = utf16CodeUnitOffset + 2
-        end
-        pos = pos + 1
-    end
-
-    return utf16CodeUnitOffset
-end
-
--- Converts a Unicode character offset to a UTF-16 code unit offset.
-function M.charOffsetToUTF16CodeUnitOffset(charOffset, content)
-    content = content or M.contentOfCurrentBuffer()
-
-    if charOffset > vim.fn.strchars(content) then
-        -- In cases where the specified location is outside of the current content,
-        -- we try to give a reasonable value, but (TODO) we don't actually know how many
-        -- *UTF-16 code units* we need to add. For now, we use bytes.
-
-        -- This case seems to trigger when deleting at the end of the file,
-        -- and when using the 'o' command.
-        local charLength = vim.fn.strchars(content)
-        local utf16Length = M.UTF16CodeUnits(content)
-        local bytesAfterContent = charOffset - charLength
-        return utf16Length + bytesAfterContent
-    end
-
-    return M.UTF16CodeUnits(vim.fn.strcharpart(content, 0, charOffset))
-end
-
--- Converts a UTF-16 code unit offset to a Unicode character offset.
-function M.UTF16CodeUnitOffsetToCharOffset(utf16CodeUnitOffset, content)
-    content = content or M.contentOfCurrentBuffer()
-
-    local pos = 0
-    local UTF16CodeUnitsRemaining = utf16CodeUnitOffset
-
-    while UTF16CodeUnitsRemaining > 0 do
-        local char = vim.fn.strgetchar(content, pos)
-        if char == -1 then
-            error("Could not look up UTF-16 offset " .. tostring(utf16CodeUnitOffset) .. " in given content.")
-        end
-        if char < 0x10000 then
-            UTF16CodeUnitsRemaining = UTF16CodeUnitsRemaining - 1
-        else
-            UTF16CodeUnitsRemaining = UTF16CodeUnitsRemaining - 2
-        end
-        pos = pos + 1
-    end
-
-    return pos
-end
-
--- Converts a UTF-16 code unit offset to a row and column.
-function M.UTF16CodeUnitOffsetToRowCol(utf16CodeUnitOffset)
-    local charOffset = M.UTF16CodeUnitOffsetToCharOffset(utf16CodeUnitOffset)
-    return M.indexToRowCol(charOffset)
 end
 
 -- Converts a Unicode character offset in the current buffer to a row and column.
@@ -180,55 +105,7 @@ local function assertFail(call)
 end
 
 function M.testAllUnits()
-    -- TODO: refactor: pull out tests per function
-    assertEqual(M.UTF16CodeUnits("hello"), 5)
-    -- 🥕 == U+1F955
-    assertEqual(M.UTF16CodeUnits("🥕"), 2)
-
-    -- utf8 1 byte, utf16 1 unit
-    assertEqual(M.byteOffsetToUTF16CodeUnitOffset(4, "world"), 4)
-    -- utf8 2 byte, utf16 1 unit
-    assertEqual(M.byteOffsetToUTF16CodeUnitOffset(4, "äworld"), 3)
-    assertEqual(M.byteOffsetToUTF16CodeUnitOffset(4, "ääworld"), 2)
-    -- utf8 3 byte, utf16 1 unit
-    -- ⚽ == U+26BD
-    assertEqual(M.byteOffsetToUTF16CodeUnitOffset(4, "⚽world"), 2)
-    -- utf8 3 byte, utf16 2 units
-    -- does it exit? TODO
-    -- utf8 4 byte, utf16 2 units
-    assertEqual(M.byteOffsetToUTF16CodeUnitOffset(4, "🥕world"), 2)
-    assertEqual(M.byteOffsetToUTF16CodeUnitOffset(5, "🥕world"), 3)
-    assertEqual(M.byteOffsetToUTF16CodeUnitOffset(5, "world"), 5)
-    assertFail(function()
-        M.byteOffsetToUTF16CodeUnitOffset(6, "world")
-    end)
-    assertFail(function()
-        M.byteOffsetToUTF16CodeUnitOffset(-1, "world")
-    end)
-    -- TODO: what happens if byteOffset doesn't match cleanly into a unit offset?
-    -- TODO: handle more edge cases / catch more invalid input
-
-    assertEqual(M.UTF16CodeUnitOffsetToCharOffset(2, "world"), 2)
-    assertEqual(M.UTF16CodeUnitOffsetToCharOffset(2, "🥕world"), 1)
-    assertEqual(M.UTF16CodeUnitOffsetToCharOffset(4, "🥕world"), 3)
-    assertEqual(M.UTF16CodeUnitOffsetToCharOffset(5, "🥕wörld"), 4)
-    assertEqual(M.UTF16CodeUnitOffsetToCharOffset(4, "⚽world"), 4)
-
-    assertEqual(M.UTF16CodeUnitOffsetToCharOffset(5, "world"), 5)
-    assertFail(function()
-        M.UTF16CodeUnitOffsetToCharOffset(6, "world")
-    end)
-
-    assertEqual(M.byteOffsetToCharOffset(5, "world"), 5)
-    assertFail(function()
-        M.byteOffsetToCharOffset(6, "world")
-    end)
-
-    assertEqual(M.byteOffsetToCharOffset(0, ""), 0)
-    assertEqual(M.UTF16CodeUnitOffsetToCharOffset(0, ""), 0)
-    assertEqual(M.byteOffsetToUTF16CodeUnitOffset(0, "world"), 0)
-
-    print("Ethersync tests successful!")
+    print("Ethersync tests successful! (0 tests ;-)")
 end
 
 return M

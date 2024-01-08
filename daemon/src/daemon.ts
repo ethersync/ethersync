@@ -3,17 +3,14 @@ import * as path from "path"
 import * as Y from "yjs"
 import {WebsocketProvider} from "y-websocket"
 import {LeveldbPersistence} from "y-leveldb"
-import {
-    JSONRPCServer,
-    JSONRPCClient,
-    JSONRPCServerAndClient,
-} from "json-rpc-2.0"
+import {JSONRPCServer, JSONRPCClient, JSONRPCServerAndClient} from "json-rpc-2.0"
 import {insert, remove, TextOp} from "ot-text-unicode"
 
 import {JSONServer} from "./json_server"
 import {OTServer} from "./ot_server"
 
 import parse from "ini-simple-parser"
+import {textOpToYjsDelta, yjsDeltaToTextOp} from "./conversion"
 
 export class Daemon {
     etherwikiURL: string | null = null
@@ -50,15 +47,11 @@ export class Daemon {
 
         let config = parse(fs.readFileSync(configPath, "utf8"))
         if (!config["etherwiki"]) {
-            throw new Error(
-                `No etherwiki property found in config file at ${configPath}.`,
-            )
+            throw new Error(`No etherwiki property found in config file at ${configPath}.`)
         }
 
         if (typeof config["etherwiki"] !== "string") {
-            throw new Error(
-                `Property 'etherwiki' in config file at ${configPath} is not a string.`,
-            )
+            throw new Error(`Property 'etherwiki' in config file at ${configPath} is not a string.`)
         }
 
         this.etherwikiURL = config["etherwiki"]
@@ -97,32 +90,12 @@ export class Daemon {
             },
             // sendToCRDT
             (operation: TextOp) => {
-                console.log(
-                    "Applying op to document: ",
-                    JSON.stringify(operation),
-                )
-                let position = 0
-                for (const change of operation) {
-                    switch (typeof change) {
-                        case "number":
-                            position += change
-                            break
-                        case "string":
-                            this.ydoc.transact(() => {
-                                this.findPage(filename)
-                                    .get("content")
-                                    .insert(position, change)
-                            }, this.clientID)
-                            break
-                        case "object":
-                            this.ydoc.transact(() => {
-                                this.findPage(filename)
-                                    .get("content")
-                                    .delete(position, change.d)
-                            }, this.clientID)
-                            break
-                    }
-                }
+                console.log("Applying op to document: ", JSON.stringify(operation))
+                let ytext = this.findPage(filename).get("content")
+                let delta = textOpToYjsDelta(operation, ytext.toString())
+                this.ydoc.transact(() => {
+                    ytext.applyDelta(delta)
+                }, this.clientID)
             },
         )
     }
@@ -133,16 +106,17 @@ export class Daemon {
             console.log(JSON.stringify(params, null, 2))
         })
 
+        this.serverAndClient.addMethod("debug", (params: any) => {
+            // Just for debugging purposes.
+        })
+
         this.serverAndClient.addMethod("insert", (params: any) => {
             let filename = params[0]
             let daemonRevision = params[1]
             let index = params[2]
             let text = params[3]
 
-            this.ot_documents[filename].applyEditorOperation(
-                daemonRevision,
-                insert(index, text),
-            )
+            this.ot_documents[filename].applyEditorOperation(daemonRevision, insert(index, text))
         })
 
         this.serverAndClient.addMethod("delete", (params: any) => {
@@ -151,10 +125,7 @@ export class Daemon {
             let index = params[2]
             let length = params[3]
 
-            this.ot_documents[filename].applyEditorOperation(
-                daemonRevision,
-                remove(index, length),
-            )
+            this.ot_documents[filename].applyEditorOperation(daemonRevision, remove(index, length))
         })
 
         this.serverAndClient.addMethod("open", (params: any) => {
@@ -204,14 +175,9 @@ export class Daemon {
 
         console.log(`Connecting to Etherwiki server at ${domain}#${room}`)
 
-        let provider = new WebsocketProvider(
-            `wss://${domain}`,
-            room,
-            this.ydoc,
-            {
-                WebSocketPolyfill: require("ws"),
-            },
-        )
+        let provider = new WebsocketProvider(`wss://${domain}`, room, this.ydoc, {
+            WebSocketPolyfill: require("ws"),
+        })
 
         provider.awareness.setLocalStateField("user", {
             name: process.env.USER + " (via ethersync)" || "anonymous",
@@ -286,7 +252,7 @@ export class Daemon {
     }
 
     startObserving() {
-        this.ydoc.getArray("pages").observeDeep(async (events: any) => {
+        this.ydoc.getArray("pages").observeDeep(async (events: Array<Y.YEvent<any>>) => {
             for (const event of events) {
                 let clientID = event.transaction.origin
                 if (clientID == this.clientID) {
@@ -303,36 +269,22 @@ export class Daemon {
                         continue
                     }
 
-                    let index = 0
-
-                    while (event.delta[0]) {
-                        if (event.delta[0]["retain"]) {
-                            index += event.delta[0]["retain"]
-                        } else if (event.delta[0]["insert"]) {
-                            let text = event.delta[0]["insert"]
-                            this.ot_documents[filename].applyCRDTChange(
-                                insert(index, text),
-                            )
-                        } else if (event.delta[0]["delete"]) {
-                            let length = event.delta[0]["delete"]
-                            this.ot_documents[filename].applyCRDTChange(
-                                remove(index, length),
-                            )
-                        }
-                        event.delta.shift()
-                    }
+                    let content = this.ot_documents[filename].document
+                    let operation = yjsDeltaToTextOp(event.delta, content)
+                    this.ot_documents[filename].applyCRDTChange(operation)
                 }
             }
         })
     }
 
-    async pullAllPages() {
+    pullAllPages() {
         if (this.etherwikiURL === null || this.directory === null) {
             throw new Error("Can't pull all pages without a directory and URL.")
         }
 
         for (const page of this.ydoc.getArray("pages").toArray()) {
             let filename = (page as any).get("title").toString()
+
             filename = path.join(this.directory, filename)
             console.log("Syncing", filename)
 
@@ -354,16 +306,10 @@ export class Daemon {
 
     async startPersistence() {
         if (this.etherwikiURL === null || this.directory === null) {
-            throw new Error(
-                "Can't start persistence without a directory and URL.",
-            )
+            throw new Error("Can't start persistence without a directory and URL.")
         }
 
-        const persistenceDir = path.join(
-            this.directory,
-            ".ethersync",
-            "persistence",
-        )
+        const persistenceDir = path.join(this.directory, ".ethersync", "persistence")
         const ldb = new LeveldbPersistence(persistenceDir)
 
         const room = new URL(this.etherwikiURL).hash.slice(1)

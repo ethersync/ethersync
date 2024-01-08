@@ -51,23 +51,12 @@ test("can make edits in nvim", async () => {
 test("can execute Lua in NVim", async () => {
     expect(await nvim.request("nvim_exec_lua", ["return 1+1", []])).toEqual(2)
 
-    expect(
-        await nvim.request("nvim_exec_lua", [
-            "return vim.api.nvim_get_color_by_name('Pink')",
-            [],
-        ]),
-    ).toEqual(0xffc0cb)
+    expect(await nvim.request("nvim_exec_lua", ["return vim.api.nvim_get_color_by_name('Pink')", []])).toEqual(0xffc0cb)
 
-    await nvim.request("nvim_exec_lua", [
-        "require('utils').insert(select(1, ...), select(2, ...))",
-        [1, "bla"],
-    ])
+    await nvim.request("nvim_exec_lua", ["require('utils').insert(select(1, ...), select(2, ...))", [1, "bla"]])
     expect(await nvim.buffer.lines).toEqual(["hblaallo"])
 
-    await nvim.request("nvim_exec_lua", [
-        "require('utils').delete(select(1, ...), select(2, ...))",
-        [2, 3],
-    ])
+    await nvim.request("nvim_exec_lua", ["require('utils').delete(select(1, ...), select(2, ...))", [2, 3]])
     expect(await nvim.buffer.lines).toEqual(["hbllo"])
 })
 
@@ -80,4 +69,14 @@ test("can make edits in parallel", async () => {
     nvim.command("EthersyncGoOnline")
     await delay(500)
     expect(await nvim.buffer.lines).toEqual(["hxo"])
+})
+
+test("can insert at end of file in Vim", async () => {
+    await nvim.request("nvim_exec_lua", ["require('utils').insert(select(1, ...), select(2, ...))", [5, "!"]])
+
+    await delay(500)
+
+    let daemonContent = daemon.findPage("integrationtest").get("content").toString()
+
+    expect(daemonContent).toEqual("hallo!")
 })
