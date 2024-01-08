@@ -1,9 +1,14 @@
+import fs from "node:fs"
+import {join} from "node:path"
+import {tmpdir} from "node:os"
+
 import {expect, test, afterAll, beforeAll, beforeEach} from "vitest"
 import cp from "child_process"
 import {attach, NeovimClient} from "neovim"
+
 import {Daemon} from "./daemon"
 
-let daemon = new Daemon()
+let daemon: Daemon
 let nvim: NeovimClient
 
 function delay(time: number) {
@@ -11,6 +16,13 @@ function delay(time: number) {
 }
 
 beforeAll(async () => {
+    let directory = fs.mkdtempSync(join(tmpdir(), "ethersync-"))
+    const configDir = join(directory, ".ethersync")
+    fs.mkdirSync(configDir)
+    // TODO: replace by local test instance once we have integrated the server component.
+    fs.writeFileSync(join(configDir, "config"), "etherwiki=https://etherwiki.blinry.org#playground")
+    daemon = new Daemon(directory)
+
     await daemon.start()
 
     const nvim_proc = cp.spawn("nvim", ["--embed", "--headless"], {})
@@ -24,7 +36,7 @@ beforeEach(async () => {
     daemon.dropPage("integrationtest")
     daemon.createPage("integrationtest", "hallo")
     daemon.pullAllPages()
-    await nvim.command("edit! output/integrationtest")
+    await nvim.command(`edit! ${daemon.directory}/integrationtest`)
     await nvim.command("EthersyncReload")
     await delay(100)
 })
@@ -32,6 +44,9 @@ beforeEach(async () => {
 afterAll(async () => {
     nvim.quit()
     // nvim_proc.disconnect()
+    if (daemon.directory) {
+        fs.rmSync(daemon.directory, {recursive: true})
+    }
 })
 
 test("can make edits from ydoc", async () => {
