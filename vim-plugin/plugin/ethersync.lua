@@ -203,9 +203,9 @@ function Ethersync()
                 byte_offset = vim.fn.strlen(content) - new_end_byte_length
             end
 
-            local charOffset = vim.fn.charidx(content, byte_offset)
-            local oldCharEnd = vim.fn.charidx(previousContent, byte_offset + old_end_byte_length)
-            local newCharEnd = vim.fn.charidx(content, byte_offset + new_end_byte_length)
+            local charOffset = utils.byteOffsetToCharOffset(byte_offset, content)
+            local oldCharEnd = utils.byteOffsetToCharOffset(byte_offset + old_end_byte_length, previousContent)
+            local newCharEnd = utils.byteOffsetToCharOffset(byte_offset + new_end_byte_length, content)
 
             local oldCharLength = oldCharEnd - charOffset
             local newCharLength = newCharEnd - charOffset

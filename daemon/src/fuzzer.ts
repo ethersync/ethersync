@@ -113,7 +113,7 @@ export class Fuzzer {
         await this.nvim.command(`edit! output/${PAGE}`)
         await this.nvim.command("EthersyncReload")
 
-        for (let i = 0; i < 1000; i++) {
+        for (let i = 0; i < 5000; i++) {
             if (Math.random() < 0.5) {
                 this.randomDaemonEdit()
             } else {

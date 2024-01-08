@@ -105,6 +105,10 @@ export class Daemon {
             console.log(JSON.stringify(params, null, 2))
         })
 
+        this.serverAndClient.addMethod("debug", (params: any) => {
+            // Just for debugging purposes.
+        })
+
         this.serverAndClient.addMethod("insert", (params: any) => {
             let filename = params[0]
             let daemonRevision = params[1]

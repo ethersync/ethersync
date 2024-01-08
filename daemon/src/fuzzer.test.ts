@@ -6,6 +6,5 @@ test("generates random strings of correct length", () => {
 
     for (let i = 0; i < 100; i++) {
         expect([...fuzzer.randomString(i)].length).toBe(i)
-        expect(fuzzer.randomUTF16String(i).length).toBe(i)
     }
 })

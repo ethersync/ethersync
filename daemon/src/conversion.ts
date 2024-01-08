@@ -3,7 +3,9 @@ import {insert, remove, type, TextOp} from "ot-text-unicode"
 // helpful: https://stackoverflow.com/a/54369605
 export function UTF16CodeUnitOffsetToCharOffset(utf16CodeUnitOffset: number, content: string): number {
     if (utf16CodeUnitOffset > content.length) {
-        throw new Error("Out of bounds")
+        throw new Error(
+            `Could not convert UTF-16 code unit offset ${utf16CodeUnitOffset} to char offset in string '${content}'`,
+        )
     }
     return [...content.slice(0, utf16CodeUnitOffset)].length
 }
@@ -12,7 +14,7 @@ export function charOffsetToUTF16CodeUnitOffset(charOffset: number, content: str
     let utf16Offset = 0
     let chars = [...content]
     if (charOffset > chars.length) {
-        throw new Error("Out of bounds")
+        throw new Error(`Could not convert char offset ${charOffset} to UTF-16 code unit offset in string '${content}'`)
     }
     for (const char of [...content].slice(0, charOffset)) {
         utf16Offset += char.length

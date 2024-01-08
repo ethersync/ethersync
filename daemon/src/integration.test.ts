@@ -70,3 +70,13 @@ test("can make edits in parallel", async () => {
     await delay(500)
     expect(await nvim.buffer.lines).toEqual(["hxo"])
 })
+
+test("can insert at end of file in Vim", async () => {
+    await nvim.request("nvim_exec_lua", ["require('utils').insert(select(1, ...), select(2, ...))", [5, "!"]])
+
+    await delay(500)
+
+    let daemonContent = daemon.findPage("integrationtest").get("content").toString()
+
+    expect(daemonContent).toEqual("hallo!")
+})
