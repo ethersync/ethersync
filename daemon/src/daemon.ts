@@ -162,18 +162,21 @@ export class Daemon {
 })*/
     }
 
+    // TODO: currently assumes a successful and immediate connection
+    // => turn into a promise?
     connectToEtherwikiServer() {
         if (this.etherwikiURL === null) {
             throw new Error("Can't connect to Etherwiki without a URL.")
         }
 
-        let url = new URL(this.etherwikiURL)
-        let domain = url.host
-        let room = url.hash.slice(1)
+        const url = new URL(this.etherwikiURL)
+        const domain = url.host
+        const room = url.hash.slice(1)
+        const wsprotocol = url.protocol === "http:" ? "ws" : "wss"
 
         console.log(`Connecting to Etherwiki server at ${domain}#${room}`)
 
-        let provider = new WebsocketProvider(`wss://${domain}`, room, this.ydoc, {
+        let provider = new WebsocketProvider(`${wsprotocol}://${domain}`, room, this.ydoc, {
             WebSocketPolyfill: require("ws"),
         })
 
