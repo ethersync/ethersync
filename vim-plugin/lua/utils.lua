@@ -105,7 +105,44 @@ local function assertFail(call)
 end
 
 function M.testAllUnits()
-    print("Ethersync tests successful! (0 tests ;-)")
+    assertEqual(#vim.split("a\nb\n", "\n"), 3)
+
+    vim.cmd("enew")
+    vim.api.nvim_buf_set_text(0, 0, 0, 0, 0, { "x" })
+    -- TODO: What we *really* expect here is "x\n".
+    assertEqual(M.contentOfCurrentBuffer(), "x")
+
+    vim.cmd("enew")
+    vim.api.nvim_buf_set_text(0, 0, 0, 0, 0, { "x", "y" })
+    assertEqual(M.contentOfCurrentBuffer(), "x\ny")
+
+    vim.cmd("enew")
+    vim.api.nvim_buf_set_text(0, 0, 0, 0, 0, { "x", "" })
+    assertEqual(M.contentOfCurrentBuffer(), "x\n")
+
+    vim.cmd("enew")
+    vim.api.nvim_buf_set_text(0, 0, 0, 0, 0, { "x", "" })
+    local row, col = M.indexToRowCol(2)
+    assertEqual(row, 1)
+    assertEqual(col, 0)
+
+    vim.cmd("enew")
+    vim.api.nvim_buf_set_text(0, 0, 0, 0, 0, { "x", "" })
+    local row, col = M.indexToRowCol(1)
+    assertEqual(row, 0)
+    assertEqual(col, 1)
+
+    vim.cmd("enew")
+    vim.api.nvim_buf_set_text(0, 0, 0, 0, 0, { "x", "" })
+    M.insert(2, "a")
+    assertEqual(M.contentOfCurrentBuffer(), "x\na")
+
+    vim.cmd("enew")
+    vim.api.nvim_buf_set_text(0, 0, 0, 0, 0, { "x", "" })
+    M.insert(1, "a")
+    assertEqual(M.contentOfCurrentBuffer(), "xa\n")
+
+    print("Ethersync tests successful!")
 end
 
 return M
