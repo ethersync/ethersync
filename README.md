@@ -20,7 +20,22 @@ Currently, there's a plugin Neovim, but other editor integrations are planned.
 
 - find the source in [server](./server) TODO
 
-<copy parts from etherwiki readme here>
+Install the dependencies...
+
+```bash
+cd etherwiki
+npm install
+```
+
+...then start [Rollup](https://rollupjs.org):
+
+```bash
+npm run dev
+```
+
+Navigate to [localhost:5000](http://localhost:5000).
+This UI can be used for development/debugging purposes, but isn't needed.
+The important part is, that this provides a Websocket Server, which has to be configured in the daemon.
 
 ### Daemon
 
