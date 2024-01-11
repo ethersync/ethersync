@@ -282,6 +282,11 @@ export class Daemon {
     }
 
     writePage(filename: string) {
+        if (filename === "") {
+            console.log("Can't write page with empty filename, skipping.")
+            return
+        }
+
         let page = this.findPage(filename)
 
         filename = path.join(this.directory, filename)
