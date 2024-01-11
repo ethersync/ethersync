@@ -130,6 +130,15 @@ export class Daemon {
             this.initializeOTDocumentServer(filename)
         })
 
+        this.serverAndClient.addMethod("close", (params: any) => {
+            let filename = params[0]
+            if (this.ot_documents[filename] !== undefined) {
+                delete this.ot_documents[filename]
+            }
+            // Save file independent of whether editor saved or not.
+            this.writePage(filename)
+        })
+
         /*serverAndClient.addMethod("cursor", (params: any) => {
     let filename = params[0]
     let headPos = parseInt(params[1])

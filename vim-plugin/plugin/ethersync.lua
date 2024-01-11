@@ -272,12 +272,18 @@ function Ethersync()
     --})
 end
 
+function EthersyncClose()
+    local filename = vim.fs.basename(vim.api.nvim_buf_get_name(0))
+    client.notify("close", { filename })
+end
+
 -- When new buffer is loaded, run Ethersync automatically.
 vim.api.nvim_exec(
     [[
 augroup Ethersync
     autocmd!
     autocmd BufEnter * lua Ethersync()
+    autocmd BufUnload * lua EthersyncClose()
 augroup END
 ]],
     false
