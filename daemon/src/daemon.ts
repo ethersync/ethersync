@@ -34,12 +34,7 @@ export class Daemon {
     ot_documents: {[filename: string]: OTServer} = {}
 
     // Provide an "Ethersync directory", which should contain an .ethersync/config file.
-    constructor(public directory: string | null = null) {
-        if (directory === null) {
-            console.log("No directory provided, not connecting to Etherwiki.")
-            return
-        }
-
+    constructor(public directory: string) {
         let configPath = path.join(directory, ".ethersync/config")
         if (!fs.existsSync(configPath)) {
             throw new Error(`No config file found at ${configPath}.`)
@@ -65,7 +60,7 @@ export class Daemon {
 
             // TODO: Time timeout is a hack we use to have "more content" before we write it to disk.
             setTimeout(() => {
-                this.pullAllPages()
+                this.writeAllPages()
                 this.setupEditorServer()
                 this.startObserving()
                 console.log("Started.")
@@ -265,51 +260,51 @@ export class Daemon {
                 if (key == "content") {
                     let filename = event.target.parent.get("title").toString()
 
-                    if (!(filename in this.ot_documents)) {
-                        // Skip edits for files that are not opened.
-                        continue
+                    if (filename in this.ot_documents) {
+                        // File is open in an editor, send change via OT.
+                        let content = this.ot_documents[filename].document
+                        let operation = yjsDeltaToTextOp(event.delta, content)
+                        this.ot_documents[filename].applyCRDTChange(operation)
+                    } else {
+                        // File is not open, apply to file directly.
+                        this.writePage(filename)
                     }
-
-                    let content = this.ot_documents[filename].document
-                    let operation = yjsDeltaToTextOp(event.delta, content)
-                    this.ot_documents[filename].applyCRDTChange(operation)
                 }
             }
         })
     }
 
-    // TODO: this method might be a misnomer? There's nothing that's necessarily depending on a server ("pull").
-    // It's basically writing the YDoc state on disk, i think?
-    pullAllPages() {
-        if (this.directory === null) {
-            throw new Error("Can't pull all pages without a directory.")
-        }
-
+    writeAllPages() {
         for (const page of this.ydoc.getArray("pages").toArray()) {
             let filename = (page as any).get("title").toString()
+            this.writePage(filename)
+        }
+    }
 
-            filename = path.join(this.directory, filename)
-            console.log("Syncing", filename)
+    writePage(filename: string) {
+        let page = this.findPage(filename)
 
-            // Create the file if it doesn't exist.
-            if (!fs.existsSync(filename)) {
-                console.log("Creating file", filename)
-                fs.writeFileSync(filename, "")
-            }
+        filename = path.join(this.directory, filename)
+        console.log("Syncing", filename)
 
-            let contentY = (page as any).get("content").toString()
-            let contentFile = fs.readFileSync(filename, "utf8")
+        // Create the file if it doesn't exist.
+        if (!fs.existsSync(filename)) {
+            console.log("Creating file", filename)
+            fs.writeFileSync(filename, "")
+        }
 
-            if (contentY !== contentFile) {
-                // TODO: Incorporate changes that have been made while the daemon was offline.
-                fs.writeFileSync(filename, contentY)
-            }
+        let contentY = (page as any).get("content").toString()
+        let contentFile = fs.readFileSync(filename, "utf8")
+
+        if (contentY !== contentFile) {
+            // TODO: Incorporate changes that have been made while the daemon was offline.
+            fs.writeFileSync(filename, contentY)
         }
     }
 
     async startPersistence() {
-        if (this.etherwikiURL === null || this.directory === null) {
-            throw new Error("Can't start persistence without a directory and URL.")
+        if (this.etherwikiURL === null) {
+            throw new Error("Can't start persistence without a URL.")
         }
 
         const persistenceDir = path.join(this.directory, ".ethersync", "persistence")
@@ -324,5 +319,9 @@ export class Daemon {
         this.ydoc.on("update", (update) => {
             ldb.storeUpdate(room, update)
         })
+    }
+
+    async stop() {
+        await this.server.close()
     }
 }

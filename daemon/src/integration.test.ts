@@ -35,7 +35,7 @@ beforeAll(async () => {
 beforeEach(async () => {
     daemon.dropPage("integrationtest")
     daemon.createPage("integrationtest", "hallo")
-    daemon.pullAllPages()
+    daemon.writeAllPages()
     await nvim.command(`edit! ${daemon.directory}/integrationtest`)
     await nvim.command("EthersyncReload")
     await delay(100)

@@ -84,4 +84,13 @@ export class JSONServer {
         this.client?.write(header)
         this.client?.write(payload)
     }
+
+    close(): Promise<void> {
+        return new Promise((resolve, _) => {
+            this.client?.destroy()
+            this.server.close(() => {
+                resolve()
+            })
+        })
+    }
 }

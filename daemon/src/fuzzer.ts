@@ -117,7 +117,7 @@ export class Fuzzer {
         await delay(500)
 
         this.daemon.createPage(PAGE, "hello")
-        this.daemon.pullAllPages()
+        this.daemon.writeAllPages()
 
         await this.nvim.command(`edit! ${this.daemon.directory}/${PAGE}`)
         await this.nvim.command("EthersyncReload")
