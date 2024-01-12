@@ -15,14 +15,48 @@ local M = {}
 --   and all others as two.
 --   https://en.wikipedia.org/wiki/UTF-16#Code_points_from_U+010000_to_U+10FFFF
 
--- Insert a string into the current buffer at a specified UTF-8 char index.
+-- Insert a string into the current buffer at a specified Unicode character index.
 function M.insert(index, content)
+    -- If 'eol' is on, there's an implied newline at the end of the buffer.
+    -- If the index refers to a location *after* that newline, we also need to insert a newline before 'content'.
+    -- In that case, decrement the index by 1, and set 'eol' off.
+    if vim.api.nvim_get_option_value("eol", { buf = 0 }) then
+        if index == vim.fn.strchars(M.contentOfCurrentBuffer()) then
+            content = "\n" .. content
+            index = index - 1
+            vim.api.nvim_set_option_value("eol", false, { scope = "local" })
+        end
+    end
+
     local row, col = M.indexToRowCol(index)
     vim.api.nvim_buf_set_text(0, row, col, row, col, vim.split(content, "\n"))
 end
 
--- Delete a string from the current buffer at a specified UTF-16 code unit index.
+-- Delete a string from the current buffer at a specified Unicode character index.
 function M.delete(index, length)
+    -- If 'eol' is on...
+    if vim.api.nvim_get_option_value("eol", { buf = 0 }) then
+        -- ...and this deletion would remove the (implied) newline at the end of the buffer...
+        if index + length == vim.fn.strchars(M.contentOfCurrentBuffer()) then
+            -- ...decrement the deleted length (because the newline isn't really there).
+            length = length - 1
+
+            -- If, after the deletion, there's no newline at the end of the buffer anymore
+            -- (either because the deletion deleted everything, or because the last remaining
+            -- character is not a newline)...
+            local byteOffsetOfLastCharAfterDeletion = M.charOffsetToByteOffset(index - 1)
+            local content = M.contentOfCurrentBuffer()
+            if index == 0 or content[byteOffsetOfLastCharAfterDeletion] ~= "\n" then
+                -- ...set 'eol' off.
+                vim.api.nvim_set_option_value("eol", false, { scope = "local" })
+            else
+                -- Otherwise, leave it on, but also delete the trailing newline.
+                index = index - 1
+                length = length + 1
+            end
+        end
+    end
+
     local row, col = M.indexToRowCol(index)
     local rowEnd, colEnd = M.indexToRowCol(index + length)
     vim.api.nvim_buf_set_text(0, row, col, rowEnd, colEnd, { "" })

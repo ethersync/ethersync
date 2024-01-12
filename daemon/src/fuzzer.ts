@@ -85,7 +85,12 @@ export class Fuzzer {
     }
 
     async vimContent(): Promise<string> {
-        return (await this.nvim.buffer.lines).join("\n")
+        let content = (await this.nvim.buffer.lines).join("\n")
+        // If the file doesn't end with a newline, add it (because 'fixeol' would write it).
+        if (content[content.length - 1] !== "\n") {
+            content += "\n"
+        }
+        return content
     }
 
     daemonContent(): string {

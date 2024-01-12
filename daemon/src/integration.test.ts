@@ -93,5 +93,5 @@ test("can insert at end of file in Vim", async () => {
 
     let daemonContent = daemon.findPage("integrationtest").get("content").toString()
 
-    expect(daemonContent).toEqual("hallo!")
+    expect(daemonContent).toEqual("hallo!\n") // The newline is there because of Vim's 'fixeol' setting.
 })

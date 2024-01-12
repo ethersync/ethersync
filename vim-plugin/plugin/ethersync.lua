@@ -75,6 +75,65 @@ local function setCursor(head, anchor)
     })
 end
 
+-- (Try to) send an insertion to the daemon.
+local function insertDaemon(charOffset, insertedString)
+    local filename = vim.fs.basename(vim.api.nvim_buf_get_name(0))
+
+    -- If we're inserting something that doesn't end with a newline at the end of the file,
+    -- 'fixeol' is on, but 'eol' and 'binary' are off, Vim would add a newline to the end of the file at the next write.
+    -- Let's append that newline to the inserted string now.
+    if
+        charOffset == vim.fn.strchars(utils.contentOfCurrentBuffer())
+        and insertedString:sub(-1) ~= "\n"
+        and not vim.api.nvim_get_option_value("eol", { buf = 0 })
+        and not vim.api.nvim_get_option_value("binary", { buf = 0 })
+        and vim.api.nvim_get_option_value("fixeol", { buf = 0 })
+    then
+        insertedString = insertedString .. "\n"
+        vim.api.nvim_set_option_value("eol", true, { buf = 0 })
+    end
+
+    editorRevision = editorRevision + 1
+    if online then
+        client.notify("insert", { filename, daemonRevision, charOffset, insertedString })
+    else
+        table.insert(opQueueForDaemon, {
+            "insert",
+            { filename, daemonRevision, charOffset, insertedString },
+        })
+    end
+end
+
+-- (Try to) send a deletion to the daemon.
+local function deleteDaemon(charOffset, charLength)
+    local filename = vim.fs.basename(vim.api.nvim_buf_get_name(0))
+
+    editorRevision = editorRevision + 1
+    if online then
+        client.notify("delete", { filename, daemonRevision, charOffset, charLength })
+    else
+        table.insert(opQueueForDaemon, {
+            "delete",
+            { filename, daemonRevision, charOffset, charLength },
+        })
+    end
+end
+
+local function fixEOLIfNecessary()
+    -- If 'eol' and 'binary' are off, but 'fixeol' is on, Vim would add a newline to the end of the file at the next write.
+    -- Let's send that newline to the daemon now. Then, set 'eol' to true.
+    if
+        not vim.api.nvim_get_option_value("eol", { buf = 0 })
+        and not vim.api.nvim_get_option_value("binary", { buf = 0 })
+        and vim.api.nvim_get_option_value("fixeol", { buf = 0 })
+    then
+        local content = utils.contentOfCurrentBuffer()
+        local charOffset = vim.fn.strchars(content)
+        insertDaemon(charOffset, "\n")
+        vim.api.nvim_set_option_value("eol", true, { buf = 0 })
+    end
+end
+
 -- Take an operation from the daemon and apply it to the editor.
 local function processOperationForEditor(method, parameters)
     if method == "operation" then
@@ -95,6 +154,8 @@ local function processOperationForEditor(method, parameters)
                 end
             end
             daemonRevision = daemonRevision + 1
+
+            fixEOLIfNecessary()
         else
             -- Operation is not up-to-date to our content, skip it!
             -- The daemon will send a transformed one later.
@@ -211,33 +272,19 @@ function Ethersync()
             local newCharLength = newCharEnd - charOffset
 
             if oldCharLength > 0 then
-                editorRevision = editorRevision + 1
-                if online then
-                    client.notify("delete", { filename, daemonRevision, charOffset, oldCharLength })
-                else
-                    table.insert(opQueueForDaemon, {
-                        "delete",
-                        { filename, daemonRevision, charOffset, oldCharLength },
-                    })
-                end
+                deleteDaemon(charOffset, oldCharLength)
             end
 
             if newCharLength > 0 then
-                editorRevision = editorRevision + 1
                 local insertedString = vim.fn.strcharpart(content, charOffset, newCharLength)
-                if online then
-                    client.notify("insert", { filename, daemonRevision, charOffset, insertedString })
-                else
-                    table.insert(opQueueForDaemon, {
-                        "insert",
-                        { filename, daemonRevision, charOffset, insertedString },
-                    })
-                end
+                insertDaemon(charOffset, insertedString)
             end
 
             previousContent = content
         end,
     })
+
+    fixEOLIfNecessary()
 
     --vim.api.nvim_create_autocmd({ "CursorMoved", "CursorMovedI" }, {
     --    callback = function()

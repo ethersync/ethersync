@@ -49,9 +49,8 @@ We have to support the following cases:
 
 ## Considered Options
 
-* {title of option 1}
-* {title of option 2}
-* {title of option 3}
+* Always force 'eol' and 'fixeol' off.
+* When 'fixeol' is on, send the fixes a Vim write would make to the daemon immediately.
 * … <!-- numbers of options can vary -->
 
 ## Decision Outcome
@@ -74,27 +73,23 @@ Chosen option: "{title of option 1}", because
 <!-- This is an optional element. Feel free to remove. -->
 ## Pros and Cons of the Options
 
-### {title of option 1}
+### Always force 'eol' and 'fixeol' off.
 
-<!-- This is an optional element. Feel free to remove. -->
-{example | description | pointer to more information | …}
+Always force 'eol' and 'fixeol' off. When opening a file, and it contains a trailing \n, insert it in the buffer (but set 'eol' off).
 
-* Good, because {argument a}
-* Good, because {argument b}
-<!-- use "neutral" if the given argument weights neither for good nor bad -->
-* Neutral, because {argument c}
-* Bad, because {argument d}
-* … <!-- numbers of pros and cons can vary -->
+* Good, because this allows us to display cursors in those empty new lines.
+* Good, because it seems simple.
+* Bad, because Vim will now always show line breaks at end of regular files, which is not what people are used to.
 
-### {title of other option}
+### When 'fixeol' is on, send the fixes a Vim write would make to the daemon immediately.
 
-{example | description | pointer to more information | …}
+In our plugin, look at 'fixeol', to determine whether Vim will ever meddle with the file. If it is on (and 'eol' is false), already send an inserted \n to the daemon at the earliest possibility. This is as if Vim writes as soon as it openes the file. Set 'eol' to true in that case.
 
-* Good, because {argument a}
-* Good, because {argument b}
-* Neutral, because {argument c}
-* Bad, because {argument d}
-* …
+If any operation leaves us with a (real) content without a newline in the end, set 'eol' to false. But if 'fixeol' is true, immediately send the "fixing" \n to the daemon again.
+
+* Good, because from Vim's point of view, the file behaves normally.
+* Bad, because a cursor in a new, empty line can't be represented (probably?).
+* Neutral, because it can lead to strange behavior when other clients delete the trailing newline. Our plugin will immediatel re-add it. But that might be what's to be expected.
 
 <!-- This is an optional element. Feel free to remove. -->
 ## More Information
@@ -114,3 +109,19 @@ Vim `:h eol` writes:
 	that when you write the file the situation from the original file can
 	be kept.  But you can change it if you want to.
 	See |eol-and-eof| for example settings.
+
+Note: The `contentOfCurrentBuffer` function should probably always look at 'eol' to return the real, implied content.
+
+Observation:
+
+- Have a file not ending in \n.
+- Open it in Vim. 'eol' will be off.
+- Verify 'fixeol' is on.
+- Write.
+- File now ends in \n.
+- But 'eol' is still on. :O So we can't really use it as a "does the last line have an implicit newline" indicator in this case.
+- But in our solution, we can toggle that option on and off and assume it does.
+
+Downside of solution where we just toggle 'eof' on and off depending on the "real" content:
+If someone puts their cursor to a new empty line in the end, we wouldn't be able to display that cursor in Vim.
+Maybe that's not so bad? Or we can find a workaround in that case?
