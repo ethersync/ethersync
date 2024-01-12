@@ -289,3 +289,11 @@ vim.api.nvim_create_user_command("EthersyncRunTests", utils.testAllUnits, {})
 vim.api.nvim_create_user_command("EthersyncGoOffline", goOffline, {})
 vim.api.nvim_create_user_command("EthersyncGoOnline", goOnline, {})
 vim.api.nvim_create_user_command("EthersyncReload", resetState, {})
+
+-- TODO For debugging purposes. Remove before merging branch.
+vim.api.nvim_create_user_command("EthersyncInsert", function()
+    print(vim.fn.strchars(utils.contentOfCurrentBuffer()))
+    local row, col = utils.indexToRowCol(2)
+    print(row, col)
+    utils.insert(2, "a")
+end, {})
