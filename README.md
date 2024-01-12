@@ -23,7 +23,7 @@ Currently, there's a plugin Neovim, but other editor integrations are planned.
 Install the dependencies...
 
 ```bash
-cd etherwiki
+cd server
 npm install
 ```
 
