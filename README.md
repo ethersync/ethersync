@@ -18,7 +18,7 @@ Currently, there's a plugin Neovim, but other editor integrations are planned.
 
 ### Server
 
-- find the source in [server](./server) TODO
+- find the source in [server](./server)
 
 Install the dependencies...
 
@@ -72,6 +72,14 @@ Install the [plugin](./vim-plugin) using your favorite plugin manager. For now, 
     ```vim
     Plug "$HOME/path/to/ethersync/vim-plugin"
     ```
+
+## Usage
+
+- Right now, you can only edit files which exist on the server
+    - You might want to add one via the web interface :)
+- When you edit a file in the output directory:
+    - If it's installed correctly, you'll get an "Ethersync activated!" greeting.
+    - Everything you edit is kept in sync.
 
 ## Sponsors
 
