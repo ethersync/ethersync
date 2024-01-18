@@ -46,8 +46,9 @@ After the usual `npm install`, to start up the daemon with a directory (say, `ou
 cd daemon
 npm install
 mkdir -p output/.ethersync # the output directory contains the locally synced files and a config
-echo "etherwiki=http://localhost:5000#playground" > output/.ethersync/config # where localhost is the server instance from above
+echo "etherwiki=http://localhost:5000#playground" > output/.ethersync/config
 ```
+where localhost is the server instance from above.
 
 To run it, start with:
 ```
