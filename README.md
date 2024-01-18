@@ -56,13 +56,21 @@ npm run ethersync --directory=output
 
 ### Neovim Plugin
 
-Install the [plugin](./vim-plugin) using your favorite plugin manager. For example, with Lazy, this is the configuration:
+Install the [plugin](./vim-plugin) using your favorite plugin manager. For now, use the path to the `vim-plugin` directory in this repository. Example configurations:
 
-```lua
-{
-    dir = path/to/ethersync/vim-plugin",
-}
-```
+- [Lazy](https://github.com/folke/lazy.nvim)
+
+    ```lua
+    {
+        dir = os.getenv("HOME") .. "/path/to/ethersync/vim-plugin",
+    }
+    ```
+
+- [vim-plug](https://github.com/junegunn/vim-plug)
+
+    ```vim
+    Plug "$HOME/path/to/ethersync/vim-plugin"
+    ```
 
 ## Sponsors
 
