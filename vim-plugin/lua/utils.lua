@@ -16,9 +16,13 @@ local M = {}
 --   https://en.wikipedia.org/wiki/UTF-16#Code_points_from_U+010000_to_U+10FFFF
 
 -- Insert a string into the current buffer at a specified UTF-8 char index.
-function M.insert(index, content)
+function M.insert(index, text)
     local row, col = M.indexToRowCol(index)
-    vim.api.nvim_buf_set_text(0, row, col, row, col, vim.split(content, "\n"))
+    vim.api.nvim_buf_set_text(0, row, col, row, col, vim.split(text, "\n"))
+end
+
+function M.appendNewline()
+    M.insert(vim.fn.strchars(M.contentOfCurrentBuffer()), "\n")
 end
 
 -- Delete a string from the current buffer at a specified UTF-16 code unit index.

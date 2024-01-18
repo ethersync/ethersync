@@ -163,6 +163,12 @@ function Ethersync()
 
     print("Ethersync activated!")
 
+    if vim.api.nvim_get_option_value("eol", { buf = 0 }) then
+        utils.appendNewline()
+        vim.api.nvim_set_option_value("eol", false, { buf = 0 })
+    end
+    vim.api.nvim_set_option_value("fixeol", false, { buf = 0 })
+
     connect()
 
     createCursor()
@@ -273,6 +279,9 @@ function Ethersync()
 end
 
 function EthersyncClose()
+    if vim.fn.isdirectory(vim.fn.expand("%:p:h") .. "/.ethersync") ~= 1 then
+        return
+    end
     local filename = vim.fs.basename(vim.api.nvim_buf_get_name(0))
     client.notify("close", { filename })
 end
@@ -295,3 +304,11 @@ vim.api.nvim_create_user_command("EthersyncRunTests", utils.testAllUnits, {})
 vim.api.nvim_create_user_command("EthersyncGoOffline", goOffline, {})
 vim.api.nvim_create_user_command("EthersyncGoOnline", goOnline, {})
 vim.api.nvim_create_user_command("EthersyncReload", resetState, {})
+
+-- TODO For debugging purposes. Remove before merging branch.
+vim.api.nvim_create_user_command("EthersyncInsert", function()
+    print(vim.fn.strchars(utils.contentOfCurrentBuffer()))
+    local row, col = utils.indexToRowCol(2)
+    print(row, col)
+    utils.insert(2, "a")
+end, {})
