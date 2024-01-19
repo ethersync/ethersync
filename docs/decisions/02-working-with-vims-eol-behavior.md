@@ -6,46 +6,9 @@ date: 2024-01-12
 
 ## Context and Problem Statement
 
-Es gibt da einen Bug: Wenn Daemon-seitig eine page mit einem \n endet, und man sie in Vim öffnet, existiert die Newline in Vim nur implizit. Führt dazu, dass zB beim Content "a\n" ein insert(2, "x") vom daemon aus in Vim zu "ax\n" wird.
-Um das zu fixen, müssten wir entweder:
-- Das newline beim Öffnen der Datei einfügen (und verhindern, dass Vim das mitspeichert), oder
-- Mit der eol-Option rumspielen, sodass sie korrekt wiederspiegelt, wie der Dateiinhalt tatsächlich ist (und vermutlich fixeol lokal ausmachen).
+When a file ends with a newline and is opened in Vim, the newline exists in Vim only implicitly (the 'eol' option will be set). This leads to an issue where, for example, with the content "a\n", an insert(2, "x") from the daemon in Vim refers to a character position that's not actually there.
 
-Reproduzieren mittels:
-
--  Buffer hat nur ein "x\n" wenn die Datei geöffnet wird
-
-```
-vim.api.nvim_create_user_command("EthersyncInsert", function()
-    print(vim.fn.strchars(utils.contentOfCurrentBuffer()))
-    local row, col = utils.indexToRowCol(2)
-    print(row, col)
-    utils.insert(2, "a")
-end, {})
-```
-=> Resultat: Es wird bei "1" eingefügt, weil vim "denkt", dass der Buffer nur aus "x" besteht (wird geclippt in charOffsetToByteOffset).
-{Describe the context and problem statement, e.g., in free form using two to three sentences or in the form of an illustrative story.
- You may want to articulate the problem in form of a question and add links to collaboration boards or issue management systems.}
-
- https://stackoverflow.com/a/16224292
-
-
-We have to support the following cases:
-- file content is "x" (without a newline)
-    - when openend with vim, EOL will be false
-    - vim writes its buffer and "fixeol" triggers writing an EOL (which is not yet communicated to daemon)
-- file content is "x\n" (with a newline)
-    - when openend with vim, EOL will be true
-- Some other editor removes the implicit \n while vim runs
-- Some other editor adds a \n while vim runs
-    - this should already work?
-
-<!-- This is an optional element. Feel free to remove. -->
-## Decision Drivers
-
-* {decision driver 1, e.g., a force, facing concern, …}
-* {decision driver 2, e.g., a force, facing concern, …}
-* … <!-- numbers of drivers can vary -->
+In addition, when the 'fixeol' option is set, and both 'eol' and 'binary' are false, Vim will add a trailing newline to content that has no newline on save. This insertion needs to be reflected in the shared content.
 
 ## Considered Options
 
@@ -94,13 +57,6 @@ If any operation leaves us with a (real) content without a newline in the end, s
 <!-- This is an optional element. Feel free to remove. -->
 ## More Information
 
-{You might want to provide additional evidence/confidence for the decision outcome here and/or
- document the team agreement on the decision and/or
- define when this decision when and how the decision should be realized and if/when it should be re-visited and/or
- how the decision is validated.
- Links to other decisions and resources might here appear as well.}
-
-
 Vim `:h eol` writes:
 
 	When 'binary' is off and 'fixeol' is on the value is not used when
@@ -121,7 +77,3 @@ Observation:
 - File now ends in \n.
 - But 'eol' is still on. :O So we can't really use it as a "does the last line have an implicit newline" indicator in this case.
 - But in our solution, we can toggle that option on and off and assume it does.
-
-Downside of solution where we just toggle 'eof' on and off depending on the "real" content:
-If someone puts their cursor to a new empty line in the end, we wouldn't be able to display that cursor in Vim.
-Maybe that's not so bad? Or we can find a workaround in that case?
