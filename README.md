@@ -12,66 +12,62 @@ Ethersync consists of three components:
 - A central **server** is responsible for connecting people.
 - Every participant needs a **daemon**, that runs on their local machine, and connects directories to the server.
 - **Editor plugins** connect to the daemon, send it what you type, and receive other peoples' changes.
-Currently, there's a plugin Neovim, but other editor integrations are planned.
+Currently, there's a plugin for Neovim, but other editor integrations are planned.
 
 ## Setup
 
+We need to set up these three components. First, clone this repository:
+
+```bash
+git clone git@github.com:ethersync/ethersync
+cd ethersync
+```
+
 ### Server
 
-- find the source in [server](./server)
-
-Install the dependencies...
+First, let's start a local server instance:
 
 ```bash
 cd server
 npm install
-```
-
-...then start [Rollup](https://rollupjs.org):
-
-```bash
 npm run dev
 ```
 
-Navigate to [localhost:5000](http://localhost:5000).
-This UI can be used for development/debugging purposes, but isn't needed.
-The important part is, that this provides a Websocket Server, which has to be configured in the daemon.
+The server also works without the other components, and offers a browser UI. You can try it by navigating to <http://localhost:5000). Create a wiki, and some pages.
 
 ### Daemon
 
-- the source is in [daemon](./daemon)
+But we also allow you to edit the content from your own text editor. For that, we need to connect the wiki to a local directory, using a daemon.
 
-After the usual `npm install`, to start up the daemon with a directory (say, `output`) you need a config file in `.ethersync/config`:
+Let's say we want to connect a wiki running at <http://localhost:5000#playground> to the directory `playground`. Here's how you would configure it.
+
+1. Create the directory, which will create the locally synced files and a configuration file:
+
+        mkdir -p playground/.ethersync
+
+2. Create the configuration file:
+
+        echo "etherwiki=http://localhost:5000#playground" > playground/.ethersync/config
+
+After that, let's start the daemon:
+
 ```
 cd daemon
 npm install
-mkdir -p output/.ethersync # the output directory contains the locally synced files and a config
-echo "etherwiki=http://localhost:5000#playground" > output/.ethersync/config
-```
-where localhost is the server instance from above.
-
-To run it, start with:
-```
-npm run ethersync --directory=output
+npm run ethersync --directory=path/to/playground
 ```
 
 ### Neovim Plugin
 
-Install the [plugin](./vim-plugin) using your favorite plugin manager. For now, use the path to the `vim-plugin` directory in this repository. Example configurations:
+Finally, we need an editor plugin, for you to be able to edit the files in real time.
 
-- [Lazy](https://github.com/folke/lazy.nvim)
+Install the [plugin](./vim-plugin) using your favorite plugin manager. For now, use the path to the `vim-plugin` directory in this repository. Consult the documentation of your plugin manager on how to do that. Example configuration for [Lazy](https://github.com/folke/lazy.nvim):
 
-    ```lua
-    {
-        dir = os.getenv("HOME") .. "/path/to/ethersync/vim-plugin",
-    }
-    ```
-
-- [vim-plug](https://github.com/junegunn/vim-plug)
-
-    ```vim
-    Plug "$HOME/path/to/ethersync/vim-plugin"
-    ```
+```lua
+{
+    dir = os.getenv("HOME") .. "/path/to/ethersync/vim-plugin",
+}
+```
 
 ## Usage
 
