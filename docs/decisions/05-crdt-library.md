@@ -121,7 +121,7 @@ General:
 Specific:
 * ✅ Has support for serialization & synchronization built in (s.t. we don't have to roll our own protocol to transfer changes)
     * There seem to be syncing-crates
-    * Less elegant compared with automerge
+    * Less elegant when compared to automerge
 * ✅ From an incoming change (might be an optimized internal format) we can compute a patch/diff to send to the (non-CRDT) editor.
 * ✅ (optional) JavaScript support, in case we decided to create a web-based client.
 * ✅ (optional) Undo/Redo
