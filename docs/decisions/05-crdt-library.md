@@ -47,7 +47,6 @@ An alternative would have been Yrs, it would probably be equally good.
 The final decision between the two was mostly based on subtle things
 like feeling closer to the community and some risk around the thread-safety with Yrs.
 
-<!-- This is an optional element. Feel free to remove. -->
 ## Pros and Cons of the Options
 
 ### Automerge
@@ -75,8 +74,9 @@ Specific:
 * ❎ (optional) Undo/Redo
     * it's in [planning](https://github.com/automerge/automerge/issues/58)
     * [undo/redo Master Thesis](https://munin.uit.no/bitstream/handle/10037/22345/thesis.pdf)
+    * currently, we'd need to implement it ourselves by inverting the user's operations
 * partial (optional) Awareness
-    * There's the concept of a cursor, but we don't get full support for awareness metadata like in Yrs.
+    * The [automerge-repo](https://automerge.org/automerge-repo/) protocol exists, Rust support is planned.
 
 
 
