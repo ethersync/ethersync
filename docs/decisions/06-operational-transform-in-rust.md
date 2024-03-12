@@ -1,6 +1,6 @@
 ---
-status: draft
-date: 2024-03-07
+status: accepted
+date: 2024-03-12
 ---
 # Which Operational Transformation Library to use in Rust?
 
@@ -10,9 +10,6 @@ In [ADR 01](./01-use-operational-transform-as-editor-backend-protocol.md) we hav
 
 For the next iteration, unless we're hit by an epiphany and realize it'll not be necessary, we'll use a similar approach.
 This backend will be written in Rust, so we'll need a library that does similar things as https://www.npmjs.com/package/ot-text-unicode does.
-
-TODO:
-- [ ] actually try the favorite and see if it could work
 
 ## Decision Drivers
 
@@ -40,15 +37,16 @@ As for specific features we need, it's also straightforward:
 
 ## Decision Outcome
 
-Chosen option: "kyte", because
-{justification. e.g., only option, which meets k.o. criterion decision driver | which resolves force {force} | … | comes out best (see below)}.
+Chosen option: "operational-transform", because it combines the advantages of being on crate.io, as well as allowing to pass function parameters by reference.
 
 ## Pros and Cons of the Options
 
 ### operational-transform
 
 * Good, because it's the most downloaded on crates.io (swarm intelligence bonus :D)
+* Neutral-good, because it supports Serde serialization
 * Bad, because it's two years old
+* Bad, because it doesn't seem to be fuzz-tested
 
 ### textot.rs
 
@@ -65,3 +63,5 @@ Chosen option: "kyte", because
 * Good, because it's not "years old" as the others, but:
 * Bad, because there are only two commits -- does it already do what it promises?
     * maybe it's neutral and this tiny feature doesn't need more?
+* Bad, because the API is built in a way where you have to clone many parameters
+* Bad, because it doesn't collapse retains that follow each other
