@@ -1,10 +1,10 @@
 ---
-status: draft
+status: accepted
 date: 2024-03-14
 ---
 # Ethersync UI Specification
 
-This document creates our current idea, how the Commandline User Interface looks like.
+This document contains our current idea, how the Commandline User Interface looks like.
 (This document could later become the README. Note that the UI doesn't exist yet in this form.)
 
 ## Overview
@@ -31,14 +31,14 @@ A shared project is an (ephemeral) session that is initiated from one end and ca
 
 ## Example
 
-Host / Initiator:
+Host / initiator:
 ```
 $ ethersync share
 Initiating a new shared directory!
 Sharing code: apple-camel-icecream
 ```
 
-Joining Peer (can be multiples)
+Joining peer (can be multiples)
 ```
 $ ethersync join apple-camel-icecream
 ```
