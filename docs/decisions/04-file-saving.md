@@ -89,20 +89,20 @@ Observation that external tools in the workflow can be:
 How to handle the situation where daemon/another editor writes a file while open in editor? Can we disable warnings?
 
 - Vim
-    Normally warns: "Modified by Vim and outside"
-    Maybe set 'nowrite'? Or the buftype "nofile"?
+    - Normally warns: "Modified by Vim and outside"
+    - Maybe set 'nowrite'? Or the buftype "nofile"?
 - Emacs
-    Yes: https://stackoverflow.com/questions/2284703/emacs-how-to-disable-file-changed-on-disk-checking
-    Seems to even lock open files, and prevent the second instance form editing
+    - Yes: https://stackoverflow.com/questions/2284703/emacs-how-to-disable-file-changed-on-disk-checking
+    - Seems to even lock open files, and prevent the second instance form editing
 - VS Code
-    Yes: https://github.com/microsoft/vscode/issues/66035
-        files.saveConflictResolution
-    Normally, on save: "Failed to save: content of the file is newer."
-        Offers to open diff
+    - Yes: https://github.com/microsoft/vscode/issues/66035
+        - files.saveConflictResolution
+    - Normally, on save: "Failed to save: content of the file is newer."
+        - Offers to open diff
 - Jetbrains
-    Warns: "changes have been made" "in memory and on disk"
-    Not clear how to turn that off
+    - Warns: "changes have been made" "in memory and on disk"
+    - Not clear how to turn that off
 
 Currently, editors use two possible reponses to changed files:
-    Show warning immediately
-    Show warning on save
+    - Show warning immediately
+    - Show warning on save
