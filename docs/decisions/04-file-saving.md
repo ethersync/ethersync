@@ -1,6 +1,6 @@
 ---
 status: draft
-date: 2024-02-29
+date: 2024-03-14
 ---
 # Who saves files?
 
@@ -12,7 +12,6 @@ In an Ethersync scenario, we might need a different approach.
 
 The question is: Who writes to files, and when? Who has "ownership" of the files?
 
-<!-- This is an optional element. Feel free to remove. -->
 ## Decision Drivers
 
 * It should feel as natural as possible to work in a shared directory.
@@ -22,14 +21,24 @@ The question is: Who writes to files, and when? Who has "ownership" of the files
 
 When editors have opened files:
 
-* As soon as editors open a file, the file content is considered irrelevant/ignored/unspecified
+* As soon as editors open a file, the file content is considered irrelevant/ignored/unspecified from daemons perspective. Editor has ownership. The daemon doesn't write to the files.
+    * assumes that no other service/program is invested into the file content, everything happens in the buffer
+        * maybe we can get around the filesystem by providing another "interface" to the content, through ethersync tooling.
+    - External programs can't see the current content of the file.
+    + Under regular usage, editors don't complain about changed file contents.
+    o When file is open in more than one editor, and user saves, editors will still complain about changed files.
+    Note: Maybe implement a ping mechanism, so that the daemon can detect when editors have crashed?
 * Try to keep the file up-to-date with the "true" CRDT content
     -> hard to keep editors from complaining about the writes
+        => excludes this option relatively hard
 
 When no editor has the file open:
 
-* Daemon keeps the content up-to-date with its CRDT content
-* Daemon *sometimes* writes the current state
+* Daemon keeps the content up-to-date with its CRDT content immediately
+* Daemon *sometimes* writes the current state, has it's own caching/writing logic
+    * decide on a middle-ground default, but make it configurable to the user preferences?
+    * could change dependent on whether the user is "active" (i.e. has other files open)
+    * we open a filewatching process that computes diffs and thus applies changes
 * Don't write to files
     -> Not good
 
@@ -254,3 +263,8 @@ What happens in the LSP world if an editor wants ownership, but another editor a
 Some file systems have "access timestamps"!
 
 Conflicting writes with two open editors are a problem anyway, without Ethersync.
+
+Observation that external tools in the workflow can be
+- read only (like a compiler)
+- read-write (like a awk/formatter)
+- write-only (log appending)
