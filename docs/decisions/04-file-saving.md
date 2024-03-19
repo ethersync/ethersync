@@ -38,8 +38,8 @@ Notes:
 
 - We could provide another "interface" to the content, through ethersync tooling, like `ethersync run "sed -i s/foo/bar file"`.
 - Maybe we should implement a ping mechanism, so that the daemon can detect when editors have crashed.
-- When a file is opened in more than one editor at once, there will be conflicting writes anyway. This is true without a software like Ethersync. The only way to prevent that would be to stop editors from writing at all, which doesn't seem desirable.
-- To incorporate changes done by external tools, we watch the file system, compute diffs, and apply changes to the CRDT. This seems true both when the file is open or closed in editors.
+- When a file is opened in more than one editor at once, there could be conflicting writes anyway. This is true without a software like Ethersync. The only way to prevent that would be to stop editors from writing at all, which doesn't seem desirable.
+- To incorporate changes done by external tools, we watch the file system, compute diffs, and apply changes to the CRDT. This is independent of whether the file is open or closed in editors.
 
 ## Pros and Cons of the Options
 
