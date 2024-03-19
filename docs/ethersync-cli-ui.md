@@ -4,7 +4,7 @@ date: 2024-03-14
 ---
 # Ethersync UI Specification
 
-This document contains our current idea, how the Commandline User Interface looks like.
+This document contains our current idea of how the Commandline User Interface looks like.
 (This document could later become the README. Note that the UI doesn't exist yet in this form.)
 
 ## Overview
@@ -19,7 +19,7 @@ A shared project is an (ephemeral) session that is initiated from one end and ca
 
 - `share`
     - creates the session (and also ensures there's a daemon running to manage it)
-    - will be sharing all of the content of the directory it was initiated in
+    - will share all of the content of the directory it was initiated in
 - `join`
     - allows to join a session
     - will synchronize the files from the session to the joining party
@@ -38,7 +38,7 @@ Initiating a new shared directory!
 Sharing code: apple-camel-icecream
 ```
 
-Joining peer (can be multiples)
+Joining peers:
 ```
 $ ethersync join apple-camel-icecream
 ```
