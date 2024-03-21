@@ -1,4 +1,4 @@
-name: Cargo Build & Test
+name: Build & Test
 
 on:
   push:
@@ -24,3 +24,13 @@ jobs:
       - run: cargo build --verbose
       - run: cargo test --verbose
       - run: cargo fmt --check
+  check_lua:
+    name: Check Lua formatting
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./vim-plugin
+    steps:
+      - uses: actions/checkout@v4
+      - run: cargo install stylua
+      - run: stylua -c .
