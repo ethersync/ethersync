@@ -1,4 +1,4 @@
-local M = {}
+local M = { }
 
 -- This file provides helper functions to convert between a number of ways to index a buffer:
 
