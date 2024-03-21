@@ -16,7 +16,13 @@ jobs:
         working-directory: ./rust
     steps:
       - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
       - run: cargo build --verbose
       - run: cargo test --verbose
       - name: rust-rustfmt-check
         uses: mbrobbel/rustfmt-check@0.10.0
+        working-directory: ./rust
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
