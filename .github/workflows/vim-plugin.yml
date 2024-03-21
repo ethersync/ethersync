@@ -1,0 +1,23 @@
+name: Vim plugin
+
+on:
+  push:
+    branches:
+      - 'main'
+    paths:
+      - 'vim-plugin/**'
+  pull_request:
+    paths:
+      - 'vim-plugin/**'
+
+jobs:
+  check_lua:
+    name: Check Lua formatting
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./vim-plugin
+    steps:
+      - uses: actions/checkout@v4
+      - run: cargo install stylua
+      - run: stylua -c .

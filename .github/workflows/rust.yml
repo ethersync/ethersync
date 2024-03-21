@@ -1,36 +1,35 @@
-name: Build & Test
+name: Rust
 
 on:
   push:
     branches:
       - 'main'
+    paths:
+      - 'rust/**'
   pull_request:
+    paths:
+      - 'rust/**'
 
 env:
   CARGO_TERM_COLOR: always
 
 jobs:
   build_and_test:
-    name: Rust build and test
+    name: Build and test
     runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: ./rust
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          components: rustfmt
       - run: cargo build --verbose
       - run: cargo test --verbose
-      - run: cargo fmt --check
-  check_lua:
-    name: Check Lua formatting
+  check_formatting:
+    name: Check formatting
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: ./vim-plugin
+        working-directory: ./rust
     steps:
       - uses: actions/checkout@v4
-      - run: cargo install stylua
-      - run: stylua -c .
+      - run: cargo fmt --check
