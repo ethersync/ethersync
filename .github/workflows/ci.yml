@@ -22,7 +22,7 @@ jobs:
       - run: cargo build --verbose
       - run: cargo test --verbose
       - name: rust-rustfmt-check
-        uses: mbrobbel/rustfmt-check@0.10.0
         working-directory: ./rust
+        uses: mbrobbel/rustfmt-check@0.10.0
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
