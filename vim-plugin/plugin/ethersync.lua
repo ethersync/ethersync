@@ -104,17 +104,17 @@ end
 
 -- Connect to the daemon.
 local function connect()
-    local cmd = vim.lsp.rpc.connect("127.0.0.1", 9000)
+    client = vim.lsp.rpc.start("/Users/mn/code/ethersync/ethersync/rust/target/debug/client-connection", {})
 
-    client = cmd({
-        notification = function(method, params)
-            if online then
-                processOperationForEditor(method, params)
-            else
-                table.insert(opQueueForEditor, { method, params })
-            end
-        end,
-    })
+    -- client = cmd({
+    --     notification = function(method, params)
+    --         if online then
+    --             processOperationForEditor(method, params)
+    --         else
+    --             table.insert(opQueueForEditor, { method, params })
+    --         end
+    --     end,
+    -- })
     online = true
 end
 

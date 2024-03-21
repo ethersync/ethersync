@@ -17,7 +17,7 @@ async fn run_server() -> anyhow::Result<SocketAddr> {
     let mut module = RpcModule::new(());
     module.register_method("insert", |params, _| {
         dbg!(params.as_str());
-        "lo"
+        dbg!(params.parse::<serde_json::Value>()).unwrap();
     })?;
 
     let addr = server.local_addr()?;
