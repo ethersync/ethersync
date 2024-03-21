@@ -21,8 +21,4 @@ jobs:
           components: rustfmt
       - run: cargo build --verbose
       - run: cargo test --verbose
-      - name: rust-rustfmt-check
-        working-directory: ./rust
-        uses: mbrobbel/rustfmt-check@0.10.0
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+      - run: cargo fmt --check
