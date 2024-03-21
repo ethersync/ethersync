@@ -1,5 +1,5 @@
-use std::net::SocketAddr;
 use jsonrpsee::server::{RpcModule, Server};
+use std::net::SocketAddr;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -7,7 +7,7 @@ async fn main() -> anyhow::Result<()> {
     let url = format!("http://{}", server_addr);
     println!("Server running at {}", url);
 
-    loop { }
+    loop {}
 }
 
 async fn run_server() -> anyhow::Result<SocketAddr> {
