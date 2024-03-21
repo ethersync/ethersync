@@ -15,7 +15,7 @@ env:
 
 jobs:
   build_and_test:
-    name: Build and test
+    name: Build & test
     runs-on: ubuntu-latest
     defaults:
       run:
