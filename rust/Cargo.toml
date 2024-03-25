@@ -8,3 +8,5 @@ edition = "2021"
 serde_json = { version = "1" }
 jsonrpc-core = "18.0.0"
 clap = { version = "4.5.3", features = ["derive"] }
+automerge = "0.5.9"
+rand = "0.8.5"
