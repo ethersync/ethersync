@@ -1,37 +1,40 @@
-use serde_json::Value;
 use std::io;
 use std::io::Read;
 use std::io::Write;
 use std::os::unix::net::UnixStream;
 use std::str::from_utf8;
 
-fn request(mut stream: &UnixStream, data: &[u8]) {
-    let data: Value = serde_json::from_str(from_utf8(data).unwrap()).unwrap();
-    stream.write_all(data.to_string().as_bytes()).unwrap();
-    stream.write_all(b"\n").unwrap();
-}
-
+// Read JSON-RPC with Content-Length headers from stdin.
+// Extract the JSON, and send it to the Ethersync socket.
 fn main() -> io::Result<()> {
-    let bytes = io::stdin().bytes();
-    let mut in_json = false;
-    let mut byte_incoming = vec![];
+    let mut stream = UnixStream::connect("/tmp/ethersync").unwrap();
 
-    let stream = UnixStream::connect("/tmp/ethersync").unwrap();
+    let mut data = vec![];
+    let mut reading_header = true;
+    let mut content_length = 0;
 
-    for byte in bytes {
-        let byte = byte.unwrap();
-        if byte == b'{' {
-            in_json = true;
-        }
-        if byte == b'}' {
-            in_json = false;
-            byte_incoming.push(byte);
-            io::stderr().write_all(&byte_incoming)?;
-            request(&stream, &byte_incoming);
-            byte_incoming.clear();
-        }
-        if in_json {
-            byte_incoming.push(byte);
+    for byte in io::stdin().lock().bytes() {
+        let byte = byte?;
+        data.push(byte);
+
+        if reading_header {
+            if data.ends_with(&[b'\r', b'\n', b'\r', b'\n']) {
+                let header_string = from_utf8(&data).unwrap();
+                content_length = 0;
+                for line in header_string.lines() {
+                    if let Some(line) = line.strip_prefix("Content-Length: ") {
+                        content_length = line.parse().unwrap();
+                    }
+                }
+                println!("Content-Length: {}", content_length);
+                data.clear();
+                reading_header = false;
+            }
+        } else if data.len() == content_length {
+            stream.write_all(&data)?;
+            stream.write_all(b"\n")?;
+            data.clear();
+            reading_header = true;
         }
     }
 
