@@ -1,31 +1,34 @@
-use jsonrpsee::server::{RpcModule, Server};
-use std::net::SocketAddr;
+use jsonrpc_core::IoHandler;
+use std::fs;
+use std::io::{BufRead, BufReader};
+use std::os::unix::net::UnixListener;
+use std::thread;
 
-#[tokio::main]
-async fn main() -> anyhow::Result<()> {
-    let server_addr = run_server().await?;
-    let url = format!("http://{}", server_addr);
-    println!("Server running at {}", url);
+const SOCKET_PATH: &str = "/tmp/ethersync";
 
-    loop {}
-}
+fn main() {
+    fs::remove_file(SOCKET_PATH).unwrap();
+    let listener = UnixListener::bind(SOCKET_PATH).unwrap();
 
-async fn run_server() -> anyhow::Result<SocketAddr> {
-    let server = Server::builder()
-        .build("0.0.0.0:9000".parse::<SocketAddr>()?)
-        .await?;
-    let mut module = RpcModule::new(());
-    module.register_method("insert", |params, _| {
-        dbg!(params.as_str());
-        dbg!(params.parse::<serde_json::Value>()).unwrap();
-    })?;
+    for stream in listener.incoming() {
+        let stream = stream.unwrap();
 
-    let addr = server.local_addr()?;
-    let handle = server.start(module);
+        thread::spawn(move || {
+            println!("Connection established.");
 
-    // In this example we don't care about doing shutdown so let's it run forever.
-    // You may use the `ServerHandle` to shut it down or manage it yourself.
-    tokio::spawn(handle.stopped());
+            let mut io = IoHandler::new();
+            io.add_notification("insert", |params| {
+                println!("insert called: {:#?}", params);
+            });
 
-    Ok(addr)
+            let buf_reader = BufReader::new(&stream);
+            for line in buf_reader.lines() {
+                let line = line.unwrap();
+                println!("Request: {:#?}", line);
+                let response = io.handle_request_sync(&line);
+                println!("Response: {:#?}", response);
+            }
+            println!("Connection closed.");
+        });
+    }
 }
