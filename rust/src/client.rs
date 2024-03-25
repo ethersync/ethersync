@@ -4,10 +4,10 @@ use std::io::Write;
 use std::os::unix::net::UnixStream;
 use std::str::from_utf8;
 
-// Read JSON-RPC with Content-Length headers from stdin.
-// Extract the JSON, and send it to the Ethersync socket.
-fn main() -> io::Result<()> {
-    let mut stream = UnixStream::connect("/tmp/ethersync").unwrap();
+const SOCKET_PATH: &str = "/tmp/ethersync";
+
+pub fn connection() -> io::Result<()> {
+    let mut stream = UnixStream::connect(SOCKET_PATH).unwrap();
 
     let mut data = vec![];
     let mut reading_header = true;

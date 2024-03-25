@@ -1,34 +1,35 @@
-use jsonrpc_core::IoHandler;
-use std::fs;
-use std::io::{BufRead, BufReader};
-use std::os::unix::net::UnixListener;
-use std::thread;
+use clap::{Parser, Subcommand};
+use std::io;
 
-const SOCKET_PATH: &str = "/tmp/ethersync";
+mod client;
+mod daemon;
 
-fn main() {
-    fs::remove_file(SOCKET_PATH).unwrap();
-    let listener = UnixListener::bind(SOCKET_PATH).unwrap();
+#[derive(Parser)]
+#[command(version, about, long_about = None)]
+#[command(propagate_version = true)]
+struct Cli {
+    #[command(subcommand)]
+    command: Commands,
+}
 
-    for stream in listener.incoming() {
-        let stream = stream.unwrap();
+#[derive(Subcommand)]
+enum Commands {
+    /// Launch Ethersync's background process that connects with clients and other nodes.
+    Daemon,
+    /// Open a JSON-RPC connection to the Ethersync daemon on stdin/stdout.
+    Client,
+}
 
-        thread::spawn(move || {
-            println!("Connection established.");
+fn main() -> io::Result<()> {
+    let cli = Cli::parse();
 
-            let mut io = IoHandler::new();
-            io.add_notification("insert", |params| {
-                println!("insert called: {:#?}", params);
-            });
-
-            let buf_reader = BufReader::new(&stream);
-            for line in buf_reader.lines() {
-                let line = line.unwrap();
-                println!("Request: {:#?}", line);
-                let response = io.handle_request_sync(&line);
-                println!("Response: {:#?}", response);
-            }
-            println!("Connection closed.");
-        });
+    match &cli.command {
+        Commands::Daemon => {
+            daemon::run()?;
+        }
+        Commands::Client => {
+            client::connection()?;
+        }
     }
+    Ok(())
 }

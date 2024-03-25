@@ -1,8 +1,10 @@
 [package]
 name = "ethersync"
+description = "Enables real-time co-editing of local text files."
 version = "0.1.0"
 edition = "2021"
 
 [dependencies]
 serde_json = { version = "1" }
 jsonrpc-core = "18.0.0"
+clap = { version = "4.5.3", features = ["derive"] }
