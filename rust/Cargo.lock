@@ -133,6 +133,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "bytecount"
+version = "0.6.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e1e5f035d16fc623ae5f74981db80a439803888314e3a555fd6f04acd51a3205"
+
+[[package]]
 name = "byteorder"
 version = "1.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -253,6 +259,7 @@ dependencies = [
  "automerge",
  "clap",
  "jsonrpc-core",
+ "operational-transform",
  "rand",
  "serde_json",
  "tokio",
@@ -533,6 +540,15 @@ name = "once_cell"
 version = "1.19.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3fdb12b2476b595f9358c5161aa467c2438859caa136dec86c26fdd2efe17b92"
+
+[[package]]
+name = "operational-transform"
+version = "0.6.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fcdc542261d37288fd18ccb2eb1fdf333d8d10d12cce21d3f586d6e74a5511df"
+dependencies = [
+ "bytecount",
+]
 
 [[package]]
 name = "parking_lot"

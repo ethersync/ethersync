@@ -11,3 +11,4 @@ clap = { version = "4.5.3", features = ["derive"] }
 automerge = "0.5.9"
 rand = "0.8.5"
 tokio = { version = "1", features = ["full"] }
+operational-transform = "0.6.1"
