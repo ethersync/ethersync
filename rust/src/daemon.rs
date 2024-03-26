@@ -8,11 +8,11 @@ use jsonrpc_core::IoHandler;
 use rand::{distributions::Alphanumeric, Rng};
 use std::fs;
 use std::io;
-use std::io::{BufRead, BufReader, Read, Write};
-use std::net::{TcpListener, TcpStream};
-use std::os::unix::net::UnixListener;
 use std::sync::{Arc, Mutex};
 use std::thread;
+use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader, ReadHalf, WriteHalf};
+use tokio::net::UnixListener;
+use tokio::net::{TcpListener, TcpStream};
 
 const SOCKET_PATH: &str = "/tmp/ethersync";
 
@@ -28,55 +28,57 @@ impl Daemon {
         Self { doc }
     }
 
-    pub fn launch(&mut self, peer: Option<String>) {
+    pub async fn launch(&mut self, peer: Option<String>) {
         let doc_clone = self.doc.clone();
-        thread::spawn(|| {
-            Self::listen_socket(doc_clone).unwrap();
+        tokio::spawn(async move {
+            Self::listen_socket(doc_clone).await;
         });
 
         if let Some(peer) = peer {
-            self.dial_tcp(peer).unwrap();
+            self.dial_tcp(peer).await.unwrap();
         } else {
-            self.listen_tcp().unwrap();
+            self.listen_tcp().await.unwrap();
         }
     }
 
-    pub fn listen_socket(doc: Arc<Mutex<AutoCommit>>) -> io::Result<()> {
+    pub async fn listen_socket(doc: Arc<Mutex<AutoCommit>>) {
         fs::remove_file(SOCKET_PATH).unwrap();
         let listener = UnixListener::bind(SOCKET_PATH).unwrap();
         println!("Listening on UNIX socket: {}", SOCKET_PATH);
 
-        for stream in listener.incoming() {
-            let stream = stream.unwrap();
-
+        loop {
             let doc_clone = doc.clone();
-            thread::spawn(move || {
-                println!("Client connection established.");
+            match listener.accept().await {
+                Ok((mut stream, _addr)) => {
+                    println!("Client connection established.");
 
-                let mut io = IoHandler::new();
-                io.add_notification("insert", move |params| {
-                    println!("insert called: {:#?}", params);
+                    let mut io = IoHandler::new();
+                    io.add_notification("insert", move |params| {
+                        println!("insert called: {:#?}", params);
 
-                    // TODO: For now, interpret all insert calls as insert(0, "a").
-                    let mut doc = doc_clone.lock().unwrap();
-                    let text = doc.get(automerge::ROOT, "text").unwrap();
-                    if let Some((automerge::Value::Object(ObjType::Text), text)) = text {
-                        doc.insert(text, 0, "a".to_string()).unwrap();
+                        // TODO: For now, interpret all insert calls as insert(0, "a").
+                        let mut doc = doc_clone.lock().unwrap();
+                        let text = doc.get(automerge::ROOT, "text").unwrap();
+                        if let Some((automerge::Value::Object(ObjType::Text), text)) = text {
+                            doc.insert(text, 0, "a".to_string()).unwrap();
+                        }
+                    });
+
+                    let buf_reader = BufReader::new(&mut stream);
+                    //for line in buf_reader.lines() {
+                    let mut lines = buf_reader.lines();
+                    while let Some(line) = lines.next_line().await.unwrap() {
+                        println!("Request: {:#?}", line);
+                        let response = io.handle_request_sync(&line);
+                        println!("Response: {:#?}", response);
                     }
-                });
-
-                let buf_reader = BufReader::new(&stream);
-                for line in buf_reader.lines() {
-                    let line = line.unwrap();
-                    println!("Request: {:#?}", line);
-                    let response = io.handle_request_sync(&line);
-                    println!("Response: {:#?}", response);
+                    println!("Client connection closed.");
                 }
-                println!("Client connection closed.");
-            });
+                Err(e) => {
+                    println!("Error: {:#?}", e);
+                }
+            }
         }
-
-        Ok(())
     }
 
     fn init_text(&mut self) {
@@ -107,29 +109,27 @@ impl Daemon {
         }
     }
 
-    fn listen_tcp(&mut self) -> io::Result<()> {
+    async fn listen_tcp(&mut self) -> io::Result<()> {
         self.init_text();
         //Self::edit_text(&mut self.doc);
 
-        let listener = TcpListener::bind("0.0.0.0:4242").unwrap();
+        let listener = TcpListener::bind("0.0.0.0:4242").await?;
         println!("Listening on TCP port: {}", listener.local_addr().unwrap());
 
-        for stream in listener.incoming() {
-            let stream = stream.unwrap();
+        loop {
+            let (stream, _addr) = listener.accept().await?;
 
             // TODO: Allow more than one peer to dial us at the same time.
             println!("Peer dialed us.");
             self.start_sync(stream)?;
         }
-
-        Ok(())
     }
 
     // Connect to IP and port.
-    fn dial_tcp(&mut self, addr: String) -> io::Result<()> {
-        let stream = TcpStream::connect(addr)?;
+    async fn dial_tcp(&mut self, addr: String) -> io::Result<()> {
+        let stream = TcpStream::connect(addr).await.unwrap();
         //let result = self.sync_with_peer(&mut stream, true);
-        self.start_sync(stream)?;
+        self.start_sync(stream);
         Ok(())
     }
 
@@ -137,18 +137,18 @@ impl Daemon {
         let peer_state = SyncState::new();
         let peer_state = Arc::new(Mutex::new(peer_state));
 
-        let stream2 = stream.try_clone().unwrap();
+        let (read, write) = tokio::io::split(stream);
 
         let peer_state_clone = peer_state.clone();
         let doc_clone = self.doc.clone();
-        thread::spawn(move || {
-            Self::sync_receive(stream, doc_clone, peer_state_clone).unwrap();
+        tokio::spawn(async move {
+            Self::sync_receive(read, doc_clone, peer_state_clone).unwrap();
         });
 
         // Make edits to the document occasionally.
         let doc_clone = self.doc.clone();
-        thread::spawn(move || loop {
-            {
+        tokio::spawn(async move {
+            loop {
                 let doc_clone = doc_clone.clone();
                 Self::edit_text(doc_clone);
                 thread::sleep(std::time::Duration::from_secs(5));
@@ -156,22 +156,22 @@ impl Daemon {
         });
 
         let doc_clone = self.doc.clone();
-        Self::sync_send(stream2, doc_clone, peer_state).unwrap();
+        Self::sync_send(write, doc_clone, peer_state).unwrap();
 
         Ok(())
     }
 
     fn sync_receive(
-        mut reader: TcpStream,
+        mut reader: ReadHalf<TcpStream>,
         doc: Arc<Mutex<AutoCommit>>,
         state: Arc<Mutex<SyncState>>,
     ) -> io::Result<()> {
         loop {
             let mut message_len_buf = [0; 4];
-            reader.read_exact(&mut message_len_buf)?;
+            reader.read_exact(&mut message_len_buf);
             let message_len = i32::from_be_bytes(message_len_buf);
             let mut message_buf = vec![0; message_len as usize];
-            reader.read_exact(&mut message_buf)?;
+            reader.read_exact(&mut message_buf);
             let message = Message::decode(&message_buf).unwrap();
             println!("Received message: {:?}", message);
 
@@ -197,7 +197,7 @@ impl Daemon {
     }
 
     fn sync_send(
-        mut writer: TcpStream,
+        mut writer: WriteHalf<TcpStream>,
         doc: Arc<Mutex<AutoCommit>>,
         state: Arc<Mutex<SyncState>>,
     ) -> io::Result<()> {
@@ -213,8 +213,8 @@ impl Daemon {
             if let Some(message) = message_maybe {
                 let message_buf = message.encode();
                 let message_len = message_buf.len() as i32;
-                writer.write_all(&message_len.to_be_bytes())?;
-                writer.write_all(&message_buf)?;
+                writer.write_all(&message_len.to_be_bytes());
+                writer.write_all(&message_buf);
 
                 println!("Sent message: {:?}", &message_buf);
             } else {

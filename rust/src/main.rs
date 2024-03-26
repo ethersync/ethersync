@@ -23,7 +23,8 @@ enum Commands {
     Client,
 }
 
-fn main() -> io::Result<()> {
+#[tokio::main]
+async fn main() -> io::Result<()> {
     let cli = Cli::parse();
 
     match &cli.command {
@@ -31,9 +32,9 @@ fn main() -> io::Result<()> {
             let mut daemon = daemon::Daemon::new();
 
             if let Some(peer) = peer {
-                daemon.launch(Some(peer.to_string()));
+                daemon.launch(Some(peer.to_string())).await;
             } else {
-                daemon.launch(None);
+                daemon.launch(None).await;
             }
         }
         Commands::Client => {
