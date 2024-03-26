@@ -1,7 +1,8 @@
 use automerge::{
+    patches::TextRepresentation,
     sync::{Message, State as SyncState, SyncDoc},
     transaction::Transactable,
-    AutoCommit, ObjType, ReadDoc,
+    AutoCommit, ObjType, PatchLog, ReadDoc,
 };
 use jsonrpc_core::IoHandler;
 use rand::{distributions::Alphanumeric, Rng};
@@ -144,6 +145,7 @@ impl Daemon {
             Self::sync_receive(stream, doc_clone, peer_state_clone).unwrap();
         });
 
+        // Make edits to the document occasionally.
         let doc_clone = self.doc.clone();
         thread::spawn(move || loop {
             {
@@ -173,14 +175,17 @@ impl Daemon {
             let message = Message::decode(&message_buf).unwrap();
             println!("Received message: {:?}", message);
 
-            println!("Trying to lock doc");
+            let mut patch_log = PatchLog::active(TextRepresentation::String);
+
             let mut doc = doc.lock().unwrap();
             let mut state = state.lock().unwrap();
-            println!("Locked doc");
 
             doc.sync()
-                .receive_sync_message(&mut state, message)
+                .receive_sync_message_log_patches(&mut state, message, &mut patch_log)
                 .unwrap();
+            let patches = doc.make_patches(&mut patch_log);
+            dbg!(&patches);
+            // TODO: Send these patches to the editors via the OT component.
 
             let text = doc.get(automerge::ROOT, "text").unwrap();
             if let Some((automerge::Value::Object(ObjType::Text), text)) = text {
