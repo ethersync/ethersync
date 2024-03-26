@@ -7,7 +7,7 @@ use jsonrpc_core::IoHandler;
 use rand::{distributions::Alphanumeric, Rng};
 use std::fs;
 use std::io;
-use std::io::{BufRead, BufReader, Read, Write};
+use std::io::{BufRead, BufReader, BufWriter, Read, Write};
 use std::net::{TcpListener, TcpStream};
 use std::os::unix::net::UnixListener;
 use std::thread;
@@ -88,14 +88,15 @@ impl Daemon {
         println!("Listening on TCP port: {}", listener.local_addr().unwrap());
 
         for stream in listener.incoming() {
-            let mut stream = stream.unwrap();
+            let stream = stream.unwrap();
 
             // TODO: Allow more than one peer to dial us at the same time.
             println!("Peer dialed us.");
-            let result = self.sync_with_peer(&mut stream, false);
-            if let Err(e) = result {
-                println!("Error: {:?}", e);
-            }
+            //let result = self.sync_with_peer(&mut stream, false);
+            self.start_sync(stream)?;
+            //if let Err(e) = result {
+            //    println!("Error: {:?}", e);
+            //}
         }
 
         Ok(())
@@ -103,12 +104,44 @@ impl Daemon {
 
     // Connect to IP and port.
     pub fn dial_tcp(&mut self, addr: &str) -> io::Result<()> {
-        let mut stream = TcpStream::connect(addr)?;
-        let result = self.sync_with_peer(&mut stream, true);
-        if let Err(e) = result {
-            println!("Error: {:?}", e);
-        }
+        let stream = TcpStream::connect(addr)?;
+        //let result = self.sync_with_peer(&mut stream, true);
+        self.start_sync(stream)?;
+        //if let Err(e) = result {
+        //    println!("Error: {:?}", e);
+        //}
         Ok(())
+    }
+
+    fn start_sync(&mut self, stream: TcpStream) -> io::Result<()> {
+        let stream2 = stream.try_clone().unwrap();
+
+        thread::spawn(move || {
+            Self::sync_receive(stream).unwrap();
+        });
+
+        Self::sync_send(stream2).unwrap();
+
+        Ok(())
+    }
+
+    fn sync_receive(mut reader: TcpStream) -> io::Result<()> {
+        loop {
+            //let peer_state = SyncState::new();
+            let mut message_len_buf = [0; 4];
+            reader.read_exact(&mut message_len_buf)?;
+            let number = i32::from_be_bytes(message_len_buf);
+            println!("Received number: {:?}", number);
+        }
+    }
+
+    fn sync_send(mut writer: TcpStream) -> io::Result<()> {
+        loop {
+            let random_number: i32 = rand::thread_rng().gen_range(0..100);
+            println!("Sending number: {:?}", random_number);
+            writer.write_all(&random_number.to_be_bytes())?;
+            thread::sleep(std::time::Duration::from_secs(1));
+        }
     }
 
     // TODO: Build this in an "event"-based way, where peers can send and receive independently at
