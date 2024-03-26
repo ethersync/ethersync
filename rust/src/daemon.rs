@@ -111,6 +111,8 @@ impl Daemon {
         Ok(())
     }
 
+    // TODO: Build this in an "event"-based way, where peers can send and receive independently at
+    // any time.
     fn sync_with_peer(
         &mut self,
         stream: &mut TcpStream,

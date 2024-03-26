@@ -6,6 +6,8 @@ use std::str::from_utf8;
 
 const SOCKET_PATH: &str = "/tmp/ethersync";
 
+// Read JSON-RPC requests that have a Content-Length header from standard input.
+// Write newline-delimited JSON-RPC to the Unix socket.
 pub fn connection() -> io::Result<()> {
     let mut stream = UnixStream::connect(SOCKET_PATH).unwrap();
 
