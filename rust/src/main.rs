@@ -29,12 +29,12 @@ async fn main() -> io::Result<()> {
 
     match &cli.command {
         Commands::Daemon { peer } => {
-            let mut daemon = daemon::Daemon::new();
+            let doc = daemon::new_doc();
 
             if let Some(peer) = peer {
-                daemon.launch(Some(peer.to_string())).await;
+                daemon::launch(doc, Some(peer.to_string())).await;
             } else {
-                daemon.launch(None).await;
+                daemon::launch(doc, None).await;
             }
         }
         Commands::Client => {
