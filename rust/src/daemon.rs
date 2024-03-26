@@ -90,13 +90,6 @@ impl Doc {
                     }
                 }
 
-                let doc_clone2 = doc_clone.clone();
-                let doc = doc_clone2.doc.lock().unwrap();
-                let text = doc.get(automerge::ROOT, "text").unwrap();
-                if let Some((automerge::Value::Object(ObjType::Text), text_obj)) = text {
-                    println!("My text is now: {}", doc.text(&text_obj).unwrap());
-                }
-
                 doc_changed_tx.send(());
                 println!("Processed message.");
             }
@@ -261,14 +254,18 @@ async fn sync_receive(
 
         let mut patch_log = PatchLog::active(TextRepresentation::String);
 
-        let mut doc = doc.doc.lock().unwrap();
+        let mut docc = doc.doc.lock().unwrap();
         let mut state = state.lock().unwrap();
 
-        doc.sync()
+        docc.sync()
             .receive_sync_message_log_patches(&mut state, message, &mut patch_log)
             .unwrap();
-        let patches = doc.make_patches(&mut patch_log);
+
+        let patches = docc.make_patches(&mut patch_log);
         dbg!(&patches);
+
+        doc.doc_changed_tx.send(());
+
         // TODO: Send these patches to the editors via the OT component.
     }
 }
@@ -280,24 +277,38 @@ async fn sync_send(
 ) -> io::Result<()> {
     let mut rx = doc.doc_changed_tx.subscribe();
     loop {
+        loop {
+            let message_maybe = {
+                let mut doc = doc.doc.lock().unwrap();
+                let mut state = state.lock().unwrap();
+
+                let message = doc.sync().generate_sync_message(&mut state);
+                message
+            };
+
+            if let Some(message) = message_maybe {
+                // TODO: clone is only called to print the message later
+                let message_buf = message.clone().encode();
+                let message_len = message_buf.len() as i32;
+                writer.write_all(&message_len.to_be_bytes()).await;
+                writer.write_all(&message_buf).await;
+
+                println!("Sent message: {:?}", &message);
+            } else {
+                break;
+            }
+        }
+
+        // Print content.
+        {
+            let doc = doc.doc.lock().unwrap();
+            let text = doc.get(automerge::ROOT, "text").unwrap();
+            if let Some((automerge::Value::Object(ObjType::Text), text_obj)) = text {
+                println!("My text is now: {}", doc.text(&text_obj).unwrap());
+            }
+        }
+
         // Wait for a message on the doc_changed channel.
         rx.recv().await.unwrap();
-
-        let message_maybe = {
-            let mut doc = doc.doc.lock().unwrap();
-            let mut state = state.lock().unwrap();
-
-            let message = doc.sync().generate_sync_message(&mut state);
-            message
-        };
-
-        if let Some(message) = message_maybe {
-            let message_buf = message.encode();
-            let message_len = message_buf.len() as i32;
-            writer.write_all(&message_len.to_be_bytes()).await;
-            writer.write_all(&message_buf).await;
-
-            println!("Sent message: {:?}", &message_buf);
-        }
     }
 }
