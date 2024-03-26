@@ -27,7 +27,19 @@ impl Daemon {
         Self { doc }
     }
 
-    pub fn listen_socket(&self) -> io::Result<()> {
+    pub fn launch(&mut self, peer: Option<String>) {
+        thread::spawn(|| {
+            Self::listen_socket().unwrap();
+        });
+
+        if let Some(peer) = peer {
+            self.dial_tcp(peer).unwrap();
+        } else {
+            self.listen_tcp().unwrap();
+        }
+    }
+
+    pub fn listen_socket() -> io::Result<()> {
         fs::remove_file(SOCKET_PATH).unwrap();
         let listener = UnixListener::bind(SOCKET_PATH).unwrap();
         println!("Listening on UNIX socket: {}", SOCKET_PATH);
@@ -85,7 +97,7 @@ impl Daemon {
         }
     }
 
-    pub fn listen_tcp(&mut self) -> io::Result<()> {
+    fn listen_tcp(&mut self) -> io::Result<()> {
         self.init_text();
         //Self::edit_text(&mut self.doc);
 
@@ -104,7 +116,7 @@ impl Daemon {
     }
 
     // Connect to IP and port.
-    pub fn dial_tcp(&mut self, addr: &str) -> io::Result<()> {
+    fn dial_tcp(&mut self, addr: String) -> io::Result<()> {
         let stream = TcpStream::connect(addr)?;
         //let result = self.sync_with_peer(&mut stream, true);
         self.start_sync(stream)?;

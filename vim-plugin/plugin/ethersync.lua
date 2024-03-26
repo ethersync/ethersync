@@ -104,7 +104,7 @@ end
 
 -- Connect to the daemon.
 local function connect()
-    client = vim.lsp.rpc.start("client-connection", {})
+    client = vim.lsp.rpc.start("ethersync", { "client" })
 
     -- client = cmd({
     --     notification = function(method, params)

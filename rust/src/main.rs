@@ -1,5 +1,6 @@
 use clap::{Parser, Subcommand};
 use std::io;
+use std::thread;
 
 mod client;
 mod daemon;
@@ -30,15 +31,10 @@ fn main() -> io::Result<()> {
         Commands::Daemon { peer } => {
             let mut daemon = daemon::Daemon::new();
 
-            // TODO: How can we listen on socket & port at the same time?
-            //thread::spawn(move || {
-            //    daemon.listen_socket().unwrap();
-            //});
-
             if let Some(peer) = peer {
-                daemon.dial_tcp(peer)?;
+                daemon.launch(Some(peer.to_string()));
             } else {
-                daemon.listen_tcp()?;
+                daemon.launch(None);
             }
         }
         Commands::Client => {
