@@ -4,8 +4,8 @@ use automerge::{
     transaction::Transactable,
     AutoCommit, ObjType, PatchLog, ReadDoc,
 };
-use jsonrpc_core::IoHandler;
 use rand::{distributions::Alphanumeric, Rng};
+use serde_json;
 use std::fs;
 use std::io;
 use std::sync::{Arc, Mutex};
@@ -18,19 +18,19 @@ use tokio::sync::mpsc;
 
 const SOCKET_PATH: &str = "/tmp/ethersync";
 
-type SharedDoc = Arc<Mutex<automerge::AutoCommit>>;
 type SharedState = Arc<Mutex<SyncState>>;
 
 #[derive(Debug)]
 enum DocMessage {
     Init,
+    RandomEdit,
     Insert { position: usize, text: String },
 }
 
 #[derive(Clone)]
 pub struct Doc {
     doc: Arc<Mutex<AutoCommit>>,
-    //doc_changed_tx: broadcast::Sender<()>,
+    doc_changed_tx: broadcast::Sender<()>,
     //doc_changed_rx: broadcast::Receiver<()>,
     message_tx: mpsc::Sender<DocMessage>,
     //message_rx: mpsc::Receiver<DocMessage>,
@@ -40,10 +40,14 @@ impl Doc {
     pub fn new() -> Self {
         let doc = Arc::new(Mutex::new(AutoCommit::new()));
 
-        let (_doc_changed_tx, _doc_changed_rx) = broadcast::channel::<()>(16);
+        let (doc_changed_tx, _doc_changed_rx) = broadcast::channel::<()>(16);
         let (message_tx, mut message_rx) = mpsc::channel(1);
 
-        let doc = Self { doc, message_tx };
+        let doc = Self {
+            doc,
+            message_tx,
+            doc_changed_tx: doc_changed_tx.clone(),
+        };
 
         let doc_clone = doc.clone();
         tokio::spawn(async move {
@@ -58,7 +62,23 @@ impl Doc {
                             .unwrap()
                             .put_object(automerge::ROOT, "text", ObjType::Text)
                             .unwrap();
-                        //doc_changed_tx.send(());
+                    }
+                    DocMessage::RandomEdit => {
+                        let mut doc = doc_clone.doc.lock().unwrap();
+                        let text_obj = doc.get(automerge::ROOT, "text").unwrap();
+                        if let Some((automerge::Value::Object(ObjType::Text), text_obj)) = text_obj
+                        {
+                            let text_length = doc.text(&text_obj).unwrap().len();
+                            let random_string: String = rand::thread_rng()
+                                .sample_iter(&Alphanumeric)
+                                .take(1)
+                                .map(char::from)
+                                .collect();
+                            let random_position =
+                                rand::thread_rng().gen_range(0..(text_length + 1));
+                            doc.insert(text_obj, random_position, random_string)
+                                .unwrap();
+                        }
                     }
                     DocMessage::Insert { position, text } => {
                         let mut doc = doc_clone.doc.lock().unwrap();
@@ -66,24 +86,10 @@ impl Doc {
                         if let Some((automerge::Value::Object(ObjType::Text), text_obj)) = text_obj
                         {
                             doc.insert(text_obj, position, text).unwrap();
-                            //doc_changed_tx.send(());
-
-                            //println!("My text is now: {}", doc.text(&text_obj).unwrap());
                         }
                     }
                 }
-                println!("Processed message.");
-            }
-        });
 
-        // Make edits to the document occasionally.
-        let doc_clone = doc.clone();
-        tokio::spawn(async move {
-            loop {
-                let doc_clone2 = doc_clone.clone();
-                edit_text(doc_clone2).await;
-
-                //show text
                 let doc_clone2 = doc_clone.clone();
                 let doc = doc_clone2.doc.lock().unwrap();
                 let text = doc.get(automerge::ROOT, "text").unwrap();
@@ -91,9 +97,23 @@ impl Doc {
                     println!("My text is now: {}", doc.text(&text_obj).unwrap());
                 }
 
-                thread::sleep(std::time::Duration::from_secs(2));
+                doc_changed_tx.send(());
+                println!("Processed message.");
             }
         });
+
+        // Make edits to the document occasionally.
+        if false {
+            let doc_clone = doc.clone();
+            tokio::spawn(async move {
+                loop {
+                    let doc_clone2 = doc_clone.clone();
+                    doc_clone2.message_tx.send(DocMessage::RandomEdit).await;
+
+                    thread::sleep(std::time::Duration::from_secs(2));
+                }
+            });
+        }
 
         doc
     }
@@ -113,7 +133,6 @@ pub async fn launch(doc: Doc, peer: Option<String>) {
 
 async fn listen_tcp(doc: Doc) -> io::Result<()> {
     //init_text(doc.clone());
-    //edit_text(&mut self.doc);
     doc.message_tx.send(DocMessage::Init).await.unwrap();
 
     let listener = TcpListener::bind("0.0.0.0:4242").await?;
@@ -131,8 +150,10 @@ async fn listen_tcp(doc: Doc) -> io::Result<()> {
 // Connect to IP and port.
 async fn dial_tcp(doc: Doc, addr: String) -> io::Result<()> {
     let stream = TcpStream::connect(addr).await.unwrap();
+
     //let result = self.sync_with_peer(&mut stream, true);
-    start_sync(doc, stream).await?;
+    start_sync(doc.clone(), stream).await?;
+
     Ok(())
 }
 
@@ -156,31 +177,6 @@ async fn start_sync(doc: Doc, stream: TcpStream) -> io::Result<()> {
     Ok(())
 }
 
-async fn edit_text(doc: Doc) {
-    doc.message_tx
-        .send(DocMessage::Insert {
-            position: 0,
-            text: "a".to_string(),
-        })
-        .await;
-    //println!("Trying to edit text!");
-    //let mut doc = doc.lock().unwrap();
-    //println!("Editing text!");
-    //let text = doc.get(automerge::ROOT, "text").unwrap();
-    //if let Some((automerge::Value::Object(ObjType::Text), text)) = text {
-    //    let text_length = doc.text(&text).unwrap().len();
-    //    let random_string: String = rand::thread_rng()
-    //        .sample_iter(&Alphanumeric)
-    //        .take(1)
-    //        .map(char::from)
-    //        .collect();
-    //    let random_position = rand::thread_rng().gen_range(0..(text_length + 1));
-    //    doc.insert(text, random_position, random_string).unwrap();
-    //} else {
-    //    println!("Text object not found.");
-    //}
-}
-
 pub async fn listen_socket(doc: Doc) {
     fs::remove_file(SOCKET_PATH).unwrap();
     let listener = UnixListener::bind(SOCKET_PATH).unwrap();
@@ -191,42 +187,54 @@ pub async fn listen_socket(doc: Doc) {
             Ok((mut stream, _addr)) => {
                 println!("Client connection established.");
 
-                //let mut io = IoHandler::new();
-                //let tx = doc.message_tx.clone();
-                //io.add_notification("insert", move |params| {
-                //    tokio::spawn(async move {
-                //        println!("insert called: {:#?}", params);
-
-                //        // TODO: For now, interpret all insert calls as insert(0, "a").
-                //        tx.send(DocMessage::Insert {
-                //            position: 0,
-                //            text: "a".to_string(),
-                //        })
-                //        .await;
-                //        //let mut doc = doc_clone.lock().unwrap();
-                //        //let text = doc.get(automerge::ROOT, "text").unwrap();
-                //        //if let Some((automerge::Value::Object(ObjType::Text), text)) = text {
-                //        //    doc.insert(text, 0, "a".to_string()).unwrap();
-                //        //}
-                //    });
-                //});
-
                 let buf_reader = BufReader::new(&mut stream);
                 //for line in buf_reader.lines() {
                 let mut lines = buf_reader.lines();
 
                 while let Some(line) = lines.next_line().await.unwrap() {
-                    println!("Request: {:#?}", line);
-
-                    //let response = io.handle_request_sync(&line);
-                    doc.message_tx
-                        .send(DocMessage::Insert {
-                            position: 0,
-                            text: "a".to_string(),
-                        })
-                        .await;
-
-                    //println!("Response: {:#?}", response);
+                    let json: serde_json::Value = serde_json::from_str(&line).unwrap();
+                    println!("Request: {:#?}", json);
+                    //doc.message_tx.send(DocMessage::RandomEdit).await;
+                    match json {
+                        serde_json::Value::Object(map) => {
+                            if let Some(serde_json::Value::String(method)) = map.get("method") {
+                                match method.as_str() {
+                                    "insert" => {
+                                        if let Some(serde_json::Value::Array(array)) =
+                                            map.get("params")
+                                        {
+                                            if let Some(serde_json::Value::Number(position)) =
+                                                array.get(2)
+                                            {
+                                                if let Some(serde_json::Value::String(text)) =
+                                                    array.get(3)
+                                                {
+                                                    let position =
+                                                        position.as_u64().unwrap() as usize;
+                                                    let text = text.as_str().to_string();
+                                                    doc.message_tx
+                                                        .send(DocMessage::Insert { position, text })
+                                                        .await;
+                                                } else {
+                                                    println!("Invalid text param.");
+                                                }
+                                            } else {
+                                                println!("Invalid position param.");
+                                            }
+                                        } else {
+                                            println!("Invalid insert params.");
+                                        }
+                                    }
+                                    _ => {
+                                        println!("Unknown method: {}", method);
+                                    }
+                                }
+                            }
+                        }
+                        _ => {
+                            println!("Invalid JSON: {:#?}", json);
+                        }
+                    }
                 }
                 println!("Client connection closed.");
             }
@@ -270,7 +278,11 @@ async fn sync_send(
     doc: Doc,
     state: SharedState,
 ) -> io::Result<()> {
+    let mut rx = doc.doc_changed_tx.subscribe();
     loop {
+        // Wait for a message on the doc_changed channel.
+        rx.recv().await.unwrap();
+
         let message_maybe = {
             let mut doc = doc.doc.lock().unwrap();
             let mut state = state.lock().unwrap();
@@ -286,9 +298,6 @@ async fn sync_send(
             writer.write_all(&message_buf).await;
 
             println!("Sent message: {:?}", &message_buf);
-        } else {
-            thread::sleep(std::time::Duration::from_secs(1));
-            println!("No message to send.");
-        };
+        }
     }
 }
