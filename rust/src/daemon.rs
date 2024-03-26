@@ -28,8 +28,9 @@ impl Daemon {
     }
 
     pub fn launch(&mut self, peer: Option<String>) {
+        let doc_clone = self.doc.clone();
         thread::spawn(|| {
-            Self::listen_socket().unwrap();
+            Self::listen_socket(doc_clone).unwrap();
         });
 
         if let Some(peer) = peer {
@@ -39,7 +40,7 @@ impl Daemon {
         }
     }
 
-    pub fn listen_socket() -> io::Result<()> {
+    pub fn listen_socket(doc: Arc<Mutex<AutoCommit>>) -> io::Result<()> {
         fs::remove_file(SOCKET_PATH).unwrap();
         let listener = UnixListener::bind(SOCKET_PATH).unwrap();
         println!("Listening on UNIX socket: {}", SOCKET_PATH);
@@ -47,12 +48,20 @@ impl Daemon {
         for stream in listener.incoming() {
             let stream = stream.unwrap();
 
+            let doc_clone = doc.clone();
             thread::spawn(move || {
                 println!("Client connection established.");
 
                 let mut io = IoHandler::new();
-                io.add_notification("insert", |params| {
+                io.add_notification("insert", move |params| {
                     println!("insert called: {:#?}", params);
+
+                    // TODO: For now, interpret all insert calls as insert(0, "a").
+                    let mut doc = doc_clone.lock().unwrap();
+                    let text = doc.get(automerge::ROOT, "text").unwrap();
+                    if let Some((automerge::Value::Object(ObjType::Text), text)) = text {
+                        doc.insert(text, 0, "a".to_string()).unwrap();
+                    }
                 });
 
                 let buf_reader = BufReader::new(&stream);

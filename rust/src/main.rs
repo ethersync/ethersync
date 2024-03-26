@@ -1,6 +1,5 @@
 use clap::{Parser, Subcommand};
 use std::io;
-use std::thread;
 
 mod client;
 mod daemon;
