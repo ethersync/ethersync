@@ -132,11 +132,17 @@ async fn listen_tcp(doc: Doc) -> io::Result<()> {
     println!("Listening on TCP port: {}", listener.local_addr().unwrap());
 
     loop {
-        let (stream, _addr) = listener.accept().await?;
+        let Ok((stream, _addr)) = listener.accept().await else {
+            println!("Error accepting connection.");
+            continue;
+        };
 
         // TODO: Allow more than one peer to dial us at the same time.
-        println!("Peer dialed us.");
-        start_sync(doc.clone(), stream).await?;
+        let doc = doc.clone();
+        tokio::spawn(async move {
+            println!("Peer dialed us.");
+            start_sync(doc, stream).await;
+        });
     }
 }
 
@@ -159,13 +165,11 @@ async fn start_sync(doc: Doc, stream: TcpStream) -> io::Result<()> {
     let doc_clone = doc.clone();
     let peer_state_clone = peer_state.clone();
     tokio::spawn(async move {
-        sync_receive(read, doc_clone, peer_state_clone)
-            .await
-            .unwrap();
+        sync_receive(read, doc_clone, peer_state_clone).await;
     });
 
     let doc_clone = doc.clone();
-    sync_send(write, doc_clone, peer_state).await.unwrap();
+    sync_send(write, doc_clone, peer_state).await;
 
     Ok(())
 }
@@ -245,10 +249,10 @@ async fn sync_receive(
 ) -> io::Result<()> {
     loop {
         let mut message_len_buf = [0; 4];
-        reader.read_exact(&mut message_len_buf).await;
+        reader.read_exact(&mut message_len_buf).await?;
         let message_len = i32::from_be_bytes(message_len_buf);
         let mut message_buf = vec![0; message_len as usize];
-        reader.read_exact(&mut message_buf).await;
+        reader.read_exact(&mut message_buf).await?;
         let message = Message::decode(&message_buf).unwrap();
         println!("Received message: {:?}", message);
 
