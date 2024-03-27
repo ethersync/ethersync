@@ -12,8 +12,7 @@ use std::thread;
 use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader, ReadHalf, WriteHalf};
 use tokio::net::UnixListener;
 use tokio::net::{TcpListener, TcpStream};
-use tokio::sync::broadcast;
-use tokio::sync::mpsc;
+use tokio::sync::{broadcast, mpsc, oneshot};
 
 const SOCKET_PATH: &str = "/tmp/ethersync";
 
@@ -23,7 +22,18 @@ type SharedState = Arc<Mutex<SyncState>>;
 enum DocMessage {
     Init,
     RandomEdit,
-    Insert { position: usize, text: String },
+    Insert {
+        position: usize,
+        text: String,
+    },
+    ReceiveSyncMessage {
+        message: Message,
+        state: SharedState,
+    },
+    GenerateSyncMessage {
+        state: SharedState,
+        response: oneshot::Sender<Option<Message>>,
+    },
 }
 
 #[derive(Clone)]
@@ -50,18 +60,18 @@ impl Doc {
         tokio::spawn(async move {
             loop {
                 let message = message_rx.recv().await.unwrap();
-                println!("Doc received message: {:#?}", message);
+                //println!("Doc received message: {:#?}", message);
+                let mut doc = doc_clone.doc.lock().unwrap();
                 match message {
                     DocMessage::Init => {
-                        let _text = doc_clone
-                            .doc
-                            .lock()
-                            .unwrap()
+                        let _text = doc
                             .put_object(automerge::ROOT, "text", ObjType::Text)
                             .unwrap();
+                        // In the beginning, no-one might be interested in these messages, so the
+                        // send might fail, I think?
+                        let _ = doc_changed_tx.send(());
                     }
                     DocMessage::RandomEdit => {
-                        let mut doc = doc_clone.doc.lock().unwrap();
                         let text_obj = doc.get(automerge::ROOT, "text").unwrap();
                         if let Some((automerge::Value::Object(ObjType::Text), text_obj)) = text_obj
                         {
@@ -75,22 +85,33 @@ impl Doc {
                                 rand::thread_rng().gen_range(0..(text_length + 1));
                             doc.insert(text_obj, random_position, random_string)
                                 .unwrap();
+                            let _ = doc_changed_tx.send(());
                         }
                     }
                     DocMessage::Insert { position, text } => {
-                        let mut doc = doc_clone.doc.lock().unwrap();
                         let text_obj = doc.get(automerge::ROOT, "text").unwrap();
                         if let Some((automerge::Value::Object(ObjType::Text), text_obj)) = text_obj
                         {
                             doc.insert(text_obj, position, text).unwrap();
+                            let _ = doc_changed_tx.send(());
                         }
                     }
+                    DocMessage::ReceiveSyncMessage { message, state } => {
+                        let mut patch_log = PatchLog::active(TextRepresentation::String);
+                        let mut state = state.lock().unwrap();
+                        doc.sync()
+                            .receive_sync_message_log_patches(&mut state, message, &mut patch_log)
+                            .unwrap();
+                        let patches = doc.make_patches(&mut patch_log);
+                        dbg!(&patches);
+                        let _ = doc_changed_tx.send(());
+                    }
+                    DocMessage::GenerateSyncMessage { state, response } => {
+                        let mut state = state.lock().unwrap();
+                        let message = doc.sync().generate_sync_message(&mut state);
+                        response.send(message).unwrap();
+                    }
                 }
-
-                // In the beginning, no-one might be interested in these messages, so the
-                // send might fail, I think?
-                let _ = doc_changed_tx.send(());
-                println!("Processed message.");
             }
         });
 
@@ -224,7 +245,7 @@ pub async fn listen_socket(doc: Doc) {
 
                 while let Some(line) = lines.next_line().await.unwrap() {
                     let json: serde_json::Value = serde_json::from_str(&line).unwrap();
-                    println!("Request: {:#?}", json);
+                    //println!("Request: {:#?}", json);
                     //doc.message_tx.send(DocMessage::RandomEdit).await;
                     match json {
                         serde_json::Value::Object(map) => {
@@ -289,19 +310,27 @@ async fn sync_receive(
         let mut message_buf = vec![0; message_len as usize];
         reader.read_exact(&mut message_buf).await?;
         let message = Message::decode(&message_buf).unwrap();
-        println!("Received message: {:?}", message);
+        //println!("Received message: {:?}", message);
 
-        let mut patch_log = PatchLog::active(TextRepresentation::String);
+        //let mut patch_log = PatchLog::active(TextRepresentation::String);
 
-        let mut docc = doc.doc.lock().unwrap();
-        let mut state = state.lock().unwrap();
+        //let mut docc = doc.doc.lock().unwrap();
+        //let mut state = state.lock().unwrap();
 
-        docc.sync()
-            .receive_sync_message_log_patches(&mut state, message, &mut patch_log)
+        //docc.sync()
+        //    .receive_sync_message_log_patches(&mut state, message, &mut patch_log)
+        //    .unwrap();
+
+        //let patches = docc.make_patches(&mut patch_log);
+        //dbg!(&patches);
+
+        doc.message_tx
+            .send(DocMessage::ReceiveSyncMessage {
+                message,
+                state: state.clone(),
+            })
+            .await
             .unwrap();
-
-        let patches = docc.make_patches(&mut patch_log);
-        dbg!(&patches);
 
         doc.doc_changed_tx.send(()).unwrap();
 
@@ -318,11 +347,23 @@ async fn sync_send(
     loop {
         loop {
             let message_maybe = {
-                let mut doc = doc.doc.lock().unwrap();
-                let mut state = state.lock().unwrap();
+                //let mut doc = doc.doc.lock().unwrap();
+                //let mut state = state.lock().unwrap();
 
-                let message = doc.sync().generate_sync_message(&mut state);
-                message
+                let (response_tx, response_rx) = oneshot::channel();
+
+                doc.message_tx
+                    .send(DocMessage::GenerateSyncMessage {
+                        state: state.clone(),
+                        response: response_tx,
+                    })
+                    .await
+                    .unwrap();
+
+                response_rx.await.unwrap()
+
+                //let message = doc.sync().generate_sync_message(&mut state);
+                //message
             };
 
             if let Some(message) = message_maybe {
@@ -332,7 +373,7 @@ async fn sync_send(
                 writer.write_all(&message_len.to_be_bytes()).await?;
                 writer.write_all(&message_buf).await?;
 
-                println!("Sent message: {:?}", &message);
+                //println!("Sent message: {:?}", &message);
             } else {
                 break;
             }
