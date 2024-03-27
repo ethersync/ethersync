@@ -7,10 +7,9 @@ use automerge::{
 use rand::{distributions::Alphanumeric, Rng};
 use std::fs;
 use std::io;
-use std::sync::{Arc, Mutex};
 use std::thread;
 use tokio::{
-    io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader, ReadHalf, WriteHalf},
+    io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader, ReadHalf},
     net::UnixListener,
     net::{TcpListener, TcpStream},
     sync::{broadcast, mpsc, oneshot},
@@ -18,9 +17,7 @@ use tokio::{
 
 const SOCKET_PATH: &str = "/tmp/ethersync";
 
-type SharedPeerState = Arc<Mutex<SyncState>>;
-
-#[derive(Debug)]
+// These messages are sent to the task that owns the document.
 enum DocMessage {
     Init,
     RandomEdit,
@@ -30,16 +27,25 @@ enum DocMessage {
     },
     ReceiveSyncMessage {
         message: Message,
-        state: SharedPeerState,
+        state: SyncState,
+        response: oneshot::Sender<SyncState>,
     },
     GenerateSyncMessage {
-        state: SharedPeerState,
-        response: oneshot::Sender<Option<Message>>,
+        state: SyncState,
+        response: oneshot::Sender<(SyncState, Option<Message>)>,
     },
+}
+
+// These messages are sent to tasks that own peer sync states.
+enum SyncerMessage {
+    ReceiveSyncMessage { message: Vec<u8> },
+    GenerateSyncMessage,
 }
 
 type DocMessageSender = mpsc::Sender<DocMessage>;
 type DocChangedSender = broadcast::Sender<()>;
+
+type SyncerMessageSender = mpsc::Sender<SyncerMessage>;
 
 // Launch the daemon. Optionally, connect to given peer.
 pub async fn launch(peer: Option<String>) {
@@ -83,9 +89,12 @@ pub async fn launch(peer: Option<String>) {
                         let _ = doc_changed_tx.send(());
                     }
                 }
-                DocMessage::ReceiveSyncMessage { message, state } => {
+                DocMessage::ReceiveSyncMessage {
+                    message,
+                    mut state,
+                    response,
+                } => {
                     let mut patch_log = PatchLog::active(TextRepresentation::String);
-                    let mut state = state.lock().unwrap();
                     doc.sync()
                         .receive_sync_message_log_patches(&mut state, message, &mut patch_log)
                         .unwrap();
@@ -93,11 +102,14 @@ pub async fn launch(peer: Option<String>) {
                     dbg!(&patches);
                     // TODO: Send patches to OT.
                     let _ = doc_changed_tx.send(());
+                    response.send(state).unwrap();
                 }
-                DocMessage::GenerateSyncMessage { state, response } => {
-                    let mut state = state.lock().unwrap();
+                DocMessage::GenerateSyncMessage {
+                    mut state,
+                    response,
+                } => {
                     let message = doc.sync().generate_sync_message(&mut state);
-                    response.send(message).unwrap();
+                    response.send((state, message)).unwrap();
                 }
             }
 
@@ -188,19 +200,15 @@ async fn start_sync(
     doc_changed_tx: DocChangedSender,
     stream: TcpStream,
 ) -> io::Result<()> {
-    // TODO: To avoid having to put this into an Arc<Mutex>, implement a channel-based mechanism.
-    // A "syncer" thread would own the state. A "receive" thread just listens for messages, and
-    // sends them to the syncer. The syncer subscribes to the doc_changed channel, and, if pinged,
-    // requests sync messages from the document, and sends them to the "send" thread.
-    let peer_state = SyncState::new();
-    let peer_state = Arc::new(Mutex::new(peer_state));
+    let mut peer_state = SyncState::new();
 
-    let (read, write) = tokio::io::split(stream);
+    let (reader_message_tx, mut reader_message_rx) = mpsc::channel(1);
+    let (read, mut write) = tokio::io::split(stream);
 
-    let peer_state_clone = peer_state.clone();
-    let tx_clone = tx.clone();
+    // TCP reader.
+    let message_tx_clone = reader_message_tx.clone();
     tokio::spawn(async move {
-        match sync_receive(read, tx_clone, peer_state_clone).await {
+        match sync_receive(read, message_tx_clone).await {
             Ok(_) => {
                 println!("Sync receive OK.");
             }
@@ -210,9 +218,52 @@ async fn start_sync(
         }
     });
 
-    sync_send(write, tx, doc_changed_tx, peer_state).await?;
+    // Generate sync message when doc changes.
+    let reader_message_tx_clone = reader_message_tx.clone();
+    tokio::spawn(async move {
+        loop {
+            reader_message_tx_clone
+                .send(SyncerMessage::GenerateSyncMessage {})
+                .await
+                .unwrap();
+            doc_changed_tx.subscribe().recv().await.unwrap();
+        }
+    });
 
-    Ok(())
+    loop {
+        let message = reader_message_rx.recv().await.unwrap();
+        match message {
+            SyncerMessage::ReceiveSyncMessage { message } => {
+                let (reponse_tx, response_rx) = oneshot::channel();
+                let message = Message::decode(&message).unwrap();
+                tx.send(DocMessage::ReceiveSyncMessage {
+                    message,
+                    state: peer_state,
+                    response: reponse_tx,
+                })
+                .await
+                .unwrap();
+                peer_state = response_rx.await.unwrap();
+            }
+            SyncerMessage::GenerateSyncMessage {} => {
+                let (reponse_tx, response_rx) = oneshot::channel();
+                tx.send(DocMessage::GenerateSyncMessage {
+                    state: peer_state,
+                    response: reponse_tx,
+                })
+                .await
+                .unwrap();
+                let (ps, message) = response_rx.await.unwrap();
+                peer_state = ps;
+                if let Some(message) = message {
+                    let message = message.encode();
+                    let message_len = message.len() as i32;
+                    write.write_all(&message_len.to_be_bytes()).await?;
+                    write.write_all(&message).await?;
+                }
+            }
+        }
+    }
 }
 
 async fn listen_socket(tx: DocMessageSender) {
@@ -283,62 +334,18 @@ async fn listen_socket(tx: DocMessageSender) {
     }
 }
 
-async fn sync_receive(
-    mut reader: ReadHalf<TcpStream>,
-    tx: DocMessageSender,
-    state: SharedPeerState,
-) -> io::Result<()> {
+async fn sync_receive(mut reader: ReadHalf<TcpStream>, tx: SyncerMessageSender) -> io::Result<()> {
     loop {
         let mut message_len_buf = [0; 4];
         reader.read_exact(&mut message_len_buf).await?;
         let message_len = i32::from_be_bytes(message_len_buf);
         let mut message_buf = vec![0; message_len as usize];
         reader.read_exact(&mut message_buf).await?;
-        let message = Message::decode(&message_buf).unwrap();
 
-        tx.send(DocMessage::ReceiveSyncMessage {
-            message,
-            state: state.clone(),
+        tx.send(SyncerMessage::ReceiveSyncMessage {
+            message: message_buf,
         })
         .await
         .unwrap();
-    }
-}
-
-async fn sync_send(
-    mut writer: WriteHalf<TcpStream>,
-    tx: DocMessageSender,
-    doc_changed_tx: DocChangedSender,
-    state: SharedPeerState,
-) -> io::Result<()> {
-    let mut rx = doc_changed_tx.subscribe();
-    loop {
-        loop {
-            let message_maybe = {
-                let (response_tx, response_rx) = oneshot::channel();
-
-                tx.send(DocMessage::GenerateSyncMessage {
-                    state: state.clone(),
-                    response: response_tx,
-                })
-                .await
-                .unwrap();
-
-                response_rx.await.unwrap()
-            };
-
-            if let Some(message) = message_maybe {
-                // TODO: clone is only called to print the message later
-                let message_buf = message.clone().encode();
-                let message_len = message_buf.len() as i32;
-                writer.write_all(&message_len.to_be_bytes()).await?;
-                writer.write_all(&message_buf).await?;
-            } else {
-                break;
-            }
-        }
-
-        // Wait for a message on the doc_changed channel.
-        rx.recv().await.unwrap();
     }
 }
