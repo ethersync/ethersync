@@ -9,14 +9,16 @@ use std::fs;
 use std::io;
 use std::sync::{Arc, Mutex};
 use std::thread;
-use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader, ReadHalf, WriteHalf};
-use tokio::net::UnixListener;
-use tokio::net::{TcpListener, TcpStream};
-use tokio::sync::{broadcast, mpsc, oneshot};
+use tokio::{
+    io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader, ReadHalf, WriteHalf},
+    net::UnixListener,
+    net::{TcpListener, TcpStream},
+    sync::{broadcast, mpsc, oneshot},
+};
 
 const SOCKET_PATH: &str = "/tmp/ethersync";
 
-type SharedState = Arc<Mutex<SyncState>>;
+type SharedPeerState = Arc<Mutex<SyncState>>;
 
 #[derive(Debug)]
 enum DocMessage {
@@ -28,100 +30,92 @@ enum DocMessage {
     },
     ReceiveSyncMessage {
         message: Message,
-        state: SharedState,
+        state: SharedPeerState,
     },
     GenerateSyncMessage {
-        state: SharedState,
+        state: SharedPeerState,
         response: oneshot::Sender<Option<Message>>,
     },
 }
 
-#[derive(Clone)]
-pub struct Doc {
-    doc: Arc<Mutex<AutoCommit>>,
-    doc_changed_tx: broadcast::Sender<()>,
-    message_tx: mpsc::Sender<DocMessage>,
-}
+type DocMessageSender = mpsc::Sender<DocMessage>;
+type DocChangedSender = broadcast::Sender<()>;
 
-impl Doc {
-    pub fn new() -> Self {
-        let doc = Arc::new(Mutex::new(AutoCommit::new()));
+// Launch the daemon. Optionally, connect to given peer.
+pub async fn launch(peer: Option<String>) {
+    let mut doc = AutoCommit::new();
 
-        let (doc_changed_tx, _doc_changed_rx) = broadcast::channel::<()>(16);
-        let (message_tx, mut message_rx) = mpsc::channel(1);
+    let (doc_changed_tx, _doc_changed_rx) = broadcast::channel::<()>(16);
+    let doc_changed_tx_clone = doc_changed_tx.clone();
+    let (message_tx, mut message_rx) = mpsc::channel(1);
 
-        let doc = Self {
-            doc,
-            message_tx,
-            doc_changed_tx: doc_changed_tx.clone(),
-        };
-
-        let doc_clone = doc.clone();
-        tokio::spawn(async move {
-            loop {
-                let message = message_rx.recv().await.unwrap();
-                //println!("Doc received message: {:#?}", message);
-                let mut doc = doc_clone.doc.lock().unwrap();
-                match message {
-                    DocMessage::Init => {
-                        let _text = doc
-                            .put_object(automerge::ROOT, "text", ObjType::Text)
+    tokio::spawn(async move {
+        loop {
+            let message = message_rx.recv().await.unwrap();
+            match message {
+                DocMessage::Init => {
+                    let _text = doc
+                        .put_object(automerge::ROOT, "text", ObjType::Text)
+                        .unwrap();
+                    // In the beginning, no-one might be interested in these messages, so the
+                    // send might fail, I think?
+                    let _ = doc_changed_tx.send(());
+                }
+                DocMessage::RandomEdit => {
+                    let text_obj = doc.get(automerge::ROOT, "text").unwrap();
+                    if let Some((automerge::Value::Object(ObjType::Text), text_obj)) = text_obj {
+                        let text_length = doc.text(&text_obj).unwrap().len();
+                        let random_string: String = rand::thread_rng()
+                            .sample_iter(&Alphanumeric)
+                            .take(1)
+                            .map(char::from)
+                            .collect();
+                        let random_position = rand::thread_rng().gen_range(0..(text_length + 1));
+                        doc.insert(text_obj, random_position, random_string)
                             .unwrap();
-                        // In the beginning, no-one might be interested in these messages, so the
-                        // send might fail, I think?
                         let _ = doc_changed_tx.send(());
-                    }
-                    DocMessage::RandomEdit => {
-                        let text_obj = doc.get(automerge::ROOT, "text").unwrap();
-                        if let Some((automerge::Value::Object(ObjType::Text), text_obj)) = text_obj
-                        {
-                            let text_length = doc.text(&text_obj).unwrap().len();
-                            let random_string: String = rand::thread_rng()
-                                .sample_iter(&Alphanumeric)
-                                .take(1)
-                                .map(char::from)
-                                .collect();
-                            let random_position =
-                                rand::thread_rng().gen_range(0..(text_length + 1));
-                            doc.insert(text_obj, random_position, random_string)
-                                .unwrap();
-                            let _ = doc_changed_tx.send(());
-                        }
-                    }
-                    DocMessage::Insert { position, text } => {
-                        let text_obj = doc.get(automerge::ROOT, "text").unwrap();
-                        if let Some((automerge::Value::Object(ObjType::Text), text_obj)) = text_obj
-                        {
-                            doc.insert(text_obj, position, text).unwrap();
-                            let _ = doc_changed_tx.send(());
-                        }
-                    }
-                    DocMessage::ReceiveSyncMessage { message, state } => {
-                        let mut patch_log = PatchLog::active(TextRepresentation::String);
-                        let mut state = state.lock().unwrap();
-                        doc.sync()
-                            .receive_sync_message_log_patches(&mut state, message, &mut patch_log)
-                            .unwrap();
-                        let patches = doc.make_patches(&mut patch_log);
-                        dbg!(&patches);
-                        let _ = doc_changed_tx.send(());
-                    }
-                    DocMessage::GenerateSyncMessage { state, response } => {
-                        let mut state = state.lock().unwrap();
-                        let message = doc.sync().generate_sync_message(&mut state);
-                        response.send(message).unwrap();
                     }
                 }
+                DocMessage::Insert { position, text } => {
+                    let text_obj = doc.get(automerge::ROOT, "text").unwrap();
+                    if let Some((automerge::Value::Object(ObjType::Text), text_obj)) = text_obj {
+                        doc.insert(text_obj, position, text).unwrap();
+                        let _ = doc_changed_tx.send(());
+                    }
+                }
+                DocMessage::ReceiveSyncMessage { message, state } => {
+                    let mut patch_log = PatchLog::active(TextRepresentation::String);
+                    let mut state = state.lock().unwrap();
+                    doc.sync()
+                        .receive_sync_message_log_patches(&mut state, message, &mut patch_log)
+                        .unwrap();
+                    let patches = doc.make_patches(&mut patch_log);
+                    dbg!(&patches);
+                    // TODO: Send patches to OT.
+                    let _ = doc_changed_tx.send(());
+                }
+                DocMessage::GenerateSyncMessage { state, response } => {
+                    let mut state = state.lock().unwrap();
+                    let message = doc.sync().generate_sync_message(&mut state);
+                    response.send(message).unwrap();
+                }
             }
-        });
 
-        // Make edits to the document occasionally.
-        if false {
-            let doc_clone = doc.clone();
-            tokio::spawn(async move {
-                loop {
-                    //let doc_clone2 = doc_clone.clone();
-                    match doc_clone.message_tx.send(DocMessage::RandomEdit).await {
+            let text = doc.get(automerge::ROOT, "text").unwrap();
+            if let Some((automerge::Value::Object(ObjType::Text), text_obj)) = text {
+                println!("My text is now: {}", doc.text(&text_obj).unwrap());
+            }
+        }
+    });
+
+    // Make edits to the document occasionally. TODO: Seems to slow something down.
+    if false {
+        let tx = message_tx.clone();
+        tokio::spawn(async move {
+            loop {
+                //let doc_clone2 = doc_clone.clone();
+                {
+                    match tx.send(DocMessage::RandomEdit).await {
                         Ok(_) => {
                             println!("Random edit sent.");
                         }
@@ -129,45 +123,28 @@ impl Doc {
                             println!("Error sending random edit: {:#?}", e);
                         }
                     }
-
-                    thread::sleep(std::time::Duration::from_secs(2));
                 }
-            });
-        }
 
-        // When doc is changed, print content.
-        let doc_clone = doc.clone();
-        tokio::spawn(async move {
-            let mut rx = doc_clone.doc_changed_tx.subscribe();
-            loop {
-                rx.recv().await.unwrap();
-                let doc = doc_clone.doc.lock().unwrap();
-                let text = doc.get(automerge::ROOT, "text").unwrap();
-                if let Some((automerge::Value::Object(ObjType::Text), text_obj)) = text {
-                    println!("My text is now: {}", doc.text(&text_obj).unwrap());
-                }
+                thread::sleep(std::time::Duration::from_secs(2));
             }
         });
-
-        doc
     }
-}
 
-pub async fn launch(doc: Doc, peer: Option<String>) {
+    // Dial peer, or listen for incoming connections.
+    let tx = message_tx.clone();
     if let Some(peer) = peer {
-        dial_tcp(doc, peer).await.unwrap();
+        dial_tcp(tx, doc_changed_tx_clone, peer).await.unwrap();
     } else {
-        let doc_clone = doc.clone();
-        tokio::spawn(async move {
-            listen_socket(doc_clone).await;
+        let tx_clone = tx.clone();
+        tokio::spawn(async {
+            listen_socket(tx_clone).await;
         });
-        listen_tcp(doc).await.unwrap();
+        listen_tcp(tx, doc_changed_tx_clone).await.unwrap();
     }
 }
 
-async fn listen_tcp(doc: Doc) -> io::Result<()> {
-    //init_text(doc.clone());
-    doc.message_tx.send(DocMessage::Init).await.unwrap();
+async fn listen_tcp(tx: DocMessageSender, doc_changed_tx: DocChangedSender) -> io::Result<()> {
+    tx.send(DocMessage::Init).await.unwrap();
 
     let listener = TcpListener::bind("0.0.0.0:4242").await?;
     println!("Listening on TCP port: {}", listener.local_addr().unwrap());
@@ -178,11 +155,11 @@ async fn listen_tcp(doc: Doc) -> io::Result<()> {
             continue;
         };
 
-        // TODO: Allow more than one peer to dial us at the same time.
-        let doc = doc.clone();
+        let tx = tx.clone();
+        let doc_changed_tx = doc_changed_tx.clone();
         tokio::spawn(async move {
             println!("Peer dialed us.");
-            match start_sync(doc, stream).await {
+            match start_sync(tx, doc_changed_tx, stream).await {
                 Ok(_) => {
                     println!("Sync OK?!");
                 }
@@ -194,26 +171,36 @@ async fn listen_tcp(doc: Doc) -> io::Result<()> {
     }
 }
 
-// Connect to IP and port.
-async fn dial_tcp(doc: Doc, addr: String) -> io::Result<()> {
+async fn dial_tcp(
+    tx: DocMessageSender,
+    doc_changed_tx: DocChangedSender,
+    addr: String,
+) -> io::Result<()> {
     let stream = TcpStream::connect(addr).await?;
 
-    //let result = self.sync_with_peer(&mut stream, true);
-    start_sync(doc.clone(), stream).await?;
+    start_sync(tx, doc_changed_tx, stream).await?;
 
     Ok(())
 }
 
-async fn start_sync(doc: Doc, stream: TcpStream) -> io::Result<()> {
+async fn start_sync(
+    tx: DocMessageSender,
+    doc_changed_tx: DocChangedSender,
+    stream: TcpStream,
+) -> io::Result<()> {
+    // TODO: To avoid having to put this into an Arc<Mutex>, implement a channel-based mechanism.
+    // A "syncer" thread would own the state. A "receive" thread just listens for messages, and
+    // sends them to the syncer. The syncer subscribes to the doc_changed channel, and, if pinged,
+    // requests sync messages from the document, and sends them to the "send" thread.
     let peer_state = SyncState::new();
     let peer_state = Arc::new(Mutex::new(peer_state));
 
     let (read, write) = tokio::io::split(stream);
 
-    let doc_clone = doc.clone();
     let peer_state_clone = peer_state.clone();
+    let tx_clone = tx.clone();
     tokio::spawn(async move {
-        match sync_receive(read, doc_clone, peer_state_clone).await {
+        match sync_receive(read, tx_clone, peer_state_clone).await {
             Ok(_) => {
                 println!("Sync receive OK.");
             }
@@ -223,18 +210,18 @@ async fn start_sync(doc: Doc, stream: TcpStream) -> io::Result<()> {
         }
     });
 
-    let doc_clone = doc.clone();
-    sync_send(write, doc_clone, peer_state).await?;
+    sync_send(write, tx, doc_changed_tx, peer_state).await?;
 
     Ok(())
 }
 
-pub async fn listen_socket(doc: Doc) {
+async fn listen_socket(tx: DocMessageSender) {
     fs::remove_file(SOCKET_PATH).unwrap();
     let listener = UnixListener::bind(SOCKET_PATH).unwrap();
     println!("Listening on UNIX socket: {}", SOCKET_PATH);
 
     loop {
+        // TODO: Accept multiple connections.
         match listener.accept().await {
             Ok((mut stream, _addr)) => {
                 println!("Client connection established.");
@@ -243,10 +230,9 @@ pub async fn listen_socket(doc: Doc) {
                 //for line in buf_reader.lines() {
                 let mut lines = buf_reader.lines();
 
+                // TODO: Write this in a nicer way...
                 while let Some(line) = lines.next_line().await.unwrap() {
                     let json: serde_json::Value = serde_json::from_str(&line).unwrap();
-                    //println!("Request: {:#?}", json);
-                    //doc.message_tx.send(DocMessage::RandomEdit).await;
                     match json {
                         serde_json::Value::Object(map) => {
                             if let Some(serde_json::Value::String(method)) = map.get("method") {
@@ -264,8 +250,7 @@ pub async fn listen_socket(doc: Doc) {
                                                     let position =
                                                         position.as_u64().unwrap() as usize;
                                                     let text = text.as_str().to_string();
-                                                    doc.message_tx
-                                                        .send(DocMessage::Insert { position, text })
+                                                    tx.send(DocMessage::Insert { position, text })
                                                         .await
                                                         .unwrap();
                                                 } else {
@@ -300,8 +285,8 @@ pub async fn listen_socket(doc: Doc) {
 
 async fn sync_receive(
     mut reader: ReadHalf<TcpStream>,
-    doc: Doc,
-    state: SharedState,
+    tx: DocMessageSender,
+    state: SharedPeerState,
 ) -> io::Result<()> {
     loop {
         let mut message_len_buf = [0; 4];
@@ -310,60 +295,36 @@ async fn sync_receive(
         let mut message_buf = vec![0; message_len as usize];
         reader.read_exact(&mut message_buf).await?;
         let message = Message::decode(&message_buf).unwrap();
-        //println!("Received message: {:?}", message);
 
-        //let mut patch_log = PatchLog::active(TextRepresentation::String);
-
-        //let mut docc = doc.doc.lock().unwrap();
-        //let mut state = state.lock().unwrap();
-
-        //docc.sync()
-        //    .receive_sync_message_log_patches(&mut state, message, &mut patch_log)
-        //    .unwrap();
-
-        //let patches = docc.make_patches(&mut patch_log);
-        //dbg!(&patches);
-
-        doc.message_tx
-            .send(DocMessage::ReceiveSyncMessage {
-                message,
-                state: state.clone(),
-            })
-            .await
-            .unwrap();
-
-        doc.doc_changed_tx.send(()).unwrap();
-
-        // TODO: Send these patches to the editors via the OT component.
+        tx.send(DocMessage::ReceiveSyncMessage {
+            message,
+            state: state.clone(),
+        })
+        .await
+        .unwrap();
     }
 }
 
 async fn sync_send(
     mut writer: WriteHalf<TcpStream>,
-    doc: Doc,
-    state: SharedState,
+    tx: DocMessageSender,
+    doc_changed_tx: DocChangedSender,
+    state: SharedPeerState,
 ) -> io::Result<()> {
-    let mut rx = doc.doc_changed_tx.subscribe();
+    let mut rx = doc_changed_tx.subscribe();
     loop {
         loop {
             let message_maybe = {
-                //let mut doc = doc.doc.lock().unwrap();
-                //let mut state = state.lock().unwrap();
-
                 let (response_tx, response_rx) = oneshot::channel();
 
-                doc.message_tx
-                    .send(DocMessage::GenerateSyncMessage {
-                        state: state.clone(),
-                        response: response_tx,
-                    })
-                    .await
-                    .unwrap();
+                tx.send(DocMessage::GenerateSyncMessage {
+                    state: state.clone(),
+                    response: response_tx,
+                })
+                .await
+                .unwrap();
 
                 response_rx.await.unwrap()
-
-                //let message = doc.sync().generate_sync_message(&mut state);
-                //message
             };
 
             if let Some(message) = message_maybe {
@@ -372,8 +333,6 @@ async fn sync_send(
                 let message_len = message_buf.len() as i32;
                 writer.write_all(&message_len.to_be_bytes()).await?;
                 writer.write_all(&message_buf).await?;
-
-                //println!("Sent message: {:?}", &message);
             } else {
                 break;
             }
