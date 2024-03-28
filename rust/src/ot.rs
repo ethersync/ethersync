@@ -4,16 +4,19 @@ use automerge::{
     patches::TextRepresentation,
     sync::{State as SyncState, SyncDoc},
     transaction::Transactable,
-    AutoCommit, ObjType, PatchLog, ReadDoc,
+    AutoCommit, ObjType, PatchLog,
 };
 use operational_transform::{Operation as OTOperation, OperationSeq};
-use std::error::Error;
-use std::io;
 
-#[derive(Debug)]
-enum Transformation {
-    Insert(usize, String),
-    None,
+/// Used to encapsulate our understanding of an OT change
+trait Delta {
+    fn insert(&mut self, s: &str);
+    fn delete(&mut self, n: usize);
+    fn retain(&mut self, n: usize);
+    fn transform(&mut self, other: Self) -> Self;
+    fn compose(&mut self, other: Self) -> Self;
+    // +invert?
+    // +transform_position?
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -353,9 +356,27 @@ impl OTServer {
     }
 }
 
-pub fn get_patch_action() -> Result<PatchAction, Box<dyn Error>> {
+fn get_opseq_from_patch_action(action: PatchAction) -> OperationSeq {
+    let mut opseq = OperationSeq::default();
+    match action {
+        PatchAction::SpliceText {
+            index,
+            value,
+            marks: _,
+        } => {
+            opseq.retain(index as u64);
+            opseq.insert(&value.make_string());
+        }
+        _ => panic!("unsupported"),
+    };
+    opseq
+}
+
+pub fn example_patch_actions() -> Vec<automerge::Patch> {
     let mut peer1 = AutoCommit::new();
-    let the_text = peer1.put_object(automerge::ROOT, "text", ObjType::Text)?;
+    let the_text = peer1
+        .put_object(automerge::ROOT, "text", ObjType::Text)
+        .unwrap();
     let _ = peer1.update_text(&the_text, "foobar");
 
     // Create a state to track our sync with peer2
@@ -389,13 +410,48 @@ pub fn get_patch_action() -> Result<PatchAction, Box<dyn Error>> {
     // Now we loop, sending messages from one to two and two to one until
     // neither has anything new to send
 
+    let mut patches = Vec::new();
+    patches.append(&mut do_the_sync(
+        &mut peer1,
+        &mut peer2,
+        &mut peer1_state,
+        &mut peer2_state,
+        &mut patch_log,
+    ));
+
+    dbg!(peer2.diff_incremental());
+    let _ = peer1.splice_text(the_text, 3, -3, "zonk");
+    patches.append(&mut do_the_sync(
+        &mut peer1,
+        &mut peer2,
+        &mut peer1_state,
+        &mut peer2_state,
+        &mut patch_log,
+    ));
+
+    dbg!(peer2.diff_incremental());
+
+    // let the_text_p2 = peer2.get(automerge::ROOT, "text")?.map(|(_, o)| o).unwrap();
+    // assert_eq!(peer2.text(&the_text_p2)?, "foobar");
+    patches
+}
+
+fn do_the_sync(
+    peer1: &mut AutoCommit,
+    peer2: &mut AutoCommit,
+    mut peer1_state: &mut SyncState,
+    mut peer2_state: &mut SyncState,
+    mut patch_log: &mut PatchLog,
+) -> Vec<automerge::Patch> {
+    let mut all_patches = Vec::new();
     loop {
         let two_to_one = peer2.sync().generate_sync_message(&mut peer2_state);
         if let Some(message) = two_to_one.as_ref() {
             // println!("two to one");
             peer1
                 .sync()
-                .receive_sync_message(&mut peer1_state, message.clone())?;
+                .receive_sync_message(&mut peer1_state, message.clone())
+                .unwrap();
         }
         let one_to_two = peer1.sync().generate_sync_message(&mut peer1_state);
         if let Some(message) = one_to_two.as_ref() {
@@ -405,8 +461,9 @@ pub fn get_patch_action() -> Result<PatchAction, Box<dyn Error>> {
                 message.clone(),
                 &mut patch_log,
             );
-            let patches = peer2.make_patches(&mut patch_log);
-            return Ok((&patches[1].action).clone());
+            let mut patches = peer2.make_patches(&mut patch_log);
+            all_patches.append(&mut patches);
+
             // peer2
             //     .sync()
             //     .receive_sync_message(&mut peer2_state, message.clone())?;
@@ -415,54 +472,18 @@ pub fn get_patch_action() -> Result<PatchAction, Box<dyn Error>> {
             break;
         }
     }
-
-    let the_text_p2 = peer2.get(automerge::ROOT, "text")?.map(|(_, o)| o).unwrap();
-    assert_eq!(peer2.text(&the_text_p2)?, "foobar");
-    Ok(PatchAction::DeleteSeq {
-        index: 0,
-        length: 1,
-    })
-}
-
-pub fn crdt_to_editor() -> io::Result<()> {
-    let action = get_patch_action().unwrap();
-    let transformation = match action {
-        PatchAction::SpliceText {
-            index,
-            value,
-            marks: _,
-        } => Transformation::Insert(index, value.make_string()),
-        _ => Transformation::None,
-    };
-
-    match transformation {
-        Transformation::Insert(i, v) => {
-            let mut a = OperationSeq::default();
-            a.retain(i as u64);
-            a.insert(&v);
-            dbg!(a);
-            // println!("Sending {} to editor", a);
-        }
-        Transformation::None => return Ok(()),
-    }
-    Ok(())
-}
-
-pub fn editor_to_crdt() -> io::Result<()> {
-    /*
-        // Called when the editor sends us an operation.
-        // daemonRevision is the revision this operation applies to.
-        applyEditorOperation(daemonRevision: number, operation: TextOp) {
-            if (daemonRevision === this.daemonRevision) {
-                // The sent operation applies to the current daemon revision. We can apply it immediately.
-                this.addEditorOperation(operation)
-    */
-    Ok(())
+    all_patches
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn generate_actions() {
+        let patches = example_patch_actions();
+        dbg!(patches);
+    }
 
     fn dummy_insert(at: usize) -> Op {
         Op {
