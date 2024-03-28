@@ -49,6 +49,8 @@ struct OpElement {
 struct Op {
     v: Vec<OpElement>,
 }
+// TODO: or should we do it as a TupleStruct?
+// struct Op(Vec<OpElement>);
 
 impl Op {
     fn len(&self) -> usize {
