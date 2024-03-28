@@ -28,11 +28,11 @@ enum DocMessage {
     ReceiveSyncMessage {
         message: Message,
         state: SyncState,
-        response: oneshot::Sender<SyncState>,
+        response_tx: oneshot::Sender<SyncState>,
     },
     GenerateSyncMessage {
         state: SyncState,
-        response: oneshot::Sender<(SyncState, Option<Message>)>,
+        response_tx: oneshot::Sender<(SyncState, Option<Message>)>,
     },
 }
 
@@ -80,6 +80,8 @@ pub async fn launch(peer: Option<String>) {
                         doc.insert(text_obj, random_position, random_string)
                             .unwrap();
                         let _ = doc_changed_tx.send(());
+                    } else {
+                        panic!("Automerge document doesn't have a text object, so I can't edit randomly.");
                     }
                 }
                 DocMessage::Insert { position, text } => {
@@ -87,29 +89,31 @@ pub async fn launch(peer: Option<String>) {
                     if let Some((automerge::Value::Object(ObjType::Text), text_obj)) = text_obj {
                         doc.insert(text_obj, position, text).unwrap();
                         let _ = doc_changed_tx.send(());
+                    } else {
+                        panic!("Automerge document doesn't have a text object, so I can't insert.");
                     }
                 }
                 DocMessage::ReceiveSyncMessage {
                     message,
-                    mut state,
-                    response,
+                    state: mut peer_state,
+                    response_tx,
                 } => {
                     let mut patch_log = PatchLog::active(TextRepresentation::String);
                     doc.sync()
-                        .receive_sync_message_log_patches(&mut state, message, &mut patch_log)
+                        .receive_sync_message_log_patches(&mut peer_state, message, &mut patch_log)
                         .unwrap();
                     let patches = doc.make_patches(&mut patch_log);
                     dbg!(&patches);
                     // TODO: Send patches to OT.
                     let _ = doc_changed_tx.send(());
-                    response.send(state).unwrap();
+                    response_tx.send(peer_state).unwrap();
                 }
                 DocMessage::GenerateSyncMessage {
-                    mut state,
-                    response,
+                    state: mut peer_state,
+                    response_tx,
                 } => {
-                    let message = doc.sync().generate_sync_message(&mut state);
-                    response.send((state, message)).unwrap();
+                    let message = doc.sync().generate_sync_message(&mut peer_state);
+                    response_tx.send((peer_state, message)).unwrap();
                 }
             }
 
@@ -239,7 +243,7 @@ async fn start_sync(
                 tx.send(DocMessage::ReceiveSyncMessage {
                     message,
                     state: peer_state,
-                    response: reponse_tx,
+                    response_tx: reponse_tx,
                 })
                 .await
                 .unwrap();
@@ -249,7 +253,7 @@ async fn start_sync(
                 let (reponse_tx, response_rx) = oneshot::channel();
                 tx.send(DocMessage::GenerateSyncMessage {
                     state: peer_state,
-                    response: reponse_tx,
+                    response_tx: reponse_tx,
                 })
                 .await
                 .unwrap();
