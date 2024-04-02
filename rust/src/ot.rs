@@ -8,17 +8,6 @@ use automerge::{
 };
 use operational_transform::{Operation as OTOperation, OperationSeq};
 
-/// Used to encapsulate our understanding of an OT change
-trait Delta {
-    fn insert(&mut self, s: &str);
-    fn delete(&mut self, n: usize);
-    fn retain(&mut self, n: usize);
-    fn transform(&mut self, other: Self) -> Self;
-    fn compose(&mut self, other: Self) -> Self;
-    // +invert?
-    // +transform_position?
-}
-
 //TODO: change Position to usize alias
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct Position {
@@ -562,12 +551,6 @@ mod tests {
                 replacement: "".to_string(),
             }],
         }
-    }
-
-    #[test]
-    fn range_forward() {
-        assert!(dummy_insert(2).v[0].range.forward());
-        assert!(delete_range(2, 4).v[0].range.forward());
     }
 
     #[test]

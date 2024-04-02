@@ -4,6 +4,7 @@ use std::io;
 mod client;
 mod daemon;
 mod ot;
+mod types;
 
 #[derive(Parser)]
 #[command(version, about, long_about = None)]
