@@ -25,6 +25,10 @@ enum DocMessage {
         position: usize,
         text: String,
     },
+    Delete {
+        position: usize,
+        length: usize,
+    },
     ReceiveSyncMessage {
         message: Message,
         state: SyncState,
@@ -88,9 +92,21 @@ pub async fn launch(peer: Option<String>) {
                     let text_obj = doc.get(automerge::ROOT, "text").unwrap();
                     if let Some((automerge::Value::Object(ObjType::Text), text_obj)) = text_obj {
                         doc.insert(text_obj, position, text).unwrap();
+                        // TODO: Call apply_editor_operation in OT.
                         let _ = doc_changed_tx.send(());
                     } else {
                         panic!("Automerge document doesn't have a text object, so I can't insert.");
+                    }
+                }
+                DocMessage::Delete { position, length } => {
+                    let text_obj = doc.get(automerge::ROOT, "text").unwrap();
+                    if let Some((automerge::Value::Object(ObjType::Text), text_obj)) = text_obj {
+                        doc.splice_text(text_obj, position, length as isize, "")
+                            .unwrap();
+                        // TODO: Call apply_editor_operation in OT.
+                        let _ = doc_changed_tx.send(());
+                    } else {
+                        panic!("Automerge document doesn't have a text object, so I can't delete.");
                     }
                 }
                 DocMessage::ReceiveSyncMessage {
@@ -104,7 +120,7 @@ pub async fn launch(peer: Option<String>) {
                         .unwrap();
                     let patches = doc.make_patches(&mut patch_log);
                     dbg!(&patches);
-                    // TODO: Send patches to OT.
+                    // TODO: Call apply_crdt_change in OT.
                     let _ = doc_changed_tx.send(());
                     response_tx.send(peer_state).unwrap();
                 }
@@ -291,6 +307,7 @@ async fn listen_socket(tx: DocMessageSender) {
                     match json {
                         serde_json::Value::Object(map) => {
                             if let Some(serde_json::Value::String(method)) = map.get("method") {
+                                // TODO: Make this prettier, maybe with a Serde JSON schema?
                                 match method.as_str() {
                                     "insert" => {
                                         if let Some(serde_json::Value::Array(array)) =
@@ -316,6 +333,35 @@ async fn listen_socket(tx: DocMessageSender) {
                                             }
                                         } else {
                                             println!("Invalid insert params.");
+                                        }
+                                    }
+                                    "delete" => {
+                                        if let Some(serde_json::Value::Array(array)) =
+                                            map.get("params")
+                                        {
+                                            if let Some(serde_json::Value::Number(position)) =
+                                                array.get(2)
+                                            {
+                                                if let Some(serde_json::Value::Number(length)) =
+                                                    array.get(3)
+                                                {
+                                                    let position =
+                                                        position.as_u64().unwrap() as usize;
+                                                    let length = length.as_u64().unwrap() as usize;
+                                                    tx.send(DocMessage::Delete {
+                                                        position,
+                                                        length,
+                                                    })
+                                                    .await
+                                                    .unwrap();
+                                                } else {
+                                                    println!("Invalid length param.");
+                                                }
+                                            } else {
+                                                println!("Invalid position param.");
+                                            }
+                                        } else {
+                                            println!("Invalid delete params.");
                                         }
                                     }
                                     _ => {
