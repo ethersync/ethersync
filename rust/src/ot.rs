@@ -19,13 +19,14 @@ trait Delta {
     // +transform_position?
 }
 
-#[derive(Debug, Clone, PartialEq)]
+//TODO: change Position to usize alias
+#[derive(Debug, Clone, PartialEq, Eq)]
 struct Position {
     line: usize,
     column: usize,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 struct Range {
     anchor: Position,
     head: Position,
@@ -42,18 +43,24 @@ impl Range {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 struct OpElement {
     range: Range,
     replacement: String,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 struct Op {
     v: Vec<OpElement>,
 }
 // TODO: or should we do it as a TupleStruct?
 // struct Op(Vec<OpElement>);
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct RevisionedOp {
+    revision: usize,
+    op: Op,
+}
 
 impl Op {
     fn len(&self) -> usize {
@@ -61,7 +68,7 @@ impl Op {
     }
 
     fn from(opseq: &OperationSeq) -> Self {
-        let mut v = Vec::new();
+        let mut v = vec![];
         let mut position = 0;
         for op in opseq.ops().iter() {
             match op {
@@ -161,7 +168,7 @@ impl Op {
     ///     * ----> *
     ///
     fn transform_through_operations(self: Op, my_operations: &Vec<Op>) -> (Self, Vec<Op>) {
-        let mut transformed_my_operations = Vec::new();
+        let mut transformed_my_operations = vec![];
         let mut their_operation = self;
         for my_operation in my_operations.iter() {
             assert!(
@@ -276,7 +283,7 @@ struct OTServer {
 */
 impl OTServer {
     fn new() -> Self {
-        return Default::default();
+        Default::default()
     }
 
     fn new_with_doc(document: &str) -> Self {
@@ -286,7 +293,7 @@ impl OTServer {
         }
     }
 
-    fn apply_change_to_document(&mut self, op: Op) {
+    fn apply_change_to_document(&mut self, op: &Op) {
         let mut ot_op = op.to_ot();
         if ot_op.base_len() < self.document.len() {
             ot_op.retain((self.document.len() - ot_op.base_len()) as u64);
@@ -295,37 +302,40 @@ impl OTServer {
     }
 
     /// Called when the CRDT world makes a change to the document.
-    fn apply_crdt_change(&mut self, op: Op) {
+    fn apply_crdt_change(&mut self, op: Op) -> RevisionedOp {
         // We can apply the change immediately.
         self.operations.push(op.clone());
         self.editor_queue.push(op.clone());
         self.daemon_revision += 1;
-        self.apply_change_to_document(op)
+        self.apply_change_to_document(&op);
 
-        /*
         // We assume that the editor is up-to-date, and send the operation to it.
         // If it can't accept it, we will transform and send it later.
-        this.sendToEditor(this.editorRevision, op)
-        */
+        RevisionedOp {
+            revision: self.editor_revision,
+            op,
+        }
     }
 
-    fn add_editor_operation(&mut self, op: Op) {
+    fn add_editor_operation(&mut self, op: &Op) {
         self.operations.push(op.clone());
         self.editor_revision += 1;
         self.apply_change_to_document(op)
-        /*
-        this.sendToCRDT(operation)
-         */
     }
 
     /// Called when the editor sends us an operation.
     /// daemonRevision is the revision this operation applies to.
-    fn apply_editor_operation(&mut self, daemon_revision: usize, mut op: Op) {
+    fn apply_editor_operation(
+        &mut self,
+        daemon_revision: usize,
+        mut op: Op,
+    ) -> (Op, Vec<RevisionedOp>) {
+        let mut to_editor = vec![];
         if daemon_revision > self.daemon_revision {
-            // must not happen, editor has seen a daemon revision from the future.
+            panic!("must not happen, editor has seen a daemon revision from the future.");
         } else if daemon_revision == self.daemon_revision {
             // The sent operation applies to the current daemon revision. We can apply it immediately.
-            self.add_editor_operation(op)
+            self.add_editor_operation(&op);
         } else {
             // The operation applies to an older daemon revision.
             // We need to transform it through the daemon operations that have happened since then.
@@ -344,8 +354,14 @@ impl OTServer {
 
             (op, self.editor_queue) = op.transform_through_operations(&self.editor_queue);
             // Apply the transformed operation to the document.
-            self.add_editor_operation(dbg!(op));
+            self.add_editor_operation(dbg!(&op));
 
+            for editor_op in self.editor_queue.iter() {
+                to_editor.push(RevisionedOp {
+                    revision: self.editor_revision,
+                    op: editor_op.clone(),
+                });
+            }
             /*
             // Send the transformed queue to the editor.
             for (let op of this.editorQueue) {
@@ -353,6 +369,7 @@ impl OTServer {
             }
             */
         }
+        (op, to_editor)
     }
 }
 
@@ -414,7 +431,7 @@ pub fn example_patch_actions() -> Vec<automerge::Patch> {
     // Now we loop, sending messages from one to two and two to one until
     // neither has anything new to send
 
-    let mut patches = Vec::new();
+    let mut patches = vec![];
     patches.append(&mut do_the_sync(
         &mut peer1,
         &mut peer2,
@@ -450,7 +467,7 @@ fn do_the_sync(
     mut peer2_state: &mut SyncState,
     mut patch_log: &mut PatchLog,
 ) -> Vec<automerge::Patch> {
-    let mut all_patches = Vec::new();
+    let mut all_patches = vec![];
     loop {
         let two_to_one = peer2.sync().generate_sync_message(&mut peer2_state);
         if let Some(message) = two_to_one.as_ref() {
@@ -493,7 +510,7 @@ mod tests {
         dbg!(patches);
     }
 
-    fn dummy_insert(at: usize) -> Op {
+    fn insert(at: usize, s: &str) -> Op {
         Op {
             v: vec![OpElement {
                 range: Range {
@@ -506,12 +523,30 @@ mod tests {
                         column: at,
                     },
                 },
-                replacement: "foo".to_string(),
+                replacement: s.to_owned(),
             }],
         }
     }
 
-    fn dummy_delete(from: usize, to: usize) -> Op {
+    fn dummy_insert(at: usize) -> Op {
+        insert(at, "foo")
+    }
+
+    fn rev_op(rev: usize, op: Op) -> RevisionedOp {
+        RevisionedOp { revision: rev, op }
+    }
+
+    fn delete(from: usize, length: usize) -> Op {
+        delete_range(from, from + length)
+    }
+
+    fn compose(op1: Op, op2: Op) -> Op {
+        Op {
+            v: [op1.v, op2.v].concat(),
+        }
+    }
+
+    fn delete_range(from: usize, to: usize) -> Op {
         Op {
             v: vec![OpElement {
                 range: Range {
@@ -532,7 +567,7 @@ mod tests {
     #[test]
     fn range_forward() {
         assert!(dummy_insert(2).v[0].range.forward());
-        assert!(dummy_delete(2, 4).v[0].range.forward());
+        assert!(delete_range(2, 4).v[0].range.forward());
     }
 
     #[test]
@@ -550,6 +585,42 @@ mod tests {
         ot_server.apply_crdt_change(op);
         assert_eq!(ot_server.editor_queue.len(), 1);
         // assert_eq!(ot_server.editor_queue[0], op); // How to compare?
+    }
+
+    #[test]
+    fn routes_operations_through_server() {
+        let mut ot_server = OTServer::new_with_doc("hello");
+
+        let to_editor = ot_server.apply_crdt_change(insert(1, "x"));
+        assert_eq!(to_editor, rev_op(0, insert(1, "x")));
+
+        let (to_crdt, to_editor) = ot_server.apply_editor_operation(0, insert(2, "y"));
+        assert_eq!(to_crdt, insert(3, "y"));
+        assert_eq!(to_editor, vec![rev_op(1, insert(1, "x"))]);
+
+        assert_eq!(ot_server.operations, vec![insert(1, "x"), insert(3, "y")]);
+        assert_eq!(ot_server.document, "hxeyllo");
+
+        let to_editor = ot_server.apply_crdt_change(insert(3, "z"));
+        assert_eq!(to_editor, rev_op(1, insert(3, "z")));
+
+        assert_eq!(ot_server.document, "hxezyllo");
+
+        // editor thinks: hxeyllo -> hlo
+        let (to_crdt, to_editor) = ot_server.apply_editor_operation(1, delete(1, 4));
+        assert_eq!(to_crdt, compose(delete(1, 2), delete(2, 2)));
+        assert_eq!(to_editor, vec![rev_op(2, insert(1, "z"))]);
+
+        assert_eq!(ot_server.document, "hzlo");
+        assert_eq!(
+            ot_server.operations,
+            vec![
+                insert(1, "x"),
+                insert(3, "y"),
+                insert(3, "z"),
+                compose(delete(1, 2), delete(2, 2))
+            ]
+        );
     }
 
     #[test]
@@ -632,7 +703,7 @@ mod tests {
 
     #[test]
     fn conversion_from_us_to_ot_delete() {
-        let ours = dummy_delete(2, 4);
+        let ours = delete_range(2, 4);
         let ot = ours.to_ot();
 
         // dbg!(&ot);
@@ -680,26 +751,12 @@ mod tests {
 
     #[test]
     fn transforms_operation_correctly_splits_deletion() {
-        let mut editor_op = dummy_insert(2);
-        editor_op.v[0].replacement = "x".to_string();
-        let unacknowledged_ops = vec![dummy_delete(1, 4)];
-        dbg!(&unacknowledged_ops[0].to_ot());
+        let editor_op = insert(2, "x");
+        let unacknowledged_ops = vec![delete(1, 3)];
 
         let (op_prime, queue_prime) = editor_op.transform_through_operations(&unacknowledged_ops);
-        assert_eq!(op_prime.len(), 1);
-        assert_eq!(op_prime.v[0].range.anchor.column, 1);
-        assert_eq!(op_prime.v[0].replacement, "x");
-        assert_eq!(queue_prime.len(), 1);
-        assert_eq!(queue_prime[0].len(), 2);
-        dbg!(&queue_prime[0]);
-        // TODO: I'm not sure our queue is already what we would expect. DISCUSS!
-        // JS has:
-        // expect(transformedQueue).toEqual([type.compose(remove(1, 1), remove(2, 2))])
-        // which skips the "x" character from deletion.
-        //
-        // (I think the error could be in the from(OT) conversion, because some intermediate
-        // result Retain( 1,), Delete( 1,), Retain( 1,), Delete( 2,),
-        // looks more like what I would expect.
+        assert_eq!(op_prime, insert(1, "x"));
+        assert_eq!(queue_prime, vec![compose(delete(1, 1), delete(2, 2))]);
     }
 
     #[test]
