@@ -1,3 +1,4 @@
+use anyhow::Result;
 use automerge::{
     patches::TextRepresentation,
     sync::{Message, State as SyncState, SyncDoc},
@@ -6,7 +7,6 @@ use automerge::{
 };
 use rand::{distributions::Alphanumeric, Rng};
 use std::fs;
-use std::io;
 use std::thread;
 use tokio::{
     io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader, ReadHalf},
@@ -61,20 +61,28 @@ pub async fn launch(peer: Option<String>) {
 
     tokio::spawn(async move {
         loop {
-            let message = message_rx.recv().await.unwrap();
+            let message = message_rx
+                .recv()
+                .await
+                .expect("Channel towards document task has been closed");
             match message {
                 DocMessage::Init => {
                     let _text = doc
                         .put_object(automerge::ROOT, "text", ObjType::Text)
-                        .unwrap();
+                        .expect("Failed to initialize text object in Automerge document");
                     // In the beginning, no-one might be interested in these messages, so the
                     // send might fail, I think?
                     let _ = doc_changed_tx.send(());
                 }
                 DocMessage::RandomEdit => {
-                    let text_obj = doc.get(automerge::ROOT, "text").unwrap();
+                    let text_obj = doc
+                        .get(automerge::ROOT, "text")
+                        .expect("Failed to get text object from Automerge document");
                     if let Some((automerge::Value::Object(ObjType::Text), text_obj)) = text_obj {
-                        let text_length = doc.text(&text_obj).unwrap().len();
+                        let text_length = doc
+                            .text(&text_obj)
+                            .expect("Failed to get string from Automerge text object")
+                            .len();
                         let random_string: String = rand::thread_rng()
                             .sample_iter(&Alphanumeric)
                             .take(1)
@@ -82,31 +90,36 @@ pub async fn launch(peer: Option<String>) {
                             .collect();
                         let random_position = rand::thread_rng().gen_range(0..(text_length + 1));
                         doc.insert(text_obj, random_position, random_string)
-                            .unwrap();
+                            .expect("Failed to insert into Automerge text object");
                         let _ = doc_changed_tx.send(());
                     } else {
-                        panic!("Automerge document doesn't have a text object, so I can't edit randomly.");
+                        panic!("Automerge document doesn't have a text object, so I can't edit randomly");
                     }
                 }
                 DocMessage::Insert { position, text } => {
-                    let text_obj = doc.get(automerge::ROOT, "text").unwrap();
+                    let text_obj = doc
+                        .get(automerge::ROOT, "text")
+                        .expect("Failed to get text object from Automerge document");
                     if let Some((automerge::Value::Object(ObjType::Text), text_obj)) = text_obj {
-                        doc.insert(text_obj, position, text).unwrap();
+                        doc.insert(text_obj, position, text)
+                            .expect("Failed to insert into Automerge text object");
                         // TODO: Call apply_editor_operation in OT.
                         let _ = doc_changed_tx.send(());
                     } else {
-                        panic!("Automerge document doesn't have a text object, so I can't insert.");
+                        panic!("Automerge document doesn't have a text object, so I can't insert");
                     }
                 }
                 DocMessage::Delete { position, length } => {
-                    let text_obj = doc.get(automerge::ROOT, "text").unwrap();
+                    let text_obj = doc
+                        .get(automerge::ROOT, "text")
+                        .expect("Failed to get text object from Automerge document");
                     if let Some((automerge::Value::Object(ObjType::Text), text_obj)) = text_obj {
                         doc.splice_text(text_obj, position, length as isize, "")
-                            .unwrap();
+                            .expect("Failed to splice Automerge text object");
                         // TODO: Call apply_editor_operation in OT.
                         let _ = doc_changed_tx.send(());
                     } else {
-                        panic!("Automerge document doesn't have a text object, so I can't delete.");
+                        panic!("Automerge document doesn't have a text object, so I can't delete");
                     }
                 }
                 DocMessage::ReceiveSyncMessage {
@@ -117,25 +130,36 @@ pub async fn launch(peer: Option<String>) {
                     let mut patch_log = PatchLog::active(TextRepresentation::String);
                     doc.sync()
                         .receive_sync_message_log_patches(&mut peer_state, message, &mut patch_log)
-                        .unwrap();
+                        .expect("Failed to apply sync message to Automerge document");
                     let patches = doc.make_patches(&mut patch_log);
                     dbg!(&patches);
                     // TODO: Call apply_crdt_change in OT.
                     let _ = doc_changed_tx.send(());
-                    response_tx.send(peer_state).unwrap();
+                    response_tx
+                        .send(peer_state)
+                        .expect("Failed to send peer state in response to ReceiveSyncMessage");
                 }
                 DocMessage::GenerateSyncMessage {
                     state: mut peer_state,
                     response_tx,
                 } => {
                     let message = doc.sync().generate_sync_message(&mut peer_state);
-                    response_tx.send((peer_state, message)).unwrap();
+                    response_tx
+                        .send((peer_state, message))
+                        .expect("Failed to send peer state and sync message in response to GenerateSyncMessage");
                 }
             }
 
-            let text = doc.get(automerge::ROOT, "text").unwrap();
+            let text = doc
+                .get(automerge::ROOT, "text")
+                .expect("Failed to get text object from the Automerge document");
+
             if let Some((automerge::Value::Object(ObjType::Text), text_obj)) = text {
-                println!("My text is now: {}", doc.text(&text_obj).unwrap());
+                println!(
+                    "My text is now: {}",
+                    doc.text(&text_obj)
+                        .expect("Failed to get string from Automerge text object")
+                );
             }
         }
     });
@@ -145,17 +169,9 @@ pub async fn launch(peer: Option<String>) {
         let tx = message_tx.clone();
         tokio::spawn(async move {
             loop {
-                //let doc_clone2 = doc_clone.clone();
-                {
-                    match tx.send(DocMessage::RandomEdit).await {
-                        Ok(_) => {
-                            println!("Random edit sent.");
-                        }
-                        Err(e) => {
-                            println!("Error sending random edit: {:#?}", e);
-                        }
-                    }
-                }
+                tx.send(DocMessage::RandomEdit)
+                    .await
+                    .expect("Failed to send random edit");
 
                 thread::sleep(std::time::Duration::from_secs(2));
             }
@@ -165,21 +181,27 @@ pub async fn launch(peer: Option<String>) {
     // Dial peer, or listen for incoming connections.
     let tx = message_tx.clone();
     if let Some(peer) = peer {
-        dial_tcp(tx, doc_changed_tx_clone, peer).await.unwrap();
+        dial_tcp(tx, doc_changed_tx_clone, peer)
+            .await
+            .expect("Failed to dial peer");
     } else {
         let tx_clone = tx.clone();
         tokio::spawn(async {
-            listen_socket(tx_clone).await;
+            listen_socket(tx_clone)
+                .await
+                .expect("Failed to listen on UNIX socket");
         });
-        listen_tcp(tx, doc_changed_tx_clone).await.unwrap();
+        listen_tcp(tx, doc_changed_tx_clone)
+            .await
+            .expect("Failed to listen on TCP port");
     }
 }
 
-async fn listen_tcp(tx: DocMessageSender, doc_changed_tx: DocChangedSender) -> io::Result<()> {
-    tx.send(DocMessage::Init).await.unwrap();
+async fn listen_tcp(tx: DocMessageSender, doc_changed_tx: DocChangedSender) -> Result<()> {
+    tx.send(DocMessage::Init).await?;
 
     let listener = TcpListener::bind("0.0.0.0:4242").await?;
-    println!("Listening on TCP port: {}", listener.local_addr().unwrap());
+    println!("Listening on TCP port: {}", listener.local_addr()?);
 
     loop {
         let Ok((stream, _addr)) = listener.accept().await else {
@@ -207,7 +229,7 @@ async fn dial_tcp(
     tx: DocMessageSender,
     doc_changed_tx: DocChangedSender,
     addr: String,
-) -> io::Result<()> {
+) -> Result<()> {
     let stream = TcpStream::connect(addr).await?;
 
     start_sync(tx, doc_changed_tx, stream).await?;
@@ -219,7 +241,7 @@ async fn start_sync(
     tx: DocMessageSender,
     doc_changed_tx: DocChangedSender,
     stream: TcpStream,
-) -> io::Result<()> {
+) -> Result<()> {
     let mut peer_state = SyncState::new();
 
     let (reader_message_tx, mut reader_message_rx) = mpsc::channel(1);
@@ -245,50 +267,56 @@ async fn start_sync(
             reader_message_tx_clone
                 .send(SyncerMessage::GenerateSyncMessage {})
                 .await
-                .unwrap();
-            doc_changed_tx.subscribe().recv().await.unwrap();
+                .expect("Failed to send GenerateSyncMessage to document task");
+            doc_changed_tx
+                .subscribe()
+                .recv()
+                .await
+                .expect("Doc changed channel has been closed.");
         }
     });
 
     loop {
-        let message = reader_message_rx.recv().await.unwrap();
-        match message {
-            SyncerMessage::ReceiveSyncMessage { message } => {
-                let (reponse_tx, response_rx) = oneshot::channel();
-                let message = Message::decode(&message).unwrap();
-                tx.send(DocMessage::ReceiveSyncMessage {
-                    message,
-                    state: peer_state,
-                    response_tx: reponse_tx,
-                })
-                .await
-                .unwrap();
-                peer_state = response_rx.await.unwrap();
+        match reader_message_rx.recv().await {
+            None => {
+                panic!("Channel towards sync task has been closed.");
             }
-            SyncerMessage::GenerateSyncMessage {} => {
-                let (reponse_tx, response_rx) = oneshot::channel();
-                tx.send(DocMessage::GenerateSyncMessage {
-                    state: peer_state,
-                    response_tx: reponse_tx,
-                })
-                .await
-                .unwrap();
-                let (ps, message) = response_rx.await.unwrap();
-                peer_state = ps;
-                if let Some(message) = message {
-                    let message = message.encode();
-                    let message_len = message.len() as i32;
-                    write.write_all(&message_len.to_be_bytes()).await?;
-                    write.write_all(&message).await?;
+            Some(message) => match message {
+                SyncerMessage::ReceiveSyncMessage { message } => {
+                    let (reponse_tx, response_rx) = oneshot::channel();
+                    let message = Message::decode(&message)?;
+                    tx.send(DocMessage::ReceiveSyncMessage {
+                        message,
+                        state: peer_state,
+                        response_tx: reponse_tx,
+                    })
+                    .await?;
+                    peer_state = response_rx.await?;
                 }
-            }
+                SyncerMessage::GenerateSyncMessage {} => {
+                    let (reponse_tx, response_rx) = oneshot::channel();
+                    tx.send(DocMessage::GenerateSyncMessage {
+                        state: peer_state,
+                        response_tx: reponse_tx,
+                    })
+                    .await?;
+                    let (ps, message) = response_rx.await?;
+                    peer_state = ps;
+                    if let Some(message) = message {
+                        let message = message.encode();
+                        let message_len = message.len() as i32;
+                        write.write_all(&message_len.to_be_bytes()).await?;
+                        write.write_all(&message).await?;
+                    }
+                }
+            },
         }
     }
 }
 
-async fn listen_socket(tx: DocMessageSender) {
-    fs::remove_file(SOCKET_PATH).unwrap();
-    let listener = UnixListener::bind(SOCKET_PATH).unwrap();
+async fn listen_socket(tx: DocMessageSender) -> Result<()> {
+    fs::remove_file(SOCKET_PATH)?;
+    let listener = UnixListener::bind(SOCKET_PATH)?;
     println!("Listening on UNIX socket: {}", SOCKET_PATH);
 
     loop {
@@ -302,8 +330,8 @@ async fn listen_socket(tx: DocMessageSender) {
                 let mut lines = buf_reader.lines();
 
                 // TODO: Write this in a nicer way...
-                while let Some(line) = lines.next_line().await.unwrap() {
-                    let json: serde_json::Value = serde_json::from_str(&line).unwrap();
+                while let Some(line) = lines.next_line().await? {
+                    let json: serde_json::Value = serde_json::from_str(&line)?;
                     match json {
                         serde_json::Value::Object(map) => {
                             if let Some(serde_json::Value::String(method)) = map.get("method") {
@@ -319,20 +347,23 @@ async fn listen_socket(tx: DocMessageSender) {
                                                 if let Some(serde_json::Value::String(text)) =
                                                     array.get(3)
                                                 {
-                                                    let position =
-                                                        position.as_u64().unwrap() as usize;
+                                                    let position = position
+                                                        .as_u64()
+                                                        .expect("Failed to parse position");
                                                     let text = text.as_str().to_string();
-                                                    tx.send(DocMessage::Insert { position, text })
-                                                        .await
-                                                        .unwrap();
+                                                    tx.send(DocMessage::Insert {
+                                                        position: position as usize,
+                                                        text,
+                                                    })
+                                                    .await?;
                                                 } else {
-                                                    println!("Invalid text param.");
+                                                    panic!("Invalid text param");
                                                 }
                                             } else {
-                                                println!("Invalid position param.");
+                                                panic!("Invalid position param");
                                             }
                                         } else {
-                                            println!("Invalid insert params.");
+                                            panic!("Invalid insert params");
                                         }
                                     }
                                     "delete" => {
@@ -345,23 +376,25 @@ async fn listen_socket(tx: DocMessageSender) {
                                                 if let Some(serde_json::Value::Number(length)) =
                                                     array.get(3)
                                                 {
-                                                    let position =
-                                                        position.as_u64().unwrap() as usize;
-                                                    let length = length.as_u64().unwrap() as usize;
+                                                    let position = position
+                                                        .as_u64()
+                                                        .expect("Failed to parse position");
+                                                    let length = length
+                                                        .as_u64()
+                                                        .expect("Failed to parse length");
                                                     tx.send(DocMessage::Delete {
-                                                        position,
-                                                        length,
+                                                        position: position as usize,
+                                                        length: length as usize,
                                                     })
-                                                    .await
-                                                    .unwrap();
+                                                    .await?;
                                                 } else {
-                                                    println!("Invalid length param.");
+                                                    panic!("Invalid length param");
                                                 }
                                             } else {
-                                                println!("Invalid position param.");
+                                                panic!("Invalid position param");
                                             }
                                         } else {
-                                            println!("Invalid delete params.");
+                                            panic!("Invalid delete params");
                                         }
                                     }
                                     _ => {
@@ -371,7 +404,7 @@ async fn listen_socket(tx: DocMessageSender) {
                             }
                         }
                         _ => {
-                            println!("Invalid JSON: {:#?}", json);
+                            panic!("Invalid JSON: {:#?}", json);
                         }
                     }
                 }
@@ -384,7 +417,7 @@ async fn listen_socket(tx: DocMessageSender) {
     }
 }
 
-async fn sync_receive(mut reader: ReadHalf<TcpStream>, tx: SyncerMessageSender) -> io::Result<()> {
+async fn sync_receive(mut reader: ReadHalf<TcpStream>, tx: SyncerMessageSender) -> Result<()> {
     loop {
         let mut message_len_buf = [0; 4];
         reader.read_exact(&mut message_len_buf).await?;
@@ -395,7 +428,6 @@ async fn sync_receive(mut reader: ReadHalf<TcpStream>, tx: SyncerMessageSender) 
         tx.send(SyncerMessage::ReceiveSyncMessage {
             message: message_buf,
         })
-        .await
-        .unwrap();
+        .await?;
     }
 }
