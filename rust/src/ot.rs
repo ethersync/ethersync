@@ -4,7 +4,7 @@ use automerge::{
     patches::TextRepresentation,
     sync::{State as SyncState, SyncDoc},
     transaction::Transactable,
-    AutoCommit, ObjType, PatchLog,
+    AutoCommit, ObjType, PatchLog, ReadDoc,
 };
 use operational_transform::{Operation as OTOperation, OperationSeq};
 
@@ -378,6 +378,8 @@ pub fn example_patch_actions() -> Vec<automerge::Patch> {
         .put_object(automerge::ROOT, "text", ObjType::Text)
         .unwrap();
     let _ = peer1.update_text(&the_text, "foobar");
+    dbg!(peer1.keys(automerge::ROOT).count());
+    dbg!(&the_text);
 
     // Create a state to track our sync with peer2
     let mut peer1_state = SyncState::new();
@@ -390,6 +392,7 @@ pub fn example_patch_actions() -> Vec<automerge::Patch> {
     // We receive the message on peer2. We don't have a document at all yet
     // so we create one
     let mut peer2 = automerge::AutoCommit::new();
+    dbg!(peer2.keys(automerge::ROOT).count());
     // We don't have a state for peer1 (it's a new connection), so we create one
     let mut peer2_state = SyncState::new();
 
@@ -399,6 +402,7 @@ pub fn example_patch_actions() -> Vec<automerge::Patch> {
         message1to2.clone(),
         &mut patch_log,
     );
+    dbg!(peer2.keys(automerge::ROOT).count());
     // let patches = peer2.make_patches(&mut patch_log);
     // dbg!(patches);
 
@@ -419,7 +423,10 @@ pub fn example_patch_actions() -> Vec<automerge::Patch> {
         &mut patch_log,
     ));
 
-    dbg!(peer2.diff_incremental());
+    let text2 = peer2.get(automerge::ROOT, "text");
+    dbg!(text2.unwrap());
+
+    // dbg!(peer2.diff_incremental());
     let _ = peer1.splice_text(the_text, 3, -3, "zonk");
     patches.append(&mut do_the_sync(
         &mut peer1,
@@ -429,7 +436,7 @@ pub fn example_patch_actions() -> Vec<automerge::Patch> {
         &mut patch_log,
     ));
 
-    dbg!(peer2.diff_incremental());
+    // dbg!(peer2.diff_incremental());
 
     // let the_text_p2 = peer2.get(automerge::ROOT, "text")?.map(|(_, o)| o).unwrap();
     // assert_eq!(peer2.text(&the_text_p2)?, "foobar");
@@ -461,6 +468,7 @@ fn do_the_sync(
                 message.clone(),
                 &mut patch_log,
             );
+            dbg!(peer2.keys(automerge::ROOT).count());
             let mut patches = peer2.make_patches(&mut patch_log);
             all_patches.append(&mut patches);
 
