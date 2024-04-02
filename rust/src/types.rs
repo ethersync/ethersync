@@ -3,7 +3,7 @@ use automerge::PatchAction;
 use operational_transform::{Operation as OTOperation, OperationSeq};
 
 #[derive(Debug, Clone, PartialEq, Default)]
-struct TextDelta(Vec<TextOp>);
+pub struct TextDelta(Vec<TextOp>);
 
 #[derive(Debug, Clone, PartialEq)]
 enum TextOp {
@@ -48,13 +48,13 @@ type Position = usize;
 
 /// Used to encapsulate our understanding of an OT change
 impl TextDelta {
-    fn retain(&mut self, n: usize) {
+    pub fn retain(&mut self, n: usize) {
         self.0.push(TextOp::Retain(n));
     }
-    fn insert(&mut self, s: &str) {
+    pub fn insert(&mut self, s: &str) {
         self.0.push(TextOp::Insert(s.to_string()));
     }
-    fn delete(&mut self, n: usize) {
+    pub fn delete(&mut self, n: usize) {
         self.0.push(TextOp::Delete(n));
     }
     //fn transform(&mut self, other: Self) -> Self;
