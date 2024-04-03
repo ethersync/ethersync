@@ -9,16 +9,18 @@ pub struct RevisionedTextDelta {
     delta: TextDelta,
 }
 
-///    This class receive operations from both the CRDT world, and one editor.
-///    It will make sure to send the correct operations back to them using the provided callbacks.
+///    OTServer receives operations from both the CRDT world, and one editor and makes sure that
+///    the editor operations (which might be based on an older document) are applicable to the
+///    state that the CRDT is tracking.
 ///
-///    Here's an example of how it works:
+///    Here's a broader example of how it works, when employed in a context of a daemon (the
+///    caller, which needs to make sure, that operations are communicated both ways).
 ///
-///    1. The daemon starts with an empty document.
+///    1. The daemon starts with an empty list of operations (corresponding to an empty/unchanged document)
 ///    2. It applies the d1 operation to it, which the editor also receives and applies.
 ///    3. The daemon applies d2 and d3, and sends them to the editor (thinking these would put it
 ///       into the same state).
-///       It also sends along the editor revision, which the number of ops received by the editor,
+///       It also sends along the editor revision, which is the number of ops received by the editor,
 ///       which is basically the column, and specifies the point the ops apply to. (Here: 0).
 ///    4. But the editor has made concurrent edits e1 and e2 in the meantime. It rejects d2 and d3.
 ///       It sends e1 and e2 to the daemon, along with the daemon revision, which is the number of ops
@@ -59,7 +61,7 @@ pub struct RevisionedTextDelta {
 ///    daemon.
 ///    (d1, d2, d3, e1', e2', d4, e3'')
 ///
-///*/
+///
 #[derive(Debug, Default)]
 pub struct OTServer {
     editor_revision: usize,
@@ -73,7 +75,6 @@ pub struct OTServer {
     /// Design Note: The daemon should do the transformation because we want to spare
     /// the overhead of implementing the tranformation per editor plugin. In our case
     /// there's a small number of editors, so transforming it in the daemon is feasible.
-    ///
     editor_queue: Vec<OperationSeq>,
 }
 
