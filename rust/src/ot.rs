@@ -243,10 +243,10 @@ impl OTServer {
         }
     }
 
-    fn add_editor_operation(&mut self, op: &Op) {
-        self.operations.push(op.clone().to_ot());
+    fn add_editor_operation(&mut self, op_seq: &OperationSeq) {
+        self.operations.push(op_seq.clone());
         self.editor_revision += 1;
-        self.apply_change_to_document(op.to_ot())
+        self.apply_change_to_document(op_seq.clone());
     }
 
     /// Called when the editor sends us an operation.
@@ -261,7 +261,7 @@ impl OTServer {
             panic!("must not happen, editor has seen a daemon revision from the future.");
         } else if daemon_revision == self.daemon_revision {
             // The sent operation applies to the current daemon revision. We can apply it immediately.
-            self.add_editor_operation(&op);
+            self.add_editor_operation(&op.to_ot());
         } else {
             // The operation applies to an older daemon revision.
             // We need to transform it through the daemon operations that have happened since then.
@@ -278,9 +278,12 @@ impl OTServer {
             // What is the most efficient+readable way to cut off the first elements?
             self.editor_queue = self.editor_queue[seen_operations..].to_vec();
 
-            (op, self.editor_queue) = transform_through_operations(op.to_ot(), &self.editor_queue);
+            let op_seq;
+            (op_seq, self.editor_queue) =
+                transform_through_operations(op.to_ot(), &self.editor_queue);
             // Apply the transformed operation to the document.
-            self.add_editor_operation(dbg!(&op));
+            self.add_editor_operation(&op_seq);
+            op = Op::from(&op_seq);
 
             for editor_op in self.editor_queue.iter() {
                 to_editor.push(RevisionedTextDelta {
@@ -320,9 +323,8 @@ impl OTServer {
 fn transform_through_operations(
     mut their_op_seq: OperationSeq,
     my_operations: &Vec<OperationSeq>,
-) -> (Op, Vec<OperationSeq>) {
+) -> (OperationSeq, Vec<OperationSeq>) {
     let mut transformed_my_operations = vec![];
-    let mut their_operation = Default::default();
     for my_op_seq in my_operations.iter() {
         let mut my_op_seq = my_op_seq.clone();
         // transform expects both operations to have the same base_len. See also:
@@ -339,10 +341,9 @@ fn transform_through_operations(
         }
         let (my_prime, their_prime) = my_op_seq.transform(&their_op_seq).unwrap();
         transformed_my_operations.push(my_prime);
-        their_operation = Op::from(&their_prime);
         their_op_seq = their_prime;
     }
-    (their_operation, transformed_my_operations)
+    (their_op_seq, transformed_my_operations)
 }
 
 #[cfg(test)]
@@ -560,6 +561,7 @@ mod tests {
         let mut theirs = dummy_insert(0);
         theirs.v[0].replacement = "bar".to_string();
         let (theirs, ours_prime) = transform_through_operations(theirs.to_ot(), &ours);
+        let theirs = Op::from(&theirs);
         assert_eq!(theirs.len(), 1);
         // position of the insert has shifted after ours
         assert_eq!(theirs.v[0].range.anchor.column, 6);
@@ -580,6 +582,7 @@ mod tests {
         let mut theirs = dummy_insert(0);
         theirs.v[0].replacement = "bar".to_string();
         let (theirs, ours_prime) = transform_through_operations(theirs.to_ot(), &ours);
+        let theirs = Op::from(&theirs);
         assert_eq!(theirs.len(), 1);
         // position of the insert hasn't shifted.
         assert_eq!(theirs.v[0].range.anchor.column, 0);
@@ -593,7 +596,7 @@ mod tests {
         let unacknowledged_ops = vec![delete(1, 3).to_ot()];
 
         let (op_prime, queue_prime) = transform_through_operations(editor_op, &unacknowledged_ops);
-        assert_eq!(op_prime, insert(1, "x"));
+        assert_eq!(op_prime, insert(1, "x").to_ot());
         assert_eq!(
             queue_prime,
             vec![compose(delete(1, 1), delete(2, 2)).to_ot()]
