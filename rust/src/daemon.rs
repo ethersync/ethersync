@@ -80,10 +80,11 @@ pub async fn launch(peer: Option<String>) {
     // The document task will send messages intended for the socket connection on this channel.
     let (socket_message_tx, _socket_message_rx) = broadcast::channel::<EditorMessage>(16);
 
-    // Make edits to the document occasionally. TODO: Seems to slow something down.
-    if false {
+    // Make edits to the document occasionally.
+    if true {
         let tx = doc_message_tx.clone();
         tokio::spawn(async move {
+            sleep(Duration::from_secs(2)).await;
             loop {
                 tx.send(DocMessage::RandomEdit)
                     .await
@@ -115,7 +116,7 @@ pub async fn launch(peer: Option<String>) {
                 tx.send(message).expect("Failed to send random insert");
 
                 sleep(Duration::from_secs(2)).await;
-                editor_revision += 1;
+                //editor_revision += 1;
             }
         });
     }
@@ -485,8 +486,11 @@ async fn listen_socket(tx: DocMessageSender, editor_message_tx: EditorMessageSen
                                     text,
                                 }) => {
                                     let message = serde_json::json!({
-                                        "method": "insert",
-                                        "params": ["", editor_revision, position, text],
+                                        "method": "operation",
+                                        "params": [
+                                            editor_revision,
+                                            [position, text]
+                                        ],
                                     });
                                     write.write_all(format!("{}\n", message).as_bytes()).await?;
                                 }
@@ -496,8 +500,11 @@ async fn listen_socket(tx: DocMessageSender, editor_message_tx: EditorMessageSen
                                     length,
                                 }) => {
                                     let message = serde_json::json!({
-                                        "method": "delete",
-                                        "params": ["", editor_revision, position, length],
+                                        "method": "operation",
+                                        "params": [
+                                            editor_revision,
+                                            [position, -(length as i64)]
+                                        ],
                                     });
                                     write.write_all(format!("{}\n", message).as_bytes()).await?;
                                 }

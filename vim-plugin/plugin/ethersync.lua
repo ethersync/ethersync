@@ -98,23 +98,31 @@ local function processOperationForEditor(method, parameters)
         else
             -- Operation is not up-to-date to our content, skip it!
             -- The daemon will send a transformed one later.
+            print(
+                "Skipping operation, my editor revision is "
+                    .. editorRevision
+                    .. " but operation is for revision "
+                    .. theEditorRevision
+            )
         end
+    else
+        print("Unknown method: " .. method)
     end
 end
 
 -- Connect to the daemon.
 local function connect()
-    client = vim.lsp.rpc.start("ethersync", { "client" })
-
-    -- client = cmd({
-    --     notification = function(method, params)
-    --         if online then
-    --             processOperationForEditor(method, params)
-    --         else
-    --             table.insert(opQueueForEditor, { method, params })
-    --         end
-    --     end,
-    -- })
+    client = vim.lsp.rpc.start("ethersync", { "client" }, {
+        notification = function(method, params)
+            print("Notification received: " .. method)
+            if online then
+                print("Processing")
+                processOperationForEditor(method, params)
+            else
+                table.insert(opQueueForEditor, { method, params })
+            end
+        end,
+    })
     online = true
 end
 

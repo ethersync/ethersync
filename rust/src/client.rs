@@ -45,7 +45,6 @@ pub fn connection() {
                             .expect("Failed to parse Content-Length as integer");
                     }
                 }
-                println!("Content-Length: {}", content_length);
                 data.clear();
                 reading_header = false;
             }
