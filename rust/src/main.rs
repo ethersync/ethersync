@@ -38,7 +38,7 @@ async fn main() -> io::Result<()> {
             }
         }
         Commands::Client => {
-            client::connection()?;
+            client::connection();
         }
     }
     Ok(())

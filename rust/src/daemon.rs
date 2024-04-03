@@ -7,12 +7,12 @@ use automerge::{
 };
 use rand::{distributions::Alphanumeric, Rng};
 use std::fs;
-use std::thread;
 use tokio::{
     io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader, ReadHalf},
     net::UnixListener,
     net::{TcpListener, TcpStream},
     sync::{broadcast, mpsc, oneshot},
+    time::{sleep, Duration},
 };
 
 const SOCKET_PATH: &str = "/tmp/ethersync";
@@ -46,57 +46,106 @@ enum SyncerMessage {
     GenerateSyncMessage,
 }
 
+#[derive(Clone, Debug)]
+enum EditorMessage {
+    Insert {
+        editor_revision: usize,
+        position: usize,
+        text: String,
+    },
+    Delete {
+        editor_revision: usize,
+        position: usize,
+        length: usize,
+    },
+}
+
 type DocMessageSender = mpsc::Sender<DocMessage>;
 type DocChangedSender = broadcast::Sender<()>;
-
+type EditorMessageSender = broadcast::Sender<EditorMessage>;
 type SyncerMessageSender = mpsc::Sender<SyncerMessage>;
 
 // Launch the daemon. Optionally, connect to given peer.
 pub async fn launch(peer: Option<String>) {
     let mut doc = AutoCommit::new();
 
+    // The document task will send a ping on this channel whenever it changes.
+    // The sync tasks will subscribe to it, and react to it by syncing with the peers.
     let (doc_changed_tx, _doc_changed_rx) = broadcast::channel::<()>(16);
-    let doc_changed_tx_clone = doc_changed_tx.clone();
-    let (message_tx, mut message_rx) = mpsc::channel(1);
+
+    // The document task will receive messages on this channel.
+    // The TCP and socket connections will send messages to it when they receive something.
+    let (doc_message_tx, mut doc_message_rx) = mpsc::channel(1);
+
+    // The document task will send messages intended for the socket connection on this channel.
+    let (socket_message_tx, _socket_message_rx) = broadcast::channel::<EditorMessage>(16);
 
     // Make edits to the document occasionally. TODO: Seems to slow something down.
     if false {
-        let tx = message_tx.clone();
+        let tx = doc_message_tx.clone();
         tokio::spawn(async move {
             loop {
                 tx.send(DocMessage::RandomEdit)
                     .await
                     .expect("Failed to send random edit");
 
-                thread::sleep(std::time::Duration::from_secs(2));
+                sleep(Duration::from_secs(2)).await;
+            }
+        });
+    }
+
+    // Send random edits to editors occasionally.
+    if true {
+        let tx = socket_message_tx.clone();
+        tokio::spawn(async move {
+            let mut editor_revision = 0;
+            loop {
+                let random_string: String = rand::thread_rng()
+                    .sample_iter(&Alphanumeric)
+                    .take(1)
+                    .map(char::from)
+                    .collect();
+                let random_position = 0; //rand::thread_rng().gen_range(0..(editor_revision + 1));
+                let message = EditorMessage::Insert {
+                    editor_revision,
+                    position: random_position,
+                    text: random_string,
+                };
+                dbg!(&message);
+                tx.send(message).expect("Failed to send random insert");
+
+                sleep(Duration::from_secs(2)).await;
+                editor_revision += 1;
             }
         });
     }
 
     // Dial peer, or listen for incoming connections.
-    let tx = message_tx.clone();
+    let doc_message_tx_clone = doc_message_tx.clone();
+    let doc_changed_tx_clone = doc_changed_tx.clone();
     if let Some(peer) = peer {
         tokio::spawn(async {
-            dial_tcp(tx, doc_changed_tx_clone, peer)
+            dial_tcp(doc_message_tx_clone, doc_changed_tx_clone, peer)
                 .await
                 .expect("Failed to dial peer");
         });
     } else {
-        let tx_clone = tx.clone();
+        let doc_message_tx_clone_2 = doc_message_tx_clone.clone();
+        let socket_message_tx_clone = socket_message_tx.clone();
         tokio::spawn(async {
-            listen_socket(tx_clone)
+            listen_socket(doc_message_tx_clone_2, socket_message_tx_clone)
                 .await
                 .expect("Failed to listen on UNIX socket");
         });
         tokio::spawn(async {
-            listen_tcp(tx, doc_changed_tx_clone)
+            listen_tcp(doc_message_tx_clone, doc_changed_tx_clone)
                 .await
                 .expect("Failed to listen on TCP port");
         });
     }
 
     loop {
-        let message = message_rx
+        let message = doc_message_rx
             .recv()
             .await
             .expect("Channel towards document task has been closed");
@@ -267,13 +316,13 @@ async fn start_sync(
     // Generate sync message when doc changes.
     let reader_message_tx_clone = reader_message_tx.clone();
     tokio::spawn(async move {
+        let mut doc_changed_rx = doc_changed_tx.subscribe();
         loop {
             reader_message_tx_clone
                 .send(SyncerMessage::GenerateSyncMessage {})
                 .await
                 .expect("Failed to send GenerateSyncMessage to document task");
-            doc_changed_tx
-                .subscribe()
+            doc_changed_rx
                 .recv()
                 .await
                 .expect("Doc changed channel has been closed.");
@@ -318,7 +367,75 @@ async fn start_sync(
     }
 }
 
-async fn listen_socket(tx: DocMessageSender) -> Result<()> {
+// TODO: Write this in a nicer way...
+fn parse_message_from_editor(s: &str) -> Result<DocMessage> {
+    let json: serde_json::Value = serde_json::from_str(s)?;
+    match json {
+        serde_json::Value::Object(map) => {
+            if let Some(serde_json::Value::String(method)) = map.get("method") {
+                match method.as_str() {
+                    "insert" => {
+                        if let Some(serde_json::Value::Array(array)) = map.get("params") {
+                            if let Some(serde_json::Value::Number(position)) = array.get(2) {
+                                if let Some(serde_json::Value::String(text)) = array.get(3) {
+                                    let position =
+                                        position.as_u64().expect("Failed to parse position");
+                                    let text = text.as_str().to_string();
+                                    Ok(DocMessage::Insert {
+                                        position: position as usize,
+                                        text,
+                                    })
+                                } else {
+                                    Err(anyhow::anyhow!("Could not find text param in position #3"))
+                                }
+                            } else {
+                                Err(anyhow::anyhow!(
+                                    "Could not find position param in position #2"
+                                ))
+                            }
+                        } else {
+                            Err(anyhow::anyhow!("Could not find params for insert method"))
+                        }
+                    }
+                    "delete" => {
+                        if let Some(serde_json::Value::Array(array)) = map.get("params") {
+                            if let Some(serde_json::Value::Number(position)) = array.get(2) {
+                                if let Some(serde_json::Value::Number(length)) = array.get(3) {
+                                    let position =
+                                        position.as_u64().expect("Failed to parse position");
+                                    let length = length.as_u64().expect("Failed to parse length");
+                                    Ok(DocMessage::Delete {
+                                        position: position as usize,
+                                        length: length as usize,
+                                    })
+                                } else {
+                                    Err(anyhow::anyhow!(
+                                        "Could not find length param in position #3"
+                                    ))
+                                }
+                            } else {
+                                Err(anyhow::anyhow!(
+                                    "Could not find position param in position #2"
+                                ))
+                            }
+                        } else {
+                            Err(anyhow::anyhow!("Could not find params for delete method"))
+                        }
+                    }
+                    _ => Err(anyhow::anyhow!("Unknown JSON method: {}", method)),
+                }
+            } else {
+                Err(anyhow::anyhow!("Could not find method in JSON message"))
+            }
+        }
+        _ => Err(anyhow::anyhow!(
+            "JSON message is not an object: {:#?}",
+            json
+        )),
+    }
+}
+
+async fn listen_socket(tx: DocMessageSender, editor_message_tx: EditorMessageSender) -> Result<()> {
     fs::remove_file(SOCKET_PATH)?;
     let listener = UnixListener::bind(SOCKET_PATH)?;
     println!("Listening on UNIX socket: {}", SOCKET_PATH);
@@ -326,89 +443,68 @@ async fn listen_socket(tx: DocMessageSender) -> Result<()> {
     loop {
         // TODO: Accept multiple connections.
         match listener.accept().await {
-            Ok((mut stream, _addr)) => {
+            Ok((stream, _addr)) => {
                 println!("Client connection established.");
 
-                let buf_reader = BufReader::new(&mut stream);
+                let mut editor_message_rx = editor_message_tx.subscribe();
+
+                let (mut read, mut write) = tokio::io::split(stream);
+                let buf_reader = BufReader::new(&mut read);
                 //for line in buf_reader.lines() {
                 let mut lines = buf_reader.lines();
 
-                // TODO: Write this in a nicer way...
-                while let Some(line) = lines.next_line().await? {
-                    let json: serde_json::Value = serde_json::from_str(&line)?;
-                    match json {
-                        serde_json::Value::Object(map) => {
-                            if let Some(serde_json::Value::String(method)) = map.get("method") {
-                                // TODO: Make this prettier, maybe with a Serde JSON schema?
-                                match method.as_str() {
-                                    "insert" => {
-                                        if let Some(serde_json::Value::Array(array)) =
-                                            map.get("params")
-                                        {
-                                            if let Some(serde_json::Value::Number(position)) =
-                                                array.get(2)
-                                            {
-                                                if let Some(serde_json::Value::String(text)) =
-                                                    array.get(3)
-                                                {
-                                                    let position = position
-                                                        .as_u64()
-                                                        .expect("Failed to parse position");
-                                                    let text = text.as_str().to_string();
-                                                    tx.send(DocMessage::Insert {
-                                                        position: position as usize,
-                                                        text,
-                                                    })
-                                                    .await?;
-                                                } else {
-                                                    panic!("Invalid text param");
-                                                }
-                                            } else {
-                                                panic!("Invalid position param");
-                                            }
-                                        } else {
-                                            panic!("Invalid insert params");
+                loop {
+                    println!("Waiting for event...");
+                    tokio::select! {
+                        line_maybe = lines.next_line() => {
+                            match line_maybe {
+                                Ok(Some(line)) => {
+                                    match parse_message_from_editor(&line) {
+                                        Ok(message) => {
+                                            tx.send(message).await?;
+                                        }
+                                        Err(e) => {
+                                            println!("Failed to parse message from editor: {:#?}", e);
                                         }
                                     }
-                                    "delete" => {
-                                        if let Some(serde_json::Value::Array(array)) =
-                                            map.get("params")
-                                        {
-                                            if let Some(serde_json::Value::Number(position)) =
-                                                array.get(2)
-                                            {
-                                                if let Some(serde_json::Value::Number(length)) =
-                                                    array.get(3)
-                                                {
-                                                    let position = position
-                                                        .as_u64()
-                                                        .expect("Failed to parse position");
-                                                    let length = length
-                                                        .as_u64()
-                                                        .expect("Failed to parse length");
-                                                    tx.send(DocMessage::Delete {
-                                                        position: position as usize,
-                                                        length: length as usize,
-                                                    })
-                                                    .await?;
-                                                } else {
-                                                    panic!("Invalid length param");
-                                                }
-                                            } else {
-                                                panic!("Invalid position param");
-                                            }
-                                        } else {
-                                            panic!("Invalid delete params");
-                                        }
-                                    }
-                                    _ => {
-                                        println!("Unknown method: {}", method);
-                                    }
+                                }
+                                Ok(None) => {
+                                    break;
+                                }
+                                Err(e) => {
+                                    println!("Error reading line: {:#?}", e);
                                 }
                             }
                         }
-                        _ => {
-                            panic!("Invalid JSON: {:#?}", json);
+                        editor_message = editor_message_rx.recv() => {
+                            println!("Received editor message.");
+                            match editor_message {
+                                Ok(EditorMessage::Insert {
+                                    editor_revision,
+                                    position,
+                                    text,
+                                }) => {
+                                    let message = serde_json::json!({
+                                        "method": "insert",
+                                        "params": ["", editor_revision, position, text],
+                                    });
+                                    write.write_all(format!("{}\n", message).as_bytes()).await?;
+                                }
+                                Ok(EditorMessage::Delete {
+                                    editor_revision,
+                                    position,
+                                    length,
+                                }) => {
+                                    let message = serde_json::json!({
+                                        "method": "delete",
+                                        "params": ["", editor_revision, position, length],
+                                    });
+                                    write.write_all(format!("{}\n", message).as_bytes()).await?;
+                                }
+                                Err(_) => {
+                                    println!("Error receiving editor message.");
+                                }
+                            }
                         }
                     }
                 }
