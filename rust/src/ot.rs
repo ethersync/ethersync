@@ -137,7 +137,7 @@ struct OTServer {
     editor_revision: usize,
     daemon_revision: usize,
     /// "Source of truth" operations.
-    operations: Vec<Op>,
+    operations: Vec<OperationSeq>,
     /// Operations that we have sent to the editor, but we're not sure whether it has
     /// accepted them. We have to keep them around until we know for sure, so that we
     /// can correctly transform operations for the editor.
@@ -148,7 +148,7 @@ struct OTServer {
     ///
     /// TODO: Could this just be a single (combined) Op as well? Given that we can have many
     /// OpElements in an Op.
-    editor_queue: Vec<Op>,
+    editor_queue: Vec<OperationSeq>,
     /// For debugging purposes we keep track of the string that would result from the given operations.
     document: String,
 }
@@ -219,21 +219,20 @@ impl OTServer {
         }
     }
 
-    fn apply_change_to_document(&mut self, op: &Op) {
-        let mut ot_op = op.to_ot();
-        if ot_op.base_len() < self.document.len() {
-            ot_op.retain((self.document.len() - ot_op.base_len()) as u64);
+    fn apply_change_to_document(&mut self, mut op_seq: OperationSeq) {
+        if op_seq.base_len() < self.document.len() {
+            op_seq.retain((self.document.len() - op_seq.base_len()) as u64);
         }
-        self.document = ot_op.apply(&self.document).unwrap();
+        self.document = op_seq.apply(&self.document).unwrap();
     }
 
     /// Called when the CRDT world makes a change to the document.
     fn apply_crdt_change(&mut self, op: Op) -> RevisionedOp {
         // We can apply the change immediately.
-        self.operations.push(op.clone());
-        self.editor_queue.push(op.clone());
+        self.operations.push(op.clone().to_ot());
+        self.editor_queue.push(op.clone().to_ot());
         self.daemon_revision += 1;
-        self.apply_change_to_document(&op);
+        self.apply_change_to_document((op.clone()).to_ot());
 
         // We assume that the editor is up-to-date, and send the operation to it.
         // If it can't accept it, we will transform and send it later.
@@ -244,9 +243,9 @@ impl OTServer {
     }
 
     fn add_editor_operation(&mut self, op: &Op) {
-        self.operations.push(op.clone());
+        self.operations.push(op.clone().to_ot());
         self.editor_revision += 1;
-        self.apply_change_to_document(op)
+        self.apply_change_to_document(op.to_ot())
     }
 
     /// Called when the editor sends us an operation.
@@ -285,7 +284,7 @@ impl OTServer {
             for editor_op in self.editor_queue.iter() {
                 to_editor.push(RevisionedOp {
                     revision: self.editor_revision,
-                    op: editor_op.clone(),
+                    op: Op::from(editor_op),
                 });
             }
             /*
@@ -317,35 +316,34 @@ impl OTServer {
 ///     v  t1'  v
 ///     * ----> *
 ///
-fn transform_through_operations(mut their_operation: Op, my_operations: &Vec<Op>) -> (Op, Vec<Op>) {
+fn transform_through_operations(
+    mut their_operation: Op,
+    my_operations: &Vec<OperationSeq>,
+) -> (Op, Vec<OperationSeq>) {
     let mut transformed_my_operations = vec![];
-    for my_operation in my_operations.iter() {
-        assert!(
-            my_operation.len() == 1,
-            "TODO: support operations that have more than one range"
-        );
-        let mut my_opseq = my_operation.to_ot();
+    for my_op_seq in my_operations.iter() {
+        let mut my_op_seq = my_op_seq.clone();
         let mut their_opseq = their_operation.to_ot();
-        dbg!(&my_opseq);
+        dbg!(&my_op_seq);
         dbg!(&their_opseq);
         // transform expects both operations to have the same base_len. See also:
         // https://docs.rs/operational-transform/0.6.1/src/operational_transform/lib.rs.html#345
         // Currently we are implementing this method on data that doesn't carry this 'global' knowledge.
         // So we'll workaround by manually fixing the base_len, if one of the operations is shorter.
         // We do so by simply retaining the required number of characters at the end
-        if my_opseq.base_len() < their_opseq.base_len() {
-            let diff = their_opseq.base_len() - my_opseq.base_len();
-            my_opseq.retain(diff as u64);
+        if my_op_seq.base_len() < their_opseq.base_len() {
+            let diff = their_opseq.base_len() - my_op_seq.base_len();
+            my_op_seq.retain(diff as u64);
         } else {
-            let diff = my_opseq.base_len() - their_opseq.base_len();
+            let diff = my_op_seq.base_len() - their_opseq.base_len();
             their_opseq.retain(diff as u64);
         }
-        dbg!(&my_opseq);
+        dbg!(&my_op_seq);
         dbg!(&their_opseq);
-        let (my_prime, their_prime) = my_opseq.transform(&their_opseq).unwrap();
+        let (my_prime, their_prime) = my_op_seq.transform(&their_opseq).unwrap();
         dbg!(&my_prime);
         dbg!(&their_prime);
-        transformed_my_operations.push(Op::from(&my_prime));
+        transformed_my_operations.push(my_prime);
         dbg!(&transformed_my_operations);
         their_operation = Op::from(&their_prime);
         dbg!(&their_operation);
@@ -440,7 +438,10 @@ mod tests {
         assert_eq!(to_crdt, insert(3, "y"));
         assert_eq!(to_editor, vec![rev_op(1, insert(1, "x"))]);
 
-        assert_eq!(ot_server.operations, vec![insert(1, "x"), insert(3, "y")]);
+        assert_eq!(
+            ot_server.operations,
+            vec![insert(1, "x").to_ot(), insert(3, "y").to_ot()]
+        );
         assert_eq!(ot_server.document, "hxeyllo");
 
         let to_editor = ot_server.apply_crdt_change(insert(3, "z"));
@@ -457,10 +458,10 @@ mod tests {
         assert_eq!(
             ot_server.operations,
             vec![
-                insert(1, "x"),
-                insert(3, "y"),
-                insert(3, "z"),
-                compose(delete(1, 2), delete(2, 2))
+                insert(1, "x").to_ot(),
+                insert(3, "y").to_ot(),
+                insert(3, "z").to_ot(),
+                compose(delete(1, 2), delete(2, 2)).to_ot()
             ]
         );
     }
@@ -557,7 +558,7 @@ mod tests {
 
     #[test]
     fn transforms_operation_correctly() {
-        let ours = vec![dummy_insert(0), dummy_insert(3)];
+        let mut ours = vec![dummy_insert(0).to_ot(), dummy_insert(3).to_ot()];
         let mut theirs = dummy_insert(0);
         theirs.v[0].replacement = "bar".to_string();
         let (theirs, ours_prime) = transform_through_operations(theirs, &ours);
@@ -565,21 +566,19 @@ mod tests {
         // position of the insert has shifted after ours
         assert_eq!(theirs.v[0].range.anchor.column, 6);
         assert_eq!(ours_prime.len(), 2);
-        // check that ours hasn't changed
+        // check that ours hasn't changed, besides retains
+        ours[0].retain(3);
+        ours[1].retain(3);
         let mut ours_it = ours.iter();
         for op_prime in ours_prime.iter() {
-            assert_eq!(op_prime.len(), 1);
-            let op_prime = &op_prime.v[0];
-            let op = &ours_it.next().unwrap().v[0];
-            assert_eq!(op.range.anchor, op_prime.range.anchor);
-            assert_eq!(op.range.head, op_prime.range.head);
-            assert_eq!(op.replacement, op_prime.replacement);
+            let op = &ours_it.next().unwrap();
+            assert_eq!(op, &op_prime);
         }
     }
 
     #[test]
     fn transforms_operation_correctly_different_base_lengths() {
-        let ours = vec![dummy_insert(3)];
+        let ours = vec![dummy_insert(3).to_ot()];
         let mut theirs = dummy_insert(0);
         theirs.v[0].replacement = "bar".to_string();
         let (theirs, ours_prime) = transform_through_operations(theirs, &ours);
@@ -587,18 +586,20 @@ mod tests {
         // position of the insert hasn't shifted.
         assert_eq!(theirs.v[0].range.anchor.column, 0);
         assert_eq!(ours_prime.len(), 1);
-        assert_eq!(ours_prime[0].len(), 1);
-        assert_eq!(ours_prime[0].v[0].range.anchor.column, 6);
+        assert_eq!(ours_prime[0].ops()[0], OTOperation::Retain(6));
     }
 
     #[test]
     fn transforms_operation_correctly_splits_deletion() {
         let editor_op = insert(2, "x");
-        let unacknowledged_ops = vec![delete(1, 3)];
+        let unacknowledged_ops = vec![delete(1, 3).to_ot()];
 
         let (op_prime, queue_prime) = transform_through_operations(editor_op, &unacknowledged_ops);
         assert_eq!(op_prime, insert(1, "x"));
-        assert_eq!(queue_prime, vec![compose(delete(1, 1), delete(2, 2))]);
+        assert_eq!(
+            queue_prime,
+            vec![compose(delete(1, 1), delete(2, 2)).to_ot()]
+        );
     }
 
     #[test]
