@@ -1,4 +1,6 @@
 use std::io;
+use std::io::BufRead;
+use std::io::BufReader;
 use std::io::Read;
 use std::io::Write;
 use std::os::unix::net::UnixStream;
@@ -7,17 +9,19 @@ use std::thread;
 
 const SOCKET_PATH: &str = "/tmp/ethersync";
 
-// Read JSON-RPC requests that have a Content-Length header from standard input.
-// Write newline-delimited JSON-RPC to the Unix socket.
+// Read/write JSON-RPC requests that have a Content-Length header from/to stdin/stdout.
+// Read/write newline-delimited JSON-RPC from/to the Unix socket.
 pub fn connection() {
     let mut stream = UnixStream::connect(SOCKET_PATH).expect("Failed to connect to socket");
 
     let stream2 = stream.try_clone().expect("Failed to clone socket stream");
+    let reader = BufReader::new(stream2);
 
     thread::spawn(|| {
-        for byte in stream2.bytes() {
-            let byte = byte.expect("Failed to read byte");
-            print!("{}", byte as char);
+        for line in reader.lines() {
+            let line = line.expect("Failed to read line");
+            let length = line.len();
+            print!("Content-Length: {}\r\n\r\n{}", length, line);
             std::io::stdout().flush().expect("Failed to flush stdout");
         }
     });
