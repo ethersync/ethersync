@@ -254,14 +254,15 @@ impl OTServer {
     fn apply_editor_operation(
         &mut self,
         daemon_revision: usize,
-        mut op: Op,
-    ) -> (Op, Vec<RevisionedTextDelta>) {
+        delta: TextDelta,
+    ) -> (TextDelta, Vec<RevisionedTextDelta>) {
         let mut to_editor = vec![];
+        let mut op_seq: OperationSeq = delta.into();
         if daemon_revision > self.daemon_revision {
             panic!("must not happen, editor has seen a daemon revision from the future.");
         } else if daemon_revision == self.daemon_revision {
             // The sent operation applies to the current daemon revision. We can apply it immediately.
-            self.add_editor_operation(&op.to_ot());
+            self.add_editor_operation(&op_seq);
         } else {
             // The operation applies to an older daemon revision.
             // We need to transform it through the daemon operations that have happened since then.
@@ -278,12 +279,9 @@ impl OTServer {
             // What is the most efficient+readable way to cut off the first elements?
             self.editor_queue = self.editor_queue[seen_operations..].to_vec();
 
-            let op_seq;
-            (op_seq, self.editor_queue) =
-                transform_through_operations(op.to_ot(), &self.editor_queue);
+            (op_seq, self.editor_queue) = transform_through_operations(op_seq, &self.editor_queue);
             // Apply the transformed operation to the document.
             self.add_editor_operation(&op_seq);
-            op = Op::from(&op_seq);
 
             for editor_op in self.editor_queue.iter() {
                 to_editor.push(RevisionedTextDelta {
@@ -298,7 +296,7 @@ impl OTServer {
             }
             */
         }
-        (op, to_editor)
+        (op_seq.into(), to_editor)
     }
 }
 
@@ -431,8 +429,9 @@ mod tests {
         let to_editor = ot_server.apply_crdt_change(insert(1, "x").to_ot().into());
         assert_eq!(to_editor, rev_op(0, insert(1, "x").to_ot().into()));
 
-        let (to_crdt, to_editor) = ot_server.apply_editor_operation(0, insert(2, "y"));
-        assert_eq!(to_crdt, insert(3, "y"));
+        let (to_crdt, to_editor) =
+            ot_server.apply_editor_operation(0, insert(2, "y").to_ot().into());
+        assert_eq!(to_crdt, insert(3, "y").to_ot().into());
         let mut expected = insert(1, "x").to_ot();
         expected.retain(2);
         assert_eq!(to_editor, vec![rev_op(1, expected.into())]);
@@ -449,8 +448,8 @@ mod tests {
         assert_eq!(ot_server.document, "hxezyllo");
 
         // editor thinks: hxeyllo -> hlo
-        let (to_crdt, to_editor) = ot_server.apply_editor_operation(1, delete(1, 4));
-        assert_eq!(to_crdt, compose(delete(1, 2), delete(2, 2)));
+        let (to_crdt, to_editor) = ot_server.apply_editor_operation(1, delete(1, 4).to_ot().into());
+        assert_eq!(to_crdt, compose(delete(1, 2), delete(2, 2)).to_ot().into());
         assert_eq!(to_editor, vec![rev_op(2, insert(1, "z").to_ot().into())]);
 
         assert_eq!(ot_server.document, "hzlo");
@@ -474,7 +473,7 @@ mod tests {
         ot_server.apply_crdt_change(dummy_insert(8).to_ot().into());
         assert_eq!(ot_server.editor_queue.len(), 3);
 
-        ot_server.apply_editor_operation(1, dummy_insert(2));
+        ot_server.apply_editor_operation(1, dummy_insert(2).to_ot().into());
         // // we have already seen one op, so now the queue has only 2 left.
         // assert_eq!(ot_server.editor_queue.len(), 2);
     }
