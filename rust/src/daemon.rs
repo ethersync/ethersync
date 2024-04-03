@@ -14,6 +14,7 @@ use tokio::{
     sync::{broadcast, mpsc, oneshot},
     time::{sleep, Duration},
 };
+use tracing::{debug, error, info, trace, warn};
 
 const SOCKET_PATH: &str = "/tmp/ethersync";
 
@@ -112,7 +113,7 @@ pub async fn launch(peer: Option<String>) {
                     position: random_position,
                     text: random_string,
                 };
-                dbg!(&message);
+                debug!(new_message = ?message);
                 tx.send(message).expect("Failed to send random insert");
 
                 sleep(Duration::from_secs(2)).await;
@@ -219,7 +220,7 @@ pub async fn launch(peer: Option<String>) {
                     .receive_sync_message_log_patches(&mut peer_state, message, &mut patch_log)
                     .expect("Failed to apply sync message to Automerge document");
                 let patches = doc.make_patches(&mut patch_log);
-                dbg!(&patches);
+                debug!(?patches);
                 // TODO: Call apply_crdt_change in OT.
                 let _ = doc_changed_tx.send(());
                 response_tx
@@ -242,11 +243,10 @@ pub async fn launch(peer: Option<String>) {
             .expect("Failed to get text object from the Automerge document");
 
         if let Some((automerge::Value::Object(ObjType::Text), text_obj)) = text {
-            println!(
-                "My text is now: {}",
-                doc.text(&text_obj)
-                    .expect("Failed to get string from Automerge text object")
-            );
+            let text = doc
+                .text(&text_obj)
+                .expect("Failed to get string from Automerge text object");
+            debug!(current_text = text);
         }
     }
 }
@@ -255,24 +255,24 @@ async fn listen_tcp(tx: DocMessageSender, doc_changed_tx: DocChangedSender) -> R
     tx.send(DocMessage::Init).await?;
 
     let listener = TcpListener::bind("0.0.0.0:4242").await?;
-    println!("Listening on TCP port: {}", listener.local_addr()?);
+    info!("Listening on TCP port: {}", listener.local_addr()?);
 
     loop {
         let Ok((stream, _addr)) = listener.accept().await else {
-            println!("Error accepting connection.");
+            error!("Error accepting connection.");
             continue;
         };
 
         let tx = tx.clone();
         let doc_changed_tx = doc_changed_tx.clone();
         tokio::spawn(async move {
-            println!("Peer dialed us.");
+            info!("Peer dialed us.");
             match start_sync(tx, doc_changed_tx, stream).await {
                 Ok(_) => {
-                    println!("Sync OK?!");
+                    debug!("Sync OK?!");
                 }
                 Err(e) => {
-                    println!("Error: {:#?}", e);
+                    error!("Error: {:#?}", e);
                 }
             }
         });
@@ -306,10 +306,10 @@ async fn start_sync(
     tokio::spawn(async move {
         match sync_receive(read, message_tx_clone).await {
             Ok(_) => {
-                println!("Sync receive OK.");
+                debug!("Sync receive OK.");
             }
             Err(e) => {
-                println!("Error sync_receive: {:#?}", e);
+                error!("Error sync_receive: {:#?}", e);
             }
         }
     });
@@ -439,13 +439,13 @@ fn parse_message_from_editor(s: &str) -> Result<DocMessage> {
 async fn listen_socket(tx: DocMessageSender, editor_message_tx: EditorMessageSender) -> Result<()> {
     fs::remove_file(SOCKET_PATH)?;
     let listener = UnixListener::bind(SOCKET_PATH)?;
-    println!("Listening on UNIX socket: {}", SOCKET_PATH);
+    info!("Listening on UNIX socket: {}", SOCKET_PATH);
 
     loop {
         // TODO: Accept multiple connections.
         match listener.accept().await {
             Ok((stream, _addr)) => {
-                println!("Client connection established.");
+                info!("Client connection established.");
 
                 let mut editor_message_rx = editor_message_tx.subscribe();
 
@@ -455,7 +455,6 @@ async fn listen_socket(tx: DocMessageSender, editor_message_tx: EditorMessageSen
                 let mut lines = buf_reader.lines();
 
                 loop {
-                    println!("Waiting for event...");
                     tokio::select! {
                         line_maybe = lines.next_line() => {
                             match line_maybe {
@@ -465,7 +464,7 @@ async fn listen_socket(tx: DocMessageSender, editor_message_tx: EditorMessageSen
                                             tx.send(message).await?;
                                         }
                                         Err(e) => {
-                                            println!("Failed to parse message from editor: {:#?}", e);
+                                            error!("Failed to parse message from editor: {:#?}", e);
                                         }
                                     }
                                 }
@@ -473,12 +472,12 @@ async fn listen_socket(tx: DocMessageSender, editor_message_tx: EditorMessageSen
                                     break;
                                 }
                                 Err(e) => {
-                                    println!("Error reading line: {:#?}", e);
+                                    error!("Error reading line: {:#?}", e);
                                 }
                             }
                         }
                         editor_message = editor_message_rx.recv() => {
-                            println!("Received editor message.");
+                            debug!("Received editor message.");
                             match editor_message {
                                 Ok(EditorMessage::Insert {
                                     editor_revision,
@@ -509,16 +508,16 @@ async fn listen_socket(tx: DocMessageSender, editor_message_tx: EditorMessageSen
                                     write.write_all(format!("{}\n", message).as_bytes()).await?;
                                 }
                                 Err(_) => {
-                                    println!("Error receiving editor message.");
+                                    error!("Error receiving editor message.");
                                 }
                             }
                         }
                     }
                 }
-                println!("Client connection closed.");
+                info!("Client connection closed.");
             }
             Err(e) => {
-                println!("Error: {:#?}", e);
+                error!("Error: {:#?}", e);
             }
         }
     }

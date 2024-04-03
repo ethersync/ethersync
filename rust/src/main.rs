@@ -1,5 +1,6 @@
 use clap::{Parser, Subcommand};
 use std::io;
+use tracing_subscriber::FmtSubscriber;
 
 mod client;
 mod daemon;
@@ -27,6 +28,12 @@ enum Commands {
 
 #[tokio::main]
 async fn main() -> io::Result<()> {
+    let subscriber = FmtSubscriber::builder()
+        .with_max_level(tracing::Level::DEBUG)
+        .finish();
+    tracing::subscriber::set_global_default(subscriber)
+        .expect("Setting default log subscriber failed");
+
     let cli = Cli::parse();
 
     match &cli.command {
