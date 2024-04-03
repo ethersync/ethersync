@@ -59,111 +59,6 @@ pub async fn launch(peer: Option<String>) {
     let doc_changed_tx_clone = doc_changed_tx.clone();
     let (message_tx, mut message_rx) = mpsc::channel(1);
 
-    tokio::spawn(async move {
-        loop {
-            let message = message_rx
-                .recv()
-                .await
-                .expect("Channel towards document task has been closed");
-            match message {
-                DocMessage::Init => {
-                    let _text = doc
-                        .put_object(automerge::ROOT, "text", ObjType::Text)
-                        .expect("Failed to initialize text object in Automerge document");
-                    // In the beginning, no-one might be interested in these messages, so the
-                    // send might fail, I think?
-                    let _ = doc_changed_tx.send(());
-                }
-                DocMessage::RandomEdit => {
-                    let text_obj = doc
-                        .get(automerge::ROOT, "text")
-                        .expect("Failed to get text object from Automerge document");
-                    if let Some((automerge::Value::Object(ObjType::Text), text_obj)) = text_obj {
-                        let text_length = doc
-                            .text(&text_obj)
-                            .expect("Failed to get string from Automerge text object")
-                            .len();
-                        let random_string: String = rand::thread_rng()
-                            .sample_iter(&Alphanumeric)
-                            .take(1)
-                            .map(char::from)
-                            .collect();
-                        let random_position = rand::thread_rng().gen_range(0..(text_length + 1));
-                        doc.insert(text_obj, random_position, random_string)
-                            .expect("Failed to insert into Automerge text object");
-                        let _ = doc_changed_tx.send(());
-                    } else {
-                        panic!("Automerge document doesn't have a text object, so I can't edit randomly");
-                    }
-                }
-                DocMessage::Insert { position, text } => {
-                    let text_obj = doc
-                        .get(automerge::ROOT, "text")
-                        .expect("Failed to get text object from Automerge document");
-                    if let Some((automerge::Value::Object(ObjType::Text), text_obj)) = text_obj {
-                        doc.insert(text_obj, position, text)
-                            .expect("Failed to insert into Automerge text object");
-                        // TODO: Call apply_editor_operation in OT.
-                        let _ = doc_changed_tx.send(());
-                    } else {
-                        panic!("Automerge document doesn't have a text object, so I can't insert");
-                    }
-                }
-                DocMessage::Delete { position, length } => {
-                    let text_obj = doc
-                        .get(automerge::ROOT, "text")
-                        .expect("Failed to get text object from Automerge document");
-                    if let Some((automerge::Value::Object(ObjType::Text), text_obj)) = text_obj {
-                        doc.splice_text(text_obj, position, length as isize, "")
-                            .expect("Failed to splice Automerge text object");
-                        // TODO: Call apply_editor_operation in OT.
-                        let _ = doc_changed_tx.send(());
-                    } else {
-                        panic!("Automerge document doesn't have a text object, so I can't delete");
-                    }
-                }
-                DocMessage::ReceiveSyncMessage {
-                    message,
-                    state: mut peer_state,
-                    response_tx,
-                } => {
-                    let mut patch_log = PatchLog::active(TextRepresentation::String);
-                    doc.sync()
-                        .receive_sync_message_log_patches(&mut peer_state, message, &mut patch_log)
-                        .expect("Failed to apply sync message to Automerge document");
-                    let patches = doc.make_patches(&mut patch_log);
-                    dbg!(&patches);
-                    // TODO: Call apply_crdt_change in OT.
-                    let _ = doc_changed_tx.send(());
-                    response_tx
-                        .send(peer_state)
-                        .expect("Failed to send peer state in response to ReceiveSyncMessage");
-                }
-                DocMessage::GenerateSyncMessage {
-                    state: mut peer_state,
-                    response_tx,
-                } => {
-                    let message = doc.sync().generate_sync_message(&mut peer_state);
-                    response_tx
-                        .send((peer_state, message))
-                        .expect("Failed to send peer state and sync message in response to GenerateSyncMessage");
-                }
-            }
-
-            let text = doc
-                .get(automerge::ROOT, "text")
-                .expect("Failed to get text object from the Automerge document");
-
-            if let Some((automerge::Value::Object(ObjType::Text), text_obj)) = text {
-                println!(
-                    "My text is now: {}",
-                    doc.text(&text_obj)
-                        .expect("Failed to get string from Automerge text object")
-                );
-            }
-        }
-    });
-
     // Make edits to the document occasionally. TODO: Seems to slow something down.
     if false {
         let tx = message_tx.clone();
@@ -181,9 +76,11 @@ pub async fn launch(peer: Option<String>) {
     // Dial peer, or listen for incoming connections.
     let tx = message_tx.clone();
     if let Some(peer) = peer {
-        dial_tcp(tx, doc_changed_tx_clone, peer)
-            .await
-            .expect("Failed to dial peer");
+        tokio::spawn(async {
+            dial_tcp(tx, doc_changed_tx_clone, peer)
+                .await
+                .expect("Failed to dial peer");
+        });
     } else {
         let tx_clone = tx.clone();
         tokio::spawn(async {
@@ -191,9 +88,116 @@ pub async fn launch(peer: Option<String>) {
                 .await
                 .expect("Failed to listen on UNIX socket");
         });
-        listen_tcp(tx, doc_changed_tx_clone)
+        tokio::spawn(async {
+            listen_tcp(tx, doc_changed_tx_clone)
+                .await
+                .expect("Failed to listen on TCP port");
+        });
+    }
+
+    loop {
+        let message = message_rx
+            .recv()
             .await
-            .expect("Failed to listen on TCP port");
+            .expect("Channel towards document task has been closed");
+        match message {
+            DocMessage::Init => {
+                let _text = doc
+                    .put_object(automerge::ROOT, "text", ObjType::Text)
+                    .expect("Failed to initialize text object in Automerge document");
+                // In the beginning, no-one might be interested in these messages, so the
+                // send might fail, I think?
+                let _ = doc_changed_tx.send(());
+            }
+            DocMessage::RandomEdit => {
+                let text_obj = doc
+                    .get(automerge::ROOT, "text")
+                    .expect("Failed to get text object from Automerge document");
+                if let Some((automerge::Value::Object(ObjType::Text), text_obj)) = text_obj {
+                    let text_length = doc
+                        .text(&text_obj)
+                        .expect("Failed to get string from Automerge text object")
+                        .len();
+                    let random_string: String = rand::thread_rng()
+                        .sample_iter(&Alphanumeric)
+                        .take(1)
+                        .map(char::from)
+                        .collect();
+                    let random_position = rand::thread_rng().gen_range(0..(text_length + 1));
+                    doc.insert(text_obj, random_position, random_string)
+                        .expect("Failed to insert into Automerge text object");
+                    let _ = doc_changed_tx.send(());
+                } else {
+                    panic!(
+                        "Automerge document doesn't have a text object, so I can't edit randomly"
+                    );
+                }
+            }
+            DocMessage::Insert { position, text } => {
+                let text_obj = doc
+                    .get(automerge::ROOT, "text")
+                    .expect("Failed to get text object from Automerge document");
+                if let Some((automerge::Value::Object(ObjType::Text), text_obj)) = text_obj {
+                    doc.insert(text_obj, position, text)
+                        .expect("Failed to insert into Automerge text object");
+                    // TODO: Call apply_editor_operation in OT.
+                    let _ = doc_changed_tx.send(());
+                } else {
+                    panic!("Automerge document doesn't have a text object, so I can't insert");
+                }
+            }
+            DocMessage::Delete { position, length } => {
+                let text_obj = doc
+                    .get(automerge::ROOT, "text")
+                    .expect("Failed to get text object from Automerge document");
+                if let Some((automerge::Value::Object(ObjType::Text), text_obj)) = text_obj {
+                    doc.splice_text(text_obj, position, length as isize, "")
+                        .expect("Failed to splice Automerge text object");
+                    // TODO: Call apply_editor_operation in OT.
+                    let _ = doc_changed_tx.send(());
+                } else {
+                    panic!("Automerge document doesn't have a text object, so I can't delete");
+                }
+            }
+            DocMessage::ReceiveSyncMessage {
+                message,
+                state: mut peer_state,
+                response_tx,
+            } => {
+                let mut patch_log = PatchLog::active(TextRepresentation::String);
+                doc.sync()
+                    .receive_sync_message_log_patches(&mut peer_state, message, &mut patch_log)
+                    .expect("Failed to apply sync message to Automerge document");
+                let patches = doc.make_patches(&mut patch_log);
+                dbg!(&patches);
+                // TODO: Call apply_crdt_change in OT.
+                let _ = doc_changed_tx.send(());
+                response_tx
+                    .send(peer_state)
+                    .expect("Failed to send peer state in response to ReceiveSyncMessage");
+            }
+            DocMessage::GenerateSyncMessage {
+                state: mut peer_state,
+                response_tx,
+            } => {
+                let message = doc.sync().generate_sync_message(&mut peer_state);
+                response_tx.send((peer_state, message)).expect(
+                    "Failed to send peer state and sync message in response to GenerateSyncMessage",
+                );
+            }
+        }
+
+        let text = doc
+            .get(automerge::ROOT, "text")
+            .expect("Failed to get text object from the Automerge document");
+
+        if let Some((automerge::Value::Object(ObjType::Text), text_obj)) = text {
+            println!(
+                "My text is now: {}",
+                doc.text(&text_obj)
+                    .expect("Failed to get string from Automerge text object")
+            );
+        }
     }
 }
 
