@@ -40,7 +40,7 @@ struct Op {
 // struct Op(Vec<OpElement>);
 
 #[derive(Debug, Clone, PartialEq)]
-struct RevisionedOp {
+struct RevisionedTextDelta {
     revision: usize,
     delta: TextDelta,
 }
@@ -228,7 +228,7 @@ impl OTServer {
     }
 
     /// Called when the CRDT world makes a change to the document.
-    fn apply_crdt_change(&mut self, delta: TextDelta) -> RevisionedOp {
+    fn apply_crdt_change(&mut self, delta: TextDelta) -> RevisionedTextDelta {
         // We can apply the change immediately.
         self.operations.push(delta.clone().into());
         self.editor_queue.push(delta.clone().into());
@@ -237,7 +237,7 @@ impl OTServer {
 
         // We assume that the editor is up-to-date, and send the operation to it.
         // If it can't accept it, we will transform and send it later.
-        RevisionedOp {
+        RevisionedTextDelta {
             revision: self.editor_revision,
             delta,
         }
@@ -255,7 +255,7 @@ impl OTServer {
         &mut self,
         daemon_revision: usize,
         mut op: Op,
-    ) -> (Op, Vec<RevisionedOp>) {
+    ) -> (Op, Vec<RevisionedTextDelta>) {
         let mut to_editor = vec![];
         if daemon_revision > self.daemon_revision {
             panic!("must not happen, editor has seen a daemon revision from the future.");
@@ -283,7 +283,7 @@ impl OTServer {
             self.add_editor_operation(dbg!(&op));
 
             for editor_op in self.editor_queue.iter() {
-                to_editor.push(RevisionedOp {
+                to_editor.push(RevisionedTextDelta {
                     revision: self.editor_revision,
                     delta: (*editor_op).clone().into(),
                 });
@@ -371,8 +371,8 @@ mod tests {
         insert(at, "foo")
     }
 
-    fn rev_op(rev: usize, delta: TextDelta) -> RevisionedOp {
-        RevisionedOp {
+    fn rev_op(rev: usize, delta: TextDelta) -> RevisionedTextDelta {
+        RevisionedTextDelta {
             revision: rev,
             delta,
         }
