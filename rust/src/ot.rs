@@ -130,62 +130,6 @@ impl Op {
         }
         opseq
     }
-
-    /// This function takes operations t1 and m1 ... m_n,
-    /// and returns operations t1' and m1' ... m_n'.
-    ///
-    ///        t1
-    ///     * ----> *
-    ///     |       |
-    ///  m1 |       | m1'
-    ///     v       v
-    ///     * ----> *
-    ///     |       |
-    ///  m2 |       | m2'
-    ///     v       v
-    ///     * ----> *
-    ///     |       |
-    ///  m3 |       | m3'
-    ///     v  t1'  v
-    ///     * ----> *
-    ///
-    fn transform_through_operations(self: Op, my_operations: &Vec<Op>) -> (Self, Vec<Op>) {
-        let mut transformed_my_operations = vec![];
-        let mut their_operation = self;
-        for my_operation in my_operations.iter() {
-            assert!(
-                my_operation.len() == 1,
-                "TODO: support operations that have more than one range"
-            );
-            let mut my_opseq = my_operation.to_ot();
-            let mut their_opseq = their_operation.to_ot();
-            dbg!(&my_opseq);
-            dbg!(&their_opseq);
-            // transform expects both operations to have the same base_len. See also:
-            // https://docs.rs/operational-transform/0.6.1/src/operational_transform/lib.rs.html#345
-            // Currently we are implementing this method on data that doesn't carry this 'global' knowledge.
-            // So we'll workaround by manually fixing the base_len, if one of the operations is shorter.
-            // We do so by simply retaining the required number of characters at the end
-            if my_opseq.base_len() < their_opseq.base_len() {
-                let diff = their_opseq.base_len() - my_opseq.base_len();
-                my_opseq.retain(diff as u64);
-            } else {
-                let diff = my_opseq.base_len() - their_opseq.base_len();
-                their_opseq.retain(diff as u64);
-            }
-            dbg!(&my_opseq);
-            dbg!(&their_opseq);
-            let (my_prime, their_prime) = my_opseq.transform(&their_opseq).unwrap();
-            dbg!(&my_prime);
-            dbg!(&their_prime);
-            transformed_my_operations.push(Op::from(&my_prime));
-            dbg!(&transformed_my_operations);
-            their_operation = Op::from(&their_prime);
-            dbg!(&their_operation);
-        }
-        // TODO: something like `self = their_operation;` doesn't work, does it?
-        (their_operation, transformed_my_operations)
-    }
 }
 
 #[derive(Debug, Default)]
@@ -334,7 +278,7 @@ impl OTServer {
             // What is the most efficient+readable way to cut off the first elements?
             self.editor_queue = self.editor_queue[seen_operations..].to_vec();
 
-            (op, self.editor_queue) = op.transform_through_operations(&self.editor_queue);
+            (op, self.editor_queue) = transform_through_operations(op, &self.editor_queue);
             // Apply the transformed operation to the document.
             self.add_editor_operation(dbg!(&op));
 
@@ -353,6 +297,61 @@ impl OTServer {
         }
         (op, to_editor)
     }
+}
+
+/// This function takes operations t1 and m1 ... m_n,
+/// and returns operations t1' and m1' ... m_n'.
+///
+///        t1
+///     * ----> *
+///     |       |
+///  m1 |       | m1'
+///     v       v
+///     * ----> *
+///     |       |
+///  m2 |       | m2'
+///     v       v
+///     * ----> *
+///     |       |
+///  m3 |       | m3'
+///     v  t1'  v
+///     * ----> *
+///
+fn transform_through_operations(mut their_operation: Op, my_operations: &Vec<Op>) -> (Op, Vec<Op>) {
+    let mut transformed_my_operations = vec![];
+    for my_operation in my_operations.iter() {
+        assert!(
+            my_operation.len() == 1,
+            "TODO: support operations that have more than one range"
+        );
+        let mut my_opseq = my_operation.to_ot();
+        let mut their_opseq = their_operation.to_ot();
+        dbg!(&my_opseq);
+        dbg!(&their_opseq);
+        // transform expects both operations to have the same base_len. See also:
+        // https://docs.rs/operational-transform/0.6.1/src/operational_transform/lib.rs.html#345
+        // Currently we are implementing this method on data that doesn't carry this 'global' knowledge.
+        // So we'll workaround by manually fixing the base_len, if one of the operations is shorter.
+        // We do so by simply retaining the required number of characters at the end
+        if my_opseq.base_len() < their_opseq.base_len() {
+            let diff = their_opseq.base_len() - my_opseq.base_len();
+            my_opseq.retain(diff as u64);
+        } else {
+            let diff = my_opseq.base_len() - their_opseq.base_len();
+            their_opseq.retain(diff as u64);
+        }
+        dbg!(&my_opseq);
+        dbg!(&their_opseq);
+        let (my_prime, their_prime) = my_opseq.transform(&their_opseq).unwrap();
+        dbg!(&my_prime);
+        dbg!(&their_prime);
+        transformed_my_operations.push(Op::from(&my_prime));
+        dbg!(&transformed_my_operations);
+        their_operation = Op::from(&their_prime);
+        dbg!(&their_operation);
+    }
+    // TODO: something like `self = their_operation;` doesn't work, does it?
+    (their_operation, transformed_my_operations)
 }
 
 #[cfg(test)]
@@ -561,7 +560,7 @@ mod tests {
         let ours = vec![dummy_insert(0), dummy_insert(3)];
         let mut theirs = dummy_insert(0);
         theirs.v[0].replacement = "bar".to_string();
-        let (theirs, ours_prime) = theirs.transform_through_operations(&ours);
+        let (theirs, ours_prime) = transform_through_operations(theirs, &ours);
         assert_eq!(theirs.len(), 1);
         // position of the insert has shifted after ours
         assert_eq!(theirs.v[0].range.anchor.column, 6);
@@ -583,7 +582,7 @@ mod tests {
         let ours = vec![dummy_insert(3)];
         let mut theirs = dummy_insert(0);
         theirs.v[0].replacement = "bar".to_string();
-        let (theirs, ours_prime) = theirs.transform_through_operations(&ours);
+        let (theirs, ours_prime) = transform_through_operations(theirs, &ours);
         assert_eq!(theirs.len(), 1);
         // position of the insert hasn't shifted.
         assert_eq!(theirs.v[0].range.anchor.column, 0);
@@ -597,7 +596,7 @@ mod tests {
         let editor_op = insert(2, "x");
         let unacknowledged_ops = vec![delete(1, 3)];
 
-        let (op_prime, queue_prime) = editor_op.transform_through_operations(&unacknowledged_ops);
+        let (op_prime, queue_prime) = transform_through_operations(editor_op, &unacknowledged_ops);
         assert_eq!(op_prime, insert(1, "x"));
         assert_eq!(queue_prime, vec![compose(delete(1, 1), delete(2, 2))]);
     }
