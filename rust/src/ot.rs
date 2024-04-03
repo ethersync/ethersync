@@ -1,15 +1,67 @@
-#![allow(dead_code)]
 use crate::types::TextDelta;
 use operational_transform::OperationSeq;
+use std::cmp::Ordering;
 
+/// When doing OT, many TextDeltas need a revision metadata, to see whether they apply.
 #[derive(Debug, Clone, PartialEq)]
-struct RevisionedTextDelta {
+pub struct RevisionedTextDelta {
     revision: usize,
     delta: TextDelta,
 }
 
+///    This class receive operations from both the CRDT world, and one editor.
+///    It will make sure to send the correct operations back to them using the provided callbacks.
+///
+///    Here's an example of how it works:
+///
+///    1. The daemon starts with an empty document.
+///    2. It applies the d1 operation to it, which the editor also receives and applies.
+///    3. The daemon applies d2 and d3, and sends them to the editor (thinking these would put it
+///       into the same state).
+///       It also sends along the editor revision, which the number of ops received by the editor,
+///       which is basically the column, and specifies the point the ops apply to. (Here: 0).
+///    4. But the editor has made concurrent edits e1 and e2 in the meantime. It rejects d2 and d3.
+///       It sends e1 and e2 to the daemon, along with the daemon revision, which is the number of ops
+///       it has received from the daemon (the row).
+///    5. The daemon transforms e1 and e2 through d2 and d3, creating e1' and e2', and applies them
+///       to the document. It sends d2' and d3' to the editor, along with the editor revision (2).
+///    6. The editor receives d2' and applies it, but then makes edit e3, and sends it to the daemon.
+///       The editor rejects d3', because it is received after e3 was created.
+///    7. The daemon meanwhile makes edit d4. Upon reciving e3, it transforms it against d3' and d4,
+///       and sends d3'' and d4' to the editor. It applies d4 and e3'' to the document.
+///    8. The editor receives d3'' and d4', and applies them. Both sides now have the same document.
+///
+///
+///     ---- the right axis is the editor revision --->
+///    |
+///    | the down axis is the daemon revision
+///    |
+///    v
+///
+///        *
+///        |
+///     d1 |
+///        v  e1      e2
+///        * ----> * ----> *
+///        |       |       |
+///     d2 |       |       | d2'
+///        v       v       v  e3
+///        * ----> * ----> * ----> *          Ops in the rightmost column need
+///        |       |       |       |          to be queued by us, because
+///     d3 |       |       | d3'   | d3''     we don't know whether the
+///        v  e1'  v  e2'  v  e3'  v          editor accepted them. (d3'' and d4')
+///        * ----> * ----> * ----> *
+///                        |       |
+///    The lower        d4 |       | d4'
+///    zig-zag is          v  e3'' v
+///    the operations      * ----> *
+///    log saved by the
+///    daemon.
+///    (d1, d2, d3, e1', e2', d4, e3'')
+///
+///*/
 #[derive(Debug, Default)]
-struct OTServer {
+pub struct OTServer {
     editor_revision: usize,
     daemon_revision: usize,
     /// "Source of truth" operations.
@@ -22,93 +74,17 @@ struct OTServer {
     /// the overhead of implementing the tranformation per editor plugin. In our case
     /// there's a small number of editors, so transforming it in the daemon is feasible.
     ///
-    /// TODO: Could this just be a single (combined) Op as well? Given that we can have many
-    /// OpElements in an Op.
     editor_queue: Vec<OperationSeq>,
-    /// For debugging purposes we keep track of the string that would result from the given operations.
-    document: String,
 }
 
-/*
- TODO: Rewrite the below properly (I copied it from node daemon), then turn into Docstring.
-
-    This class receive operations from both the CRDT world, and one editor.
-    It will make sure to send the correct operations back to them using the provided callbacks.
-
-    Here's an example of how it works:
-
-    1. The daemon starts with an empty document.
-    2. It applies the d1 operation to it, which the editor also receives and applies.
-    3. The daemon applies d2 and d3, and sends them to the editor (thinking these would put it
-       into the same state).
-       It also sends along the editor revision, which the number of ops received by the editor,
-       which is basically the column, and specifies the point the ops apply to. (Here: 0).
-    4. But the editor has made concurrent edits e1 and e2 in the meantime. It rejects d2 and d3.
-       It sends e1 and e2 to the daemon, along with the daemon revision, which is the number of ops
-       it has received from the daemon (the row).
-    5. The daemon transforms e1 and e2 through d2 and d3, creating e1' and e2', and applies them
-       to the document. It sends d2' and d3' to the editor, along with the editor revision (2).
-    6. The editor receives d2' and applies it, but then makes edit e3, and sends it to the daemon.
-       The editor rejects d3', because it is received after e3 was created.
-    7. The daemon meanwhile makes edit d4. Upon reciving e3, it transforms it against d3' and d4,
-       and sends d3'' and d4' to the editor. It applies d4 and e3'' to the document.
-    8. The editor receives d3'' and d4', and applies them. Both sides now have the same document.
-
-
-     ---- the right axis is the editor revision --->
-    |
-    | the down axis is the daemon revision
-    |
-    v
-
-        *
-        |
-     d1 |
-        v  e1      e2
-        * ----> * ----> *
-        |       |       |
-     d2 |       |       | d2'
-        v       v       v  e3
-        * ----> * ----> * ----> *          Ops in the rightmost column need
-        |       |       |       |          to be queued by us, because
-     d3 |       |       | d3'   | d3''     we don't know whether the
-        v  e1'  v  e2'  v  e3'  v          editor accepted them. (d3'' and d4')
-        * ----> * ----> * ----> *
-                        |       |
-    The lower        d4 |       | d4'
-    zig-zag is          v  e3'' v
-    the operations      * ----> *
-    log saved by the
-    daemon.
-    (d1, d2, d3, e1', e2', d4, e3'')
-
-*/
+#[allow(dead_code)] // TODO: remove, once OTServer is in use.
 impl OTServer {
-    fn new() -> Self {
-        Default::default()
-    }
-
-    fn new_with_doc(document: &str) -> Self {
-        Self {
-            document: document.to_string(),
-            ..Default::default()
-        }
-    }
-
-    fn apply_change_to_document(&mut self, mut op_seq: OperationSeq) {
-        if op_seq.base_len() < self.document.len() {
-            op_seq.retain((self.document.len() - op_seq.base_len()) as u64);
-        }
-        self.document = op_seq.apply(&self.document).unwrap();
-    }
-
     /// Called when the CRDT world makes a change to the document.
-    fn apply_crdt_change(&mut self, delta: TextDelta) -> RevisionedTextDelta {
+    pub fn apply_crdt_change(&mut self, delta: TextDelta) -> RevisionedTextDelta {
         // We can apply the change immediately.
         self.operations.push(delta.clone().into());
         self.editor_queue.push(delta.clone().into());
         self.daemon_revision += 1;
-        self.apply_change_to_document(delta.clone().into());
 
         // We assume that the editor is up-to-date, and send the operation to it.
         // If it can't accept it, we will transform and send it later.
@@ -118,60 +94,63 @@ impl OTServer {
         }
     }
 
-    fn add_editor_operation(&mut self, op_seq: &OperationSeq) {
-        self.operations.push(op_seq.clone());
-        self.editor_revision += 1;
-        self.apply_change_to_document(op_seq.clone());
-    }
-
     /// Called when the editor sends us an operation.
     /// daemonRevision is the revision this operation applies to.
-    fn apply_editor_operation(
+    pub fn apply_editor_operation(
         &mut self,
         daemon_revision: usize,
         delta: TextDelta,
     ) -> (TextDelta, Vec<RevisionedTextDelta>) {
         let mut to_editor = vec![];
         let mut op_seq: OperationSeq = delta.into();
-        if daemon_revision > self.daemon_revision {
-            panic!("must not happen, editor has seen a daemon revision from the future.");
-        } else if daemon_revision == self.daemon_revision {
-            // The sent operation applies to the current daemon revision. We can apply it immediately.
-            self.add_editor_operation(&op_seq);
-        } else {
-            // The operation applies to an older daemon revision.
-            // We need to transform it through the daemon operations that have happened since then.
-
-            // But we at least we know that the editor has seen all daemon operations until
-            // daemon_revision. So we can remove them from the editor queue.
-            let daemon_operations_to_transform = self.daemon_revision - daemon_revision;
-            assert!(
-                self.editor_queue.len() >= daemon_operations_to_transform,
-                "Whoopsie, we don't have enough operations cached. Was this already processed?"
-            );
-            let seen_operations = self.editor_queue.len() - daemon_operations_to_transform;
-            // TODO: should we use split_off instead and drop the first one?
-            // What is the most efficient+readable way to cut off the first elements?
-            self.editor_queue = self.editor_queue[seen_operations..].to_vec();
-
-            (op_seq, self.editor_queue) = transform_through_operations(op_seq, &self.editor_queue);
-            // Apply the transformed operation to the document.
-            self.add_editor_operation(&op_seq);
-
-            for editor_op in self.editor_queue.iter() {
-                to_editor.push(RevisionedTextDelta {
-                    revision: self.editor_revision,
-                    delta: (*editor_op).clone().into(),
-                });
+        self.editor_revision += 1;
+        match daemon_revision.cmp(&self.daemon_revision) {
+            Ordering::Greater => {
+                panic!("must not happen, editor has seen a daemon revision from the future.");
             }
-            /*
-            // Send the transformed queue to the editor.
-            for (let op of this.editorQueue) {
-                this.sendToEditor(this.editorRevision, op)
+            Ordering::Equal => {
+                // The sent operation applies to the current daemon revision. We can apply it immediately.
             }
-            */
+            Ordering::Less => {
+                // The operation applies to an older daemon revision.
+                // We need to transform it through the daemon operations that have happened since then.
+
+                // But we at least we know that the editor has seen all daemon operations until
+                // daemon_revision. So we can remove them from the editor queue.
+                let daemon_operations_to_transform = self.daemon_revision - daemon_revision;
+                assert!(
+                    self.editor_queue.len() >= daemon_operations_to_transform,
+                    "Whoopsie, we don't have enough operations cached. Was this already processed?"
+                );
+                let seen_operations = self.editor_queue.len() - daemon_operations_to_transform;
+                // TODO: should we use split_off instead and drop the first one?
+                // What is the most efficient+readable way to cut off the first elements?
+                self.editor_queue = self.editor_queue[seen_operations..].to_vec();
+
+                (op_seq, self.editor_queue) =
+                    transform_through_operations(op_seq, &self.editor_queue);
+
+                for editor_op in &self.editor_queue {
+                    to_editor.push(RevisionedTextDelta {
+                        revision: self.editor_revision,
+                        delta: editor_op.clone().into(),
+                    });
+                }
+            }
         }
+        self.operations.push(op_seq.clone());
         (op_seq.into(), to_editor)
+    }
+
+    pub fn apply_to_string(&mut self, mut document: String) -> String {
+        for op_seq in &self.operations {
+            let mut op_seq = op_seq.clone();
+            if op_seq.base_len() < document.len() {
+                op_seq.retain((document.len() - op_seq.base_len()) as u64);
+            }
+            document = op_seq.apply(&document).unwrap();
+        }
+        document
     }
 }
 
@@ -253,7 +232,7 @@ mod tests {
 
         #[test]
         fn routes_operations_through_server() {
-            let mut ot_server = OTServer::new_with_doc("hello");
+            let mut ot_server: OTServer = Default::default();
 
             let to_editor = ot_server.apply_crdt_change(insert(1, "x").into());
             assert_eq!(to_editor, rev_op(0, insert(1, "x").into()));
@@ -268,19 +247,19 @@ mod tests {
                 ot_server.operations,
                 vec![insert(1, "x").into(), insert(3, "y").into()]
             );
-            assert_eq!(ot_server.document, "hxeyllo");
+            assert_eq!(ot_server.apply_to_string("hello".into()), "hxeyllo");
 
             let to_editor = ot_server.apply_crdt_change(insert(3, "z").into());
             assert_eq!(to_editor, rev_op(1, insert(3, "z").into()));
 
-            assert_eq!(ot_server.document, "hxezyllo");
+            assert_eq!(ot_server.apply_to_string("hello".into()), "hxezyllo");
 
             // editor thinks: hxeyllo -> hlo
             let (to_crdt, to_editor) = ot_server.apply_editor_operation(1, delete(1, 4).into());
             assert_eq!(to_crdt, compose(delete(1, 2), delete(2, 2)).into());
             assert_eq!(to_editor, vec![rev_op(2, insert(1, "z").into())]);
 
-            assert_eq!(ot_server.document, "hzlo");
+            assert_eq!(ot_server.apply_to_string("hello".into()), "hzlo");
             assert_eq!(
                 ot_server.operations,
                 vec![
@@ -302,7 +281,7 @@ mod tests {
 
         #[test]
         fn crdt_change_increases_revision() {
-            let mut ot_server = OTServer::new_with_doc("he");
+            let mut ot_server: OTServer = Default::default();
             ot_server.apply_crdt_change(dummy_insert(2));
             assert_eq!(ot_server.daemon_revision, 1);
             assert_eq!(ot_server.editor_revision, 0);
@@ -310,7 +289,7 @@ mod tests {
 
         #[test]
         fn editor_operation_tracks_revision() {
-            let mut ot_server = OTServer::new_with_doc("he");
+            let mut ot_server: OTServer = Default::default();
             ot_server.apply_editor_operation(0, dummy_insert(2));
             assert_eq!(ot_server.editor_revision, 1);
             assert_eq!(ot_server.daemon_revision, 0);
@@ -318,14 +297,14 @@ mod tests {
 
         #[test]
         fn crdt_change_tracks_in_queue() {
-            let mut ot_server = OTServer::new_with_doc("he");
+            let mut ot_server: OTServer = Default::default();
             ot_server.apply_crdt_change(dummy_insert(2));
             assert_eq!(ot_server.editor_queue, vec![dummy_insert(2).into()]);
         }
 
         #[test]
         fn editor_operation_reduces_editor_queue() {
-            let mut ot_server = OTServer::new_with_doc("he");
+            let mut ot_server: OTServer = Default::default();
 
             ot_server.apply_crdt_change(dummy_insert(2));
             ot_server.apply_crdt_change(dummy_insert(5));
