@@ -1,4 +1,5 @@
 #![allow(dead_code)]
+use crate::types::TextDelta;
 use operational_transform::{Operation as OTOperation, OperationSeq};
 
 //TODO: change Position to usize alias
@@ -38,10 +39,10 @@ struct Op {
 // TODO: or should we do it as a TupleStruct?
 // struct Op(Vec<OpElement>);
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 struct RevisionedOp {
     revision: usize,
-    op: Op,
+    delta: TextDelta,
 }
 
 impl Op {
@@ -227,18 +228,18 @@ impl OTServer {
     }
 
     /// Called when the CRDT world makes a change to the document.
-    fn apply_crdt_change(&mut self, op: Op) -> RevisionedOp {
+    fn apply_crdt_change(&mut self, delta: TextDelta) -> RevisionedOp {
         // We can apply the change immediately.
-        self.operations.push(op.clone().to_ot());
-        self.editor_queue.push(op.clone().to_ot());
+        self.operations.push(delta.clone().into());
+        self.editor_queue.push(delta.clone().into());
         self.daemon_revision += 1;
-        self.apply_change_to_document((op.clone()).to_ot());
+        self.apply_change_to_document(delta.clone().into());
 
         // We assume that the editor is up-to-date, and send the operation to it.
         // If it can't accept it, we will transform and send it later.
         RevisionedOp {
             revision: self.editor_revision,
-            op,
+            delta,
         }
     }
 
@@ -284,7 +285,7 @@ impl OTServer {
             for editor_op in self.editor_queue.iter() {
                 to_editor.push(RevisionedOp {
                     revision: self.editor_revision,
-                    op: Op::from(editor_op),
+                    delta: (*editor_op).clone().into(),
                 });
             }
             /*
@@ -370,8 +371,11 @@ mod tests {
         insert(at, "foo")
     }
 
-    fn rev_op(rev: usize, op: Op) -> RevisionedOp {
-        RevisionedOp { revision: rev, op }
+    fn rev_op(rev: usize, delta: TextDelta) -> RevisionedOp {
+        RevisionedOp {
+            revision: rev,
+            delta,
+        }
     }
 
     fn delete(from: usize, length: usize) -> Op {
@@ -405,7 +409,7 @@ mod tests {
     #[test]
     fn crdt_change_increases_revision() {
         let mut ot_server = OTServer::new_with_doc("he");
-        ot_server.apply_crdt_change(dummy_insert(2));
+        ot_server.apply_crdt_change(dummy_insert(2).to_ot().into());
         assert_eq!(ot_server.daemon_revision, 1);
         assert_eq!(ot_server.editor_revision, 0);
     }
@@ -414,7 +418,7 @@ mod tests {
     fn crdt_change_tracks_in_queue() {
         let mut ot_server = OTServer::new_with_doc("he");
         let op = dummy_insert(2);
-        ot_server.apply_crdt_change(op);
+        ot_server.apply_crdt_change(op.to_ot().into());
         assert_eq!(ot_server.editor_queue.len(), 1);
         // assert_eq!(ot_server.editor_queue[0], op); // How to compare?
     }
@@ -423,12 +427,14 @@ mod tests {
     fn routes_operations_through_server() {
         let mut ot_server = OTServer::new_with_doc("hello");
 
-        let to_editor = ot_server.apply_crdt_change(insert(1, "x"));
-        assert_eq!(to_editor, rev_op(0, insert(1, "x")));
+        let to_editor = ot_server.apply_crdt_change(insert(1, "x").to_ot().into());
+        assert_eq!(to_editor, rev_op(0, insert(1, "x").to_ot().into()));
 
         let (to_crdt, to_editor) = ot_server.apply_editor_operation(0, insert(2, "y"));
         assert_eq!(to_crdt, insert(3, "y"));
-        assert_eq!(to_editor, vec![rev_op(1, insert(1, "x"))]);
+        let mut expected = insert(1, "x").to_ot();
+        expected.retain(2);
+        assert_eq!(to_editor, vec![rev_op(1, expected.into())]);
 
         assert_eq!(
             ot_server.operations,
@@ -436,15 +442,15 @@ mod tests {
         );
         assert_eq!(ot_server.document, "hxeyllo");
 
-        let to_editor = ot_server.apply_crdt_change(insert(3, "z"));
-        assert_eq!(to_editor, rev_op(1, insert(3, "z")));
+        let to_editor = ot_server.apply_crdt_change(insert(3, "z").to_ot().into());
+        assert_eq!(to_editor, rev_op(1, insert(3, "z").to_ot().into()));
 
         assert_eq!(ot_server.document, "hxezyllo");
 
         // editor thinks: hxeyllo -> hlo
         let (to_crdt, to_editor) = ot_server.apply_editor_operation(1, delete(1, 4));
         assert_eq!(to_crdt, compose(delete(1, 2), delete(2, 2)));
-        assert_eq!(to_editor, vec![rev_op(2, insert(1, "z"))]);
+        assert_eq!(to_editor, vec![rev_op(2, insert(1, "z").to_ot().into())]);
 
         assert_eq!(ot_server.document, "hzlo");
         assert_eq!(
@@ -462,9 +468,9 @@ mod tests {
     fn editor_operation_reduces_editor_queue() {
         let mut ot_server = OTServer::new_with_doc("he");
 
-        ot_server.apply_crdt_change(dummy_insert(2));
-        ot_server.apply_crdt_change(dummy_insert(5));
-        ot_server.apply_crdt_change(dummy_insert(8));
+        ot_server.apply_crdt_change(dummy_insert(2).to_ot().into());
+        ot_server.apply_crdt_change(dummy_insert(5).to_ot().into());
+        ot_server.apply_crdt_change(dummy_insert(8).to_ot().into());
         assert_eq!(ot_server.editor_queue.len(), 3);
 
         ot_server.apply_editor_operation(1, dummy_insert(2));
