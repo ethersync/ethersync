@@ -2,135 +2,10 @@
 use crate::types::TextDelta;
 use operational_transform::{Operation as OTOperation, OperationSeq};
 
-//TODO: change Position to usize alias
-#[derive(Debug, Clone, PartialEq, Eq)]
-struct Position {
-    line: usize,
-    column: usize,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-struct Range {
-    anchor: Position,
-    head: Position,
-}
-
-impl Range {
-    fn empty(&self) -> bool {
-        self.anchor == self.head
-    }
-
-    fn forward(&self) -> bool {
-        (self.anchor.line < self.head.line)
-            || (self.anchor.line == self.head.line && self.anchor.column <= self.head.column)
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-struct OpElement {
-    range: Range,
-    replacement: String,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
-struct Op {
-    v: Vec<OpElement>,
-}
-// TODO: or should we do it as a TupleStruct?
-// struct Op(Vec<OpElement>);
-
 #[derive(Debug, Clone, PartialEq)]
 struct RevisionedTextDelta {
     revision: usize,
     delta: TextDelta,
-}
-
-impl Op {
-    fn len(&self) -> usize {
-        self.v.len()
-    }
-
-    fn from(opseq: &OperationSeq) -> Self {
-        let mut v = vec![];
-        let mut position = 0;
-        for op in opseq.ops().iter() {
-            match op {
-                OTOperation::Retain(n) => position += n,
-                OTOperation::Delete(n) => {
-                    v.push(OpElement {
-                        range: Range {
-                            anchor: Position {
-                                line: 0,
-                                column: position as usize,
-                            },
-                            head: Position {
-                                line: 0,
-                                column: (position + n) as usize,
-                            },
-                        },
-                        replacement: "".to_string(),
-                    });
-                }
-                OTOperation::Insert(s) => {
-                    v.push(OpElement {
-                        range: Range {
-                            anchor: Position {
-                                line: 0,
-                                column: position as usize,
-                            },
-                            head: Position {
-                                line: 0,
-                                column: position as usize,
-                            },
-                        },
-                        replacement: s.to_string(),
-                    });
-                    position += s.len() as u64;
-                }
-            }
-        }
-
-        Self { v }
-    }
-
-    fn to_ot(&self) -> OperationSeq {
-        let mut opseq = OperationSeq::default();
-        for op in self.v.iter() {
-            let mut opseq_sub = OperationSeq::default();
-            assert!(op.range.anchor.line == 0, "TODO: support lines.");
-            if op.replacement != "" {
-                if op.range.empty() {
-                    // insert
-                    opseq_sub.retain(op.range.anchor.column as u64);
-                    opseq_sub.insert(&op.replacement);
-                } else {
-                    // replace.
-                    todo!()
-                }
-            } else {
-                if !op.range.empty() {
-                    // delete
-                    let from;
-                    let to;
-                    if op.range.forward() {
-                        from = op.range.anchor.column;
-                        to = op.range.head.column;
-                    } else {
-                        from = op.range.head.column;
-                        to = op.range.anchor.column;
-                    }
-                    opseq_sub.retain(from as u64);
-                    opseq_sub.delete((to - from) as u64);
-                } // else: no-op.
-            }
-            // TODO: I *think* the other way around can't happen? Not sure tho...
-            if opseq.target_len() < opseq_sub.base_len() {
-                opseq.retain((opseq_sub.base_len() - opseq.target_len()) as u64);
-            }
-            opseq = opseq.compose(&opseq_sub).unwrap();
-        }
-        opseq
-    }
 }
 
 #[derive(Debug, Default)]
@@ -454,10 +329,7 @@ mod tests {
         let mut ours = vec![dummy_insert(0), dummy_insert(3)];
         let theirs = insert(0, "bar");
         let (theirs, ours_prime) = transform_through_operations(theirs, &ours);
-        dbg!(&theirs);
-        // assert_eq!(theirs.len(), 1);
-        // // position of the insert has shifted after ours
-        // assert_eq!(theirs.v[0].range.anchor.column, 6);
+        assert_eq!(theirs, insert(6, "bar"));
         assert_eq!(ours_prime.len(), 2);
         // check that ours hasn't changed, besides retains
         ours[0].retain(3);
@@ -472,12 +344,11 @@ mod tests {
     #[test]
     fn transforms_operation_correctly_different_base_lengths() {
         let ours = vec![dummy_insert(3)];
-        let theirs = insert(0, "bar");
-        let (theirs, ours_prime) = transform_through_operations(theirs, &ours);
-        dbg!(&theirs);
-        // assert_eq!(theirs.len(), 1);
-        // position of the insert hasn't shifted.
-        // assert_eq!(theirs.v[0].range.anchor.column, 0);
+        let mut theirs = insert(0, "bar");
+        let (theirs_prime, ours_prime) = transform_through_operations(theirs.clone(), &ours);
+        // position of the insert hasn't shifted, but we got a retain added.
+        theirs.retain(6);
+        assert_eq!(theirs, theirs_prime);
         assert_eq!(ours_prime.len(), 1);
         assert_eq!(ours_prime[0].ops()[0], OTOperation::Retain(6));
     }
