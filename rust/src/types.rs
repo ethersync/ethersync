@@ -14,7 +14,7 @@ enum TextOp {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct EditorTextDelta(Vec<EditorTextOp>);
+pub struct EditorTextDelta(pub Vec<EditorTextOp>);
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct RevisionedEditorTextDelta {
@@ -37,33 +37,32 @@ impl RevisionedTextDelta {
 
 impl From<RevisionedEditorTextDelta> for RevisionedTextDelta {
     fn from(rev_ed_delta: RevisionedEditorTextDelta) -> Self {
-        todo!()
-        //Self::new(rev_ed_delta.revision, rev_ed_delta.into())
+        Self::new(rev_ed_delta.revision, rev_ed_delta.delta.into())
     }
 }
 
 #[derive(Debug, Clone, PartialEq)]
-struct EditorTextOp {
-    range: Range,
-    replacement: String,
+pub struct EditorTextOp {
+    pub range: Range,
+    pub replacement: String,
 }
 
 #[derive(Debug, Clone, PartialEq)]
-struct Range {
+pub struct Range {
     anchor: Position,
     head: Position,
 }
 
 impl Range {
-    fn is_empty(&self) -> bool {
+    pub fn is_empty(&self) -> bool {
         self.anchor == self.head
     }
 
-    fn is_forward(&self) -> bool {
+    pub fn is_forward(&self) -> bool {
         self.anchor <= self.head
     }
 
-    fn as_relative(&self) -> (usize, usize) {
+    pub fn as_relative(&self) -> (usize, usize) {
         if self.is_forward() {
             (self.anchor, self.head - self.anchor)
         } else {
