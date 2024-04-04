@@ -27,6 +27,14 @@ enum DocMessage {
     Init,
     RandomEdit,
     Delta(RevisionedEditorTextDelta),
+    Insert {
+        position: usize,
+        text: String,
+    },
+    Delete {
+        position: usize,
+        length: usize,
+    },
     ReceiveSyncMessage {
         message: Message,
         state: SyncState,
@@ -187,13 +195,13 @@ pub async fn launch(peer: Option<String>) {
                     .get(automerge::ROOT, "text")
                     .expect("Failed to get text object from Automerge document");
                 if let Some((automerge::Value::Object(ObjType::Text), text_obj)) = text_obj {
-                    for op in rev_delta.delta {
-                        let (position, length) = op.range.as_relative();
-                        doc.splice_text(text_obj, position, length as isize, op.replacement)
-                            .expect("Failed to splice Automerge text object");
-                    }
-                    // TODO: fill with meaningful values
-                    ot_server.apply_editor_operation(rev_delta);
+                    //for op in rev_delta.delta {
+                    //    let (position, length) = op.range.as_relative();
+                    //    doc.splice_text(text_obj, position, length as isize, op.replacement)
+                    //        .expect("Failed to splice Automerge text object");
+                    //}
+                    //// TODO: fill with meaningful values
+                    //ot_server.apply_editor_operation(rev_delta.into());
                     let _ = doc_changed_tx.send(());
                 } else {
                     panic!("Automerge document doesn't have a text object, so I can't delete");
@@ -225,6 +233,7 @@ pub async fn launch(peer: Option<String>) {
                     "Failed to send peer state and sync message in response to GenerateSyncMessage",
                 );
             }
+            _ => {}
         }
 
         let text = doc

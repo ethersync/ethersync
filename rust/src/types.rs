@@ -170,6 +170,13 @@ impl From<TextDelta> for OperationSeq {
     }
 }
 
+impl From<EditorTextDelta> for TextDelta {
+    fn from(ed_delta: EditorTextDelta) -> Self {
+        let mut delta = TextDelta::default();
+        delta
+    }
+}
+
 // TODO: Write this in a nicer way...
 impl TryFrom<JSONValue> for RevisionedEditorTextDelta {
     type Error = anyhow::Error;
