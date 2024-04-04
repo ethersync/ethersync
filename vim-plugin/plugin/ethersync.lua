@@ -85,13 +85,16 @@ local function processOperationForEditor(method, parameters)
             local position = 0
             for _, change in ipairs(changes) do
                 if type(change) == "number" then
-                    position = position + change
+                    if change > 0 then
+                        position = position + change
+                    elseif change < 0 then
+                        utils.delete(position, -change)
+                    else
+                        -- Ignore.
+                    end
                 elseif type(change) == "string" then
                     ignoreNextUpdate()
                     utils.insert(position, change)
-                elseif type(change) == "table" then
-                    ignoreNextUpdate()
-                    utils.delete(position, change.d)
                 end
             end
             daemonRevision = daemonRevision + 1

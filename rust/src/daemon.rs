@@ -83,7 +83,7 @@ pub async fn launch(peer: Option<String>) {
     let (socket_message_tx, _socket_message_rx) = broadcast::channel::<RevisionedTextDelta>(16);
 
     // Make edits to the document occasionally.
-    if let Some(_) = peer {
+    if false {
         let tx = doc_message_tx.clone();
         tokio::spawn(async move {
             sleep(Duration::from_secs(2)).await;
@@ -139,6 +139,8 @@ pub async fn launch(peer: Option<String>) {
     // Dial peer, or listen for incoming connections.
     let doc_message_tx_clone = doc_message_tx.clone();
     let doc_changed_tx_clone = doc_changed_tx.clone();
+    let doc_message_tx_clone_2 = doc_message_tx_clone.clone();
+
     if let Some(peer) = peer {
         tokio::spawn(async {
             dial_tcp(doc_message_tx_clone, doc_changed_tx_clone, peer)
@@ -146,19 +148,19 @@ pub async fn launch(peer: Option<String>) {
                 .expect("Failed to dial peer");
         });
     } else {
-        let doc_message_tx_clone_2 = doc_message_tx_clone.clone();
-        let socket_message_tx_clone = socket_message_tx.clone();
-        tokio::spawn(async {
-            listen_socket(doc_message_tx_clone_2, socket_message_tx_clone)
-                .await
-                .expect("Failed to listen on UNIX socket");
-        });
         tokio::spawn(async {
             listen_tcp(doc_message_tx_clone, doc_changed_tx_clone)
                 .await
                 .expect("Failed to listen on TCP port");
         });
     }
+
+    let socket_message_tx_clone = socket_message_tx.clone();
+    tokio::spawn(async {
+        listen_socket(doc_message_tx_clone_2, socket_message_tx_clone)
+            .await
+            .expect("Failed to listen on UNIX socket");
+    });
 
     loop {
         let message = doc_message_rx
