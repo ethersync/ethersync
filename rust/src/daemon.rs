@@ -7,6 +7,7 @@ use automerge::{
 };
 use rand::{distributions::Alphanumeric, Rng};
 use std::fs;
+use std::path::Path;
 use tokio::{
     io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader, ReadHalf},
     net::UnixListener,
@@ -437,7 +438,9 @@ fn parse_message_from_editor(s: &str) -> Result<DocMessage> {
 }
 
 async fn listen_socket(tx: DocMessageSender, editor_message_tx: EditorMessageSender) -> Result<()> {
-    fs::remove_file(SOCKET_PATH)?;
+    if Path::new(SOCKET_PATH).exists() {
+        fs::remove_file(SOCKET_PATH)?;
+    }
     let listener = UnixListener::bind(SOCKET_PATH)?;
     info!("Listening on UNIX socket: {}", SOCKET_PATH);
 
