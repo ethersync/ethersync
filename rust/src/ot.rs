@@ -9,6 +9,12 @@ pub struct RevisionedTextDelta {
     delta: TextDelta,
 }
 
+impl RevisionedTextDelta {
+    pub fn make(revision: usize, delta: TextDelta) -> Self {
+        Self { revision, delta }
+    }
+}
+
 ///    OTServer receives operations from both the CRDT world, and one editor and makes sure that
 ///    the editor operations (which might be based on an older document) are applicable to the
 ///    state that the CRDT is tracking.
@@ -132,10 +138,10 @@ impl OTServer {
                     transform_through_operations(op_seq, &self.editor_queue);
 
                 for editor_op in &self.editor_queue {
-                    to_editor.push(RevisionedTextDelta {
-                        revision: self.editor_revision,
-                        delta: editor_op.clone().into(),
-                    });
+                    to_editor.push(RevisionedTextDelta::make(
+                        self.editor_revision,
+                        editor_op.clone().into(),
+                    ));
                 }
             }
         }
@@ -221,11 +227,8 @@ mod tests {
         operational_transform_internals::ot_compose(delta1.into(), delta2.into()).into()
     }
 
-    fn rev_delta(rev: usize, delta: TextDelta) -> RevisionedTextDelta {
-        RevisionedTextDelta {
-            revision: rev,
-            delta,
-        }
+    fn rev_delta(revision: usize, delta: TextDelta) -> RevisionedTextDelta {
+        RevisionedTextDelta::make(revision, delta)
     }
 
     mod ot_server_public_interface {
