@@ -1,9 +1,12 @@
+#![allow(dead_code, unused_imports)]
+use crate::ot::{OTServer, RevisionedTextDelta};
+use crate::types::RevisionedEditorTextDelta;
 use anyhow::Result;
 use automerge::{
     patches::TextRepresentation,
     sync::{Message, State as SyncState, SyncDoc},
     transaction::Transactable,
-    AutoCommit, ObjType, PatchLog, ReadDoc,
+    AutoCommit, ObjType, Patch, PatchAction, PatchLog, ReadDoc,
 };
 use rand::{distributions::Alphanumeric, Rng};
 use std::fs;
@@ -23,14 +26,7 @@ const SOCKET_PATH: &str = "/tmp/ethersync";
 enum DocMessage {
     Init,
     RandomEdit,
-    Insert {
-        position: usize,
-        text: String,
-    },
-    Delete {
-        position: usize,
-        length: usize,
-    },
+    Delta(RevisionedEditorTextDelta),
     ReceiveSyncMessage {
         message: Message,
         state: SyncState,
@@ -70,6 +66,7 @@ type SyncerMessageSender = mpsc::Sender<SyncerMessage>;
 // Launch the daemon. Optionally, connect to given peer.
 pub async fn launch(peer: Option<String>) {
     let mut doc = AutoCommit::new();
+    let mut ot_server: OTServer = Default::default();
 
     // The document task will send a ping on this channel whenever it changes.
     // The sync tasks will subscribe to it, and react to it by syncing with the peers.
@@ -185,27 +182,18 @@ pub async fn launch(peer: Option<String>) {
                     );
                 }
             }
-            DocMessage::Insert { position, text } => {
+            DocMessage::Delta(rev_delta) => {
                 let text_obj = doc
                     .get(automerge::ROOT, "text")
                     .expect("Failed to get text object from Automerge document");
                 if let Some((automerge::Value::Object(ObjType::Text), text_obj)) = text_obj {
-                    doc.insert(text_obj, position, text)
-                        .expect("Failed to insert into Automerge text object");
-                    // TODO: Call apply_editor_operation in OT.
-                    let _ = doc_changed_tx.send(());
-                } else {
-                    panic!("Automerge document doesn't have a text object, so I can't insert");
-                }
-            }
-            DocMessage::Delete { position, length } => {
-                let text_obj = doc
-                    .get(automerge::ROOT, "text")
-                    .expect("Failed to get text object from Automerge document");
-                if let Some((automerge::Value::Object(ObjType::Text), text_obj)) = text_obj {
-                    doc.splice_text(text_obj, position, length as isize, "")
-                        .expect("Failed to splice Automerge text object");
-                    // TODO: Call apply_editor_operation in OT.
+                    for op in rev_delta.delta {
+                        let (position, length) = op.range.as_relative();
+                        doc.splice_text(text_obj, position, length as isize, op.replacement)
+                            .expect("Failed to splice Automerge text object");
+                    }
+                    // TODO: fill with meaningful values
+                    ot_server.apply_editor_operation(rev_delta);
                     let _ = doc_changed_tx.send(());
                 } else {
                     panic!("Automerge document doesn't have a text object, so I can't delete");

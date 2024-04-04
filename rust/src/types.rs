@@ -1,4 +1,4 @@
-#![allow(dead_code)]
+#![allow(dead_code)] // TODO: consider the dead code.
 use automerge::PatchAction;
 use operational_transform::{Operation as OTOperation, OperationSeq};
 
@@ -13,6 +13,11 @@ enum TextOp {
 }
 
 struct EditorTextDelta(Vec<EditorTextOp>);
+
+pub struct RevisionedEditorTextDelta {
+    pub revision: usize,
+    pub delta: EditorTextDelta,
+}
 
 #[derive(Debug, Clone, PartialEq)]
 struct EditorTextOp {
@@ -33,6 +38,14 @@ impl Range {
 
     fn is_forward(&self) -> bool {
         self.anchor <= self.head
+    }
+
+    fn as_relative(&self) -> (usize, usize) {
+        if self.is_forward() {
+            (self.anchor, self.head - self.anchor)
+        } else {
+            (self.head, self.anchor - self.head)
+        }
     }
 }
 

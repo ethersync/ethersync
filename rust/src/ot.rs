@@ -1,17 +1,16 @@
 use crate::types::TextDelta;
 use operational_transform::OperationSeq;
 use std::cmp::Ordering;
-use std::fmt;
 
 /// When doing OT, many TextDeltas need a revision metadata, to see whether they apply.
 #[derive(Debug, Clone, PartialEq)]
 pub struct RevisionedTextDelta {
-    revision: usize,
-    delta: TextDelta,
+    pub revision: usize,
+    pub delta: TextDelta,
 }
 
 impl RevisionedTextDelta {
-    pub fn make(revision: usize, delta: TextDelta) -> Self {
+    pub fn new(revision: usize, delta: TextDelta) -> Self {
         Self { revision, delta }
     }
 }
@@ -139,7 +138,7 @@ impl OTServer {
                     transform_through_operations(op_seq, &self.editor_queue);
 
                 for editor_op in &self.editor_queue {
-                    to_editor.push(RevisionedTextDelta::make(
+                    to_editor.push(RevisionedTextDelta::new(
                         self.editor_revision,
                         editor_op.clone().into(),
                     ));
@@ -237,7 +236,7 @@ mod tests {
     }
 
     fn rev_delta(revision: usize, delta: TextDelta) -> RevisionedTextDelta {
-        RevisionedTextDelta::make(revision, delta)
+        RevisionedTextDelta::new(revision, delta)
     }
 
     mod ot_server_public_interface {
