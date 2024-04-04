@@ -22,6 +22,26 @@ pub struct RevisionedEditorTextDelta {
     pub delta: EditorTextDelta,
 }
 
+/// When doing OT, many TextDeltas need a revision metadata, to see whether they apply.
+#[derive(Debug, Clone, PartialEq)]
+pub struct RevisionedTextDelta {
+    pub revision: usize,
+    pub delta: TextDelta,
+}
+
+impl RevisionedTextDelta {
+    pub fn new(revision: usize, delta: TextDelta) -> Self {
+        Self { revision, delta }
+    }
+}
+
+impl From<RevisionedEditorTextDelta> for RevisionedTextDelta {
+    fn from(rev_ed_delta: RevisionedEditorTextDelta) -> Self {
+        todo!()
+        //Self::new(rev_ed_delta.revision, rev_ed_delta.into())
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 struct EditorTextOp {
     range: Range,
@@ -73,8 +93,20 @@ impl TextDelta {
     pub fn delete(&mut self, n: usize) {
         self.0.push(TextOp::Delete(n));
     }
+
+    pub fn compose(self, other: Self) -> Self {
+        let mut my_op_seq: OperationSeq = self.into();
+        let other_op_seq: OperationSeq = other.into();
+        if my_op_seq.target_len() < other_op_seq.base_len() {
+            my_op_seq.retain((other_op_seq.base_len() - my_op_seq.target_len()) as u64);
+        }
+        my_op_seq
+            .compose(&other_op_seq)
+            .expect("Composition of deltas failed. Lengths messed up?")
+            .into()
+    }
+
     //fn transform(&mut self, other: Self) -> Self;
-    //fn compose(&mut self, other: Self) -> Self;
     // +some way of looking into the data
     // +invert?
     // +transform_position?
@@ -175,6 +207,31 @@ impl From<TextDelta> for OperationSeq {
 impl From<EditorTextDelta> for TextDelta {
     fn from(ed_delta: EditorTextDelta) -> Self {
         let mut delta = TextDelta::default();
+        // TODO: add support, when needed
+        assert!(
+            ed_delta.0.len() == 1,
+            "We don't yet support EditorTextDelta with multiple operations."
+        );
+        for ed_op in ed_delta.0 {
+            let mut delta_step = TextDelta::default();
+            if ed_op.range.is_empty() {
+                if ed_op.replacement != "" {
+                    // insert
+                    delta_step.retain(ed_op.range.anchor);
+                    delta_step.insert(&ed_op.replacement);
+                }
+            } else {
+                // delete or replace
+                let (position, length) = ed_op.range.as_relative();
+                delta_step.retain(position);
+                delta_step.delete(length);
+                if ed_op.replacement.is_empty() {
+                    // replace
+                    delta_step.insert(&ed_op.replacement);
+                }
+            }
+            delta = delta.compose(delta_step);
+        }
         delta
     }
 }
@@ -296,13 +353,78 @@ impl TryFrom<JSONValue> for RevisionedEditorTextDelta {
 }
 
 #[cfg(test)]
+pub mod factories {
+    use super::*;
+
+    pub fn insert(at: usize, s: &str) -> TextDelta {
+        let mut delta: TextDelta = Default::default();
+        delta.retain(at);
+        delta.insert(s);
+        delta
+    }
+
+    pub fn delete(from: usize, length: usize) -> TextDelta {
+        let mut delta: TextDelta = Default::default();
+        delta.retain(from);
+        delta.delete(length);
+        delta
+    }
+    pub fn rev_delta(revision: usize, delta: TextDelta) -> RevisionedTextDelta {
+        RevisionedTextDelta::new(revision, delta)
+    }
+}
+
+#[cfg(test)]
 mod tests {
+    use super::factories::*;
     use super::*;
 
     #[test]
     fn range_forward() {
         assert!(Range { anchor: 0, head: 1 }.is_forward());
         assert!(!Range { anchor: 1, head: 0 }.is_forward());
+    }
+
+    #[test]
+    fn conversion_editor_to_text_delta_insert() {
+        let ed_delta = EditorTextDelta(vec![EditorTextOp {
+            range: Range { anchor: 1, head: 1 },
+            replacement: "a".to_string(),
+        }]);
+        let delta: TextDelta = ed_delta.into();
+        assert_eq!(delta, insert(1, "a"));
+    }
+
+    #[test]
+    fn conversion_editor_to_text_delta_delete() {
+        let ed_delta = EditorTextDelta(vec![EditorTextOp {
+            range: Range { anchor: 1, head: 3 },
+            replacement: "".to_string(),
+        }]);
+        let delta: TextDelta = ed_delta.into();
+        assert_eq!(delta, delete(1, 2));
+    }
+
+    #[test]
+    #[ignore] // TODO: enable, when we support multiple ops in one delta
+    fn conversion_editor_to_text_delta_insert_twice() {
+        let ed_delta = EditorTextDelta(vec![
+            EditorTextOp {
+                range: Range { anchor: 1, head: 1 },
+                replacement: "long".to_string(),
+            },
+            EditorTextOp {
+                range: Range { anchor: 2, head: 2 },
+                replacement: "short".to_string(),
+            },
+        ]);
+        let delta: TextDelta = ed_delta.into();
+        let mut expected = TextDelta::default();
+        expected.retain(1);
+        expected.insert("l");
+        expected.insert("short");
+        expected.insert("ong");
+        assert_eq!(delta, expected);
     }
 
     #[test]

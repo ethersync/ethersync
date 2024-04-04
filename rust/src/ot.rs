@@ -1,26 +1,6 @@
-use crate::types::{RevisionedEditorTextDelta, TextDelta};
+use crate::types::{RevisionedEditorTextDelta, RevisionedTextDelta, TextDelta};
 use operational_transform::OperationSeq;
 use std::cmp::Ordering;
-
-/// When doing OT, many TextDeltas need a revision metadata, to see whether they apply.
-#[derive(Debug, Clone, PartialEq)]
-pub struct RevisionedTextDelta {
-    pub revision: usize,
-    pub delta: TextDelta,
-}
-
-impl RevisionedTextDelta {
-    pub fn new(revision: usize, delta: TextDelta) -> Self {
-        Self { revision, delta }
-    }
-}
-
-impl From<RevisionedEditorTextDelta> for RevisionedTextDelta {
-    fn from(rev_ed_delta: RevisionedEditorTextDelta) -> Self {
-        todo!()
-        //Self::new(rev_ed_delta.revision, rev_ed_delta.into())
-    }
-}
 
 ///    OTServer receives operations from both the CRDT world, and one editor and makes sure that
 ///    the editor operations (which might be based on an older document) are applicable to the
@@ -223,27 +203,10 @@ fn transform_through_operations(
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    fn insert(at: usize, s: &str) -> TextDelta {
-        let mut delta: TextDelta = Default::default();
-        delta.retain(at);
-        delta.insert(s);
-        delta
-    }
-
-    fn delete(from: usize, length: usize) -> TextDelta {
-        let mut delta: TextDelta = Default::default();
-        delta.retain(from);
-        delta.delete(length);
-        delta
-    }
+    use crate::types::factories::*;
 
     fn compose(delta1: TextDelta, delta2: TextDelta) -> TextDelta {
         operational_transform_internals::ot_compose(delta1.into(), delta2.into()).into()
-    }
-
-    fn rev_delta(revision: usize, delta: TextDelta) -> RevisionedTextDelta {
-        RevisionedTextDelta::new(revision, delta)
     }
 
     mod ot_server_public_interface {

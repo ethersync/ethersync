@@ -1,6 +1,6 @@
 #![allow(dead_code, unused_imports)]
-use crate::ot::{OTServer, RevisionedTextDelta};
-use crate::types::RevisionedEditorTextDelta;
+use crate::ot::OTServer;
+use crate::types::{RevisionedTextDelta, RevisionedEditorTextDelta};
 use anyhow::Result;
 use automerge::{
     patches::TextRepresentation,
