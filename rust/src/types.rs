@@ -169,6 +169,13 @@ impl From<TextDelta> for OperationSeq {
     }
 }
 
+impl From<EditorTextDelta> for TextDelta {
+    fn from(ed_delta: EditorTextDelta) -> Self {
+        let mut delta = TextDelta::default();
+        delta
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
