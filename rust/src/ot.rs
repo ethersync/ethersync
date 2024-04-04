@@ -1,4 +1,4 @@
-use crate::types::{RevisionedEditorTextDelta, RevisionedTextDelta, TextDelta};
+use crate::types::{RevisionedTextDelta, TextDelta};
 use operational_transform::OperationSeq;
 use std::cmp::Ordering;
 

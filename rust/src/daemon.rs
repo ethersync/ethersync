@@ -1,6 +1,8 @@
 #![allow(dead_code, unused_imports)]
 use crate::ot::OTServer;
-use crate::types::{EditorTextDelta, RevisionedEditorTextDelta, RevisionedTextDelta, TextOp};
+use crate::types::{
+    EditorTextDelta, RevisionedEditorTextDelta, RevisionedTextDelta, TextDelta, TextOp,
+};
 use anyhow::Result;
 use automerge::{
     patches::TextRepresentation,
@@ -187,8 +189,18 @@ pub async fn launch(peer: Option<String>) {
                         .map(char::from)
                         .collect();
                     let random_position = rand::thread_rng().gen_range(0..(text_length + 1));
+
+                    let mut delta = TextDelta::default();
+                    delta.retain(random_position);
+                    delta.insert(&random_string);
+                    let rev_delta = ot_server.apply_crdt_change(delta);
+                    socket_message_tx
+                        .send(rev_delta)
+                        .expect("Failed to send message to socket channel.");
+
                     doc.insert(text_obj, random_position, random_string)
                         .expect("Failed to insert into Automerge text object");
+
                     let _ = doc_changed_tx.send(());
                 } else {
                     panic!(
@@ -241,7 +253,9 @@ pub async fn launch(peer: Option<String>) {
                 debug!(?patches);
                 for patch in patches {
                     let rev_delta = ot_server.apply_crdt_change(patch.action.into());
-                    socket_message_tx.send(rev_delta);
+                    socket_message_tx
+                        .send(rev_delta)
+                        .expect("Failed to send message to socket channel.");
                 }
                 let _ = doc_changed_tx.send(());
                 response_tx
