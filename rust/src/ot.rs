@@ -99,11 +99,11 @@ impl OTServer {
     /// daemonRevision is the revision this operation applies to.
     pub fn apply_editor_operation(
         &mut self,
-        daemon_revision: usize,
-        delta: TextDelta,
+        rev_delta: RevisionedTextDelta,
     ) -> (TextDelta, Vec<RevisionedTextDelta>) {
         let mut to_editor = vec![];
-        let mut op_seq: OperationSeq = delta.into();
+        let mut op_seq: OperationSeq = rev_delta.delta.into();
+        let daemon_revision = rev_delta.revision;
         self.editor_revision += 1;
         match daemon_revision.cmp(&self.daemon_revision) {
             Ordering::Greater => {
@@ -221,15 +221,15 @@ mod tests {
         operational_transform_internals::ot_compose(delta1.into(), delta2.into()).into()
     }
 
+    fn rev_op(rev: usize, delta: TextDelta) -> RevisionedTextDelta {
+        RevisionedTextDelta {
+            revision: rev,
+            delta,
+        }
+    }
+
     mod ot_server_public_interface {
         use super::*;
-
-        fn rev_op(rev: usize, delta: TextDelta) -> RevisionedTextDelta {
-            RevisionedTextDelta {
-                revision: rev,
-                delta,
-            }
-        }
 
         #[test]
         fn routes_operations_through_server() {
@@ -238,7 +238,8 @@ mod tests {
             let to_editor = ot_server.apply_crdt_change(insert(1, "x").into());
             assert_eq!(to_editor, rev_op(0, insert(1, "x").into()));
 
-            let (to_crdt, to_editor) = ot_server.apply_editor_operation(0, insert(2, "y").into());
+            let (to_crdt, to_editor) =
+                ot_server.apply_editor_operation(rev_op(0, insert(2, "y").into()));
             assert_eq!(to_crdt, insert(3, "y").into());
             let mut expected = insert(1, "x");
             expected.retain(2);
@@ -256,7 +257,8 @@ mod tests {
             assert_eq!(ot_server.apply_to_string("hello".into()), "hxezyllo");
 
             // editor thinks: hxeyllo -> hlo
-            let (to_crdt, to_editor) = ot_server.apply_editor_operation(1, delete(1, 4).into());
+            let (to_crdt, to_editor) =
+                ot_server.apply_editor_operation(rev_op(1, delete(1, 4).into()));
             assert_eq!(to_crdt, compose(delete(1, 2), delete(2, 2)).into());
             assert_eq!(to_editor, vec![rev_op(2, insert(1, "z").into())]);
 
@@ -291,7 +293,7 @@ mod tests {
         #[test]
         fn editor_operation_tracks_revision() {
             let mut ot_server: OTServer = Default::default();
-            ot_server.apply_editor_operation(0, dummy_insert(2));
+            ot_server.apply_editor_operation(rev_op(0, dummy_insert(2)));
             assert_eq!(ot_server.editor_revision, 1);
             assert_eq!(ot_server.daemon_revision, 0);
         }
@@ -312,7 +314,7 @@ mod tests {
             ot_server.apply_crdt_change(dummy_insert(8));
             assert_eq!(ot_server.editor_queue.len(), 3);
 
-            ot_server.apply_editor_operation(1, dummy_insert(2));
+            ot_server.apply_editor_operation(rev_op(1, dummy_insert(2)));
             // we have already seen one op, so now the queue has only 2 left.
             assert_eq!(ot_server.editor_queue.len(), 2);
         }
