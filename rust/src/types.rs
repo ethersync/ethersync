@@ -13,8 +13,10 @@ enum TextOp {
     Delete(usize),
 }
 
-struct EditorTextDelta(Vec<EditorTextOp>);
+#[derive(Debug, Clone, PartialEq)]
+pub struct EditorTextDelta(Vec<EditorTextOp>);
 
+#[derive(Debug, Clone, PartialEq)]
 pub struct RevisionedEditorTextDelta {
     pub revision: usize,
     pub delta: EditorTextDelta,
@@ -301,5 +303,38 @@ mod tests {
     fn range_forward() {
         assert!(Range { anchor: 0, head: 1 }.is_forward());
         assert!(!Range { anchor: 1, head: 0 }.is_forward());
+    }
+
+    #[test]
+    fn json_to_revisioned_editor_text_delta() {
+        let json = serde_json::json!({
+            "method": "insert",
+            "params": ["", 0, 1, "a"]
+        });
+
+        let delta = RevisionedEditorTextDelta::try_from(json).unwrap();
+        assert_eq!(delta.revision, 0);
+        assert_eq!(
+            delta.delta,
+            EditorTextDelta(vec![EditorTextOp {
+                range: Range { anchor: 1, head: 1 },
+                replacement: "a".to_string(),
+            }])
+        );
+
+        let json = serde_json::json!({
+            "method": "delete",
+            "params": ["", 2, 1, 3]
+        });
+
+        let delta = RevisionedEditorTextDelta::try_from(json).unwrap();
+        assert_eq!(delta.revision, 2);
+        assert_eq!(
+            delta.delta,
+            EditorTextDelta(vec![EditorTextOp {
+                range: Range { anchor: 1, head: 4 },
+                replacement: "".to_string(),
+            }])
+        );
     }
 }
