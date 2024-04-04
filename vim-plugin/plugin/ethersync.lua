@@ -114,8 +114,12 @@ local function processOperationForEditor(method, parameters)
 end
 
 -- Connect to the daemon.
-local function connect()
-    client = vim.lsp.rpc.start("ethersync", { "client" }, {
+local function connect(socket_path)
+    params = { "client" }
+    if socket_path then
+        table.insert(params, "--socket-path=" .. socket_path)
+    end
+    client = vim.lsp.rpc.start("ethersync", params, {
         notification = function(method, params)
             print("Notification received: " .. method)
             if online then
@@ -127,6 +131,11 @@ local function connect()
         end,
     })
     online = true
+end
+
+local function connect2()
+    client.terminate()
+    connect("/tmp/etherbonk")
 end
 
 -- Simulate disconnecting from the daemon.
@@ -315,6 +324,7 @@ vim.api.nvim_create_user_command("EthersyncRunTests", utils.testAllUnits, {})
 vim.api.nvim_create_user_command("EthersyncGoOffline", goOffline, {})
 vim.api.nvim_create_user_command("EthersyncGoOnline", goOnline, {})
 vim.api.nvim_create_user_command("EthersyncReload", resetState, {})
+vim.api.nvim_create_user_command("Etherbonk", connect2, {})
 
 -- TODO For debugging purposes. Remove before merging branch.
 vim.api.nvim_create_user_command("EthersyncInsert", function()

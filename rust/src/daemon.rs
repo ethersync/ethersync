@@ -67,7 +67,7 @@ type EditorMessageSender = broadcast::Sender<RevisionedTextDelta>;
 type SyncerMessageSender = mpsc::Sender<SyncerMessage>;
 
 // Launch the daemon. Optionally, connect to given peer.
-pub async fn launch(peer: Option<String>) {
+pub async fn launch(peer: Option<String>, socket_path: String) {
     let mut doc = AutoCommit::new();
     let mut ot_server: OTServer = Default::default();
 
@@ -157,7 +157,7 @@ pub async fn launch(peer: Option<String>) {
 
     let socket_message_tx_clone = socket_message_tx.clone();
     tokio::spawn(async {
-        listen_socket(doc_message_tx_clone_2, socket_message_tx_clone)
+        listen_socket(doc_message_tx_clone_2, socket_message_tx_clone, socket_path)
             .await
             .expect("Failed to listen on UNIX socket");
     });
@@ -406,12 +406,16 @@ async fn start_sync(
     }
 }
 
-async fn listen_socket(tx: DocMessageSender, editor_message_tx: EditorMessageSender) -> Result<()> {
-    if Path::new(SOCKET_PATH).exists() {
-        fs::remove_file(SOCKET_PATH)?;
+async fn listen_socket(
+    tx: DocMessageSender,
+    editor_message_tx: EditorMessageSender,
+    socket_path: String,
+) -> Result<()> {
+    if Path::new(&socket_path).exists() {
+        fs::remove_file(&socket_path)?;
     }
-    let listener = UnixListener::bind(SOCKET_PATH)?;
-    info!("Listening on UNIX socket: {}", SOCKET_PATH);
+    let listener = UnixListener::bind(&socket_path)?;
+    info!("Listening on UNIX socket: {}", socket_path);
 
     loop {
         // TODO: Accept multiple connections.

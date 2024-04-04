@@ -7,12 +7,10 @@ use std::os::unix::net::UnixStream;
 use std::str::from_utf8;
 use std::thread;
 
-const SOCKET_PATH: &str = "/tmp/ethersync";
-
 // Read/write JSON-RPC requests that have a Content-Length header from/to stdin/stdout.
 // Read/write newline-delimited JSON-RPC from/to the Unix socket.
-pub fn connection() {
-    let mut stream = UnixStream::connect(SOCKET_PATH).expect("Failed to connect to socket");
+pub fn connection(socket_path: &str) {
+    let mut stream = UnixStream::connect(socket_path).expect("Failed to connect to socket");
 
     let stream2 = stream.try_clone().expect("Failed to clone socket stream");
     let reader = BufReader::new(stream2);

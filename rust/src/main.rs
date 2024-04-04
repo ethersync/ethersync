@@ -7,12 +7,16 @@ mod daemon;
 mod ot;
 mod types;
 
+const DEFAULT_SOCKET_PATH: &str = "/tmp/ethersync";
+
 #[derive(Parser)]
 #[command(version, about, long_about = None)]
 #[command(propagate_version = true)]
 struct Cli {
     #[command(subcommand)]
     command: Commands,
+    #[arg(short, long, global = true)]
+    socket_path: Option<String>,
 }
 
 #[derive(Subcommand)]
@@ -36,16 +40,14 @@ async fn main() -> io::Result<()> {
 
     let cli = Cli::parse();
 
-    match &cli.command {
+    let socket_path = cli.socket_path.unwrap_or(DEFAULT_SOCKET_PATH.to_string());
+
+    match cli.command {
         Commands::Daemon { peer } => {
-            if let Some(peer) = peer {
-                daemon::launch(Some(peer.to_string())).await;
-            } else {
-                daemon::launch(None).await;
-            }
+            daemon::launch(peer, socket_path).await;
         }
         Commands::Client => {
-            client::connection();
+            client::connection(&socket_path);
         }
     }
     Ok(())
