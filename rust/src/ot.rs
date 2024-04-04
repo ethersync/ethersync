@@ -1,4 +1,4 @@
-use crate::types::TextDelta;
+use crate::types::{RevisionedEditorTextDelta, TextDelta};
 use operational_transform::OperationSeq;
 use std::cmp::Ordering;
 
@@ -12,6 +12,12 @@ pub struct RevisionedTextDelta {
 impl RevisionedTextDelta {
     pub fn new(revision: usize, delta: TextDelta) -> Self {
         Self { revision, delta }
+    }
+}
+
+impl From<RevisionedEditorTextDelta> for RevisionedTextDelta {
+    fn from(rev_ed_delta: RevisionedEditorTextDelta) -> Self {
+        Self::new(rev_ed_delta.revision, rev_ed_delta.into())
     }
 }
 
