@@ -2,12 +2,13 @@
 use automerge::PatchAction;
 use operational_transform::{Operation as OTOperation, OperationSeq};
 use serde_json::Value as JSONValue;
+use tracing::warn;
 
 #[derive(Debug, Clone, PartialEq, Default)]
-pub struct TextDelta(Vec<TextOp>);
+pub struct TextDelta(pub Vec<TextOp>);
 
 #[derive(Debug, Clone, PartialEq)]
-enum TextOp {
+pub enum TextOp {
     Retain(usize),
     Insert(String),
     Delete(usize),
@@ -112,10 +113,10 @@ impl TextDelta {
 }
 
 impl From<PatchAction> for TextDelta {
-    fn from(patch: PatchAction) -> Self {
+    fn from(patch_action: PatchAction) -> Self {
         let mut delta = TextDelta::default();
 
-        match patch {
+        match patch_action {
             PatchAction::SpliceText { index, value, .. } => {
                 delta.retain(index);
                 delta.insert(&value.make_string());
@@ -125,7 +126,7 @@ impl From<PatchAction> for TextDelta {
                 delta.delete(length);
             }
             _ => {
-                panic!("Unsupported patch action.");
+                warn!("Unsupported patch action: {}", patch_action);
             }
         }
 
@@ -232,6 +233,39 @@ impl From<EditorTextDelta> for TextDelta {
             delta = delta.compose(delta_step);
         }
         delta
+    }
+}
+
+impl From<TextDelta> for EditorTextDelta {
+    fn from(delta: TextDelta) -> Self {
+        let mut editor_ops = vec![];
+        let mut position = 0;
+        for op in delta.0 {
+            match op {
+                TextOp::Retain(n) => position += n,
+                TextOp::Delete(n) => {
+                    editor_ops.push(EditorTextOp {
+                        range: Range {
+                            anchor: position,
+                            head: (position + n),
+                        },
+                        replacement: "".to_string(),
+                    });
+                }
+                TextOp::Insert(s) => {
+                    editor_ops.push(EditorTextOp {
+                        range: Range {
+                            anchor: position,
+                            head: position,
+                        },
+                        replacement: s.to_string(),
+                    });
+                    position += s.chars().count();
+                }
+            }
+        }
+
+        Self(editor_ops)
     }
 }
 
