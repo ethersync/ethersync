@@ -221,7 +221,7 @@ mod tests {
         operational_transform_internals::ot_compose(delta1.into(), delta2.into()).into()
     }
 
-    fn rev_op(rev: usize, delta: TextDelta) -> RevisionedTextDelta {
+    fn rev_delta(rev: usize, delta: TextDelta) -> RevisionedTextDelta {
         RevisionedTextDelta {
             revision: rev,
             delta,
@@ -236,14 +236,14 @@ mod tests {
             let mut ot_server: OTServer = Default::default();
 
             let to_editor = ot_server.apply_crdt_change(insert(1, "x").into());
-            assert_eq!(to_editor, rev_op(0, insert(1, "x").into()));
+            assert_eq!(to_editor, rev_delta(0, insert(1, "x").into()));
 
             let (to_crdt, to_editor) =
-                ot_server.apply_editor_operation(rev_op(0, insert(2, "y").into()));
+                ot_server.apply_editor_operation(rev_delta(0, insert(2, "y").into()));
             assert_eq!(to_crdt, insert(3, "y").into());
             let mut expected = insert(1, "x");
             expected.retain(2);
-            assert_eq!(to_editor, vec![rev_op(1, expected.into())]);
+            assert_eq!(to_editor, vec![rev_delta(1, expected.into())]);
 
             assert_eq!(
                 ot_server.operations,
@@ -252,15 +252,15 @@ mod tests {
             assert_eq!(ot_server.apply_to_string("hello".into()), "hxeyllo");
 
             let to_editor = ot_server.apply_crdt_change(insert(3, "z").into());
-            assert_eq!(to_editor, rev_op(1, insert(3, "z").into()));
+            assert_eq!(to_editor, rev_delta(1, insert(3, "z").into()));
 
             assert_eq!(ot_server.apply_to_string("hello".into()), "hxezyllo");
 
             // editor thinks: hxeyllo -> hlo
             let (to_crdt, to_editor) =
-                ot_server.apply_editor_operation(rev_op(1, delete(1, 4).into()));
+                ot_server.apply_editor_operation(rev_delta(1, delete(1, 4).into()));
             assert_eq!(to_crdt, compose(delete(1, 2), delete(2, 2)).into());
-            assert_eq!(to_editor, vec![rev_op(2, insert(1, "z").into())]);
+            assert_eq!(to_editor, vec![rev_delta(2, insert(1, "z").into())]);
 
             assert_eq!(ot_server.apply_to_string("hello".into()), "hzlo");
             assert_eq!(
@@ -293,7 +293,7 @@ mod tests {
         #[test]
         fn editor_operation_tracks_revision() {
             let mut ot_server: OTServer = Default::default();
-            ot_server.apply_editor_operation(rev_op(0, dummy_insert(2)));
+            ot_server.apply_editor_operation(rev_delta(0, dummy_insert(2)));
             assert_eq!(ot_server.editor_revision, 1);
             assert_eq!(ot_server.daemon_revision, 0);
         }
@@ -314,7 +314,7 @@ mod tests {
             ot_server.apply_crdt_change(dummy_insert(8));
             assert_eq!(ot_server.editor_queue.len(), 3);
 
-            ot_server.apply_editor_operation(rev_op(1, dummy_insert(2)));
+            ot_server.apply_editor_operation(rev_delta(1, dummy_insert(2)));
             // we have already seen one op, so now the queue has only 2 left.
             assert_eq!(ot_server.editor_queue.len(), 2);
         }
