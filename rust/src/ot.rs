@@ -1,6 +1,7 @@
 use crate::types::TextDelta;
 use operational_transform::OperationSeq;
 use std::cmp::Ordering;
+use std::fmt;
 
 /// When doing OT, many TextDeltas need a revision metadata, to see whether they apply.
 #[derive(Debug, Clone, PartialEq)]
@@ -155,7 +156,11 @@ impl OTServer {
             if op_seq.base_len() < document.len() {
                 op_seq.retain((document.len() - op_seq.base_len()) as u64);
             }
-            document = op_seq.apply(&document).unwrap();
+            document = op_seq.apply(&document).expect(&format!(
+                "Could not apply operation expecting length {} to string with length {}.",
+                op_seq.base_len(),
+                document.len()
+            ));
         }
         document
     }
@@ -198,7 +203,11 @@ fn transform_through_operations(
             let diff = my_op_seq.base_len() - their_op_seq.base_len();
             their_op_seq.retain(diff as u64);
         }
-        let (my_prime, their_prime) = my_op_seq.transform(&their_op_seq).unwrap();
+        let (my_prime, their_prime) = my_op_seq.transform(&their_op_seq).expect(&format!(
+            "Could not transform operations {:?} on top of {:?}.",
+            &their_op_seq.ops(),
+            &my_op_seq.ops()
+        ));
         transformed_my_operations.push(my_prime);
         their_op_seq = their_prime;
     }
@@ -344,7 +353,8 @@ mod tests {
             if op1.target_len() < op2.base_len() {
                 op1.retain((op2.base_len() - op1.target_len()) as u64);
             }
-            op1.compose(&op2).unwrap()
+            op1.compose(&op2)
+                .expect("Composition failed. Lengths messed up?")
         }
 
         #[test]
@@ -404,7 +414,9 @@ mod tests {
             c.insert("y");
             c.retain(1);
 
-            let (a_prime, b_prime) = a.transform(&b).unwrap();
+            let (a_prime, b_prime) = a
+                .transform(&b)
+                .expect("Transform failed. Do the lengths fit?");
             assert_eq!(
                 a_prime.ops(),
                 vec![OTOperation::Retain(1), OTOperation::Insert("x".to_string())]
@@ -422,7 +434,9 @@ mod tests {
             // With inserts at the same position,
             // the operation that is transformed is applied "after" the other one.
             // If you want it the other way around, you'll need to swap a and c.
-            let (a_prime, c_prime) = a.transform(&c).unwrap();
+            let (a_prime, c_prime) = a
+                .transform(&c)
+                .expect("Transform failed. Do the lengths fit?");
             assert_eq!(
                 a_prime.ops(),
                 vec![
