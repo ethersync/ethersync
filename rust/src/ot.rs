@@ -139,13 +139,13 @@ impl OTServer {
     pub fn apply_to_string(&mut self, mut document: String) -> String {
         for op_seq in &self.operations {
             let mut op_seq = op_seq.clone();
-            if op_seq.base_len() < document.len() {
-                op_seq.retain((document.len() - op_seq.base_len()) as u64);
+            let doc_chars = document.chars().count();
+            if op_seq.base_len() < doc_chars {
+                op_seq.retain((doc_chars - op_seq.base_len()) as u64);
             }
             document = op_seq.apply(&document).expect(&format!(
-                "Could not apply operation expecting length {} to string with length {}.",
-                op_seq.base_len(),
-                document.len()
+                "Could not apply operation {:?} to string with length {}.",
+                op_seq, doc_chars
             ));
         }
         document
