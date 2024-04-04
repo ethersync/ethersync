@@ -1,6 +1,7 @@
 #![allow(dead_code)] // TODO: consider the dead code.
 use automerge::PatchAction;
 use operational_transform::{Operation as OTOperation, OperationSeq};
+use serde_json::Value as JSONValue;
 
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct TextDelta(Vec<TextOp>);
@@ -166,6 +167,122 @@ impl From<TextDelta> for OperationSeq {
             }
         }
         op_seq
+    }
+}
+
+// TODO: Write this in a nicer way...
+impl TryFrom<JSONValue> for RevisionedEditorTextDelta {
+    type Error = anyhow::Error;
+    fn try_from(json: JSONValue) -> Result<Self, Self::Error> {
+        match json {
+            serde_json::Value::Object(map) => {
+                if let Some(serde_json::Value::String(method)) = map.get("method") {
+                    match method.as_str() {
+                        "insert" => {
+                            if let Some(serde_json::Value::Array(array)) = map.get("params") {
+                                if let Some(serde_json::Value::Number(revision)) = array.get(1) {
+                                    if let Some(serde_json::Value::Number(position)) = array.get(2)
+                                    {
+                                        if let Some(serde_json::Value::String(text)) = array.get(3)
+                                        {
+                                            let revision = revision
+                                                .as_u64()
+                                                .expect("Failed to parse revision");
+                                            let position = position
+                                                .as_u64()
+                                                .expect("Failed to parse position");
+                                            let text = text.as_str().to_string();
+                                            let op = EditorTextOp {
+                                                range: Range {
+                                                    anchor: position as usize,
+                                                    head: position as usize,
+                                                },
+                                                replacement: text,
+                                            };
+                                            let delta = EditorTextDelta(vec![op]);
+                                            Ok(RevisionedEditorTextDelta {
+                                                revision: revision as usize,
+                                                delta,
+                                            })
+                                        } else {
+                                            Err(anyhow::anyhow!(
+                                                "Could not find text param in position #3"
+                                            ))
+                                        }
+                                    } else {
+                                        Err(anyhow::anyhow!(
+                                            "Could not find position param in position #2"
+                                        ))
+                                    }
+                                } else {
+                                    Err(anyhow::anyhow!(
+                                        "Could not find revision param in position #1"
+                                    ))
+                                }
+                            } else {
+                                Err(anyhow::anyhow!("Could not find params for insert method"))
+                            }
+                        }
+                        "delete" => {
+                            if let Some(serde_json::Value::Array(array)) = map.get("params") {
+                                if let Some(serde_json::Value::Number(revision)) = array.get(1) {
+                                    if let Some(serde_json::Value::Number(position)) = array.get(2)
+                                    {
+                                        if let Some(serde_json::Value::Number(length)) =
+                                            array.get(3)
+                                        {
+                                            let revision = revision
+                                                .as_u64()
+                                                .expect("Failed to parse revision");
+                                            let position = position
+                                                .as_u64()
+                                                .expect("Failed to parse position");
+
+                                            let length =
+                                                length.as_u64().expect("Failed to parse length");
+
+                                            let op = EditorTextOp {
+                                                range: Range {
+                                                    anchor: position as usize,
+                                                    head: position as usize + length as usize,
+                                                },
+                                                replacement: "".to_string(),
+                                            };
+                                            let delta = EditorTextDelta(vec![op]);
+                                            Ok(RevisionedEditorTextDelta {
+                                                revision: revision as usize,
+                                                delta,
+                                            })
+                                        } else {
+                                            Err(anyhow::anyhow!(
+                                                "Could not find length param in position #3"
+                                            ))
+                                        }
+                                    } else {
+                                        Err(anyhow::anyhow!(
+                                            "Could not find position param in position #2"
+                                        ))
+                                    }
+                                } else {
+                                    Err(anyhow::anyhow!("Could not find params for delete method"))
+                                }
+                            } else {
+                                Err(anyhow::anyhow!(
+                                    "Could not find revision param in position #1"
+                                ))
+                            }
+                        }
+                        _ => Err(anyhow::anyhow!("Unknown JSON method: {}", method)),
+                    }
+                } else {
+                    Err(anyhow::anyhow!("Could not find method in JSON message"))
+                }
+            }
+            _ => Err(anyhow::anyhow!(
+                "JSON message is not an object: {:#?}",
+                json
+            )),
+        }
     }
 }
 

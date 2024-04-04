@@ -357,74 +357,6 @@ async fn start_sync(
     }
 }
 
-// TODO: Write this in a nicer way...
-fn parse_message_from_editor(s: &str) -> Result<DocMessage> {
-    let json: serde_json::Value = serde_json::from_str(s)?;
-    match json {
-        serde_json::Value::Object(map) => {
-            if let Some(serde_json::Value::String(method)) = map.get("method") {
-                match method.as_str() {
-                    "insert" => {
-                        if let Some(serde_json::Value::Array(array)) = map.get("params") {
-                            if let Some(serde_json::Value::Number(position)) = array.get(2) {
-                                if let Some(serde_json::Value::String(text)) = array.get(3) {
-                                    let position =
-                                        position.as_u64().expect("Failed to parse position");
-                                    let text = text.as_str().to_string();
-                                    Ok(DocMessage::Insert {
-                                        position: position as usize,
-                                        text,
-                                    })
-                                } else {
-                                    Err(anyhow::anyhow!("Could not find text param in position #3"))
-                                }
-                            } else {
-                                Err(anyhow::anyhow!(
-                                    "Could not find position param in position #2"
-                                ))
-                            }
-                        } else {
-                            Err(anyhow::anyhow!("Could not find params for insert method"))
-                        }
-                    }
-                    "delete" => {
-                        if let Some(serde_json::Value::Array(array)) = map.get("params") {
-                            if let Some(serde_json::Value::Number(position)) = array.get(2) {
-                                if let Some(serde_json::Value::Number(length)) = array.get(3) {
-                                    let position =
-                                        position.as_u64().expect("Failed to parse position");
-                                    let length = length.as_u64().expect("Failed to parse length");
-                                    Ok(DocMessage::Delete {
-                                        position: position as usize,
-                                        length: length as usize,
-                                    })
-                                } else {
-                                    Err(anyhow::anyhow!(
-                                        "Could not find length param in position #3"
-                                    ))
-                                }
-                            } else {
-                                Err(anyhow::anyhow!(
-                                    "Could not find position param in position #2"
-                                ))
-                            }
-                        } else {
-                            Err(anyhow::anyhow!("Could not find params for delete method"))
-                        }
-                    }
-                    _ => Err(anyhow::anyhow!("Unknown JSON method: {}", method)),
-                }
-            } else {
-                Err(anyhow::anyhow!("Could not find method in JSON message"))
-            }
-        }
-        _ => Err(anyhow::anyhow!(
-            "JSON message is not an object: {:#?}",
-            json
-        )),
-    }
-}
-
 async fn listen_socket(tx: DocMessageSender, editor_message_tx: EditorMessageSender) -> Result<()> {
     if Path::new(SOCKET_PATH).exists() {
         fs::remove_file(SOCKET_PATH)?;
@@ -450,8 +382,10 @@ async fn listen_socket(tx: DocMessageSender, editor_message_tx: EditorMessageSen
                         line_maybe = lines.next_line() => {
                             match line_maybe {
                                 Ok(Some(line)) => {
-                                    match parse_message_from_editor(&line) {
-                                        Ok(message) => {
+                                    let json: serde_json::Value = serde_json::from_str(&line)?;
+                                    match json.try_into() {
+                                        Ok(rev_delta) => {
+                                            let message = DocMessage::Delta(rev_delta);
                                             tx.send(message).await?;
                                         }
                                         Err(e) => {
