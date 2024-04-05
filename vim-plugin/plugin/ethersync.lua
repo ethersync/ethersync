@@ -88,6 +88,7 @@ local function processOperationForEditor(method, parameters)
                     if change > 0 then
                         position = position + change
                     elseif change < 0 then
+                        ignoreNextUpdate()
                         utils.delete(position, -change)
                     else
                         -- Ignore.

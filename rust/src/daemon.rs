@@ -254,10 +254,17 @@ pub async fn launch(peer: Option<String>, socket_path: String) {
                 let patches = doc.make_patches(&mut patch_log);
                 debug!(?patches);
                 for patch in patches {
-                    let rev_delta = ot_server.apply_crdt_change(patch.action.into());
-                    socket_message_tx
-                        .send(rev_delta)
-                        .expect("Failed to send message to socket channel.");
+                    match patch.action.try_into() {
+                        Ok(delta) => {
+                            let rev_delta = ot_server.apply_crdt_change(delta);
+                            socket_message_tx
+                                .send(rev_delta)
+                                .expect("Failed to send message to socket channel.");
+                        }
+                        Err(e) => {
+                            warn!("Failed to convert patch to delta: {:#?}", e);
+                        }
+                    }
                 }
                 let _ = doc_changed_tx.send(());
                 response_tx

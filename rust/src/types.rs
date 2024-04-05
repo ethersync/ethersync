@@ -112,8 +112,10 @@ impl TextDelta {
     // +transform_position?
 }
 
-impl From<PatchAction> for TextDelta {
-    fn from(patch_action: PatchAction) -> Self {
+impl TryFrom<PatchAction> for TextDelta {
+    type Error = anyhow::Error;
+
+    fn try_from(patch_action: PatchAction) -> Result<Self, Self::Error> {
         let mut delta = TextDelta::default();
 
         match patch_action {
@@ -126,11 +128,14 @@ impl From<PatchAction> for TextDelta {
                 delta.delete(length);
             }
             _ => {
-                warn!("Unsupported patch action: {}", patch_action);
+                return Err(anyhow::anyhow!(
+                    "Unsupported patch action: {}",
+                    patch_action
+                ));
             }
         }
 
-        delta
+        Ok(delta)
     }
 }
 
