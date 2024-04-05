@@ -71,7 +71,6 @@ pub struct OTServer {
     editor_queue: Vec<OperationSeq>,
 }
 
-#[allow(dead_code)] // TODO: remove, once OTServer is in use.
 impl OTServer {
     /// Called when the CRDT world makes a change to the document.
     pub fn apply_crdt_change(&mut self, delta: TextDelta) -> RevisionedTextDelta {
