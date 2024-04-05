@@ -2,7 +2,6 @@
 use automerge::PatchAction;
 use operational_transform::{Operation as OTOperation, OperationSeq};
 use serde_json::Value as JSONValue;
-use tracing::warn;
 
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct TextDelta(pub Vec<TextOp>);
@@ -220,7 +219,7 @@ impl From<EditorTextDelta> for TextDelta {
         for ed_op in ed_delta.0 {
             let mut delta_step = TextDelta::default();
             if ed_op.range.is_empty() {
-                if ed_op.replacement.is_empty() {
+                if !ed_op.replacement.is_empty() {
                     // insert
                     delta_step.retain(ed_op.range.anchor);
                     delta_step.insert(&ed_op.replacement);
