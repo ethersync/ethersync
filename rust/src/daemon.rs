@@ -20,7 +20,7 @@ use tokio::{
     sync::{broadcast, mpsc, oneshot},
     time::{sleep, Duration},
 };
-use tracing::{debug, error, info};
+use tracing::{debug, error, info, warn};
 
 // These messages are sent to the task that owns the document.
 enum DocMessage {
@@ -67,7 +67,7 @@ pub async fn launch(peer: Option<String>, socket_path: String) {
 
     // Make edits to the document occasionally.
     // To activate, build with --features simulate_edits_on_crdt
-    if cfg!(feature="simulate_edits_on") {
+    if cfg!(feature = "simulate_edits_on") {
         let tx = doc_message_tx.clone();
         tokio::spawn(async move {
             sleep(Duration::from_secs(2)).await;
