@@ -1,4 +1,3 @@
-#![allow(dead_code, unused_imports)]
 use crate::ot::OTServer;
 use crate::types::{
     EditorTextDelta, RevisionedEditorTextDelta, RevisionedTextDelta, TextDelta, TextOp,
@@ -67,7 +66,8 @@ pub async fn launch(peer: Option<String>, socket_path: String) {
     let (socket_message_tx, _socket_message_rx) = broadcast::channel::<RevisionedTextDelta>(16);
 
     // Make edits to the document occasionally.
-    if false {
+    // To activate, build with --features simulate_edits_on_crdt
+    if cfg!(feature="simulate_edits_on") {
         let tx = doc_message_tx.clone();
         tokio::spawn(async move {
             sleep(Duration::from_secs(2)).await;
@@ -75,28 +75,17 @@ pub async fn launch(peer: Option<String>, socket_path: String) {
                 tx.send(DocMessage::RandomEdit)
                     .await
                     .expect("Failed to send random edit");
-                /*
-                let random_string: String = rand::thread_rng()
-                    .sample_iter(&Alphanumeric)
-                    .take(1)
-                    .map(char::from)
-                    .collect();
-                let random_position = 0://rand::thread_rng().gen_range(0..(text_length + 1));
-                let delta = RevisionedTextDelta {
-                    revision: 0,
-                    delta: insert(random_position, random_string),
-                };
-
-                tx.send(delta);
-                */
-
                 sleep(Duration::from_secs(2)).await;
             }
         });
     }
 
     // Send random edits to editors occasionally.
-    /*if false {
+    // To activate, build with --features simulate_edits_from_editor
+    // TODO: this feature is currently be broken, so it's even commented out.
+    // (mostly because it doesn't send a proper revision? also not the correct type.)
+    /*
+    if cfg!(feature="simulate_edits_from_editor") {
         let tx = socket_message_tx.clone();
         tokio::spawn(async move {
             let editor_revision = 0;
@@ -118,7 +107,8 @@ pub async fn launch(peer: Option<String>, socket_path: String) {
                 sleep(Duration::from_secs(2)).await;
             }
         });
-    }*/
+    }
+    */
 
     // Dial peer, or listen for incoming connections.
     let doc_message_tx_clone = doc_message_tx.clone();
