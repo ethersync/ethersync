@@ -68,6 +68,8 @@ Vim `:h eol` writes:
 
 Note: The `contentOfCurrentBuffer` function should probably always look at 'eol' to return the real, implied content.
 
+Note: Vim doesn't seem to set 'eol' to false when the file is completely empty.
+
 Observation:
 
 - Have a file not ending in \n.

@@ -184,12 +184,6 @@ function Ethersync()
 
     print("Ethersync activated!")
 
-    if vim.api.nvim_get_option_value("eol", { buf = 0 }) then
-        utils.appendNewline()
-        vim.api.nvim_set_option_value("eol", false, { buf = 0 })
-    end
-    vim.api.nvim_set_option_value("fixeol", false, { buf = 0 })
-
     connect()
 
     createCursor()
@@ -265,6 +259,14 @@ function Ethersync()
             previousContent = content
         end,
     })
+
+    if vim.api.nvim_get_option_value("fixeol", { buf = 0 }) then
+        if not vim.api.nvim_get_option_value("eol", { buf = 0 }) then
+            utils.appendNewline()
+            vim.api.nvim_set_option_value("eol", true, { buf = 0 })
+        end
+        vim.api.nvim_set_option_value("fixeol", false, { buf = 0 })
+    end
 
     --vim.api.nvim_create_autocmd({ "CursorMoved", "CursorMovedI" }, {
     --    callback = function()

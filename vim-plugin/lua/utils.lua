@@ -22,6 +22,7 @@ function M.insert(index, text)
 end
 
 function M.appendNewline()
+    print("Appending newline...")
     M.insert(vim.fn.strchars(M.contentOfCurrentBuffer()), "\n")
 end
 
@@ -84,8 +85,30 @@ function M.indexToRowCol(index)
     local byte = M.charOffsetToByteOffset(index)
 
     local row = vim.fn.byte2line(byte + 1) - 1
-    local byteOffsetOfLine = vim.api.nvim_buf_get_offset(0, row)
-    local col = byte - byteOffsetOfLine
+    local col
+    if row < 0 then
+        -- This can happen if the requested index is at the end of the content.
+        local content = M.contentOfCurrentBuffer()
+        if content == "" then
+            return 0, 0
+        else
+            if index == vim.fn.strchars(content) then
+                -- There are two cases: If the last character is a newline, return the position in the next line.
+                -- Otherwise, return the position after the line.
+                row, col = M.indexToRowCol(index - 1)
+                if string.sub(content, -1) == "\n" then
+                    return row + 1, 0
+                else
+                    return row, col + 1
+                end
+            else
+                error("Could not get row/col for index " .. tostring(index) .. " in content " .. content)
+            end
+        end
+    else
+        local byteOffsetOfLine = vim.api.nvim_buf_get_offset(0, row)
+        col = byte - byteOffsetOfLine
+    end
 
     return row, col
 end
@@ -132,9 +155,15 @@ function M.testAllUnits()
 
     vim.cmd("enew")
     vim.api.nvim_buf_set_text(0, 0, 0, 0, 0, { "x", "" })
-    local row, col = M.indexToRowCol(1)
+    row, col = M.indexToRowCol(1)
     assertEqual(row, 0)
     assertEqual(col, 1)
+
+    vim.cmd("enew")
+    assertEqual(M.contentOfCurrentBuffer(), "")
+    row, col = M.indexToRowCol(0)
+    assertEqual(row, 0)
+    assertEqual(col, 0)
 
     vim.cmd("enew")
     vim.api.nvim_buf_set_text(0, 0, 0, 0, 0, { "x", "" })
@@ -145,6 +174,11 @@ function M.testAllUnits()
     vim.api.nvim_buf_set_text(0, 0, 0, 0, 0, { "x", "" })
     M.insert(1, "a")
     assertEqual(M.contentOfCurrentBuffer(), "xa\n")
+
+    assertEqual(M.charOffsetToByteOffset(0, ""), 0)
+
+    vim.cmd("enew")
+    M.appendNewline()
 
     print("Ethersync tests successful!")
 end
