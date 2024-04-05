@@ -1,4 +1,3 @@
-#![allow(dead_code, unused_imports)]
 use crate::ot::OTServer;
 use crate::types::{
     EditorTextDelta, RevisionedEditorTextDelta, RevisionedTextDelta, TextDelta, TextOp,
@@ -8,10 +7,10 @@ use automerge::{
     patches::TextRepresentation,
     sync::{Message, State as SyncState, SyncDoc},
     transaction::Transactable,
-    AutoCommit, ObjType, Patch, PatchAction, PatchLog, ReadDoc,
+    AutoCommit, ObjType, PatchLog, ReadDoc,
 };
 use rand::{distributions::Alphanumeric, Rng};
-use serde_json::{json, Value as JSONValue};
+use serde_json::json;
 use std::fs;
 use std::path::Path;
 use tokio::{
@@ -21,9 +20,7 @@ use tokio::{
     sync::{broadcast, mpsc, oneshot},
     time::{sleep, Duration},
 };
-use tracing::{debug, error, info, trace, warn};
-
-const SOCKET_PATH: &str = "/tmp/ethersync";
+use tracing::{debug, error, info};
 
 // These messages are sent to the task that owns the document.
 enum DocMessage {
@@ -45,20 +42,6 @@ enum DocMessage {
 enum SyncerMessage {
     ReceiveSyncMessage { message: Vec<u8> },
     GenerateSyncMessage,
-}
-
-#[derive(Clone, Debug)]
-enum EditorMessage {
-    Insert {
-        editor_revision: usize,
-        position: usize,
-        text: String,
-    },
-    Delete {
-        editor_revision: usize,
-        position: usize,
-        length: usize,
-    },
 }
 
 type DocMessageSender = mpsc::Sender<DocMessage>;
@@ -83,7 +66,8 @@ pub async fn launch(peer: Option<String>, socket_path: String) {
     let (socket_message_tx, _socket_message_rx) = broadcast::channel::<RevisionedTextDelta>(16);
 
     // Make edits to the document occasionally.
-    if false {
+    // To activate, build with --features simulate_edits_on_crdt
+    if cfg!(feature="simulate_edits_on") {
         let tx = doc_message_tx.clone();
         tokio::spawn(async move {
             sleep(Duration::from_secs(2)).await;
@@ -91,28 +75,17 @@ pub async fn launch(peer: Option<String>, socket_path: String) {
                 tx.send(DocMessage::RandomEdit)
                     .await
                     .expect("Failed to send random edit");
-                /*
-                let random_string: String = rand::thread_rng()
-                    .sample_iter(&Alphanumeric)
-                    .take(1)
-                    .map(char::from)
-                    .collect();
-                let random_position = 0://rand::thread_rng().gen_range(0..(text_length + 1));
-                let delta = RevisionedTextDelta {
-                    revision: 0,
-                    delta: insert(random_position, random_string),
-                };
-
-                tx.send(delta);
-                */
-
                 sleep(Duration::from_secs(2)).await;
             }
         });
     }
 
     // Send random edits to editors occasionally.
-    /*if false {
+    // To activate, build with --features simulate_edits_from_editor
+    // TODO: this feature is currently be broken, so it's even commented out.
+    // (mostly because it doesn't send a proper revision? also not the correct type.)
+    /*
+    if cfg!(feature="simulate_edits_from_editor") {
         let tx = socket_message_tx.clone();
         tokio::spawn(async move {
             let editor_revision = 0;
@@ -134,7 +107,8 @@ pub async fn launch(peer: Option<String>, socket_path: String) {
                 sleep(Duration::from_secs(2)).await;
             }
         });
-    }*/
+    }
+    */
 
     // Dial peer, or listen for incoming connections.
     let doc_message_tx_clone = doc_message_tx.clone();

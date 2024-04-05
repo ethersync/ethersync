@@ -15,3 +15,8 @@ operational-transform = "0.6.1"
 anyhow = "1.0.81"
 tracing = "0.1.40"
 tracing-subscriber = "0.3.18"
+
+[features]
+
+simulate_edits_from_editor = []
+simulate_edits_on_crdt = []
