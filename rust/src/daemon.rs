@@ -8,10 +8,10 @@ use automerge::{
     patches::TextRepresentation,
     sync::{Message, State as SyncState, SyncDoc},
     transaction::Transactable,
-    AutoCommit, ObjType, Patch, PatchAction, PatchLog, ReadDoc,
+    AutoCommit, ObjType, PatchLog, ReadDoc,
 };
 use rand::{distributions::Alphanumeric, Rng};
-use serde_json::{json, Value as JSONValue};
+use serde_json::json;
 use std::fs;
 use std::path::Path;
 use tokio::{
@@ -21,9 +21,7 @@ use tokio::{
     sync::{broadcast, mpsc, oneshot},
     time::{sleep, Duration},
 };
-use tracing::{debug, error, info, trace, warn};
-
-const SOCKET_PATH: &str = "/tmp/ethersync";
+use tracing::{debug, error, info};
 
 // These messages are sent to the task that owns the document.
 enum DocMessage {
@@ -45,20 +43,6 @@ enum DocMessage {
 enum SyncerMessage {
     ReceiveSyncMessage { message: Vec<u8> },
     GenerateSyncMessage,
-}
-
-#[derive(Clone, Debug)]
-enum EditorMessage {
-    Insert {
-        editor_revision: usize,
-        position: usize,
-        text: String,
-    },
-    Delete {
-        editor_revision: usize,
-        position: usize,
-        length: usize,
-    },
 }
 
 type DocMessageSender = mpsc::Sender<DocMessage>;
