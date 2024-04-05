@@ -142,10 +142,12 @@ impl OTServer {
             if op_seq.base_len() < doc_chars {
                 op_seq.retain((doc_chars - op_seq.base_len()) as u64);
             }
-            document = op_seq.apply(&document).expect(&format!(
-                "Could not apply operation {:?} to string with length {}.",
-                op_seq, doc_chars
-            ));
+            document = op_seq.apply(&document).unwrap_or_else(|_| {
+                panic!(
+                    "Could not apply operation {:?} to string with length {}.",
+                    op_seq, doc_chars
+                )
+            });
         }
         document
     }
@@ -188,11 +190,13 @@ fn transform_through_operations(
             let diff = my_op_seq.base_len() - their_op_seq.base_len();
             their_op_seq.retain(diff as u64);
         }
-        let (my_prime, their_prime) = my_op_seq.transform(&their_op_seq).expect(&format!(
-            "Could not transform operations {:?} on top of {:?}.",
-            &their_op_seq.ops(),
-            &my_op_seq.ops()
-        ));
+        let (my_prime, their_prime) = my_op_seq.transform(&their_op_seq).unwrap_or_else(|_| {
+            panic!(
+                "Could not transform operations {:?} on top of {:?}.",
+                &their_op_seq.ops(),
+                &my_op_seq.ops()
+            )
+        });
         transformed_my_operations.push(my_prime);
         their_op_seq = their_prime;
     }
