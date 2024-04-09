@@ -227,7 +227,7 @@ mod tests {
 
         #[test]
         fn routes_operations_through_server() {
-            let mut ot_server: OTServer = Default::default();
+            let mut ot_server: OTServer = OTServer::new("hello".into());
 
             let to_editor = ot_server.apply_crdt_change(insert(1, "x"));
             assert_eq!(to_editor, rev_delta(0, insert(1, "x")));
@@ -243,19 +243,19 @@ mod tests {
                 ot_server.operations,
                 vec![insert(1, "x").into(), insert(3, "y").into()]
             );
-            assert_eq!(ot_server.apply_to_string("hello".into()), "hxeyllo");
+            assert_eq!(ot_server.apply_to_initial_content(), "hxeyllo");
 
             let to_editor = ot_server.apply_crdt_change(insert(3, "z"));
             assert_eq!(to_editor, rev_delta(1, insert(3, "z")));
 
-            assert_eq!(ot_server.apply_to_string("hello".into()), "hxezyllo");
+            assert_eq!(ot_server.apply_to_initial_content(), "hxezyllo");
 
             // editor thinks: hxeyllo -> hlo
             let (to_crdt, to_editor) = ot_server.apply_editor_operation(rev_delta(1, delete(1, 4)));
             assert_eq!(to_crdt, compose(delete(1, 2), delete(2, 2)));
             assert_eq!(to_editor, vec![rev_delta(2, insert(1, "z"))]);
 
-            assert_eq!(ot_server.apply_to_string("hello".into()), "hzlo");
+            assert_eq!(ot_server.apply_to_initial_content(), "hzlo");
             assert_eq!(
                 ot_server.operations,
                 vec![
