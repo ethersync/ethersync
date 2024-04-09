@@ -195,68 +195,72 @@ function Ethersync()
 
     vim.api.nvim_buf_attach(0, false, {
         on_bytes = function(
-            _the_string_bytes,
-            _buffer_handle,
+            _the_string_bytes, ---@diagnostic disable-line
+            _buffer_handle, ---@diagnostic disable-line
             changedtick,
-            _start_row,
-            _start_column,
+            _start_row, ---@diagnostic disable-line
+            _start_column, ---@diagnostic disable-line
             byte_offset,
-            _old_end_row,
-            _old_end_column,
+            _old_end_row, ---@diagnostic disable-line
+            _old_end_column, ---@diagnostic disable-line
             old_end_byte_length,
-            _new_end_row,
-            _new_end_column,
+            _new_end_row, ---@diagnostic disable-line
+            _new_end_column, ---@diagnostic disable-line
             new_end_byte_length
         )
-            local content = utils.contentOfCurrentBuffer()
+            -- We think we need to schedule this, because otherwise, when substituting with :s, the "current buffer content"
+            -- is not correct yet. TODO: Does this break correctness?
+            vim.schedule(function()
+                local content = utils.contentOfCurrentBuffer()
 
-            -- Did the change come from us? If so, ignore it.
-            if ignored_ticks[changedtick] then
-                ignored_ticks[changedtick] = nil
+                -- Did the change come from us? If so, ignore it.
+                if ignored_ticks[changedtick] then
+                    ignored_ticks[changedtick] = nil
+                    previousContent = content
+                    return
+                end
+
+                if byte_offset + new_end_byte_length > vim.fn.strlen(content) then
+                    -- Tried to insert something *after* the end of the (resulting) file.
+                    -- I think this is probably a bug, that happens when you use the 'o' command, for example.
+                    -- See for example https://github.com/neovim/neovim/issues/25966.
+                    byte_offset = vim.fn.strlen(content) - new_end_byte_length
+                end
+
+                local charOffset = utils.byteOffsetToCharOffset(byte_offset, content)
+                local oldCharEnd = utils.byteOffsetToCharOffset(byte_offset + old_end_byte_length, previousContent)
+                local newCharEnd = utils.byteOffsetToCharOffset(byte_offset + new_end_byte_length, content)
+
+                local oldCharLength = oldCharEnd - charOffset
+                local newCharLength = newCharEnd - charOffset
+
+                if oldCharLength > 0 then
+                    editorRevision = editorRevision + 1
+                    if online then
+                        client.notify("delete", { filename, daemonRevision, charOffset, oldCharLength })
+                    else
+                        table.insert(opQueueForDaemon, {
+                            "delete",
+                            { filename, daemonRevision, charOffset, oldCharLength },
+                        })
+                    end
+                end
+
+                if newCharLength > 0 then
+                    editorRevision = editorRevision + 1
+                    local insertedString = vim.fn.strcharpart(content, charOffset, newCharLength)
+                    if online then
+                        client.notify("insert", { filename, daemonRevision, charOffset, insertedString })
+                    else
+                        table.insert(opQueueForDaemon, {
+                            "insert",
+                            { filename, daemonRevision, charOffset, insertedString },
+                        })
+                    end
+                end
+
                 previousContent = content
-                return
-            end
-
-            if byte_offset + new_end_byte_length > vim.fn.strlen(content) then
-                -- Tried to insert something *after* the end of the (resulting) file.
-                -- I think this is probably a bug, that happens when you use the 'o' command, for example.
-                -- See for example https://github.com/neovim/neovim/issues/25966.
-                byte_offset = vim.fn.strlen(content) - new_end_byte_length
-            end
-
-            local charOffset = utils.byteOffsetToCharOffset(byte_offset, content)
-            local oldCharEnd = utils.byteOffsetToCharOffset(byte_offset + old_end_byte_length, previousContent)
-            local newCharEnd = utils.byteOffsetToCharOffset(byte_offset + new_end_byte_length, content)
-
-            local oldCharLength = oldCharEnd - charOffset
-            local newCharLength = newCharEnd - charOffset
-
-            if oldCharLength > 0 then
-                editorRevision = editorRevision + 1
-                if online then
-                    client.notify("delete", { filename, daemonRevision, charOffset, oldCharLength })
-                else
-                    table.insert(opQueueForDaemon, {
-                        "delete",
-                        { filename, daemonRevision, charOffset, oldCharLength },
-                    })
-                end
-            end
-
-            if newCharLength > 0 then
-                editorRevision = editorRevision + 1
-                local insertedString = vim.fn.strcharpart(content, charOffset, newCharLength)
-                if online then
-                    client.notify("insert", { filename, daemonRevision, charOffset, insertedString })
-                else
-                    table.insert(opQueueForDaemon, {
-                        "insert",
-                        { filename, daemonRevision, charOffset, insertedString },
-                    })
-                end
-            end
-
-            previousContent = content
+            end)
         end,
     })
 
