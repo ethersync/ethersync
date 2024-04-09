@@ -5,6 +5,15 @@ use operational_transform::{Operation as OTOperation, OperationSeq};
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct TextDelta(pub Vec<TextOp>);
 
+impl IntoIterator for TextDelta {
+    type Item = TextOp;
+    type IntoIter = std::vec::IntoIter<Self::Item>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.into_iter()
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum TextOp {
     Retain(usize),
@@ -14,6 +23,15 @@ pub enum TextOp {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct EditorTextDelta(pub Vec<EditorTextOp>);
+
+impl IntoIterator for EditorTextDelta {
+    type Item = EditorTextOp;
+    type IntoIter = std::vec::IntoIter<Self::Item>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.into_iter()
+    }
+}
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct RevisionedEditorTextDelta {
@@ -141,7 +159,7 @@ impl From<TextDelta> for Vec<PatchAction> {
     fn from(delta: TextDelta) -> Vec<PatchAction> {
         let mut patch_actions = vec![];
         let mut position = 0;
-        for op in delta.0 {
+        for op in delta {
             match op {
                 TextOp::Retain(n) => {
                     position += n;
@@ -190,7 +208,7 @@ impl From<OperationSeq> for TextDelta {
 impl From<TextDelta> for OperationSeq {
     fn from(delta: TextDelta) -> OperationSeq {
         let mut op_seq = OperationSeq::default();
-        for op in delta.0 {
+        for op in delta {
             match op {
                 TextOp::Retain(n) => {
                     op_seq.retain(n as u64);
@@ -215,7 +233,7 @@ impl From<EditorTextDelta> for TextDelta {
             ed_delta.0.len() == 1,
             "We don't yet support EditorTextDelta with multiple operations."
         );
-        for ed_op in ed_delta.0 {
+        for ed_op in ed_delta {
             let mut delta_step = TextDelta::default();
             if ed_op.range.is_empty() {
                 if !ed_op.replacement.is_empty() {
@@ -243,7 +261,7 @@ impl From<TextDelta> for EditorTextDelta {
     fn from(delta: TextDelta) -> Self {
         let mut editor_ops = vec![];
         let mut position = 0;
-        for op in delta.0 {
+        for op in delta {
             match op {
                 TextOp::Retain(n) => position += n,
                 TextOp::Delete(n) => {

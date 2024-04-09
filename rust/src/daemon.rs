@@ -460,7 +460,7 @@ async fn listen_socket(
                             debug!("Received editor message.");
 
                             let mut json_params = vec![];
-                            for op in rev_delta.delta.0 {
+                            for op in rev_delta.delta {
                                 match op {
                                     TextOp::Retain(n) => {
                                         json_params.push(json!(n));
