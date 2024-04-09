@@ -25,7 +25,6 @@ use tracing::{debug, error, info, warn};
 
 // These messages are sent to the task that owns the document.
 enum DocMessage {
-    Init,
     Open,
     Close,
     RandomEdit,
@@ -55,7 +54,7 @@ type SyncerMessageSender = mpsc::Sender<SyncerMessage>;
 // Launch the daemon. Optionally, connect to given peer.
 pub async fn launch(peer: Option<String>, socket_path: String, file_path: String) {
     let mut doc = AutoCommit::new();
-    let mut doc_ownership = true;
+    let mut editor_is_connected = false;
     let mut ot_server: OTServer = Default::default();
 
     // The document task will send a ping on this channel whenever it changes.
@@ -68,6 +67,20 @@ pub async fn launch(peer: Option<String>, socket_path: String, file_path: String
 
     // The document task will send messages intended for the socket connection on this channel.
     let (socket_message_tx, _socket_message_rx) = broadcast::channel::<RevisionedTextDelta>(16);
+
+    // If we are the host, read file content.
+    if peer.is_none() {
+        if let Ok(text) = std::fs::read_to_string(&file_path) {
+            let text_obj = doc
+                .put_object(automerge::ROOT, "text", ObjType::Text)
+                .expect("Failed to initialize text object in Automerge document");
+            doc.splice_text(text_obj, 0, 0, &text)
+                .expect("Failed to splice text into Automerge text object");
+        } else {
+            // TODO: Look at *why* we couldn't read the file.
+            panic!("Could not read file {}", &file_path);
+        }
+    }
 
     // Make edits to the document occasionally.
     // To activate, build with --features simulate_edits_on_crdt
@@ -146,59 +159,53 @@ pub async fn launch(peer: Option<String>, socket_path: String, file_path: String
             .await
             .expect("Channel towards document task has been closed");
         match message {
-            DocMessage::Init => {
-                let _text = doc
-                    .put_object(automerge::ROOT, "text", ObjType::Text)
-                    .expect("Failed to initialize text object in Automerge document");
-                // In the beginning, no-one might be interested in these messages, so the
-                // send might fail, I think?
-                let _ = doc_changed_tx.send(());
-            }
             DocMessage::Open => {
-                doc_ownership = false;
+                editor_is_connected = true;
+                ot_server = OTServer::new(current_content(&doc));
             }
             DocMessage::Close => {
-                doc_ownership = true;
+                editor_is_connected = false;
             }
             DocMessage::RandomEdit => {
-                let text_obj = doc
-                    .get(automerge::ROOT, "text")
-                    .expect("Failed to get text object from Automerge document");
-                if let Some((automerge::Value::Object(ObjType::Text), text_obj)) = text_obj {
-                    let text_length = doc
-                        .text(&text_obj)
-                        .expect("Failed to get string from Automerge text object")
-                        .len();
-                    let random_string: String = rand::thread_rng()
-                        .sample_iter(&Alphanumeric)
-                        .take(1)
-                        .map(char::from)
-                        .collect();
-                    let random_position = rand::thread_rng().gen_range(0..(text_length + 1));
+                let text = current_content(&doc);
+                let random_string: String = rand::thread_rng()
+                    .sample_iter(&Alphanumeric)
+                    .take(1)
+                    .map(char::from)
+                    .collect();
+                let text_length = text.chars().count();
+                let random_position = rand::thread_rng().gen_range(0..(text_length + 1));
 
+                if editor_is_connected {
                     let mut delta = TextDelta::default();
                     delta.retain(random_position);
                     delta.insert(&random_string);
+
                     let rev_delta = ot_server.apply_crdt_change(delta);
                     socket_message_tx
                         .send(rev_delta)
                         .expect("Failed to send message to socket channel.");
+                }
 
+                let text_obj = doc
+                    .get(automerge::ROOT, "text")
+                    .expect("Failed to get text object from Automerge document");
+                if let Some((automerge::Value::Object(ObjType::Text), text_obj)) = text_obj {
                     doc.insert(text_obj, random_position, random_string)
                         .expect("Failed to insert into Automerge text object");
-
-                    let _ = doc_changed_tx.send(());
-                } else {
-                    panic!(
-                        "Automerge document doesn't have a text object, so I can't edit randomly"
-                    );
                 }
+
+                let _ = doc_changed_tx.send(());
             }
             DocMessage::Delta(rev_delta) => {
                 let text_obj = doc
                     .get(automerge::ROOT, "text")
                     .expect("Failed to get text object from Automerge document");
                 if let Some((automerge::Value::Object(ObjType::Text), text_obj)) = text_obj {
+                    if !editor_is_connected {
+                        panic!("No editor connected, where does this delta come from?");
+                    }
+
                     let (delta_for_crdt, rev_deltas_for_editor) =
                         ot_server.apply_editor_operation(rev_delta.into());
 
@@ -235,18 +242,20 @@ pub async fn launch(peer: Option<String>, socket_path: String, file_path: String
                 doc.sync()
                     .receive_sync_message_log_patches(&mut peer_state, message, &mut patch_log)
                     .expect("Failed to apply sync message to Automerge document");
-                let patches = doc.make_patches(&mut patch_log);
-                debug!(?patches);
-                for patch in patches {
-                    match patch.action.try_into() {
-                        Ok(delta) => {
-                            let rev_delta = ot_server.apply_crdt_change(delta);
-                            socket_message_tx
-                                .send(rev_delta)
-                                .expect("Failed to send message to socket channel.");
-                        }
-                        Err(e) => {
-                            warn!("Failed to convert patch to delta: {:#?}", e);
+                if editor_is_connected {
+                    let patches = doc.make_patches(&mut patch_log);
+                    debug!(?patches);
+                    for patch in patches {
+                        match patch.action.try_into() {
+                            Ok(delta) => {
+                                let rev_delta = ot_server.apply_crdt_change(delta);
+                                socket_message_tx
+                                    .send(rev_delta)
+                                    .expect("Failed to send message to socket channel.");
+                            }
+                            Err(e) => {
+                                warn!("Failed to convert patch to delta: {:#?}", e);
+                            }
                         }
                     }
                 }
@@ -266,26 +275,16 @@ pub async fn launch(peer: Option<String>, socket_path: String, file_path: String
             }
         }
 
-        let text = doc
-            .get(automerge::ROOT, "text")
-            .expect("Failed to get text object from the Automerge document");
-
-        if let Some((automerge::Value::Object(ObjType::Text), text_obj)) = text {
-            let text = doc
-                .text(&text_obj)
-                .expect("Failed to get string from Automerge text object");
-            if doc_ownership {
-                std::fs::write(&file_path, &text).expect("Could not write to file");
-            }
-            debug!(current_text = text);
-            debug!(current_ot_doc = ot_server.apply_to_string("".into()));
+        let text = current_content(&doc);
+        if !editor_is_connected {
+            std::fs::write(&file_path, &text).expect("Could not write to file");
         }
+        debug!(current_text = text);
+        debug!(current_ot_doc = ot_server.apply_to_initial_content());
     }
 }
 
 async fn listen_tcp(tx: DocMessageSender, doc_changed_tx: DocChangedSender) -> Result<()> {
-    tx.send(DocMessage::Init).await?;
-
     let listener = TcpListener::bind("0.0.0.0:4242").await?;
     info!("Listening on TCP port: {}", listener.local_addr()?);
 
@@ -496,6 +495,18 @@ async fn sync_receive(mut reader: ReadHalf<TcpStream>, tx: SyncerMessageSender) 
             message: message_buf,
         })
         .await?;
+    }
+}
+
+fn current_content(doc: &AutoCommit) -> String {
+    let text_obj = doc
+        .get(automerge::ROOT, "text")
+        .expect("Failed to get text object from Automerge document");
+    if let Some((automerge::Value::Object(ObjType::Text), text_obj)) = text_obj {
+        doc.text(&text_obj)
+            .expect("Failed to get string from Automerge text object")
+    } else {
+        panic!("Automerge document doesn't have a text object, so I can't get the current content");
     }
 }
 

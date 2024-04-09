@@ -69,9 +69,17 @@ pub struct OTServer {
     /// the overhead of implementing the tranformation per editor plugin. In our case
     /// there's a small number of editors, so transforming it in the daemon is feasible.
     editor_queue: Vec<OperationSeq>,
+    initial_content: String,
 }
 
 impl OTServer {
+    pub fn new(initial_content: String) -> Self {
+        Self {
+            initial_content,
+            ..Default::default()
+        }
+    }
+
     /// Called when the CRDT world makes a change to the document.
     pub fn apply_crdt_change(&mut self, delta: TextDelta) -> RevisionedTextDelta {
         // We can apply the change immediately.
@@ -135,7 +143,9 @@ impl OTServer {
         (op_seq.into(), to_editor)
     }
 
-    pub fn apply_to_string(&mut self, mut document: String) -> String {
+    pub fn apply_to_initial_content(&mut self) -> String {
+        let mut document = self.initial_content.clone();
+
         for op_seq in &self.operations {
             let mut op_seq = op_seq.clone();
             let doc_chars = document.chars().count();
