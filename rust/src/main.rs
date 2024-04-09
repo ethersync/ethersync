@@ -25,6 +25,8 @@ enum Commands {
     Daemon {
         /// IP + port of a peer to connect to. Example: 192.168.1.42:1234
         peer: Option<String>,
+        #[arg(short, long)]
+        file: String,
     },
     /// Open a JSON-RPC connection to the Ethersync daemon on stdin/stdout.
     Client,
@@ -43,8 +45,8 @@ async fn main() -> io::Result<()> {
     let socket_path = cli.socket_path.unwrap_or(DEFAULT_SOCKET_PATH.to_string());
 
     match cli.command {
-        Commands::Daemon { peer } => {
-            daemon::launch(peer, socket_path).await;
+        Commands::Daemon { peer, file } => {
+            daemon::launch(peer, socket_path, file).await;
         }
         Commands::Client => {
             client::connection(&socket_path);

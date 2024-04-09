@@ -1,6 +1,7 @@
 use crate::ot::OTServer;
 use crate::types::{
-    EditorTextDelta, RevisionedEditorTextDelta, RevisionedTextDelta, TextDelta, TextOp,
+    EditorTextDelta, EditorTextOp, Range, RevisionedEditorTextDelta, RevisionedTextDelta,
+    TextDelta, TextOp,
 };
 use anyhow::Result;
 use automerge::{
@@ -25,6 +26,8 @@ use tracing::{debug, error, info, warn};
 // These messages are sent to the task that owns the document.
 enum DocMessage {
     Init,
+    Open,
+    Close,
     RandomEdit,
     Delta(RevisionedEditorTextDelta),
     ReceiveSyncMessage {
@@ -50,8 +53,9 @@ type EditorMessageSender = broadcast::Sender<RevisionedTextDelta>;
 type SyncerMessageSender = mpsc::Sender<SyncerMessage>;
 
 // Launch the daemon. Optionally, connect to given peer.
-pub async fn launch(peer: Option<String>, socket_path: String) {
+pub async fn launch(peer: Option<String>, socket_path: String, file_path: String) {
     let mut doc = AutoCommit::new();
+    let mut doc_ownership = true;
     let mut ot_server: OTServer = Default::default();
 
     // The document task will send a ping on this channel whenever it changes.
@@ -149,6 +153,12 @@ pub async fn launch(peer: Option<String>, socket_path: String) {
                 // In the beginning, no-one might be interested in these messages, so the
                 // send might fail, I think?
                 let _ = doc_changed_tx.send(());
+            }
+            DocMessage::Open => {
+                doc_ownership = false;
+            }
+            DocMessage::Close => {
+                doc_ownership = true;
             }
             DocMessage::RandomEdit => {
                 let text_obj = doc
@@ -264,6 +274,9 @@ pub async fn launch(peer: Option<String>, socket_path: String) {
             let text = doc
                 .text(&text_obj)
                 .expect("Failed to get string from Automerge text object");
+            if doc_ownership {
+                std::fs::write(&file_path, &text).expect("Could not write to file");
+            }
             debug!(current_text = text);
             debug!(current_ot_doc = ot_server.apply_to_string("".into()));
         }
@@ -420,10 +433,8 @@ async fn listen_socket(
                         line_maybe = lines.next_line() => {
                             match line_maybe {
                                 Ok(Some(line)) => {
-                                    let json: serde_json::Value = serde_json::from_str(&line)?;
-                                    match json.try_into() {
-                                        Ok(rev_editor_delta) => {
-                                            let message = DocMessage::Delta(rev_editor_delta);
+                                    match jsonrpc_to_docmessage(&line) {
+                                        Ok(message) => {
                                             tx.send(message).await?;
                                         }
                                         Err(e) => {
@@ -485,5 +496,156 @@ async fn sync_receive(mut reader: ReadHalf<TcpStream>, tx: SyncerMessageSender) 
             message: message_buf,
         })
         .await?;
+    }
+}
+
+fn jsonrpc_to_docmessage(s: &str) -> Result<DocMessage> {
+    let json = serde_json::from_str(s)?;
+    match json {
+        serde_json::Value::Object(map) => {
+            if let Some(serde_json::Value::String(method)) = map.get("method") {
+                match method.as_str() {
+                    "open" => Ok(DocMessage::Open),
+                    "close" => Ok(DocMessage::Close),
+                    "insert" => {
+                        if let Some(serde_json::Value::Array(array)) = map.get("params") {
+                            if let Some(serde_json::Value::Number(revision)) = array.get(1) {
+                                if let Some(serde_json::Value::Number(position)) = array.get(2) {
+                                    if let Some(serde_json::Value::String(text)) = array.get(3) {
+                                        let revision =
+                                            revision.as_u64().expect("Failed to parse revision");
+                                        let position =
+                                            position.as_u64().expect("Failed to parse position");
+                                        let text = text.as_str().to_string();
+                                        let op = EditorTextOp {
+                                            range: Range {
+                                                anchor: position as usize,
+                                                head: position as usize,
+                                            },
+                                            replacement: text,
+                                        };
+                                        let delta = EditorTextDelta(vec![op]);
+                                        Ok(DocMessage::Delta(RevisionedEditorTextDelta {
+                                            revision: revision as usize,
+                                            delta,
+                                        }))
+                                    } else {
+                                        Err(anyhow::anyhow!(
+                                            "Could not find text param in position #3"
+                                        ))
+                                    }
+                                } else {
+                                    Err(anyhow::anyhow!(
+                                        "Could not find position param in position #2"
+                                    ))
+                                }
+                            } else {
+                                Err(anyhow::anyhow!(
+                                    "Could not find revision param in position #1"
+                                ))
+                            }
+                        } else {
+                            Err(anyhow::anyhow!("Could not find params for insert method"))
+                        }
+                    }
+                    "delete" => {
+                        if let Some(serde_json::Value::Array(array)) = map.get("params") {
+                            if let Some(serde_json::Value::Number(revision)) = array.get(1) {
+                                if let Some(serde_json::Value::Number(position)) = array.get(2) {
+                                    if let Some(serde_json::Value::Number(length)) = array.get(3) {
+                                        let revision =
+                                            revision.as_u64().expect("Failed to parse revision");
+                                        let position =
+                                            position.as_u64().expect("Failed to parse position");
+
+                                        let length =
+                                            length.as_u64().expect("Failed to parse length");
+
+                                        let op = EditorTextOp {
+                                            range: Range {
+                                                anchor: position as usize,
+                                                head: position as usize + length as usize,
+                                            },
+                                            replacement: "".to_string(),
+                                        };
+                                        let delta = EditorTextDelta(vec![op]);
+                                        Ok(DocMessage::Delta(RevisionedEditorTextDelta {
+                                            revision: revision as usize,
+                                            delta,
+                                        }))
+                                    } else {
+                                        Err(anyhow::anyhow!(
+                                            "Could not find length param in position #3"
+                                        ))
+                                    }
+                                } else {
+                                    Err(anyhow::anyhow!(
+                                        "Could not find position param in position #2"
+                                    ))
+                                }
+                            } else {
+                                Err(anyhow::anyhow!("Could not find params for delete method"))
+                            }
+                        } else {
+                            Err(anyhow::anyhow!(
+                                "Could not find revision param in position #1"
+                            ))
+                        }
+                    }
+                    _ => Err(anyhow::anyhow!("Unknown JSON method: {}", method)),
+                }
+            } else {
+                Err(anyhow::anyhow!("Could not find method in JSON message"))
+            }
+        }
+        _ => Err(anyhow::anyhow!(
+            "JSON message is not an object: {:#?}",
+            json
+        )),
+    }
+}
+
+#[test]
+fn json_to_docmessage() {
+    let json = serde_json::json!({
+        "method": "insert",
+        "params": ["", 0, 1, "a"]
+    });
+
+    let message = jsonrpc_to_docmessage(&json.to_string()).unwrap();
+    if let DocMessage::Delta(delta) = message {
+        assert_eq!(
+            delta,
+            RevisionedEditorTextDelta {
+                revision: 0,
+                delta: EditorTextDelta(vec![EditorTextOp {
+                    range: Range { anchor: 1, head: 1 },
+                    replacement: "a".to_string(),
+                }])
+            }
+        );
+    } else {
+        panic!("Expected DocMessage::Delta, got something else.");
+    }
+
+    let json = serde_json::json!({
+        "method": "delete",
+        "params": ["", 2, 1, 3]
+    });
+
+    let message = jsonrpc_to_docmessage(&json.to_string()).unwrap();
+    if let DocMessage::Delta(delta) = message {
+        assert_eq!(
+            delta,
+            RevisionedEditorTextDelta {
+                revision: 2,
+                delta: EditorTextDelta(vec![EditorTextOp {
+                    range: Range { anchor: 1, head: 4 },
+                    replacement: "".to_string(),
+                }])
+            }
+        );
+    } else {
+        panic!("Expected DocMessage::Delta, got something else.");
     }
 }
