@@ -412,8 +412,12 @@ async fn listen_socket(
                 let mut lines = buf_reader.lines();
 
                 loop {
+                    // either we're parsing a line from the reader (if we have one)
+                    // which means we got a Delta from the ethersync client
+                    //
+                    // or we're sending an editor message to the client
                     tokio::select! {
-                    line_maybe = lines.next_line() => {
+                        line_maybe = lines.next_line() => {
                             match line_maybe {
                                 Ok(Some(line)) => {
                                     let json: serde_json::Value = serde_json::from_str(&line)?;
