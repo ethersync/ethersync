@@ -161,13 +161,17 @@ pub async fn launch(peer: Option<String>, socket_path: String, file_path: String
         match message {
             DocMessage::Open => {
                 editor_is_connected = true;
-                ot_server = OTServer::new(current_content(&doc));
+                ot_server = OTServer::new(
+                    current_content(&doc)
+                        .expect("Should have initialized text before initializing the document"),
+                );
             }
             DocMessage::Close => {
                 editor_is_connected = false;
             }
             DocMessage::RandomEdit => {
-                let text = current_content(&doc);
+                let text = current_content(&doc)
+                    .expect("Should have initialized text before performing random edit");
                 let random_string: String = rand::thread_rng()
                     .sample_iter(&Alphanumeric)
                     .take(1)
@@ -275,12 +279,15 @@ pub async fn launch(peer: Option<String>, socket_path: String, file_path: String
             }
         }
 
-        let text = current_content(&doc);
-        if !editor_is_connected {
-            std::fs::write(&file_path, &text).expect("Could not write to file");
+        let content = current_content(&doc);
+        if let Ok(text) = content {
+            debug!(current_text = text);
+            if editor_is_connected {
+                debug!(current_ot_doc = ot_server.apply_to_initial_content());
+            } else {
+                std::fs::write(&file_path, &text).expect("Could not write to file");
+            }
         }
-        debug!(current_text = text);
-        debug!(current_ot_doc = ot_server.apply_to_initial_content());
     }
 }
 
@@ -498,15 +505,18 @@ async fn sync_receive(mut reader: ReadHalf<TcpStream>, tx: SyncerMessageSender) 
     }
 }
 
-fn current_content(doc: &AutoCommit) -> String {
+fn current_content(doc: &AutoCommit) -> Result<String> {
     let text_obj = doc
         .get(automerge::ROOT, "text")
-        .expect("Failed to get text object from Automerge document");
+        .expect("Failed to get text key from Automerge document");
     if let Some((automerge::Value::Object(ObjType::Text), text_obj)) = text_obj {
-        doc.text(&text_obj)
-            .expect("Failed to get string from Automerge text object")
+        Ok(doc
+            .text(&text_obj)
+            .expect("Failed to get string from Automerge text object"))
     } else {
-        panic!("Automerge document doesn't have a text object, so I can't get the current content");
+        Err(anyhow::anyhow!(
+            "Could not get text object from Automerge object. Is it a text value?"
+        ))
     }
 }
 
