@@ -3,6 +3,7 @@ name = "ethersync"
 description = "Enables real-time co-editing of local text files."
 version = "0.1.0"
 edition = "2021"
+default-run = "ethersync"
 
 [dependencies]
 serde_json = { version = "1" }
@@ -17,6 +18,7 @@ tracing = "0.1.40"
 tracing-subscriber = "0.3.18"
 nvim-rs = {version = "0.7.0", features = ["use_tokio"]}
 temp-dir = "0.1.13"
+async-trait = "0.1.79"
 
 [features]
 

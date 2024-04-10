@@ -284,6 +284,7 @@ name = "ethersync"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "async-trait",
  "automerge",
  "clap",
  "jsonrpc-core",

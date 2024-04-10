@@ -128,7 +128,7 @@ impl TextDelta {
         for op in &self.0 {
             match op {
                 TextOp::Retain(n) => {
-                    result.push_str(&content[position..position + *n]);
+                    result.push_str(&content.chars().skip(position).take(*n).collect::<String>());
                     position += *n;
                 }
                 TextOp::Insert(s) => {
@@ -139,7 +139,7 @@ impl TextDelta {
                 }
             }
         }
-        result.push_str(&content[position..]);
+        result.push_str(&content.chars().skip(position).collect::<String>());
         result
     }
 
