@@ -122,6 +122,27 @@ impl TextDelta {
             .into()
     }
 
+    pub fn apply(&self, content: &str) -> String {
+        let mut position = 0;
+        let mut result = String::new();
+        for op in &self.0 {
+            match op {
+                TextOp::Retain(n) => {
+                    result.push_str(&content[position..position + *n]);
+                    position += *n;
+                }
+                TextOp::Insert(s) => {
+                    result.push_str(s);
+                }
+                TextOp::Delete(n) => {
+                    position += n;
+                }
+            }
+        }
+        result.push_str(&content[position..]);
+        result
+    }
+
     //fn transform(&mut self, other: Self) -> Self;
     // +some way of looking into the data
     // +invert?
@@ -321,6 +342,13 @@ mod tests {
     fn range_forward() {
         assert!(Range { anchor: 0, head: 1 }.is_forward());
         assert!(!Range { anchor: 1, head: 0 }.is_forward());
+    }
+
+    #[test]
+    fn apply_text_delta() {
+        let content = "Hello, world!";
+        let delta = insert(7, "cruel ");
+        assert_eq!(delta.apply(content), "Hello, cruel world!");
     }
 
     #[test]
