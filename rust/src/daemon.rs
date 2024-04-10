@@ -29,6 +29,7 @@ pub enum DocMessage {
     Close,
     RandomEdit,
     RevDelta(RevisionedEditorTextDelta),
+    #[allow(dead_code)]
     Delta(TextDelta),
     ReceiveSyncMessage {
         message: Message,
@@ -69,6 +70,7 @@ impl Daemon {
         }
     }
 
+    #[allow(dead_code)]
     pub async fn message(&self, message: DocMessage) {
         self.doc_message_tx
             .send(message)
@@ -76,6 +78,7 @@ impl Daemon {
             .expect("Failed to send message to document task");
     }
 
+    #[allow(dead_code)]
     pub fn tcp_address(&self) -> String {
         // TODO: Get the actual address.
         "0.0.0.0:4242".to_string()
