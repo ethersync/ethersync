@@ -369,17 +369,8 @@ async fn start_sync(
     let (tcp_read, mut tcp_write) = tokio::io::split(stream);
 
     // TCP reader.
-    let message_tx_clone = reader_message_tx.clone();
-    tokio::spawn(async move {
-        match sync_receive(tcp_read, message_tx_clone).await {
-            Ok(_) => {
-                debug!("Sync receive OK.");
-            }
-            Err(e) => {
-                error!("Error sync_receive: {:#?}", e);
-            }
-        }
-    });
+    let receiver = SyncReceiver::new(tcp_read, reader_message_tx.clone());
+    tokio::spawn(sync_receive(receiver));
 
     // Generate sync message when doc changes.
     let reader_message_tx_clone = reader_message_tx.clone();
@@ -519,18 +510,36 @@ async fn listen_socket(
     }
 }
 
-async fn sync_receive(mut reader: ReadHalf<TcpStream>, tx: SyncerMessageSender) -> Result<()> {
-    loop {
+struct SyncReceiver {
+    sender: SyncerMessageSender,
+    reader: ReadHalf<TcpStream>,
+}
+
+impl SyncReceiver {
+    fn new(reader: ReadHalf<TcpStream>, sender: SyncerMessageSender) -> Self {
+        Self { sender, reader }
+    }
+
+    async fn forward_sync_message(&self, message: Vec<u8>) {
+        let _ = self
+            .sender
+            .send(SyncerMessage::ReceiveSyncMessage { message }).await;
+    }
+
+    async fn read_message(&mut self) -> Result<Vec<u8>> {
         let mut message_len_buf = [0; 4];
-        reader.read_exact(&mut message_len_buf).await?;
+        self.reader.read_exact(&mut message_len_buf).await?;
         let message_len = i32::from_be_bytes(message_len_buf);
         let mut message_buf = vec![0; message_len as usize];
-        reader.read_exact(&mut message_buf).await?;
+        self.reader.read_exact(&mut message_buf).await?;
+        Ok(message_buf)
+    }
+}
 
-        tx.send(SyncerMessage::ReceiveSyncMessage {
-            message: message_buf,
-        })
-        .await?;
+async fn sync_receive(mut sync_receiver: SyncReceiver) {
+    // TODO: error case?
+    while let Ok(message) = sync_receiver.read_message().await {
+        sync_receiver.forward_sync_message(message).await;
     }
 }
 
