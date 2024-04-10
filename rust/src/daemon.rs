@@ -363,12 +363,12 @@ async fn start_sync(
     let mut peer_state = SyncState::new();
 
     let (reader_message_tx, mut reader_message_rx) = mpsc::channel(1);
-    let (read, mut write) = tokio::io::split(stream);
+    let (tcp_read, mut tcp_write) = tokio::io::split(stream);
 
     // TCP reader.
     let message_tx_clone = reader_message_tx.clone();
     tokio::spawn(async move {
-        match sync_receive(read, message_tx_clone).await {
+        match sync_receive(tcp_read, message_tx_clone).await {
             Ok(_) => {
                 debug!("Sync receive OK.");
             }
@@ -423,8 +423,8 @@ async fn start_sync(
                     if let Some(message) = message {
                         let message = message.encode();
                         let message_len = message.len() as i32;
-                        write.write_all(&message_len.to_be_bytes()).await?;
-                        write.write_all(&message).await?;
+                        tcp_write.write_all(&message_len.to_be_bytes()).await?;
+                        tcp_write.write_all(&message).await?;
                     }
                 }
             },
@@ -451,8 +451,8 @@ async fn listen_socket(
 
                 let mut editor_message_rx = editor_message_tx.subscribe();
 
-                let (mut read, mut write) = tokio::io::split(stream);
-                let buf_reader = BufReader::new(&mut read);
+                let (mut tcp_read, mut tcp_write) = tokio::io::split(stream);
+                let buf_reader = BufReader::new(&mut tcp_read);
                 //for line in buf_reader.lines() {
                 let mut lines = buf_reader.lines();
 
@@ -503,7 +503,7 @@ async fn listen_socket(
                                 "method": "operation",
                                 "params": [rev_delta.revision, json_params]
                             });
-                            write.write_all(format!("{}\n", payload).as_bytes()).await?;
+                            tcp_write.write_all(format!("{}\n", payload).as_bytes()).await?;
                         }
                     }
                 }
