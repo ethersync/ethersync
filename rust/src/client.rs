@@ -4,12 +4,13 @@ use std::io::BufReader;
 use std::io::Read;
 use std::io::Write;
 use std::os::unix::net::UnixStream;
+use std::path::Path;
 use std::str::from_utf8;
 use std::thread;
 
 // Read/write JSON-RPC requests that have a Content-Length header from/to stdin/stdout.
 // Read/write newline-delimited JSON-RPC from/to the Unix socket.
-pub fn connection(socket_path: &str) {
+pub fn connection(socket_path: &Path) {
     let mut stream = UnixStream::connect(socket_path).expect("Failed to connect to socket");
 
     let stream2 = stream.try_clone().expect("Failed to clone socket stream");

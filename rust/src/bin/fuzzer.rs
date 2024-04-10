@@ -1,13 +1,18 @@
 use actors::random_delta;
-use actors::{Actor, Daemon, Neovim};
+use actors::{Actor, Neovim};
+use daemon::Daemon;
 use rand::Rng;
+use std::path::Path;
 use std::path::PathBuf;
 use tokio::time::{sleep, timeout};
-use types::TextDelta;
 
-// TODO: Move types to lib directory?
+// TODO: Move types to lib directory.
 #[path = "../actors.rs"]
 mod actors;
+#[path = "../daemon.rs"]
+mod daemon;
+#[path = "../ot.rs"]
+mod ot;
 #[path = "../types.rs"]
 mod types;
 
@@ -15,7 +20,7 @@ async fn perform_random_edits(actor: &mut impl Actor) {
     loop {
         let content = actor.content().await;
         let delta = random_delta(&content);
-        actor.apply_delta(delta);
+        actor.apply_delta(delta).await;
         let random_millis = rand::thread_rng().gen_range(0..1000);
         sleep(std::time::Duration::from_millis(random_millis)).await;
 
@@ -40,20 +45,39 @@ async fn main() {
     // Set up the project directory.
     let dir = temp_dir::TempDir::new().unwrap();
     let file = dir.child("file");
+    let file2 = dir.child("file2");
     create_ethersync_dir(dir.path().to_path_buf());
+
+    println!("Setting up actors");
 
     // Set up the actors.
     let mut daemon = Daemon::new();
-    daemon.launch(None);
+
+    println!("Expected hang will happen in 3, 2, 1, ...");
+
+    // TODO: Problem: Right now, launch() never returns. We could spawn a task here, or in
+    // launch(), but we need write access to doc_message_rx. How can we improve that?
+    daemon
+        .launch(None, Path::new("/tmp/ethersync"), file.as_path())
+        .await;
 
     let mut nvim = Neovim::new().await;
     let mut buffer = nvim.open(file).await;
 
+    println!("Launching peer");
+
     let mut peer = Daemon::new();
-    peer.launch(Some(daemon.tcp_address()));
+    peer.launch(
+        Some(daemon.tcp_address()),
+        Path::new("/tmp/etherbonk"),
+        file2.as_path(),
+    )
+    .await;
+
+    println!("Performing random edits");
 
     // Perform random edits in parallel for a number of seconds.
-    timeout(std::time::Duration::from_secs(10), async {
+    timeout(std::time::Duration::from_secs(1), async {
         perform_random_edits(&mut daemon).await;
         perform_random_edits(&mut peer).await;
         perform_random_edits(&mut buffer).await;
@@ -68,9 +92,13 @@ async fn main() {
     buffer.set_online(true);
     */
 
+    println!("Sleep a bit");
+
     // Wait for a moment to allow them to sync.
     sleep(std::time::Duration::from_secs(1)).await;
     // TODO: Maybe broadcast "ready" message? Wait for roundtrip?
+
+    println!("Checking content");
 
     // Check that all actors have the same content.
     let buffer_content = buffer.content().await;
@@ -79,6 +107,3 @@ async fn main() {
     assert_eq!(buffer_content, daemon_content);
     assert_eq!(buffer_content, peer_content);
 }
-
-#[test]
-fn nvim_has_ethersync_plugin() {}

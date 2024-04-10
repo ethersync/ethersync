@@ -24,11 +24,12 @@ use tokio::{
 use tracing::{debug, error, info, warn};
 
 // These messages are sent to the task that owns the document.
-enum DocMessage {
+pub enum DocMessage {
     Open,
     Close,
     RandomEdit,
-    Delta(RevisionedEditorTextDelta),
+    RevDelta(RevisionedEditorTextDelta),
+    Delta(TextDelta),
     ReceiveSyncMessage {
         message: Message,
         state: SyncState,
@@ -51,161 +52,197 @@ type DocChangedSender = broadcast::Sender<()>;
 type EditorMessageSender = broadcast::Sender<RevisionedTextDelta>;
 type SyncerMessageSender = mpsc::Sender<SyncerMessage>;
 
-// Launch the daemon. Optionally, connect to given peer.
-pub async fn launch(peer: Option<String>, socket_path: String, file_path: String) {
-    let mut doc = AutoCommit::new();
-    let mut editor_is_connected = false;
-    let mut ot_server: OTServer = Default::default();
+pub struct Daemon {
+    doc_message_tx: DocMessageSender,
+    doc_message_rx: mpsc::Receiver<DocMessage>,
+}
 
-    // The document task will send a ping on this channel whenever it changes.
-    // The sync tasks will subscribe to it, and react to it by syncing with the peers.
-    let (doc_changed_tx, _doc_changed_rx) = broadcast::channel::<()>(16);
+impl Daemon {
+    pub fn new() -> Self {
+        // The document task will receive messages on this channel.
+        // The TCP and socket connections will send messages to it when they receive something.
+        let (doc_message_tx, doc_message_rx) = mpsc::channel(1);
 
-    // The document task will receive messages on this channel.
-    // The TCP and socket connections will send messages to it when they receive something.
-    let (doc_message_tx, mut doc_message_rx) = mpsc::channel(1);
-
-    // The document task will send messages intended for the socket connection on this channel.
-    let (socket_message_tx, _socket_message_rx) = broadcast::channel::<RevisionedTextDelta>(16);
-
-    // If we are the host, read file content.
-    if peer.is_none() {
-        if let Ok(text) = std::fs::read_to_string(&file_path) {
-            let text_obj = doc
-                .put_object(automerge::ROOT, "text", ObjType::Text)
-                .expect("Failed to initialize text object in Automerge document");
-            doc.splice_text(text_obj, 0, 0, &text)
-                .expect("Failed to splice text into Automerge text object");
-        } else {
-            // TODO: Look at *why* we couldn't read the file.
-            panic!("Could not read file {}", &file_path);
+        Self {
+            doc_message_tx,
+            doc_message_rx,
         }
     }
 
-    // Make edits to the document occasionally.
-    // To activate, build with --features simulate_edits_on_crdt
-    if cfg!(feature = "simulate_edits_on_crdt") {
-        let tx = doc_message_tx.clone();
-        tokio::spawn(async move {
-            sleep(Duration::from_secs(2)).await;
-            loop {
-                tx.send(DocMessage::RandomEdit)
+    pub async fn message(&self, message: DocMessage) {
+        self.doc_message_tx
+            .send(message)
+            .await
+            .expect("Failed to send message to document task");
+    }
+
+    pub fn tcp_address(&self) -> String {
+        // TODO: Get the actual address.
+        "0.0.0.0:4242".to_string()
+    }
+
+    // Launch the daemon. Optionally, connect to given peer.
+    pub async fn launch(&mut self, peer: Option<String>, socket_path: &Path, file_path: &Path) {
+        let mut doc = AutoCommit::new();
+        let mut editor_is_connected = false;
+        let mut ot_server: OTServer = Default::default();
+
+        // The document task will send a ping on this channel whenever it changes.
+        // The sync tasks will subscribe to it, and react to it by syncing with the peers.
+        let (doc_changed_tx, _doc_changed_rx) = broadcast::channel::<()>(16);
+
+        // The document task will send messages intended for the socket connection on this channel.
+        let (socket_message_tx, _socket_message_rx) = broadcast::channel::<RevisionedTextDelta>(16);
+
+        // If we are the host, read file content.
+        if peer.is_none() {
+            // Create the file if it doesn't exist.
+            if !file_path.exists() {
+                std::fs::write(file_path, "").expect("Could not create file");
+            }
+
+            if let Ok(text) = std::fs::read_to_string(file_path) {
+                let text_obj = doc
+                    .put_object(automerge::ROOT, "text", ObjType::Text)
+                    .expect("Failed to initialize text object in Automerge document");
+                doc.splice_text(text_obj, 0, 0, &text)
+                    .expect("Failed to splice text into Automerge text object");
+            } else {
+                // TODO: Look at *why* we couldn't read the file.
+                panic!("Could not read file {}", file_path.display());
+            }
+        }
+
+        // Make edits to the document occasionally.
+        // To activate, build with --features simulate_edits_on_crdt
+        if cfg!(feature = "simulate_edits_on_crdt") {
+            let tx = self.doc_message_tx.clone();
+            tokio::spawn(async move {
+                sleep(Duration::from_secs(2)).await;
+                loop {
+                    tx.send(DocMessage::RandomEdit)
+                        .await
+                        .expect("Failed to send random edit");
+                    sleep(Duration::from_secs(2)).await;
+                }
+            });
+        }
+
+        // Send random edits to editors occasionally.
+        // To activate, build with --features simulate_edits_from_editor
+        // TODO: this feature is currently be broken, so it's even commented out.
+        // (mostly because it doesn't send a proper revision? also not the correct type.)
+        /*
+        if cfg!(feature="simulate_edits_from_editor") {
+            let tx = socket_message_tx.clone();
+            tokio::spawn(async move {
+                let editor_revision = 0;
+                loop {
+                    let random_string: String = rand::thread_rng()
+                        .sample_iter(&Alphanumeric)
+                        .take(1)
+                        .map(char::from)
+                        .collect();
+                    let random_position = 0; //rand::thread_rng().gen_range(0..(editor_revision + 1));
+                    let message = EditorMessage::Insert {
+                        editor_revision,
+                        position: random_position,
+                        text: random_string,
+                    };
+                    debug!(new_message = ?message);
+                    tx.send(message).expect("Failed to send random insert");
+
+                    sleep(Duration::from_secs(2)).await;
+                }
+            });
+        }
+        */
+
+        // Dial peer, or listen for incoming connections.
+        let doc_message_tx_clone = self.doc_message_tx.clone();
+        let doc_changed_tx_clone = doc_changed_tx.clone();
+        let doc_message_tx_clone_2 = doc_message_tx_clone.clone();
+
+        if let Some(peer) = peer {
+            tokio::spawn(async {
+                dial_tcp(doc_message_tx_clone, doc_changed_tx_clone, peer)
                     .await
-                    .expect("Failed to send random edit");
-                sleep(Duration::from_secs(2)).await;
-            }
-        });
-    }
+                    .expect("Failed to dial peer");
+            });
+        } else {
+            tokio::spawn(async {
+                listen_tcp(doc_message_tx_clone, doc_changed_tx_clone)
+                    .await
+                    .expect("Failed to listen on TCP port");
+            });
+        }
 
-    // Send random edits to editors occasionally.
-    // To activate, build with --features simulate_edits_from_editor
-    // TODO: this feature is currently be broken, so it's even commented out.
-    // (mostly because it doesn't send a proper revision? also not the correct type.)
-    /*
-    if cfg!(feature="simulate_edits_from_editor") {
-        let tx = socket_message_tx.clone();
+        let socket_message_tx_clone = socket_message_tx.clone();
+        let socket_path_clone = socket_path.to_path_buf();
         tokio::spawn(async move {
-            let editor_revision = 0;
-            loop {
-                let random_string: String = rand::thread_rng()
-                    .sample_iter(&Alphanumeric)
-                    .take(1)
-                    .map(char::from)
-                    .collect();
-                let random_position = 0; //rand::thread_rng().gen_range(0..(editor_revision + 1));
-                let message = EditorMessage::Insert {
-                    editor_revision,
-                    position: random_position,
-                    text: random_string,
-                };
-                debug!(new_message = ?message);
-                tx.send(message).expect("Failed to send random insert");
-
-                sleep(Duration::from_secs(2)).await;
-            }
-        });
-    }
-    */
-
-    // Dial peer, or listen for incoming connections.
-    let doc_message_tx_clone = doc_message_tx.clone();
-    let doc_changed_tx_clone = doc_changed_tx.clone();
-    let doc_message_tx_clone_2 = doc_message_tx_clone.clone();
-
-    if let Some(peer) = peer {
-        tokio::spawn(async {
-            dial_tcp(doc_message_tx_clone, doc_changed_tx_clone, peer)
-                .await
-                .expect("Failed to dial peer");
-        });
-    } else {
-        tokio::spawn(async {
-            listen_tcp(doc_message_tx_clone, doc_changed_tx_clone)
-                .await
-                .expect("Failed to listen on TCP port");
-        });
-    }
-
-    let socket_message_tx_clone = socket_message_tx.clone();
-    tokio::spawn(async {
-        listen_socket(doc_message_tx_clone_2, socket_message_tx_clone, socket_path)
+            listen_socket(
+                doc_message_tx_clone_2,
+                socket_message_tx_clone,
+                &socket_path_clone,
+            )
             .await
             .expect("Failed to listen on UNIX socket");
-    });
+        });
 
-    loop {
-        let message = doc_message_rx
-            .recv()
-            .await
-            .expect("Channel towards document task has been closed");
-        match message {
-            DocMessage::Open => {
-                editor_is_connected = true;
-                ot_server = OTServer::new(
-                    current_content(&doc)
-                        .expect("Should have initialized text before initializing the document"),
-                );
-            }
-            DocMessage::Close => {
-                editor_is_connected = false;
-            }
-            DocMessage::RandomEdit => {
-                let text = current_content(&doc)
-                    .expect("Should have initialized text before performing random edit");
-                let random_string: String = rand::thread_rng()
-                    .sample_iter(&Alphanumeric)
-                    .take(1)
-                    .map(char::from)
-                    .collect();
-                let text_length = text.chars().count();
-                let random_position = rand::thread_rng().gen_range(0..(text_length + 1));
-
-                if editor_is_connected {
-                    let mut delta = TextDelta::default();
-                    delta.retain(random_position);
-                    delta.insert(&random_string);
-
-                    let rev_delta = ot_server.apply_crdt_change(delta);
-                    socket_message_tx
-                        .send(rev_delta)
-                        .expect("Failed to send message to socket channel.");
+        loop {
+            let message = self
+                .doc_message_rx
+                .recv()
+                .await
+                .expect("Channel towards document task has been closed");
+            match message {
+                DocMessage::Open => {
+                    editor_is_connected = true;
+                    ot_server =
+                        OTServer::new(current_content(&doc).expect(
+                            "Should have initialized text before initializing the document",
+                        ));
                 }
-
-                let text_obj = doc
-                    .get(automerge::ROOT, "text")
-                    .expect("Failed to get text object from Automerge document");
-                if let Some((automerge::Value::Object(ObjType::Text), text_obj)) = text_obj {
-                    doc.insert(text_obj, random_position, random_string)
-                        .expect("Failed to insert into Automerge text object");
+                DocMessage::Close => {
+                    editor_is_connected = false;
                 }
+                DocMessage::RandomEdit => {
+                    let text = current_content(&doc)
+                        .expect("Should have initialized text before performing random edit");
+                    let random_string: String = rand::thread_rng()
+                        .sample_iter(&Alphanumeric)
+                        .take(1)
+                        .map(char::from)
+                        .collect();
+                    let text_length = text.chars().count();
+                    let random_position = rand::thread_rng().gen_range(0..(text_length + 1));
 
-                let _ = doc_changed_tx.send(());
-            }
-            DocMessage::Delta(rev_delta) => {
-                let text_obj = doc
-                    .get(automerge::ROOT, "text")
-                    .expect("Failed to get text object from Automerge document");
-                if let Some((automerge::Value::Object(ObjType::Text), text_obj)) = text_obj {
+                    if editor_is_connected {
+                        let mut delta = TextDelta::default();
+                        delta.retain(random_position);
+                        delta.insert(&random_string);
+
+                        let rev_delta = ot_server.apply_crdt_change(delta);
+                        socket_message_tx
+                            .send(rev_delta)
+                            .expect("Failed to send message to socket channel.");
+                    }
+
+                    let text_obj = doc
+                        .get(automerge::ROOT, "text")
+                        .expect("Failed to get text object from Automerge document");
+                    if let Some((automerge::Value::Object(ObjType::Text), text_obj)) = text_obj {
+                        doc.insert(text_obj, random_position, random_string)
+                            .expect("Failed to insert into Automerge text object");
+                    }
+
+                    let _ = doc_changed_tx.send(());
+                }
+                DocMessage::Delta(delta) => {
+                    let editor_delta: EditorTextDelta = delta.into();
+                    apply_delta(&mut doc, &editor_delta);
+                }
+                DocMessage::RevDelta(rev_delta) => {
                     if !editor_is_connected {
                         panic!("No editor connected, where does this delta come from?");
                     }
@@ -215,16 +252,7 @@ pub async fn launch(peer: Option<String>, socket_path: String, file_path: String
 
                     let editor_delta_for_crdt: EditorTextDelta = delta_for_crdt.into();
 
-                    for op in &editor_delta_for_crdt.0 {
-                        let (position, length) = op.range.as_relative();
-                        doc.splice_text(
-                            text_obj.clone(),
-                            position,
-                            length as isize,
-                            &op.replacement,
-                        )
-                        .expect("Failed to splice Automerge text object");
-                    }
+                    apply_delta(&mut doc, &editor_delta_for_crdt);
 
                     for rev_delta in rev_deltas_for_editor {
                         socket_message_tx
@@ -233,59 +261,57 @@ pub async fn launch(peer: Option<String>, socket_path: String, file_path: String
                     }
 
                     let _ = doc_changed_tx.send(());
-                } else {
-                    panic!("Automerge document doesn't have a text object, so I can't delete");
                 }
-            }
-            DocMessage::ReceiveSyncMessage {
-                message,
-                state: mut peer_state,
-                response_tx,
-            } => {
-                let mut patch_log = PatchLog::active(TextRepresentation::String);
-                doc.sync()
-                    .receive_sync_message_log_patches(&mut peer_state, message, &mut patch_log)
-                    .expect("Failed to apply sync message to Automerge document");
-                if editor_is_connected {
-                    let patches = doc.make_patches(&mut patch_log);
-                    debug!(?patches);
-                    for patch in patches {
-                        match patch.action.try_into() {
-                            Ok(delta) => {
-                                let rev_delta = ot_server.apply_crdt_change(delta);
-                                socket_message_tx
-                                    .send(rev_delta)
-                                    .expect("Failed to send message to socket channel.");
-                            }
-                            Err(e) => {
-                                warn!("Failed to convert patch to delta: {:#?}", e);
+                DocMessage::ReceiveSyncMessage {
+                    message,
+                    state: mut peer_state,
+                    response_tx,
+                } => {
+                    let mut patch_log = PatchLog::active(TextRepresentation::String);
+                    doc.sync()
+                        .receive_sync_message_log_patches(&mut peer_state, message, &mut patch_log)
+                        .expect("Failed to apply sync message to Automerge document");
+                    if editor_is_connected {
+                        let patches = doc.make_patches(&mut patch_log);
+                        debug!(?patches);
+                        for patch in patches {
+                            match patch.action.try_into() {
+                                Ok(delta) => {
+                                    let rev_delta = ot_server.apply_crdt_change(delta);
+                                    socket_message_tx
+                                        .send(rev_delta)
+                                        .expect("Failed to send message to socket channel.");
+                                }
+                                Err(e) => {
+                                    warn!("Failed to convert patch to delta: {:#?}", e);
+                                }
                             }
                         }
                     }
+                    let _ = doc_changed_tx.send(());
+                    response_tx
+                        .send(peer_state)
+                        .expect("Failed to send peer state in response to ReceiveSyncMessage");
                 }
-                let _ = doc_changed_tx.send(());
-                response_tx
-                    .send(peer_state)
-                    .expect("Failed to send peer state in response to ReceiveSyncMessage");
+                DocMessage::GenerateSyncMessage {
+                    state: mut peer_state,
+                    response_tx,
+                } => {
+                    let message = doc.sync().generate_sync_message(&mut peer_state);
+                    response_tx.send((peer_state, message)).expect(
+                        "Failed to send peer state and sync message in response to GenerateSyncMessage",
+                    );
+                }
             }
-            DocMessage::GenerateSyncMessage {
-                state: mut peer_state,
-                response_tx,
-            } => {
-                let message = doc.sync().generate_sync_message(&mut peer_state);
-                response_tx.send((peer_state, message)).expect(
-                    "Failed to send peer state and sync message in response to GenerateSyncMessage",
-                );
-            }
-        }
 
-        let content = current_content(&doc);
-        if let Ok(text) = content {
-            debug!(current_text = text);
-            if editor_is_connected {
-                debug!(current_ot_doc = ot_server.apply_to_initial_content());
-            } else {
-                std::fs::write(&file_path, &text).expect("Could not write to file");
+            let content = current_content(&doc);
+            if let Ok(text) = content {
+                debug!(current_text = text);
+                if editor_is_connected {
+                    debug!(current_ot_doc = ot_server.apply_to_initial_content());
+                } else {
+                    std::fs::write(&file_path, &text).expect("Could not write to file");
+                }
             }
         }
     }
@@ -409,13 +435,13 @@ async fn start_sync(
 async fn listen_socket(
     tx: DocMessageSender,
     editor_message_tx: EditorMessageSender,
-    socket_path: String,
+    socket_path: &Path,
 ) -> Result<()> {
     if Path::new(&socket_path).exists() {
         fs::remove_file(&socket_path)?;
     }
     let listener = UnixListener::bind(&socket_path)?;
-    info!("Listening on UNIX socket: {}", socket_path);
+    info!("Listening on UNIX socket: {}", socket_path.display());
 
     loop {
         // TODO: Accept multiple connections.
@@ -520,6 +546,21 @@ fn current_content(doc: &AutoCommit) -> Result<String> {
     }
 }
 
+fn apply_delta(doc: &mut AutoCommit, delta: &EditorTextDelta) {
+    let text_obj = doc
+        .get(automerge::ROOT, "text")
+        .expect("Failed to get text key from Automerge document");
+    if let Some((automerge::Value::Object(ObjType::Text), text_obj)) = text_obj {
+        for op in &delta.0 {
+            let (position, length) = op.range.as_relative();
+            doc.splice_text(text_obj.clone(), position, length as isize, &op.replacement)
+                .expect("Failed to splice Automerge text object");
+        }
+    } else {
+        panic!("Automerge document doesn't have a text object, so I can't modify it");
+    }
+}
+
 fn jsonrpc_to_docmessage(s: &str) -> Result<DocMessage> {
     let json = serde_json::from_str(s)?;
     match json {
@@ -546,7 +587,7 @@ fn jsonrpc_to_docmessage(s: &str) -> Result<DocMessage> {
                                             replacement: text,
                                         };
                                         let delta = EditorTextDelta(vec![op]);
-                                        Ok(DocMessage::Delta(RevisionedEditorTextDelta {
+                                        Ok(DocMessage::RevDelta(RevisionedEditorTextDelta {
                                             revision: revision as usize,
                                             delta,
                                         }))
@@ -590,7 +631,7 @@ fn jsonrpc_to_docmessage(s: &str) -> Result<DocMessage> {
                                             replacement: "".to_string(),
                                         };
                                         let delta = EditorTextDelta(vec![op]);
-                                        Ok(DocMessage::Delta(RevisionedEditorTextDelta {
+                                        Ok(DocMessage::RevDelta(RevisionedEditorTextDelta {
                                             revision: revision as usize,
                                             delta,
                                         }))
@@ -634,7 +675,7 @@ fn json_to_docmessage() {
     });
 
     let message = jsonrpc_to_docmessage(&json.to_string()).unwrap();
-    if let DocMessage::Delta(delta) = message {
+    if let DocMessage::RevDelta(delta) = message {
         assert_eq!(
             delta,
             RevisionedEditorTextDelta {
@@ -655,7 +696,7 @@ fn json_to_docmessage() {
     });
 
     let message = jsonrpc_to_docmessage(&json.to_string()).unwrap();
-    if let DocMessage::Delta(delta) = message {
+    if let DocMessage::RevDelta(delta) = message {
         assert_eq!(
             delta,
             RevisionedEditorTextDelta {

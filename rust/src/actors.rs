@@ -1,3 +1,4 @@
+use crate::daemon::{Daemon, DocMessage};
 use crate::types::TextDelta;
 use async_trait::async_trait;
 use nvim_rs::{compat::tokio::Compat, create::tokio::new_child, rpc::handler::Dummy};
@@ -10,10 +11,8 @@ pub trait Actor {
     async fn content(&self) -> String;
     async fn apply_delta(&mut self, delta: TextDelta);
     //fn wait_for_sync(&self);
-    async fn set_online(&mut self, online: bool);
+    //async fn set_online(&mut self, online: bool);
 }
-
-pub struct Daemon {}
 
 pub struct Neovim {
     nvim: nvim_rs::Neovim<Compat<ChildStdin>>,
@@ -21,20 +20,6 @@ pub struct Neovim {
 
 pub struct Buffer {
     buffer: nvim_rs::Buffer<Compat<ChildStdin>>,
-}
-
-impl Daemon {
-    pub fn new() -> Self {
-        todo!()
-    }
-
-    pub fn launch(&mut self, _address: Option<String>) {
-        todo!()
-    }
-
-    pub fn tcp_address(&self) -> String {
-        todo!()
-    }
 }
 
 impl Neovim {
@@ -46,7 +31,8 @@ impl Neovim {
         Self { nvim }
     }
 
-    pub async fn open(&mut self, file: PathBuf) -> Buffer {
+    pub async fn open(&mut self, _file: PathBuf) -> Buffer {
+        // TODO: Actually open file.
         let buffer = self.nvim.get_current_buf().await.unwrap();
 
         Buffer { buffer }
@@ -60,11 +46,7 @@ impl Actor for Daemon {
     }
 
     async fn apply_delta(&mut self, delta: TextDelta) {
-        todo!()
-    }
-
-    async fn set_online(&mut self, online: bool) {
-        todo!()
+        self.message(DocMessage::Delta(delta)).await;
     }
 }
 
@@ -78,16 +60,12 @@ impl Actor for Buffer {
             .join("\n")
     }
 
-    async fn apply_delta(&mut self, delta: TextDelta) {
+    async fn apply_delta(&mut self, _delta: TextDelta) {
         // TODO: Actually apply the delta.
         self.buffer
             .set_text(0, 0, 0, 0, vec!["!".into()])
             .await
             .unwrap();
-    }
-
-    async fn set_online(&mut self, online: bool) {
-        todo!()
     }
 }
 
