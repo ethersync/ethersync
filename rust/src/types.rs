@@ -1,4 +1,3 @@
-#![allow(dead_code)] // TODO: consider the dead code.
 use automerge::PatchAction;
 use operational_transform::{Operation as OTOperation, OperationSeq};
 
