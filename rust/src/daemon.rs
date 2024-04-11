@@ -57,10 +57,6 @@ type DocChangedSender = broadcast::Sender<()>;
 type EditorMessageSender = broadcast::Sender<RevisionedTextDelta>;
 type SyncerMessageSender = mpsc::Sender<SyncerMessage>;
 
-pub struct Daemon {
-    doc_message_tx: DocMessageSender,
-}
-
 pub struct DaemonActor {
     doc_message_rx: mpsc::Receiver<DocMessage>,
     doc_changed_ping_tx: DocChangedSender,
@@ -105,14 +101,14 @@ impl DaemonActor {
                 delta.retain(random_position);
                 delta.insert(&random_string);
 
-                apply_delta_to_doc(&mut self.doc, &delta.clone().into());
+                self.apply_delta_to_doc(&delta.clone().into());
                 self.process_crdt_delta_in_ot(delta);
 
                 let _ = self.doc_changed_ping_tx.send(());
             }
             DocMessage::Delta(delta) => {
                 let editor_delta: EditorTextDelta = delta.clone().into();
-                apply_delta_to_doc(&mut self.doc, &editor_delta);
+                self.apply_delta_to_doc(&editor_delta);
                 self.process_crdt_delta_in_ot(delta);
             }
             DocMessage::RevDelta(rev_delta) => {
@@ -125,7 +121,7 @@ impl DaemonActor {
 
                 let editor_delta_for_crdt: EditorTextDelta = delta_for_crdt.into();
 
-                apply_delta_to_doc(&mut self.doc, &editor_delta_for_crdt);
+                self.apply_delta_to_doc(&editor_delta_for_crdt);
 
                 for rev_delta in rev_deltas_for_editor {
                     self.socket_message_tx
@@ -173,6 +169,23 @@ impl DaemonActor {
                     "Failed to send peer state and sync message in response to GenerateSyncMessage",
                 );
             }
+        }
+    }
+
+    fn apply_delta_to_doc(&mut self, delta: &EditorTextDelta) {
+        let text_obj = self
+            .doc
+            .get(automerge::ROOT, "text")
+            .expect("Failed to get text key from Automerge document");
+        if let Some((automerge::Value::Object(ObjType::Text), text_obj)) = text_obj {
+            for op in &delta.0 {
+                let (position, length) = op.range.as_relative();
+                self.doc
+                    .splice_text(text_obj.clone(), position, length as isize, &op.replacement)
+                    .expect("Failed to splice Automerge text object");
+            }
+        } else {
+            panic!("Automerge document doesn't have a text object, so I can't modify it");
         }
     }
 
@@ -224,6 +237,10 @@ async fn run_daemon_actor(mut actor: DaemonActor) {
         actor.write_current_content_to_file();
     }
     debug!("Channel towards document task has been closed");
+}
+
+pub struct Daemon {
+    doc_message_tx: DocMessageSender,
 }
 
 impl Daemon {
@@ -602,22 +619,6 @@ fn current_content(doc: &AutoCommit) -> Result<String> {
         Err(anyhow::anyhow!(
             "Could not get text object from Automerge object. Is it a text value?"
         ))
-    }
-}
-
-// TODO: Move this into the DaemonActor, and make sure that the ping channel is pinged!
-fn apply_delta_to_doc(doc: &mut AutoCommit, delta: &EditorTextDelta) {
-    let text_obj = doc
-        .get(automerge::ROOT, "text")
-        .expect("Failed to get text key from Automerge document");
-    if let Some((automerge::Value::Object(ObjType::Text), text_obj)) = text_obj {
-        for op in &delta.0 {
-            let (position, length) = op.range.as_relative();
-            doc.splice_text(text_obj.clone(), position, length as isize, &op.replacement)
-                .expect("Failed to splice Automerge text object");
-        }
-    } else {
-        panic!("Automerge document doesn't have a text object, so I can't modify it");
     }
 }
 

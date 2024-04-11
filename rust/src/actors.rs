@@ -1,6 +1,5 @@
 use async_trait::async_trait;
 use ethersync::daemon::Daemon;
-use ethersync::types::TextDelta;
 use nvim_rs::{compat::tokio::Compat, create::tokio::new_child_cmd, rpc::handler::Dummy};
 use rand::Rng;
 use std::path::PathBuf;
