@@ -207,7 +207,7 @@ impl DaemonActor {
         if let Some((automerge::Value::Object(ObjType::Text), text_obj)) = text_obj {
             Ok(self
                 .doc
-                .text(&text_obj)
+                .text(text_obj)
                 .expect("Failed to get string from Automerge text object"))
         } else {
             Err(anyhow::anyhow!(
@@ -513,9 +513,9 @@ async fn listen_socket(
     socket_path: &Path,
 ) -> Result<()> {
     if Path::new(&socket_path).exists() {
-        fs::remove_file(&socket_path)?;
+        fs::remove_file(socket_path)?;
     }
-    let listener = UnixListener::bind(&socket_path)?;
+    let listener = UnixListener::bind(socket_path)?;
     info!("Listening on UNIX socket: {}", socket_path.display());
 
     loop {
