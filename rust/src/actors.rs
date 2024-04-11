@@ -1,7 +1,7 @@
 use async_trait::async_trait;
 use ethersync::daemon::Daemon;
 use ethersync::types::TextDelta;
-use nvim_rs::{compat::tokio::Compat, create::tokio::new_child, rpc::handler::Dummy};
+use nvim_rs::{compat::tokio::Compat, create::tokio::new_child_cmd, rpc::handler::Dummy};
 use rand::Rng;
 use std::path::PathBuf;
 use tokio::process::ChildStdin;
@@ -26,14 +26,18 @@ pub struct Buffer {
 impl Neovim {
     pub async fn new() -> Self {
         let handler = Dummy::new();
-
-        let (nvim, _, _) = new_child(handler).await.unwrap();
+        let mut cmd = tokio::process::Command::new("nvim");
+        cmd.arg("--headless").arg("--embed");
+        let (nvim, _, _) = new_child_cmd(&mut cmd, handler).await.unwrap();
 
         Self { nvim }
     }
 
-    pub async fn open(&mut self, _file: PathBuf) -> Buffer {
-        // TODO: Actually open file.
+    pub async fn open(&mut self, file_path: PathBuf) -> Buffer {
+        self.nvim
+            .command(&format!("edit! {}", file_path.display()))
+            .await
+            .expect("Opening file in nvim failed");
         let buffer = self.nvim.get_current_buf().await.unwrap();
 
         Buffer { buffer }
@@ -83,7 +87,7 @@ pub fn random_delta(content: &str) -> TextDelta {
     }
 
     let content_length = content.chars().count();
-    if rand::thread_rng().gen_range(0.0..0.1) < 0.5 {
+    if rand::thread_rng().gen_range(0.0..1.0) < 0.5 {
         // Insertion.
         let start = rand_range_inclusive(0, content_length);
         let length = rand_range_inclusive(0, 10);
@@ -120,6 +124,19 @@ pub mod tests {
             delta.insert("!");
             buffer.apply_delta(delta).await;
             assert_eq!(buffer.content().await, "!");
+        });
+    }
+
+    #[test]
+    fn plugin_loaded() {
+        let runtime = tokio::runtime::Runtime::new().unwrap();
+        runtime.block_on(async {
+            let handler = Dummy::new();
+            let mut cmd = tokio::process::Command::new("nvim");
+            cmd.arg("--headless").arg("--embed");
+            let (nvim, _, _) = new_child_cmd(&mut cmd, handler).await.unwrap();
+            // Test if Ethersync can be run successfully (empty string means the command exists).
+            assert_eq!(nvim.command_output("Ethersync").await.unwrap(), "");
         });
     }
 

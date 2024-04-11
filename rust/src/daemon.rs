@@ -188,10 +188,12 @@ impl DaemonActor {
     }
 
     fn process_crdt_delta_in_ot(&mut self, delta: TextDelta) {
-        let rev_text_delta_for_editor = self.ot_server.apply_crdt_change(delta);
-        self.socket_message_tx
-            .send(rev_text_delta_for_editor)
-            .expect("Failed to send message to socket channel.");
+        if self.editor_is_connected {
+            let rev_text_delta_for_editor = self.ot_server.apply_crdt_change(delta);
+            self.socket_message_tx
+                .send(rev_text_delta_for_editor)
+                .expect("Failed to send message to socket channel.");
+        }
     }
 
     fn write_current_content_to_file(&mut self) {

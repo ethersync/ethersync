@@ -1,9 +1,11 @@
+#![allow(dead_code)]
 use actors::{random_delta, Actor, Neovim};
 use ethersync::daemon::Daemon;
 use rand::Rng;
 use std::path::Path;
 use std::path::PathBuf;
 use tokio::time::{sleep, timeout};
+use tracing_subscriber::FmtSubscriber;
 
 // TODO: Move types to lib directory.
 #[path = "../actors.rs"]
@@ -20,11 +22,11 @@ async fn perform_random_edits(actor: &mut impl Actor) {
         let content = actor.content().await;
         let delta = random_delta(&content);
         actor.apply_delta(delta).await;
-        let random_millis = rand::thread_rng().gen_range(0..1000);
+        let random_millis = rand::thread_rng().gen_range(0..100);
         sleep(std::time::Duration::from_millis(random_millis)).await;
 
-        /*if rand::thread_rng().gen_range(0.0..0.1) < 0.1 {
-            if rand::thread_rng().gen_range(0.0..0.1) < 0.5 {
+        /*if rand::thread_rng().gen_range(0.0..1.0) < 0.1 {
+            if rand::thread_rng().gen_range(0.0..1.0) < 0.5 {
                 actor.set_online(true);
             } else {
                 actor.set_online(false);
@@ -41,6 +43,12 @@ fn create_ethersync_dir(dir: PathBuf) {
 
 #[tokio::main]
 async fn main() {
+    let subscriber = FmtSubscriber::builder()
+        .with_max_level(tracing::Level::INFO)
+        .finish();
+    tracing::subscriber::set_global_default(subscriber)
+        .expect("Setting default log subscriber failed");
+
     // Set up the project directory.
     let dir = temp_dir::TempDir::new().unwrap();
     let file = dir.child("file");
@@ -51,6 +59,8 @@ async fn main() {
 
     // Set up the actors.
     let mut daemon = Daemon::new(None, Path::new("/tmp/ethersync"), file.as_path());
+
+    sleep(std::time::Duration::from_secs(1)).await;
 
     let mut nvim = Neovim::new().await;
     let mut buffer = nvim.open(file).await;
@@ -65,14 +75,18 @@ async fn main() {
 
     println!("Performing random edits");
 
+    sleep(std::time::Duration::from_secs(1)).await;
+
     // Perform random edits in parallel for a number of seconds.
-    timeout(std::time::Duration::from_secs(1), async {
-        perform_random_edits(&mut daemon).await;
-        perform_random_edits(&mut peer).await;
-        perform_random_edits(&mut buffer).await;
+    timeout(std::time::Duration::from_secs(2), async {
+        tokio::join!(
+            perform_random_edits(&mut daemon),
+            perform_random_edits(&mut peer),
+            perform_random_edits(&mut buffer),
+        )
     })
     .await
-    .unwrap();
+    .expect_err("Random edits died unexpectedly");
 
     // Set all actors to be online.
     /*
@@ -93,6 +107,17 @@ async fn main() {
     let buffer_content = buffer.content().await;
     let daemon_content = <Daemon as Actor>::content(&daemon).await;
     let peer_content = <Daemon as Actor>::content(&peer).await;
-    assert_eq!(buffer_content, daemon_content);
-    assert_eq!(buffer_content, peer_content);
+    let mut all_converged = true;
+    dbg!(&buffer_content);
+    if buffer_content != daemon_content {
+        dbg!(&daemon_content);
+        println!("Daemon content differs!");
+        all_converged = false;
+    }
+    if buffer_content != peer_content {
+        dbg!(&peer_content);
+        println!("Peer content differs!");
+        all_converged = false;
+    }
+    assert!(all_converged);
 }
