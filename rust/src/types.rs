@@ -39,7 +39,7 @@ pub struct RevisionedEditorTextDelta {
     pub delta: EditorTextDelta,
 }
 
-/// When doing OT, many TextDeltas need a revision metadata, to see whether they apply.
+/// When doing OT, many `TextDelta`s need a revision metadata, to see whether they apply.
 #[derive(Debug, Clone, PartialEq)]
 pub struct RevisionedTextDelta {
     pub revision: usize,
@@ -47,12 +47,14 @@ pub struct RevisionedTextDelta {
 }
 
 impl RevisionedTextDelta {
+    #[must_use]
     pub fn new(revision: usize, delta: TextDelta) -> Self {
         Self { revision, delta }
     }
 }
 
 impl From<RevisionedEditorTextDelta> for RevisionedTextDelta {
+    #[must_use]
     fn from(rev_ed_delta: RevisionedEditorTextDelta) -> Self {
         Self::new(rev_ed_delta.revision, rev_ed_delta.delta.into())
     }
@@ -71,14 +73,17 @@ pub struct Range {
 }
 
 impl Range {
+    #[must_use]
     pub fn is_empty(&self) -> bool {
         self.anchor == self.head
     }
 
+    #[must_use]
     pub fn is_forward(&self) -> bool {
         self.anchor <= self.head
     }
 
+    #[must_use]
     pub fn as_relative(&self) -> (usize, usize) {
         if self.is_forward() {
             (self.anchor, self.head - self.anchor)
@@ -110,6 +115,7 @@ impl TextDelta {
         self.0.push(TextOp::Delete(n));
     }
 
+    #[must_use]
     pub fn compose(self, other: Self) -> Self {
         let mut my_op_seq: OperationSeq = self.into();
         let other_op_seq: OperationSeq = other.into();
@@ -270,7 +276,7 @@ impl From<TextDelta> for EditorTextDelta {
                             anchor: position,
                             head: (position + n),
                         },
-                        replacement: "".to_string(),
+                        replacement: String::new(),
                     });
                 }
                 TextOp::Insert(s) => {

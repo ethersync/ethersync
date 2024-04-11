@@ -96,7 +96,7 @@ impl DaemonActor {
                     .map(char::from)
                     .collect();
                 let text_length = text.chars().count();
-                let random_position = rand::thread_rng().gen_range(0..(text_length + 1));
+                let random_position = rand::thread_rng().gen_range(0..=text_length);
 
                 let mut delta = TextDelta::default();
                 delta.retain(random_position);
@@ -395,6 +395,7 @@ impl Daemon {
     }
 
     #[allow(dead_code)]
+    #[must_use]
     pub fn tcp_address(&self) -> String {
         // TODO: Get the actual address.
         "0.0.0.0:4242".to_string()
@@ -416,7 +417,7 @@ async fn listen_tcp(tx: DocMessageSender, doc_changed_ping_tx: DocChangedSender)
         tokio::spawn(async move {
             info!("Peer dialed us.");
             match start_sync(tx, doc_changed_ping_tx, stream).await {
-                Ok(_) => {
+                Ok(()) => {
                     debug!("Sync OK?!");
                 }
                 Err(e) => {
@@ -578,7 +579,7 @@ async fn listen_socket(
                                 "method": "operation",
                                 "params": [rev_delta.revision, json_params]
                             });
-                            tcp_write.write_all(format!("{}\n", payload).as_bytes()).await?;
+                            tcp_write.write_all(format!("{payload}\n").as_bytes()).await?;
                         }
                     }
                 }
@@ -622,7 +623,7 @@ async fn sync_receive(mut sync_receiver: SyncReceiver) {
     while let Ok(message) = sync_receiver.read_message().await {
         sync_receiver.forward_sync_message(message).await;
     }
-    warn!("Sync Receive loop stopped")
+    warn!("Sync Receive loop stopped");
 }
 
 fn jsonrpc_to_docmessage(s: &str) -> Result<DocMessage> {
@@ -692,7 +693,7 @@ fn jsonrpc_to_docmessage(s: &str) -> Result<DocMessage> {
                                                 anchor: position as usize,
                                                 head: position as usize + length as usize,
                                             },
-                                            replacement: "".to_string(),
+                                            replacement: String::new(),
                                         };
                                         let delta = EditorTextDelta(vec![op]);
                                         Ok(DocMessage::RevDelta(RevisionedEditorTextDelta {

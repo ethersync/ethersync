@@ -3,7 +3,7 @@ use crate::types::{RevisionedTextDelta, TextDelta};
 use operational_transform::OperationSeq;
 use std::cmp::Ordering;
 
-///    OTServer receives operations from both the CRDT world, and one editor and makes sure that
+///    `OTServer` receives operations from both the CRDT world, and one editor and makes sure that
 ///    the editor operations (which might be based on an older document) are applicable to the
 ///    state that the CRDT is tracking.
 ///
