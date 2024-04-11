@@ -108,7 +108,7 @@ pub mod tests {
 
     #[test]
     fn buffer_content() {
-        let mut runtime = tokio::runtime::Runtime::new().unwrap();
+        let runtime = tokio::runtime::Runtime::new().unwrap();
         runtime.block_on(async {
             let mut neovim = Neovim::new().await;
             let temp_file = std::env::temp_dir().join("test");
