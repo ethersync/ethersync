@@ -33,7 +33,6 @@ use std::cmp::Ordering;
 ///    | the down axis is the daemon revision
 ///    |
 ///    v
-///
 ///        *
 ///        |
 ///     d1 |
@@ -166,7 +165,7 @@ impl OTServer {
 
 /// This function takes operations t1 and m1 ... m_n,
 /// and returns operations t1' and m1' ... m_n'.
-///
+/// .
 ///        t1
 ///     * ----> *
 ///     |       |
