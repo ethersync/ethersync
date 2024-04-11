@@ -71,7 +71,7 @@ impl DaemonActor {
     fn handle_message(&mut self, message: DocMessage) {
         match message {
             DocMessage::GetContent { response_tx } => {
-                let content_maybe = current_content(&self.doc);
+                let content_maybe = self.current_content();
                 response_tx
                     .send(content_maybe)
                     .expect("Failed to send content to response channel");
@@ -79,7 +79,7 @@ impl DaemonActor {
             DocMessage::Open => {
                 self.editor_is_connected = true;
                 self.ot_server = OTServer::new(
-                    current_content(&self.doc)
+                    self.current_content()
                         .expect("Should have initialized text before initializing the document"),
                 );
             }
@@ -87,7 +87,8 @@ impl DaemonActor {
                 self.editor_is_connected = false;
             }
             DocMessage::RandomEdit => {
-                let text = current_content(&self.doc)
+                let text = self
+                    .current_content()
                     .expect("Should have initialized text before performing random edit");
                 let random_string: String = rand::thread_rng()
                     .sample_iter(&Alphanumeric)
@@ -198,8 +199,25 @@ impl DaemonActor {
         }
     }
 
+    fn current_content(&self) -> Result<String> {
+        let text_obj = self
+            .doc
+            .get(automerge::ROOT, "text")
+            .expect("Failed to get text key from Automerge document");
+        if let Some((automerge::Value::Object(ObjType::Text), text_obj)) = text_obj {
+            Ok(self
+                .doc
+                .text(&text_obj)
+                .expect("Failed to get string from Automerge text object"))
+        } else {
+            Err(anyhow::anyhow!(
+                "Could not get text object from Automerge object. Is it a text value?"
+            ))
+        }
+    }
+
     fn write_current_content_to_file(&mut self) {
-        let content = current_content(&self.doc);
+        let content = self.current_content();
         if let Ok(text) = content {
             debug!(current_text = text);
             if self.editor_is_connected {
@@ -605,21 +623,6 @@ async fn sync_receive(mut sync_receiver: SyncReceiver) {
         sync_receiver.forward_sync_message(message).await;
     }
     warn!("Sync Receive loop stopped")
-}
-
-fn current_content(doc: &AutoCommit) -> Result<String> {
-    let text_obj = doc
-        .get(automerge::ROOT, "text")
-        .expect("Failed to get text key from Automerge document");
-    if let Some((automerge::Value::Object(ObjType::Text), text_obj)) = text_obj {
-        Ok(doc
-            .text(&text_obj)
-            .expect("Failed to get string from Automerge text object"))
-    } else {
-        Err(anyhow::anyhow!(
-            "Could not get text object from Automerge object. Is it a text value?"
-        ))
-    }
 }
 
 fn jsonrpc_to_docmessage(s: &str) -> Result<DocMessage> {
