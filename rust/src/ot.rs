@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 use crate::types::{RevisionedTextDelta, TextDelta};
 use operational_transform::OperationSeq;
 use std::cmp::Ordering;

@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 use automerge::PatchAction;
 use operational_transform::{Operation as OTOperation, OperationSeq};
 

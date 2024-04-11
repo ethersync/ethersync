@@ -1,11 +1,12 @@
-use crate::daemon::{Daemon, DocMessage};
-use crate::types::TextDelta;
 use async_trait::async_trait;
+use ethersync::daemon::Daemon;
+use ethersync::types::TextDelta;
 use nvim_rs::{compat::tokio::Compat, create::tokio::new_child, rpc::handler::Dummy};
 use rand::Rng;
 use std::path::PathBuf;
 use tokio::process::ChildStdin;
 
+// TODO: Consider renaming this, to avoid confusion with tokio "actors".
 #[async_trait]
 pub trait Actor {
     async fn content(&self) -> String;
@@ -42,11 +43,13 @@ impl Neovim {
 #[async_trait]
 impl Actor for Daemon {
     async fn content(&self) -> String {
-        todo!()
+        self.content()
+            .await
+            .expect("Document doesn't have content yet")
     }
 
     async fn apply_delta(&mut self, delta: TextDelta) {
-        self.message(DocMessage::Delta(delta)).await;
+        self.apply_delta(delta).await;
     }
 }
 

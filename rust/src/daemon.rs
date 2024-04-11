@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 use crate::ot::OTServer;
 use crate::types::{
     EditorTextDelta, EditorTextOp, Range, RevisionedEditorTextDelta, RevisionedTextDelta,
@@ -25,6 +26,9 @@ use tracing::{debug, error, info, warn};
 
 // These messages are sent to the task that owns the document.
 pub enum DocMessage {
+    GetContent {
+        response_tx: oneshot::Sender<Result<String>>,
+    },
     Open,
     Close,
     RandomEdit,
@@ -70,6 +74,12 @@ pub struct DaemonActor {
 impl DaemonActor {
     fn handle_message(&mut self, message: DocMessage) {
         match message {
+            DocMessage::GetContent { response_tx } => {
+                let content_maybe = current_content(&self.doc);
+                response_tx
+                    .send(content_maybe)
+                    .expect("Failed to send content to response channel");
+            }
             DocMessage::Open => {
                 self.editor_is_connected = true;
                 self.ot_server = OTServer::new(
@@ -96,10 +106,7 @@ impl DaemonActor {
                     delta.retain(random_position);
                     delta.insert(&random_string);
 
-                    let rev_delta = self.ot_server.apply_crdt_change(delta);
-                    self.socket_message_tx
-                        .send(rev_delta)
-                        .expect("Failed to send message to socket channel.");
+                    self.process_crdt_delta_in_ot(delta);
                 }
 
                 let text_obj = self
@@ -115,8 +122,9 @@ impl DaemonActor {
                 let _ = self.doc_changed_ping_tx.send(());
             }
             DocMessage::Delta(delta) => {
-                let editor_delta: EditorTextDelta = delta.into();
-                apply_delta(&mut self.doc, &editor_delta);
+                let editor_delta: EditorTextDelta = delta.clone().into();
+                apply_delta_to_doc(&mut self.doc, &editor_delta);
+                self.process_crdt_delta_in_ot(delta);
             }
             DocMessage::RevDelta(rev_delta) => {
                 if !self.editor_is_connected {
@@ -128,7 +136,7 @@ impl DaemonActor {
 
                 let editor_delta_for_crdt: EditorTextDelta = delta_for_crdt.into();
 
-                apply_delta(&mut self.doc, &editor_delta_for_crdt);
+                apply_delta_to_doc(&mut self.doc, &editor_delta_for_crdt);
 
                 for rev_delta in rev_deltas_for_editor {
                     self.socket_message_tx
@@ -154,10 +162,7 @@ impl DaemonActor {
                     for patch in patches {
                         match patch.action.try_into() {
                             Ok(delta) => {
-                                let rev_delta = self.ot_server.apply_crdt_change(delta);
-                                self.socket_message_tx
-                                    .send(rev_delta)
-                                    .expect("Failed to send message to socket channel.");
+                                self.process_crdt_delta_in_ot(delta);
                             }
                             Err(e) => {
                                 warn!("Failed to convert patch to delta: {:#?}", e);
@@ -180,6 +185,13 @@ impl DaemonActor {
                 );
             }
         }
+    }
+
+    fn process_crdt_delta_in_ot(&mut self, delta: TextDelta) {
+        let rev_text_delta_for_editor = self.ot_server.apply_crdt_change(delta);
+        self.socket_message_tx
+            .send(rev_text_delta_for_editor)
+            .expect("Failed to send message to socket channel.");
     }
 
     fn write_current_content_to_file(&mut self) {
@@ -332,12 +344,20 @@ impl Daemon {
         Self { doc_message_tx }
     }
 
-    #[allow(dead_code)]
-    pub async fn message(&self, message: DocMessage) {
+    pub async fn content(&self) -> Result<String> {
+        let (send, recv) = oneshot::channel();
+        let message = DocMessage::GetContent { response_tx: send };
+        // Ignore send errors, because recv.await will fail anyway.
+        let _ = self.doc_message_tx.send(message).await;
+        recv.await.expect("DaemonActor task has been killed")
+    }
+
+    pub async fn apply_delta(&mut self, delta: TextDelta) {
+        let message = DocMessage::Delta(delta);
         self.doc_message_tx
             .send(message)
             .await
-            .expect("Failed to send message to document task");
+            .expect("Failed to send delta to document task");
     }
 
     #[allow(dead_code)]
@@ -586,7 +606,7 @@ fn current_content(doc: &AutoCommit) -> Result<String> {
     }
 }
 
-fn apply_delta(doc: &mut AutoCommit, delta: &EditorTextDelta) {
+fn apply_delta_to_doc(doc: &mut AutoCommit, delta: &EditorTextDelta) {
     let text_obj = doc
         .get(automerge::ROOT, "text")
         .expect("Failed to get text key from Automerge document");
