@@ -51,7 +51,7 @@ async fn main() -> io::Result<()> {
         Commands::Daemon { peer, file } => {
             Daemon::new(peer, &socket_path, &file);
             match signal::ctrl_c().await {
-                Ok(()) => {},
+                Ok(()) => {}
                 Err(err) => {
                     eprintln!("Unable to listen for shutdown signal: {}", err);
                     // still shut down.
