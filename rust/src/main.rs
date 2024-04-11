@@ -3,6 +3,7 @@ use daemon::Daemon;
 use std::io;
 use std::path::PathBuf;
 use tracing_subscriber::FmtSubscriber;
+use tokio::signal;
 
 mod client;
 mod daemon;
@@ -48,8 +49,14 @@ async fn main() -> io::Result<()> {
 
     match cli.command {
         Commands::Daemon { peer, file } => {
-            let mut daemon = Daemon::new();
-            daemon.launch(peer, &socket_path, &file).await;
+            Daemon::new(peer, &socket_path, &file);
+            match signal::ctrl_c().await {
+                Ok(()) => {},
+                Err(err) => {
+                    eprintln!("Unable to listen for shutdown signal: {}", err);
+                    // still shut down.
+                }
+            }
         }
         Commands::Client => {
             client::connection(&socket_path);

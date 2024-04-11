@@ -51,28 +51,21 @@ async fn main() {
     println!("Setting up actors");
 
     // Set up the actors.
-    let mut daemon = Daemon::new();
-
     println!("Expected hang will happen in 3, 2, 1, ...");
-
     // TODO: Problem: Right now, launch() never returns. We could spawn a task here, or in
     // launch(), but we need write access to doc_message_rx. How can we improve that?
-    daemon
-        .launch(None, Path::new("/tmp/ethersync"), file.as_path())
-        .await;
+    let mut daemon = Daemon::new(None, Path::new("/tmp/ethersync"), file.as_path());
 
     let mut nvim = Neovim::new().await;
     let mut buffer = nvim.open(file).await;
 
     println!("Launching peer");
 
-    let mut peer = Daemon::new();
-    peer.launch(
+    let mut peer = Daemon::new(
         Some(daemon.tcp_address()),
         Path::new("/tmp/etherbonk"),
         file2.as_path(),
-    )
-    .await;
+    );
 
     println!("Performing random edits");
 
