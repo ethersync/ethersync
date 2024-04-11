@@ -22,6 +22,9 @@ jobs:
         working-directory: ./rust
     steps:
       - uses: actions/checkout@v4
+      - uses: rhysd/action-setup-vim@v1
+        with:
+          neovim: true
       - run: cargo build --verbose
       - run: cargo test --verbose
   check_formatting:
