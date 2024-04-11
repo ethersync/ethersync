@@ -521,9 +521,10 @@ impl SyncReceiver {
     }
 
     async fn forward_sync_message(&self, message: Vec<u8>) {
-        let _ = self
-            .sender
-            .send(SyncerMessage::ReceiveSyncMessage { message }).await;
+        self.sender
+            .send(SyncerMessage::ReceiveSyncMessage { message })
+            .await
+            .expect("Channel for sending Sync Task has been closed");
     }
 
     async fn read_message(&mut self) -> Result<Vec<u8>> {
@@ -537,10 +538,10 @@ impl SyncReceiver {
 }
 
 async fn sync_receive(mut sync_receiver: SyncReceiver) {
-    // TODO: error case?
     while let Ok(message) = sync_receiver.read_message().await {
         sync_receiver.forward_sync_message(message).await;
     }
+    warn!("Sync Receive loop stopped")
 }
 
 fn current_content(doc: &AutoCommit) -> Result<String> {
