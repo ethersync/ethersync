@@ -90,9 +90,10 @@ pub fn random_delta(content: &str) -> TextDelta {
     if rand::thread_rng().gen_range(0.0..1.0) < 0.5 {
         // Insertion.
         let start = rand_range_inclusive(0, content_length);
-        let length = rand_range_inclusive(0, 10);
-        let text = (0..length)
-            .map(|_| rand::random::<char>())
+        let number_of_components = rand_range_inclusive(0, 10);
+        let components = ["x", "🥕", "_", "💚", "\n"];
+        let text = (0..number_of_components)
+            .map(|_| components[rand_range_inclusive(0, components.len() - 1)])
             .collect::<String>();
         let mut delta = TextDelta::default();
         delta.retain(start);
