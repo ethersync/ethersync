@@ -365,19 +365,19 @@ async fn start_sync(
 ) -> Result<()> {
     let mut peer_state = SyncState::new();
 
-    let (reader_message_tx, mut reader_message_rx) = mpsc::channel(1);
+    let (syncer_message_tx, mut syncer_message_rx) = mpsc::channel(1);
     let (tcp_read, mut tcp_write) = tokio::io::split(stream);
 
     // TCP reader.
-    let receiver = SyncReceiver::new(tcp_read, reader_message_tx.clone());
+    let receiver = SyncReceiver::new(tcp_read, syncer_message_tx.clone());
     tokio::spawn(sync_receive(receiver));
 
     // Generate sync message when doc changes.
-    let reader_message_tx_clone = reader_message_tx.clone();
+    let syncer_message_tx_clone = syncer_message_tx.clone();
     tokio::spawn(async move {
         let mut doc_changed_rx = doc_changed_tx.subscribe();
         loop {
-            reader_message_tx_clone
+            syncer_message_tx_clone
                 .send(SyncerMessage::GenerateSyncMessage {})
                 .await
                 .expect("Failed to send GenerateSyncMessage to document task");
@@ -389,7 +389,7 @@ async fn start_sync(
     });
 
     loop {
-        match reader_message_rx.recv().await {
+        match syncer_message_rx.recv().await {
             None => {
                 panic!("Channel towards sync task has been closed.");
             }
