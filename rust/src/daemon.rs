@@ -173,20 +173,29 @@ impl DaemonActor {
         }
     }
 
-    fn apply_delta_to_doc(&mut self, delta: &EditorTextDelta) {
+    fn text_obj(&self) -> Result<automerge::ObjId> {
         let text_obj = self
             .doc
             .get(automerge::ROOT, "text")
             .expect("Failed to get text key from Automerge document");
         if let Some((automerge::Value::Object(ObjType::Text), text_obj)) = text_obj {
-            for op in &delta.0 {
-                let (position, length) = op.range.as_relative();
-                self.doc
-                    .splice_text(text_obj.clone(), position, length as isize, &op.replacement)
-                    .expect("Failed to splice Automerge text object");
-            }
+            Ok(text_obj)
         } else {
-            panic!("Automerge document doesn't have a text object, so I can't modify it");
+            Err(anyhow::anyhow!(
+                "Automerge document doesn't have a text object, so I can't provide it"
+            ))
+        }
+    }
+
+    fn apply_delta_to_doc(&mut self, delta: &EditorTextDelta) {
+        let text_obj = self
+            .text_obj()
+            .expect("Couldn't get automerge text object, so not able to modify it");
+        for op in &delta.0 {
+            let (position, length) = op.range.as_relative();
+            self.doc
+                .splice_text(text_obj.clone(), position, length as isize, &op.replacement)
+                .expect("Failed to splice Automerge text object");
         }
     }
 
@@ -200,20 +209,11 @@ impl DaemonActor {
     }
 
     fn current_content(&self) -> Result<String> {
-        let text_obj = self
-            .doc
-            .get(automerge::ROOT, "text")
-            .expect("Failed to get text key from Automerge document");
-        if let Some((automerge::Value::Object(ObjType::Text), text_obj)) = text_obj {
-            Ok(self
-                .doc
-                .text(text_obj)
-                .expect("Failed to get string from Automerge text object"))
-        } else {
-            Err(anyhow::anyhow!(
-                "Could not get text object from Automerge object. Is it a text value?"
-            ))
-        }
+        self.text_obj().map(|to| {
+            self.doc
+                .text(to)
+                .expect("Failed to get string from Automerge text object")
+        })
     }
 
     fn write_current_content_to_file(&mut self) {
