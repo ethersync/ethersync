@@ -1,6 +1,5 @@
-use actors::random_delta;
-use actors::{Actor, Neovim};
-use daemon::Daemon;
+use actors::{random_delta, Actor, Neovim};
+use ethersync::daemon::Daemon;
 use rand::Rng;
 use std::path::Path;
 use std::path::PathBuf;

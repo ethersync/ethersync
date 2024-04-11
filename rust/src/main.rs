@@ -1,14 +1,11 @@
 use clap::{Parser, Subcommand};
-use daemon::Daemon;
+use ethersync::daemon::Daemon;
 use std::io;
 use std::path::PathBuf;
-use tracing_subscriber::FmtSubscriber;
 use tokio::signal;
+use tracing_subscriber::FmtSubscriber;
 
 mod client;
-mod daemon;
-mod ot;
-mod types;
 
 const DEFAULT_SOCKET_PATH: &str = "/tmp/ethersync";
 
