@@ -1,27 +1,20 @@
 #![allow(dead_code)]
-use actors::{random_delta, Actor, Neovim};
+use actors::{Actor, Neovim};
 use ethersync::daemon::Daemon;
+use pretty_assertions::assert_eq;
 use rand::Rng;
 use std::path::Path;
 use std::path::PathBuf;
 use tokio::time::{sleep, timeout};
 use tracing_subscriber::FmtSubscriber;
 
-// TODO: Move types to lib directory.
+// TODO: Can we do this in a better way?
 #[path = "../actors.rs"]
 mod actors;
-#[path = "../daemon.rs"]
-mod daemon;
-#[path = "../ot.rs"]
-mod ot;
-#[path = "../types.rs"]
-mod types;
 
 async fn perform_random_edits(actor: &mut impl Actor) {
     loop {
-        let content = actor.content().await;
-        let delta = random_delta(&content);
-        actor.apply_delta(delta).await;
+        actor.apply_random_delta().await;
         let random_millis = rand::thread_rng().gen_range(0..100);
         sleep(std::time::Duration::from_millis(random_millis)).await;
 
@@ -62,8 +55,7 @@ async fn main() {
 
     sleep(std::time::Duration::from_secs(1)).await;
 
-    let mut nvim = Neovim::new().await;
-    let mut buffer = nvim.open(file).await;
+    let mut nvim = Neovim::new(file).await;
 
     println!("Launching peer");
 
@@ -82,7 +74,7 @@ async fn main() {
         tokio::join!(
             perform_random_edits(&mut daemon),
             perform_random_edits(&mut peer),
-            perform_random_edits(&mut buffer),
+            perform_random_edits(&mut nvim),
         )
     })
     .await
@@ -92,7 +84,7 @@ async fn main() {
     /*
     daemon.set_online(true);
     peer.set_online(true);
-    buffer.set_online(true);
+    nvim.set_online(true);
     */
 
     println!("Sleep a bit");
@@ -104,20 +96,21 @@ async fn main() {
     println!("Checking content");
 
     // Check that all actors have the same content.
-    let buffer_content = buffer.content().await;
+    let nvim_content = nvim.content().await;
     let daemon_content = <Daemon as Actor>::content(&daemon).await;
     let peer_content = <Daemon as Actor>::content(&peer).await;
-    let mut all_converged = true;
-    dbg!(&buffer_content);
-    if buffer_content != daemon_content {
-        dbg!(&daemon_content);
-        println!("Daemon content differs!");
-        all_converged = false;
+
+    println!("Neovim: {:?}", nvim_content);
+    println!("Daemon: {:?}", daemon_content);
+    println!("Peer:   {:?}", peer_content);
+
+    if nvim_content != daemon_content {
+        println!("Neovim and daemon content differ");
     }
-    if buffer_content != peer_content {
-        dbg!(&peer_content);
-        println!("Peer content differs!");
-        all_converged = false;
+    if nvim_content != peer_content {
+        println!("Neovim and peer content differ");
     }
-    assert!(all_converged);
+
+    assert_eq!(nvim_content, daemon_content);
+    assert_eq!(nvim_content, peer_content);
 }

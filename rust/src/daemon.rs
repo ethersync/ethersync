@@ -101,23 +101,12 @@ impl DaemonActor {
                 let text_length = text.chars().count();
                 let random_position = rand::thread_rng().gen_range(0..(text_length + 1));
 
-                if self.editor_is_connected {
-                    let mut delta = TextDelta::default();
-                    delta.retain(random_position);
-                    delta.insert(&random_string);
+                let mut delta = TextDelta::default();
+                delta.retain(random_position);
+                delta.insert(&random_string);
 
-                    self.process_crdt_delta_in_ot(delta);
-                }
-
-                let text_obj = self
-                    .doc
-                    .get(automerge::ROOT, "text")
-                    .expect("Failed to get text object from Automerge document");
-                if let Some((automerge::Value::Object(ObjType::Text), text_obj)) = text_obj {
-                    self.doc
-                        .insert(text_obj, random_position, random_string)
-                        .expect("Failed to insert into Automerge text object");
-                }
+                apply_delta_to_doc(&mut self.doc, &delta.clone().into());
+                self.process_crdt_delta_in_ot(delta);
 
                 let _ = self.doc_changed_ping_tx.send(());
             }
@@ -352,6 +341,14 @@ impl Daemon {
         // Ignore send errors, because recv.await will fail anyway.
         let _ = self.doc_message_tx.send(message).await;
         recv.await.expect("DaemonActor task has been killed")
+    }
+
+    pub async fn apply_random_delta(&mut self) {
+        let message = DocMessage::RandomEdit;
+        self.doc_message_tx
+            .send(message)
+            .await
+            .expect("Failed to send random edit to document task");
     }
 
     pub async fn apply_delta(&mut self, delta: TextDelta) {
@@ -608,6 +605,7 @@ fn current_content(doc: &AutoCommit) -> Result<String> {
     }
 }
 
+// TODO: Move this into the DaemonActor, and make sure that the ping channel is pinged!
 fn apply_delta_to_doc(doc: &mut AutoCommit, delta: &EditorTextDelta) {
     let text_obj = doc
         .get(automerge::ROOT, "text")
