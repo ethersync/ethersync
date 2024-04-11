@@ -247,14 +247,14 @@ impl DaemonActor {
             panic!("Could not read file {}", self.file_path.display());
         }
     }
-}
 
-async fn run_daemon_actor(mut actor: DaemonActor) {
-    while let Some(message) = actor.doc_message_rx.recv().await {
-        actor.handle_message(message);
-        actor.write_current_content_to_file();
+    async fn run(&mut self) {
+        while let Some(message) = self.doc_message_rx.recv().await {
+            self.handle_message(message);
+            self.write_current_content_to_file();
+        }
+        debug!("Channel towards document task has been closed");
     }
-    debug!("Channel towards document task has been closed");
 }
 
 pub struct Daemon {
@@ -366,7 +366,7 @@ impl Daemon {
             .expect("Failed to listen on UNIX socket");
         });
 
-        tokio::spawn(run_daemon_actor(daemon_actor));
+        tokio::spawn(async move { daemon_actor.run().await });
         Self { doc_message_tx }
     }
 
