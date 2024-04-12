@@ -78,6 +78,13 @@ impl Document {
         self.doc.make_patches(&mut patch_log)
     }
 
+    fn receive_sync_message(&mut self, message: Message, peer_state: &mut SyncState) {
+        self.doc
+            .sync()
+            .receive_sync_message(peer_state, message)
+            .expect("Failed to apply sync message to Automerge document");
+    }
+
     fn generate_sync_message(&mut self, peer_state: &mut SyncState) -> Option<Message> {
         self.doc.sync().generate_sync_message(peer_state)
     }
@@ -192,23 +199,19 @@ impl DaemonActor {
                 state: mut peer_state,
                 response_tx,
             } => {
-                // TODO: we don't need patches when no editor is connected! crdt_doc should have
-                // another method for that.
-                let patches = self
-                    .crdt_doc
-                    .receive_sync_message_log_patches(message, &mut peer_state);
-                debug!(?patches);
-                for patch in patches {
-                    match patch.action.try_into() {
-                        Ok(delta) => {
-                            self.process_crdt_delta_in_ot(delta);
-                        }
-                        Err(e) => {
-                            warn!("Failed to convert patch to delta: {:#?}", e);
+                if let Some(patches) = self.apply_sync_message_to_doc(message, &mut peer_state) {
+                    debug!(?patches);
+                    for patch in patches {
+                        match patch.action.try_into() {
+                            Ok(delta) => {
+                                self.process_crdt_delta_in_ot(delta);
+                            }
+                            Err(e) => {
+                                warn!("Failed to convert patch to delta: {:#?}", e);
+                            }
                         }
                     }
                 }
-                let _ = self.doc_changed_ping_tx.send(());
                 response_tx
                     .send(peer_state)
                     .expect("Failed to send peer state in response to ReceiveSyncMessage");
@@ -223,6 +226,25 @@ impl DaemonActor {
                 );
             }
         }
+    }
+
+    fn apply_sync_message_to_doc(
+        &mut self,
+        message: Message,
+        peer_state: &mut SyncState,
+    ) -> Option<Vec<Patch>> {
+        let result;
+        if self.ot_server.is_some() {
+            let patches = self
+                .crdt_doc
+                .receive_sync_message_log_patches(message, peer_state);
+            result = Some(patches)
+        } else {
+            self.crdt_doc.receive_sync_message(message, peer_state);
+            result = None
+        }
+        let _ = self.doc_changed_ping_tx.send(());
+        result
     }
 
     fn send_deltas_to_editor(&self, rev_deltas: Vec<RevisionedTextDelta>) {
