@@ -174,15 +174,11 @@ impl DaemonActor {
                 let delta = self.random_delta();
                 self.apply_delta_to_doc(&delta.clone().into());
                 self.process_crdt_delta_in_ot(delta);
-
-                let _ = self.doc_changed_ping_tx.send(());
             }
             DocMessage::Delta(delta) => {
                 let editor_delta: EditorTextDelta = delta.clone().into();
                 self.apply_delta_to_doc(&editor_delta);
                 self.process_crdt_delta_in_ot(delta);
-
-                let _ = self.doc_changed_ping_tx.send(());
             }
             DocMessage::RevDelta(rev_delta) => {
                 let (editor_delta_for_crdt, rev_deltas_for_editor) =
@@ -190,8 +186,6 @@ impl DaemonActor {
 
                 self.apply_delta_to_doc(&editor_delta_for_crdt);
                 self.send_deltas_to_editor(rev_deltas_for_editor);
-
-                let _ = self.doc_changed_ping_tx.send(());
             }
             DocMessage::ReceiveSyncMessage {
                 message,
@@ -312,7 +306,8 @@ impl DaemonActor {
     }
 
     fn apply_delta_to_doc(&mut self, delta: &EditorTextDelta) {
-        self.crdt_doc.apply_delta_to_doc(delta)
+        self.crdt_doc.apply_delta_to_doc(delta);
+        let _ = self.doc_changed_ping_tx.send(());
     }
 
     async fn run(&mut self) {
