@@ -50,7 +50,7 @@ async fn main() -> io::Result<()> {
             match signal::ctrl_c().await {
                 Ok(()) => {}
                 Err(err) => {
-                    eprintln!("Unable to listen for shutdown signal: {}", err);
+                    eprintln!("Unable to listen for shutdown signal: {err}");
                     // still shut down.
                 }
             }

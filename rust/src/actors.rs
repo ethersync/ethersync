@@ -54,7 +54,7 @@ impl Neovim {
         let dir = TempDir::new().unwrap();
         let ethersync_dir = dir.child(".ethersync");
         std::fs::create_dir(ethersync_dir).unwrap();
-        let file_path = dir.child("test").to_owned();
+        let file_path = dir.child("test");
 
         Self::new(file_path).await
     }
@@ -88,7 +88,7 @@ impl Actor for Neovim {
             vim_normal_command.push('i');
             let vim_components = vec!["x", "🥕", "_", "💚"];
             vim_normal_command
-                .push_str(&random_string(rand_usize_inclusive(0, 10), vim_components));
+                .push_str(&random_string(rand_usize_inclusive(0, 10), &vim_components));
         }
 
         self.nvim
@@ -114,7 +114,7 @@ impl Actor for Neovim {
     }*/
 }
 
-fn random_string(length: usize, components: Vec<&str>) -> String {
+fn random_string(length: usize, components: &[&str]) -> String {
     (0..length)
         .map(|_| components[rand_usize_inclusive(0, components.len() - 1)])
         .collect::<String>()

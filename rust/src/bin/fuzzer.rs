@@ -6,7 +6,6 @@ use pretty_assertions::assert_eq;
 use rand::Rng;
 use std::collections::HashMap;
 use std::path::Path;
-use std::path::PathBuf;
 use tokio::time::{sleep, timeout};
 use tracing::info;
 use tracing_subscriber::FmtSubscriber;
@@ -19,8 +18,8 @@ async fn perform_random_edits(actor: &mut (impl Actor + ?Sized)) {
     }
 }
 
-fn create_ethersync_dir(dir: PathBuf) {
-    let mut ethersync_dir = dir.clone();
+fn create_ethersync_dir(dir: &Path) {
+    let mut ethersync_dir = dir.to_path_buf();
     ethersync_dir.push(".ethersync");
     std::fs::create_dir(ethersync_dir).expect("Failed to create .ethersync directory");
 }
@@ -37,7 +36,7 @@ async fn main() {
     let dir = temp_dir::TempDir::new().expect("Failed to create temp directory");
     let file = dir.child("file");
     let file2 = dir.child("file2");
-    create_ethersync_dir(dir.path().to_path_buf());
+    create_ethersync_dir(dir.path());
 
     // Set up the actors.
     let daemon = Daemon::new(None, Path::new("/tmp/ethersync"), file.as_path());
@@ -76,7 +75,7 @@ async fn main() {
     // TODO: Maybe broadcast "ready" message? Wait for roundtrip?
 
     let mut contents: HashMap<String, String> = HashMap::new();
-    for (name, actor) in actors.iter_mut() {
+    for (name, actor) in &mut actors {
         contents.insert(name.clone(), actor.content().await);
         println!(
             "{:>10}: {:?}",
@@ -90,7 +89,7 @@ async fn main() {
     // Check that all contents are identical.
     let first = contents.values().next().expect("No contents found");
     let first_name = contents.keys().next().expect("No content keys found");
-    for (name, content) in contents.iter() {
+    for (name, content) in &contents {
         assert_eq!(
             first, content,
             "Content of {} differs from {}",

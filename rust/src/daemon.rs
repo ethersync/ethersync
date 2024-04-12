@@ -57,7 +57,7 @@ type DocChangedSender = broadcast::Sender<()>;
 type EditorMessageSender = broadcast::Sender<RevisionedTextDelta>;
 type SyncerMessageSender = mpsc::Sender<SyncerMessage>;
 
-/// Encapsulates the Automerge AutoCommit and provides a generic interface,
+/// Encapsulates the Automerge `AutoCommit` and provides a generic interface,
 /// s.t. we don't need to worry about automerge internals elsewhere.
 #[derive(Debug, Default)]
 pub struct Document {
@@ -129,7 +129,7 @@ impl Document {
             .put_object(automerge::ROOT, "text", ObjType::Text)
             .expect("Failed to initialize text object in Automerge document");
         self.doc
-            .splice_text(text_obj, 0, 0, &text)
+            .splice_text(text_obj, 0, 0, text)
             .expect("Failed to splice text into Automerge text object");
     }
 }
@@ -223,16 +223,15 @@ impl DaemonActor {
         message: Message,
         peer_state: &mut SyncState,
     ) -> Option<Vec<Patch>> {
-        let result;
-        if self.ot_server.is_some() {
+        let result = if self.ot_server.is_some() {
             let patches = self
                 .crdt_doc
                 .receive_sync_message_log_patches(message, peer_state);
-            result = Some(patches)
+            Some(patches)
         } else {
             self.crdt_doc.receive_sync_message(message, peer_state);
-            result = None
-        }
+            None
+        };
         let _ = self.doc_changed_ping_tx.send(());
         result
     }

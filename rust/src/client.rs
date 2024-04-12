@@ -20,7 +20,7 @@ pub fn connection(socket_path: &Path) {
         for line in reader.lines() {
             let line = line.expect("Failed to read line");
             let length = line.len();
-            print!("Content-Length: {}\r\n\r\n{}", length, line);
+            print!("Content-Length: {length}\r\n\r\n{line}");
             std::io::stdout().flush().expect("Failed to flush stdout");
         }
     });
