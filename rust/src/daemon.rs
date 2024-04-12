@@ -59,18 +59,12 @@ type SyncerMessageSender = mpsc::Sender<SyncerMessage>;
 
 /// Encapsulates the Automerge AutoCommit and provides a generic interface,
 /// s.t. we don't need to worry about automerge internals elsewhere.
+#[derive(Debug, Default)]
 pub struct Document {
     doc: AutoCommit,
 }
 
 impl Document {
-    #[must_use]
-    fn new() -> Self {
-        Self {
-            doc: AutoCommit::new(),
-        }
-    }
-
     fn receive_sync_message_log_patches(
         &mut self,
         message: Message,
@@ -157,7 +151,7 @@ impl DaemonActor {
             socket_message_tx,
             file_path,
             ot_server: None,
-            crdt_doc: Document::new(),
+            crdt_doc: Document::default(),
         }
     }
     fn handle_message(&mut self, message: DocMessage) {
