@@ -189,11 +189,7 @@ impl DaemonActor {
                     self.apply_delta_to_ot(rev_delta);
 
                 self.apply_delta_to_doc(&editor_delta_for_crdt);
-                for rev_delta in rev_deltas_for_editor {
-                    self.socket_message_tx
-                        .send(rev_delta)
-                        .expect("Failed to send message to socket channel.");
-                }
+                self.send_deltas_to_editor(rev_deltas_for_editor);
 
                 let _ = self.doc_changed_ping_tx.send(());
             }
@@ -232,6 +228,14 @@ impl DaemonActor {
                     "Failed to send peer state and sync message in response to GenerateSyncMessage",
                 );
             }
+        }
+    }
+
+    fn send_deltas_to_editor(&self, rev_deltas: Vec<RevisionedTextDelta>) {
+        for rev_delta in rev_deltas {
+            self.socket_message_tx
+                .send(rev_delta)
+                .expect("Failed to send message to socket channel.");
         }
     }
 
