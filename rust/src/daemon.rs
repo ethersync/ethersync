@@ -68,6 +68,23 @@ pub struct DaemonActor {
 }
 
 impl DaemonActor {
+    #[must_use]
+    fn new(
+        doc_message_rx: mpsc::Receiver<DocMessage>,
+        doc_changed_ping_tx: DocChangedSender,
+        socket_message_tx: EditorMessageSender,
+        file_path: PathBuf,
+    ) -> Self {
+        Self {
+            doc_message_rx,
+            doc_changed_ping_tx,
+            socket_message_tx,
+            file_path,
+            editor_is_connected: false,
+            ot_server: OTServer::default(),
+            doc: AutoCommit::default(),
+        }
+    }
     fn handle_message(&mut self, message: DocMessage) {
         match message {
             DocMessage::GetContent { response_tx } => {
@@ -275,15 +292,12 @@ impl Daemon {
         // The document task will send messages intended for the socket connection on this channel.
         let (socket_message_tx, _socket_message_rx) = broadcast::channel::<RevisionedTextDelta>(16);
 
-        let mut daemon_actor = DaemonActor {
-            doc: AutoCommit::new(),
+        let mut daemon_actor = DaemonActor::new(
             doc_message_rx,
-            doc_changed_ping_tx: doc_changed_ping_tx.clone(),
-            socket_message_tx: socket_message_tx.clone(),
-            editor_is_connected: false,
-            ot_server: OTServer::default(),
-            file_path: file_path.to_path_buf(),
-        };
+            doc_changed_ping_tx.clone(),
+            socket_message_tx.clone(),
+            file_path.into(),
+        );
 
         // If we are the host, read file content.
         if peer.is_none() {
