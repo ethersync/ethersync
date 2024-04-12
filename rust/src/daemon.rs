@@ -171,21 +171,7 @@ impl DaemonActor {
                 self.ot_server = None;
             }
             DocMessage::RandomEdit => {
-                let text = self
-                    .current_content()
-                    .expect("Should have initialized text before performing random edit");
-                let random_string: String = rand::thread_rng()
-                    .sample_iter(&Alphanumeric)
-                    .take(1)
-                    .map(char::from)
-                    .collect();
-                let text_length = text.chars().count();
-                let random_position = rand::thread_rng().gen_range(0..=text_length);
-
-                let mut delta = TextDelta::default();
-                delta.retain(random_position);
-                delta.insert(&random_string);
-
+                let delta = self.random_delta();
                 self.apply_delta_to_doc(&delta.clone().into());
                 self.process_crdt_delta_in_ot(delta);
 
@@ -195,6 +181,8 @@ impl DaemonActor {
                 let editor_delta: EditorTextDelta = delta.clone().into();
                 self.apply_delta_to_doc(&editor_delta);
                 self.process_crdt_delta_in_ot(delta);
+
+                let _ = self.doc_changed_ping_tx.send(());
             }
             DocMessage::RevDelta(rev_delta) => {
                 let ot_server = self
@@ -253,6 +241,24 @@ impl DaemonActor {
                 );
             }
         }
+    }
+
+    fn random_delta(&self) -> TextDelta {
+        let text = self
+            .current_content()
+            .expect("Should have initialized text before performing random edit");
+        let random_string: String = rand::thread_rng()
+            .sample_iter(&Alphanumeric)
+            .take(1)
+            .map(char::from)
+            .collect();
+        let text_length = text.chars().count();
+        let random_position = rand::thread_rng().gen_range(0..=text_length);
+
+        let mut delta = TextDelta::default();
+        delta.retain(random_position);
+        delta.insert(&random_string);
+        delta
     }
 
     fn process_crdt_delta_in_ot(&mut self, delta: TextDelta) {
