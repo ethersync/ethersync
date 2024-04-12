@@ -122,9 +122,7 @@ local function connect(socket_path)
     end
     client = vim.lsp.rpc.start("ethersync", params, {
         notification = function(method, params)
-            print("Notification received: " .. method)
             if online then
-                print("Processing")
                 processOperationForEditor(method, params)
             else
                 table.insert(opQueueForEditor, { method, params })
@@ -132,10 +130,15 @@ local function connect(socket_path)
         end,
     })
     online = true
+
+    local filename = vim.fs.basename(vim.api.nvim_buf_get_name(0))
+    client.notify("open", { filename })
 end
 
 local function connect2()
-    client.terminate()
+    if client then
+        client.terminate()
+    end
     connect("/tmp/etherbonk")
 end
 
@@ -190,9 +193,6 @@ function Ethersync()
 
     previousContent = utils.contentOfCurrentBuffer()
 
-    local filename = vim.fs.basename(vim.api.nvim_buf_get_name(0))
-    client.notify("open", { filename })
-
     vim.api.nvim_buf_attach(0, false, {
         on_bytes = function(
             _the_string_bytes, ---@diagnostic disable-line
@@ -208,8 +208,8 @@ function Ethersync()
             _new_end_column, ---@diagnostic disable-line
             new_end_byte_length
         )
-            -- TODO: When substituting with :s, the "current buffer content"
-            -- doesn't seem to be correct. Can we use vim.schedule somehow, without breaking correctness?
+            -- TODO: When substituting with :s, the "current buffer content" doesn't seem to be correct.
+            -- Can we fix that, maybe using vim.schedule somehow, without breaking correctness?
             local content = utils.contentOfCurrentBuffer()
 
             -- Did the change come from us? If so, ignore it.
