@@ -9,7 +9,7 @@ use automerge::{
     patches::TextRepresentation,
     sync::{Message, State as SyncState, SyncDoc},
     transaction::Transactable,
-    AutoCommit, ObjType, PatchLog, ReadDoc,
+    AutoCommit, ObjType, Patch, PatchLog, ReadDoc,
 };
 use rand::{distributions::Alphanumeric, Rng};
 use serde_json::json;
@@ -57,13 +57,89 @@ type DocChangedSender = broadcast::Sender<()>;
 type EditorMessageSender = broadcast::Sender<RevisionedTextDelta>;
 type SyncerMessageSender = mpsc::Sender<SyncerMessage>;
 
+/// Encapsulates the Automerge AutoCommit and provides a generic interface,
+/// s.t. we don't need to worry about automerge internals elsewhere.
+pub struct Document {
+    doc: AutoCommit,
+}
+
+impl Document {
+    #[must_use]
+    fn new() -> Self {
+        Self {
+            doc: AutoCommit::new(),
+        }
+    }
+
+    fn receive_sync_message_log_patches(
+        &mut self,
+        message: Message,
+        peer_state: &mut SyncState,
+    ) -> Vec<Patch> {
+        let mut patch_log = PatchLog::active(TextRepresentation::String);
+        self.doc
+            .sync()
+            .receive_sync_message_log_patches(peer_state, message, &mut patch_log)
+            .expect("Failed to apply sync message to Automerge document");
+        self.doc.make_patches(&mut patch_log)
+    }
+
+    fn generate_sync_message(&mut self, peer_state: &mut SyncState) -> Option<Message> {
+        self.doc.sync().generate_sync_message(peer_state)
+    }
+
+    fn text_obj(&self) -> Result<automerge::ObjId> {
+        let text_obj = self
+            .doc
+            .get(automerge::ROOT, "text")
+            .expect("Failed to get text key from Automerge document");
+        if let Some((automerge::Value::Object(ObjType::Text), text_obj)) = text_obj {
+            Ok(text_obj)
+        } else {
+            Err(anyhow::anyhow!(
+                "Automerge document doesn't have a text object, so I can't provide it"
+            ))
+        }
+    }
+
+    fn apply_delta_to_doc(&mut self, delta: &EditorTextDelta) {
+        let text_obj = self
+            .text_obj()
+            .expect("Couldn't get automerge text object, so not able to modify it");
+        for op in &delta.0 {
+            let (position, length) = op.range.as_relative();
+            self.doc
+                .splice_text(text_obj.clone(), position, length as isize, &op.replacement)
+                .expect("Failed to splice Automerge text object");
+        }
+    }
+
+    fn current_content(&self) -> Result<String> {
+        self.text_obj().map(|to| {
+            self.doc
+                .text(to)
+                .expect("Failed to get string from Automerge text object")
+        })
+    }
+
+    fn initialize_text(&mut self, text: &str) {
+        let text_obj = self
+            .doc
+            .put_object(automerge::ROOT, "text", ObjType::Text)
+            .expect("Failed to initialize text object in Automerge document");
+        self.doc
+            .splice_text(text_obj, 0, 0, &text)
+            .expect("Failed to splice text into Automerge text object");
+    }
+}
+
 pub struct DaemonActor {
     doc_message_rx: mpsc::Receiver<DocMessage>,
     doc_changed_ping_tx: DocChangedSender,
     socket_message_tx: EditorMessageSender,
     editor_is_connected: bool,
     ot_server: OTServer,
-    doc: AutoCommit,
+    crdt_doc: Document,
     file_path: PathBuf,
 }
 
@@ -82,7 +158,7 @@ impl DaemonActor {
             file_path,
             editor_is_connected: false,
             ot_server: OTServer::default(),
-            doc: AutoCommit::default(),
+            crdt_doc: Document::new(),
         }
     }
     fn handle_message(&mut self, message: DocMessage) {
@@ -154,13 +230,12 @@ impl DaemonActor {
                 state: mut peer_state,
                 response_tx,
             } => {
-                let mut patch_log = PatchLog::active(TextRepresentation::String);
-                self.doc
-                    .sync()
-                    .receive_sync_message_log_patches(&mut peer_state, message, &mut patch_log)
-                    .expect("Failed to apply sync message to Automerge document");
+                // TODO: we don't need patches when no editor is connected! crdt_doc should have
+                // another method for that.
+                let patches = self
+                    .crdt_doc
+                    .receive_sync_message_log_patches(message, &mut peer_state);
                 if self.editor_is_connected {
-                    let patches = self.doc.make_patches(&mut patch_log);
                     debug!(?patches);
                     for patch in patches {
                         match patch.action.try_into() {
@@ -182,37 +257,11 @@ impl DaemonActor {
                 state: mut peer_state,
                 response_tx,
             } => {
-                let message = self.doc.sync().generate_sync_message(&mut peer_state);
+                let message = self.crdt_doc.generate_sync_message(&mut peer_state);
                 response_tx.send((peer_state, message)).expect(
                     "Failed to send peer state and sync message in response to GenerateSyncMessage",
                 );
             }
-        }
-    }
-
-    fn text_obj(&self) -> Result<automerge::ObjId> {
-        let text_obj = self
-            .doc
-            .get(automerge::ROOT, "text")
-            .expect("Failed to get text key from Automerge document");
-        if let Some((automerge::Value::Object(ObjType::Text), text_obj)) = text_obj {
-            Ok(text_obj)
-        } else {
-            Err(anyhow::anyhow!(
-                "Automerge document doesn't have a text object, so I can't provide it"
-            ))
-        }
-    }
-
-    fn apply_delta_to_doc(&mut self, delta: &EditorTextDelta) {
-        let text_obj = self
-            .text_obj()
-            .expect("Couldn't get automerge text object, so not able to modify it");
-        for op in &delta.0 {
-            let (position, length) = op.range.as_relative();
-            self.doc
-                .splice_text(text_obj.clone(), position, length as isize, &op.replacement)
-                .expect("Failed to splice Automerge text object");
         }
     }
 
@@ -223,14 +272,6 @@ impl DaemonActor {
                 .send(rev_text_delta_for_editor)
                 .expect("Failed to send message to socket channel.");
         }
-    }
-
-    fn current_content(&self) -> Result<String> {
-        self.text_obj().map(|to| {
-            self.doc
-                .text(to)
-                .expect("Failed to get string from Automerge text object")
-        })
     }
 
     fn write_current_content_to_file(&mut self) {
@@ -252,17 +293,19 @@ impl DaemonActor {
         }
 
         if let Ok(text) = std::fs::read_to_string(&self.file_path) {
-            let text_obj = self
-                .doc
-                .put_object(automerge::ROOT, "text", ObjType::Text)
-                .expect("Failed to initialize text object in Automerge document");
-            self.doc
-                .splice_text(text_obj, 0, 0, &text)
-                .expect("Failed to splice text into Automerge text object");
+            self.crdt_doc.initialize_text(&text);
         } else {
             // TODO: Look at *why* we couldn't read the file.
             panic!("Could not read file {}", self.file_path.display());
         }
+    }
+
+    fn current_content(&self) -> Result<String> {
+        self.crdt_doc.current_content()
+    }
+
+    fn apply_delta_to_doc(&mut self, delta: &EditorTextDelta) {
+        self.crdt_doc.apply_delta_to_doc(delta)
     }
 
     async fn run(&mut self) {
