@@ -1,5 +1,5 @@
+use crate::daemon::Daemon;
 use async_trait::async_trait;
-use ethersync::daemon::Daemon;
 use nvim_rs::{compat::tokio::Compat, create::tokio::new_child_cmd, rpc::handler::Dummy};
 use rand::Rng;
 use std::fs;
@@ -14,7 +14,7 @@ use tokio::{
 
 // TODO: Consider renaming this, to avoid confusion with tokio "actors".
 #[async_trait]
-pub trait Actor {
+pub trait Actor: Send {
     async fn apply_random_delta(&mut self);
     async fn content(&self) -> String;
     //fn wait_for_sync(&self);
@@ -41,6 +41,15 @@ impl Neovim {
         Self { nvim, buffer }
     }
 
+    // TODO: The "Etherbonk" approach is not a very good way of picking different sockets...
+    pub async fn etherbonk(&mut self) {
+        self.nvim
+            .command("Etherbonk")
+            .await
+            .expect("Running Etherbonk failed");
+    }
+
+    #[allow(dead_code)]
     async fn new_ethersync_enabled() -> Self {
         let dir = TempDir::new().unwrap();
         let ethersync_dir = dir.child(".ethersync");
@@ -68,16 +77,19 @@ impl Actor for Neovim {
         let mut vim_normal_command = String::new();
 
         let directions = ["h", "j", "k", "l"];
-        (0..1).for_each(|_| {
+        (0..2).for_each(|_| {
             vim_normal_command
                 .push_str(directions[rand::thread_rng().gen_range(0..(directions.len()))]);
         });
-        vim_normal_command.push('i');
-        let vim_components = vec!["x", "🥕", "_", "💚"];
-        vim_normal_command.push_str(&random_string(rand_usize_inclusive(0, 10), vim_components));
 
-        //vim_normal_command.push_str("lix");
-        //vim_normal_command.push_str("\u{1b}");
+        if rand::thread_rng().gen_bool(0.5) {
+            vim_normal_command.push('x');
+        } else {
+            vim_normal_command.push('i');
+            let vim_components = vec!["x", "🥕", "_", "💚"];
+            vim_normal_command
+                .push_str(&random_string(rand_usize_inclusive(0, 10), vim_components));
+        }
 
         self.nvim
             .command(&format!(r#"execute "normal {vim_normal_command}""#))
@@ -116,10 +128,12 @@ fn rand_usize_inclusive(start: usize, end: usize) -> usize {
     }
 }
 
+#[allow(dead_code)]
 struct MockSocket {
     tx: tokio::sync::mpsc::Sender<String>,
 }
 
+#[allow(dead_code)]
 impl MockSocket {
     async fn new(socket_path: &str) -> Self {
         if Path::new(socket_path).exists() {
@@ -166,8 +180,9 @@ pub mod tests {
             let mut cmd = tokio::process::Command::new("nvim");
             cmd.arg("--headless").arg("--embed");
             let (nvim, _, _) = new_child_cmd(&mut cmd, handler).await.unwrap();
-            // Test if Ethersync can be run successfully (empty string means the command exists).
-            assert_eq!(nvim.command_output("Ethersync").await.unwrap(), "");
+            nvim.command("Ethersinc")
+                .await
+                .expect("Failed to run Ethersync");
         });
     }
 

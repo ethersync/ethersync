@@ -20,6 +20,7 @@ nvim-rs = {version = "0.7.0", features = ["use_tokio"]}
 temp-dir = "0.1.13"
 async-trait = "0.1.79"
 pretty_assertions = "1.4.0"
+futures = "0.3.30"
 
 [features]
 

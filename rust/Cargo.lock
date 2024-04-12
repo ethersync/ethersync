@@ -293,6 +293,7 @@ dependencies = [
  "async-trait",
  "automerge",
  "clap",
+ "futures 0.3.30",
  "jsonrpc-core",
  "nvim-rs",
  "operational-transform",
