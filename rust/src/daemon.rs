@@ -185,18 +185,10 @@ impl DaemonActor {
                 let _ = self.doc_changed_ping_tx.send(());
             }
             DocMessage::RevDelta(rev_delta) => {
-                let ot_server = self
-                    .ot_server
-                    .as_mut()
-                    .expect("No editor connected, where does this delta come from?");
-
-                let (delta_for_crdt, rev_deltas_for_editor) =
-                    ot_server.apply_editor_operation(rev_delta.into());
-
-                let editor_delta_for_crdt: EditorTextDelta = delta_for_crdt.into();
+                let (editor_delta_for_crdt, rev_deltas_for_editor) =
+                    self.apply_delta_to_ot(rev_delta);
 
                 self.apply_delta_to_doc(&editor_delta_for_crdt);
-
                 for rev_delta in rev_deltas_for_editor {
                     self.socket_message_tx
                         .send(rev_delta)
@@ -241,6 +233,21 @@ impl DaemonActor {
                 );
             }
         }
+    }
+
+    fn apply_delta_to_ot(
+        &mut self,
+        rev_delta: RevisionedEditorTextDelta,
+    ) -> (EditorTextDelta, Vec<RevisionedTextDelta>) {
+        let ot_server = self
+            .ot_server
+            .as_mut()
+            .expect("No editor connected, where does this delta come from?");
+
+        let (delta_for_crdt, rev_deltas_for_editor) =
+            ot_server.apply_editor_operation(rev_delta.into());
+
+        (delta_for_crdt.into(), rev_deltas_for_editor)
     }
 
     fn random_delta(&self) -> TextDelta {
