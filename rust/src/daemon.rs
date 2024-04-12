@@ -200,17 +200,7 @@ impl DaemonActor {
                 response_tx,
             } => {
                 if let Some(patches) = self.apply_sync_message_to_doc(message, &mut peer_state) {
-                    debug!(?patches);
-                    for patch in patches {
-                        match patch.action.try_into() {
-                            Ok(delta) => {
-                                self.process_crdt_delta_in_ot(delta);
-                            }
-                            Err(e) => {
-                                warn!("Failed to convert patch to delta: {:#?}", e);
-                            }
-                        }
-                    }
+                    self.process_crdt_patches_in_ot(patches);
                 }
                 response_tx
                     .send(peer_state)
@@ -286,6 +276,20 @@ impl DaemonActor {
         delta.retain(random_position);
         delta.insert(&random_string);
         delta
+    }
+
+    fn process_crdt_patches_in_ot(&mut self, patches: Vec<Patch>) {
+        debug!(?patches);
+        for patch in patches {
+            match patch.action.try_into() {
+                Ok(delta) => {
+                    self.process_crdt_delta_in_ot(delta);
+                }
+                Err(e) => {
+                    warn!("Failed to convert patch to delta: {:#?}", e);
+                }
+            }
+        }
     }
 
     fn process_crdt_delta_in_ot(&mut self, delta: TextDelta) {
