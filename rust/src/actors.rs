@@ -77,22 +77,30 @@ impl Actor for Neovim {
         let mut vim_normal_command = String::new();
 
         let directions = ["h", "j", "k", "l"];
-        (0..2).for_each(|_| {
+        (0..10).for_each(|_| {
             vim_normal_command
                 .push_str(directions[rand::thread_rng().gen_range(0..(directions.len()))]);
         });
 
+        // TODO: There seems to be a bug when enabling multiline insertions and/or multi-line
+        // deletions. Something to do with empty lines?
         if rand::thread_rng().gen_bool(0.5) {
-            vim_normal_command.push('x');
+            let deletion_components = vec!["x"]; //, "dd", "vllld"];
+            vim_normal_command.push_str(&random_string(
+                rand_usize_inclusive(1, 2),
+                &deletion_components,
+            ));
         } else {
             vim_normal_command.push('i');
-            let vim_components = vec!["x", "🥕", "_", "💚"];
+            let vim_components = vec!["x", "🥕", "_", "💚"]; //, "\n"];
             vim_normal_command
-                .push_str(&random_string(rand_usize_inclusive(0, 10), &vim_components));
+                .push_str(&random_string(rand_usize_inclusive(1, 10), &vim_components));
         }
 
+        // We run the commands using :silent!, so that they don't stop on errors (e.g. when trying
+        // to navigate outside of the buffer).
         self.nvim
-            .command(&format!(r#"execute "normal {vim_normal_command}""#))
+            .command(&format!(r#"silent! execute "normal {vim_normal_command}""#))
             .await
             .expect("Executing normal command failed");
     }

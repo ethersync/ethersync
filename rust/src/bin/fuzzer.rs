@@ -76,13 +76,15 @@ async fn main() {
 
     let mut contents: HashMap<String, String> = HashMap::new();
     for (name, actor) in &mut actors {
-        contents.insert(name.clone(), actor.content().await);
+        let content = actor.content().await;
+        contents.insert(name.clone(), content.clone());
         println!(
-            "{:>10}: {:?}",
-            name,
-            contents
-                .get(name)
-                .expect("Failed to get actor content by name")
+            r#"
+{name} content:
+---------------------------------
+{content}
+---------------------------------
+"#
         );
     }
 
