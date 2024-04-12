@@ -137,8 +137,8 @@ pub struct DaemonActor {
     doc_message_rx: mpsc::Receiver<DocMessage>,
     doc_changed_ping_tx: DocChangedSender,
     socket_message_tx: EditorMessageSender,
-    editor_is_connected: bool,
-    ot_server: OTServer,
+    /// if we have an ot_server, it means that an editor is connected
+    ot_server: Option<OTServer>,
     crdt_doc: Document,
     file_path: PathBuf,
 }
@@ -156,28 +156,25 @@ impl DaemonActor {
             doc_changed_ping_tx,
             socket_message_tx,
             file_path,
-            editor_is_connected: false,
-            ot_server: OTServer::default(),
+            ot_server: None,
             crdt_doc: Document::new(),
         }
     }
     fn handle_message(&mut self, message: DocMessage) {
         match message {
             DocMessage::GetContent { response_tx } => {
-                let content_maybe = self.current_content();
                 response_tx
-                    .send(content_maybe)
+                    .send(self.current_content())
                     .expect("Failed to send content to response channel");
             }
             DocMessage::Open => {
-                self.editor_is_connected = true;
-                self.ot_server = OTServer::new(
+                self.ot_server = Some(OTServer::new(
                     self.current_content()
                         .expect("Should have initialized text before initializing the document"),
-                );
+                ));
             }
             DocMessage::Close => {
-                self.editor_is_connected = false;
+                self.ot_server = None;
             }
             DocMessage::RandomEdit => {
                 let text = self
@@ -206,12 +203,13 @@ impl DaemonActor {
                 self.process_crdt_delta_in_ot(delta);
             }
             DocMessage::RevDelta(rev_delta) => {
-                if !self.editor_is_connected {
-                    panic!("No editor connected, where does this delta come from?");
-                }
+                let ot_server = self
+                    .ot_server
+                    .as_mut()
+                    .expect("No editor connected, where does this delta come from?");
 
                 let (delta_for_crdt, rev_deltas_for_editor) =
-                    self.ot_server.apply_editor_operation(rev_delta.into());
+                    ot_server.apply_editor_operation(rev_delta.into());
 
                 let editor_delta_for_crdt: EditorTextDelta = delta_for_crdt.into();
 
@@ -235,16 +233,14 @@ impl DaemonActor {
                 let patches = self
                     .crdt_doc
                     .receive_sync_message_log_patches(message, &mut peer_state);
-                if self.editor_is_connected {
-                    debug!(?patches);
-                    for patch in patches {
-                        match patch.action.try_into() {
-                            Ok(delta) => {
-                                self.process_crdt_delta_in_ot(delta);
-                            }
-                            Err(e) => {
-                                warn!("Failed to convert patch to delta: {:#?}", e);
-                            }
+                debug!(?patches);
+                for patch in patches {
+                    match patch.action.try_into() {
+                        Ok(delta) => {
+                            self.process_crdt_delta_in_ot(delta);
+                        }
+                        Err(e) => {
+                            warn!("Failed to convert patch to delta: {:#?}", e);
                         }
                     }
                 }
@@ -266,8 +262,8 @@ impl DaemonActor {
     }
 
     fn process_crdt_delta_in_ot(&mut self, delta: TextDelta) {
-        if self.editor_is_connected {
-            let rev_text_delta_for_editor = self.ot_server.apply_crdt_change(delta);
+        if let Some(ot_server) = &mut self.ot_server {
+            let rev_text_delta_for_editor = ot_server.apply_crdt_change(delta);
             self.socket_message_tx
                 .send(rev_text_delta_for_editor)
                 .expect("Failed to send message to socket channel.");
@@ -278,8 +274,8 @@ impl DaemonActor {
         let content = self.current_content();
         if let Ok(text) = content {
             debug!(current_text = text);
-            if self.editor_is_connected {
-                debug!(current_ot_doc = self.ot_server.apply_to_initial_content());
+            if let Some(ot_server) = &mut self.ot_server {
+                debug!(current_ot_doc = ot_server.apply_to_initial_content());
             } else {
                 std::fs::write(&self.file_path, &text).expect("Could not write to file");
             }
