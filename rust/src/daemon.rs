@@ -779,47 +779,113 @@ fn jsonrpc_to_docmessage(s: &str) -> Result<DocMessage> {
     }
 }
 
-#[test]
-fn json_to_docmessage() {
-    let json = serde_json::json!({
-        "method": "insert",
-        "params": ["", 0, 1, "a"]
-    });
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-    let message = jsonrpc_to_docmessage(&json.to_string()).unwrap();
-    if let DocMessage::RevDelta(delta) = message {
-        assert_eq!(
-            delta,
-            RevisionedEditorTextDelta {
-                revision: 0,
-                delta: EditorTextDelta(vec![EditorTextOp {
-                    range: Range { anchor: 1, head: 1 },
-                    replacement: "a".to_string(),
-                }])
-            }
-        );
-    } else {
-        panic!("Expected DocMessage::Delta, got something else.");
+    mod document {
+        use super::*;
+        use crate::types::factories::*;
+
+        #[test]
+        fn can_initialize_content() {
+            let mut document = Document::default();
+            let text = "To be or not to be, that is the question".to_string();
+
+            document.initialize_text(&text);
+
+            // unfortunately anyhow::Error doesn't implement PartialEq, so we'll rather unwrap.
+            assert_eq!(document.current_content().unwrap(), text);
+        }
+
+        #[test]
+        fn can_apply_delta_basic_insertion() {
+            let mut document = Document::default();
+            let text = String::new();
+            document.initialize_text(&text);
+
+            let delta = insert(0, "foobar");
+
+            document.apply_delta_to_doc(&delta.into());
+            assert_eq!(document.current_content().unwrap(), "foobar");
+        }
+
+        #[test]
+        fn can_apply_delta_basic_deletion() {
+            let mut document = Document::default();
+            let text = "foobar".to_string();
+            document.initialize_text(&text);
+
+            let delta = delete(3, 3);
+
+            document.apply_delta_to_doc(&delta.into());
+            assert_eq!(document.current_content().unwrap(), "foo");
+        }
+
+        #[test]
+        fn can_apply_delta_multiple_ops() {
+            let mut document = Document::default();
+            let text = "To be or not to be, that is the question".to_string();
+            document.initialize_text(&text);
+
+            let mut delta = insert(3, "m");
+            delta.delete(1); // "b"
+            delta.retain(5); // "e or "
+            delta.delete(4); // "not "
+            delta.retain(3); // "to "
+            delta.delete(2); // "be"
+            delta.insert("you");
+
+            document.apply_delta_to_doc(&delta.into());
+            assert_eq!(
+                document.current_content().unwrap(),
+                "To me or to you, that is the question"
+            );
+        }
     }
 
-    let json = serde_json::json!({
-        "method": "delete",
-        "params": ["", 2, 1, 3]
-    });
+    #[test]
+    fn json_to_docmessage() {
+        let json = serde_json::json!({
+            "method": "insert",
+            "params": ["", 0, 1, "a"]
+        });
 
-    let message = jsonrpc_to_docmessage(&json.to_string()).unwrap();
-    if let DocMessage::RevDelta(delta) = message {
-        assert_eq!(
-            delta,
-            RevisionedEditorTextDelta {
-                revision: 2,
-                delta: EditorTextDelta(vec![EditorTextOp {
-                    range: Range { anchor: 1, head: 4 },
-                    replacement: "".to_string(),
-                }])
-            }
-        );
-    } else {
-        panic!("Expected DocMessage::Delta, got something else.");
+        let message = jsonrpc_to_docmessage(&json.to_string()).unwrap();
+        if let DocMessage::RevDelta(delta) = message {
+            assert_eq!(
+                delta,
+                RevisionedEditorTextDelta {
+                    revision: 0,
+                    delta: EditorTextDelta(vec![EditorTextOp {
+                        range: Range { anchor: 1, head: 1 },
+                        replacement: "a".to_string(),
+                    }])
+                }
+            );
+        } else {
+            panic!("Expected DocMessage::Delta, got something else.");
+        }
+
+        let json = serde_json::json!({
+            "method": "delete",
+            "params": ["", 2, 1, 3]
+        });
+
+        let message = jsonrpc_to_docmessage(&json.to_string()).unwrap();
+        if let DocMessage::RevDelta(delta) = message {
+            assert_eq!(
+                delta,
+                RevisionedEditorTextDelta {
+                    revision: 2,
+                    delta: EditorTextDelta(vec![EditorTextOp {
+                        range: Range { anchor: 1, head: 4 },
+                        replacement: "".to_string(),
+                    }])
+                }
+            );
+        } else {
+            panic!("Expected DocMessage::Delta, got something else.");
+        }
     }
 }
