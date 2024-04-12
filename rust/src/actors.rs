@@ -2,8 +2,15 @@ use async_trait::async_trait;
 use ethersync::daemon::Daemon;
 use nvim_rs::{compat::tokio::Compat, create::tokio::new_child_cmd, rpc::handler::Dummy};
 use rand::Rng;
-use std::path::PathBuf;
-use tokio::process::ChildStdin;
+use std::fs;
+use std::path::{Path, PathBuf};
+use temp_dir::TempDir;
+use tokio::{
+    io::{split, AsyncWriteExt, BufWriter},
+    net::UnixListener,
+    process::ChildStdin,
+    sync::mpsc,
+};
 
 // TODO: Consider renaming this, to avoid confusion with tokio "actors".
 #[async_trait]
@@ -32,6 +39,15 @@ impl Neovim {
         let buffer = nvim.get_current_buf().await.unwrap();
 
         Self { nvim, buffer }
+    }
+
+    async fn new_ethersync_enabled() -> Self {
+        let dir = TempDir::new().unwrap();
+        let ethersync_dir = dir.child(".ethersync");
+        std::fs::create_dir(ethersync_dir).unwrap();
+        let file_path = dir.child("test").to_owned();
+
+        Self::new(file_path).await
     }
 }
 
@@ -100,6 +116,43 @@ fn rand_usize_inclusive(start: usize, end: usize) -> usize {
     }
 }
 
+struct MockSocket {
+    tx: tokio::sync::mpsc::Sender<String>,
+}
+
+impl MockSocket {
+    async fn new(socket_path: &str) -> Self {
+        if Path::new(socket_path).exists() {
+            fs::remove_file(socket_path).expect("Could not remove existing socket file");
+        }
+        let listener = UnixListener::bind(socket_path).expect("Could not bind to socket");
+        let (tx, mut rx) = mpsc::channel::<String>(1);
+        tokio::spawn(async move {
+            let (socket, _) = listener
+                .accept()
+                .await
+                .expect("Could not accept connection");
+            let (_reader, writer) = split(socket);
+            let mut writer = BufWriter::new(writer);
+            while let Some(message) = rx.recv().await {
+                writer
+                    .write_all(message.as_bytes())
+                    .await
+                    .expect("Could not write to socket");
+                writer.flush().await.expect("Could not flush socket");
+            }
+        });
+        Self { tx }
+    }
+
+    async fn send(&mut self, message: &str) {
+        self.tx
+            .send(message.to_string())
+            .await
+            .expect("Could not send message");
+    }
+}
+
 #[cfg(test)]
 pub mod tests {
     use super::*;
@@ -115,6 +168,23 @@ pub mod tests {
             let (nvim, _, _) = new_child_cmd(&mut cmd, handler).await.unwrap();
             // Test if Ethersync can be run successfully (empty string means the command exists).
             assert_eq!(nvim.command_output("Ethersync").await.unwrap(), "");
+        });
+    }
+
+    #[test]
+    #[ignore]
+    fn vim_processes_delta() {
+        let runtime = tokio::runtime::Runtime::new().expect("Could not create Tokio runtime");
+        runtime.block_on(async {
+            let mut socket = MockSocket::new("/tmp/ethersync").await;
+            let nvim = Neovim::new_ethersync_enabled().await;
+            socket
+                .send(r#"{"jsonrpc":"2.0","method":"operation","params":[0,["bananas"]]}"#)
+                .await;
+            socket.send("\n").await;
+            tokio::time::sleep(tokio::time::Duration::from_millis(0)).await; // TODO: This is a bit funny, but it
+                                                                             // seems necessary.
+            assert_eq!(nvim.content().await, "bananas");
         });
     }
 }
