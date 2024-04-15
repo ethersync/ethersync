@@ -710,7 +710,8 @@ async fn sync_receive(mut sync_receiver: SyncReceiver) {
     warn!("Sync Receive loop stopped");
 }
 
-fn jsonrpc_to_docmessage(s: &str) -> Result<DocMessage> {
+// TODO: Move this somewhere else? We set it pub to use it from actors::tests.
+pub fn jsonrpc_to_docmessage(s: &str) -> Result<DocMessage> {
     let json = serde_json::from_str(s)?;
     match json {
         serde_json::Value::Object(map) => {

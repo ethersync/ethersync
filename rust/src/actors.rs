@@ -2,11 +2,12 @@ use crate::daemon::Daemon;
 use async_trait::async_trait;
 use nvim_rs::{compat::tokio::Compat, create::tokio::new_child_cmd, rpc::handler::Dummy};
 use rand::Rng;
+use serde_json::Value as JSONValue;
 use std::fs;
 use std::path::{Path, PathBuf};
 use temp_dir::TempDir;
 use tokio::{
-    io::{split, AsyncWriteExt, BufWriter},
+    io::{split, AsyncBufReadExt, AsyncWriteExt, BufReader, BufWriter},
     net::UnixListener,
     process::ChildStdin,
     sync::mpsc,
@@ -41,6 +42,13 @@ impl Neovim {
         Self { nvim, buffer }
     }
 
+    pub async fn input(&mut self, input: &str) {
+        self.nvim
+            .input(input)
+            .await
+            .expect("Failed to send input to Neovim");
+    }
+
     // TODO: The "Etherbonk" approach is not a very good way of picking different sockets...
     pub async fn etherbonk(&mut self) {
         self.nvim
@@ -50,11 +58,12 @@ impl Neovim {
     }
 
     #[allow(dead_code)]
-    async fn new_ethersync_enabled() -> Self {
+    async fn new_ethersync_enabled(initial_content: &str) -> Self {
         let dir = TempDir::new().unwrap();
         let ethersync_dir = dir.child(".ethersync");
         std::fs::create_dir(ethersync_dir).unwrap();
         let file_path = dir.child("test");
+        std::fs::write(&file_path, initial_content).unwrap();
 
         Self::new(file_path).await
     }
@@ -138,7 +147,8 @@ fn rand_usize_inclusive(start: usize, end: usize) -> usize {
 
 #[allow(dead_code)]
 struct MockSocket {
-    tx: tokio::sync::mpsc::Sender<String>,
+    writer_tx: tokio::sync::mpsc::Sender<String>,
+    reader_rx: tokio::sync::mpsc::Receiver<String>,
 }
 
 #[allow(dead_code)]
@@ -147,42 +157,88 @@ impl MockSocket {
         if Path::new(socket_path).exists() {
             fs::remove_file(socket_path).expect("Could not remove existing socket file");
         }
+
         let listener = UnixListener::bind(socket_path).expect("Could not bind to socket");
-        let (tx, mut rx) = mpsc::channel::<String>(1);
+        let (writer_tx, mut writer_rx) = mpsc::channel::<String>(1);
+        let (reader_tx, reader_rx) = mpsc::channel::<String>(1);
+
         tokio::spawn(async move {
             let (socket, _) = listener
                 .accept()
                 .await
                 .expect("Could not accept connection");
-            let (_reader, writer) = split(socket);
+
+            let (reader, writer) = split(socket);
             let mut writer = BufWriter::new(writer);
-            while let Some(message) = rx.recv().await {
-                writer
-                    .write_all(message.as_bytes())
-                    .await
-                    .expect("Could not write to socket");
-                writer.flush().await.expect("Could not flush socket");
-            }
+            let mut reader = BufReader::new(reader);
+
+            tokio::spawn(async move {
+                while let Some(message) = writer_rx.recv().await {
+                    writer
+                        .write_all(message.as_bytes())
+                        .await
+                        .expect("Could not write to socket");
+                    writer.flush().await.expect("Could not flush socket");
+                }
+            });
+
+            tokio::spawn(async move {
+                let mut buffer = String::new();
+                while reader.read_line(&mut buffer).await.is_ok() {
+                    reader_tx
+                        .send(buffer.clone())
+                        .await
+                        .expect("Could not send message to reader channel");
+                    buffer.clear();
+                }
+            });
         });
-        Self { tx }
+
+        Self {
+            writer_tx,
+            reader_rx,
+        }
     }
 
     async fn send(&mut self, message: &str) {
-        self.tx
+        self.writer_tx
             .send(message.to_string())
             .await
             .expect("Could not send message");
+    }
+
+    async fn recv(&mut self) -> JSONValue {
+        loop {
+            let line = self
+                .reader_rx
+                .recv()
+                .await
+                .expect("Could not receive message");
+            let json: JSONValue = serde_json::from_str(&line).expect("Could not parse JSON");
+            if json["method"] == "debug" {
+                continue;
+            } else {
+                return json;
+            }
+        }
     }
 }
 
 #[cfg(test)]
 pub mod tests {
     use super::*;
+    use crate::daemon::jsonrpc_to_docmessage;
+    use crate::daemon::DocMessage;
+    use crate::types::{factories::*, TextDelta};
+    use tokio::{
+        runtime::Runtime,
+        time::{timeout, Duration},
+    };
 
     #[test]
     #[ignore] // TODO: enable as soon as we have figured out how to install plugin on gh actions
     fn plugin_loaded() {
-        let runtime = tokio::runtime::Runtime::new().unwrap();
+        let runtime = Runtime::new().unwrap();
         runtime.block_on(async {
             let handler = Dummy::new();
             let mut cmd = tokio::process::Command::new("nvim");
@@ -197,17 +253,85 @@ pub mod tests {
     #[test]
     #[ignore]
     fn vim_processes_delta() {
-        let runtime = tokio::runtime::Runtime::new().expect("Could not create Tokio runtime");
+        let runtime = Runtime::new().expect("Could not create Tokio runtime");
         runtime.block_on(async {
             let mut socket = MockSocket::new("/tmp/ethersync").await;
-            let nvim = Neovim::new_ethersync_enabled().await;
+            let nvim = Neovim::new_ethersync_enabled("").await;
             socket
                 .send(r#"{"jsonrpc":"2.0","method":"operation","params":[0,["bananas"]]}"#)
                 .await;
             socket.send("\n").await;
-            tokio::time::sleep(tokio::time::Duration::from_millis(0)).await; // TODO: This is a bit funny, but it
-                                                                             // seems necessary.
+            tokio::time::sleep(Duration::from_millis(0)).await; // TODO: This is a bit funny, but it
+                                                                // seems necessary.
             assert_eq!(nvim.content().await, "bananas");
         });
+    }
+
+    fn assert_vim_input_yields_text_deltas(
+        initial_content: &str,
+        input: &str,
+        expected: Vec<TextDelta>,
+    ) {
+        let runtime = Runtime::new().expect("Could not create Tokio runtime");
+        runtime.block_on(async {
+            timeout(Duration::from_millis(500), async {
+                let mut socket = MockSocket::new("/tmp/ethersync").await;
+                let mut nvim = Neovim::new_ethersync_enabled(initial_content).await;
+                nvim.input(input).await;
+
+                let msg = socket.recv().await;
+                assert_eq!(msg["method"], "open");
+
+                for expected_delta in expected {
+                    let msg = socket.recv().await;
+                    let docmessage = jsonrpc_to_docmessage(&msg.to_string())
+                        .expect("Could not convert JSON to DocMessage");
+                    if let DocMessage::RevDelta(rev_delta) = docmessage {
+                        let text_delta: TextDelta = rev_delta.delta.into();
+                        assert_eq!(text_delta, expected_delta);
+                    } else {
+                        panic!("Expected RevDelta message, got something else");
+                    }
+                }
+            })
+            .await
+            .unwrap_or_else(|_| {
+                panic!(
+                    "Nvim test for input '{input}' timed out. We probably received too few messages?"
+                )
+            });
+        });
+    }
+
+    #[test]
+    #[ignore]
+    fn vim_sends_correct_delta() {
+        assert_vim_input_yields_text_deltas("", "ia", vec![insert(0, "a")]);
+        assert_vim_input_yields_text_deltas("a\n", "x", vec![delete(0, 1)]);
+        assert_vim_input_yields_text_deltas("abc\n", "lx", vec![delete(1, 1)]);
+        assert_vim_input_yields_text_deltas("abc\n", "vlld", vec![delete(0, 3)]);
+        assert_vim_input_yields_text_deltas("a\n", "rb", vec![delete(0, 1), insert(0, "b")]);
+        assert_vim_input_yields_text_deltas("a\n", "Ab", vec![insert(1, "b")]);
+        assert_vim_input_yields_text_deltas("a\n", "Ib", vec![insert(0, "b")]);
+        assert_vim_input_yields_text_deltas("a\n", "o", vec![insert(1, "\n")]);
+        assert_vim_input_yields_text_deltas("a\n", "O", vec![insert(0, "\n")]);
+        assert_vim_input_yields_text_deltas("a\n", "yyp", vec![insert(1, "\na")]);
+        assert_vim_input_yields_text_deltas("a\nb\n", "dd", vec![delete(0, 2)]);
+        assert_vim_input_yields_text_deltas("a\nb\n", "jdd", vec![delete(1, 2)]);
+
+        // TODO: Broken tests:
+
+        // Doesn't do anything.
+        //assert_vim_input_yields_text_deltas("a\n", "dd", vec![delete(0, 1)]);
+
+        // Inserts "\n" instead of " ".
+        //assert_vim_input_yields_text_deltas("a\nb\n", "J", vec![delete(1, 1), insert(1, " ")]);
+
+        // Inserts "a" instead of "b".
+        //assert_vim_input_yields_text_deltas(
+        //    "a\n",
+        //    ":s/a/b<CR>",
+        //    vec![delete(0, 1), insert(0, "b")],
+        //);
     }
 }

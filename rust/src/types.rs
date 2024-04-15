@@ -106,13 +106,19 @@ type Position = usize;
 /// Used to encapsulate our understanding of an OT change
 impl TextDelta {
     pub fn retain(&mut self, n: usize) {
-        self.0.push(TextOp::Retain(n));
+        if n != 0 {
+            self.0.push(TextOp::Retain(n));
+        }
     }
     pub fn insert(&mut self, s: &str) {
-        self.0.push(TextOp::Insert(s.to_string()));
+        if !s.is_empty() {
+            self.0.push(TextOp::Insert(s.to_string()));
+        }
     }
     pub fn delete(&mut self, n: usize) {
-        self.0.push(TextOp::Delete(n));
+        if n != 0 {
+            self.0.push(TextOp::Delete(n));
+        }
     }
 
     #[must_use]
@@ -296,7 +302,6 @@ impl From<TextDelta> for EditorTextDelta {
     }
 }
 
-#[cfg(test)]
 pub mod factories {
     use super::*;
 
