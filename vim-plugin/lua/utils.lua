@@ -114,10 +114,20 @@ function M.indexToRowCol(index)
 end
 
 -- Converts a row and column in the current buffer to a Unicode character offset.
+-- row starts from 1, col is a byte offset that starts from 0.
 function M.rowColToIndex(row, col)
     -- Note: line2byte returns 1 for the first line.
     local byte = vim.fn.line2byte(row) + col - 1
     return M.byteOffsetToCharOffset(byte)
+end
+
+function M.rowColToIndexInLines(row, col, lines)
+    local byte = 0
+    for i = 1, row - 1 do
+        byte = byte + vim.fn.strlen(lines[i]) + 1
+    end
+    byte = byte + col
+    return M.byteOffsetToCharOffset(byte, table.concat(lines, "\n"))
 end
 
 -- TEST SUITE
@@ -179,6 +189,18 @@ function M.testAllUnits()
 
     vim.cmd("enew")
     M.appendNewline()
+
+    assertEqual(M.byteOffsetToCharOffset(8, "x\ny\nzöz"), 7)
+
+    vim.cmd("enew")
+    vim.api.nvim_buf_set_text(0, 0, 0, 0, 0, { "x", "y", "zöz" })
+    assertEqual(M.rowColToIndex(1, 0), 0)
+    assertEqual(M.rowColToIndex(2, 0), 2)
+    assertEqual(M.rowColToIndex(3, 4), 7)
+
+    assertEqual(M.rowColToIndexInLines(1, 0, { "x", "y", "zöz" }), 0)
+    assertEqual(M.rowColToIndexInLines(2, 0, { "x", "y", "zöz" }), 2)
+    assertEqual(M.rowColToIndexInLines(3, 4, { "x", "y", "zöz" }), 7)
 
     print("Ethersync tests successful!")
 end

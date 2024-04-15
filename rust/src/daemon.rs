@@ -31,6 +31,7 @@ pub enum DocMessage {
     },
     Open,
     Close,
+    Debug, // TODO: Find a better way to drop debug messages from the editor.
     RandomEdit,
     RevDelta(RevisionedEditorTextDelta),
     #[allow(dead_code)]
@@ -176,6 +177,9 @@ impl DaemonActor {
             }
             DocMessage::Close => {
                 self.ot_server = None;
+            }
+            DocMessage::Debug => {
+                // Ignore.
             }
             DocMessage::RandomEdit => {
                 let delta = self.random_delta();
@@ -625,6 +629,7 @@ async fn listen_socket(
                         line_maybe = lines.next_line() => {
                             match line_maybe {
                                 Ok(Some(line)) => {
+                                    debug!("Received line from editor: {:#?}", line);
                                     match jsonrpc_to_docmessage(&line) {
                                         Ok(message) => {
                                             tx.send(message).await?;
@@ -663,6 +668,7 @@ async fn listen_socket(
                                 "method": "operation",
                                 "params": [rev_delta.revision, json_params]
                             });
+                            debug!("Sending message to editor: {:#?}", payload);
                             tcp_write.write_all(format!("{payload}\n").as_bytes()).await?;
                         }
                     }
@@ -717,6 +723,7 @@ pub fn jsonrpc_to_docmessage(s: &str) -> Result<DocMessage> {
         serde_json::Value::Object(map) => {
             if let Some(serde_json::Value::String(method)) = map.get("method") {
                 match method.as_str() {
+                    "debug" => Ok(DocMessage::Debug),
                     "open" => Ok(DocMessage::Open),
                     "close" => Ok(DocMessage::Close),
                     "insert" => {

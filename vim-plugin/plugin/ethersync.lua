@@ -1,4 +1,5 @@
 local utils = require("utils")
+local sync = require("vim.lsp.sync")
 
 -- Used to store the changedtick of the buffer when we make changes to it.
 -- We do this to avoid infinite loops, where we make a change, which would
@@ -28,6 +29,8 @@ local editorRevision = 0
 -- Used to remember the previous content of the buffer, so that we can
 -- calculate the difference between the previous and the current content.
 local previousContent
+-- TODO: We probably only need one of these.
+local prev_lines
 
 local function ignoreNextUpdate()
     local nextTick = vim.api.nvim_buf_get_changedtick(0)
@@ -192,74 +195,150 @@ function Ethersync()
     createCursor()
 
     previousContent = utils.contentOfCurrentBuffer()
+    prev_lines = vim.api.nvim_buf_get_lines(0, 0, -1, true)
 
     vim.api.nvim_buf_attach(0, false, {
-        on_bytes = function(
-            _the_string_bytes, ---@diagnostic disable-line
-            _buffer_handle, ---@diagnostic disable-line
+        on_lines = function(
+            _the_literal_string_lines --[[@diagnostic disable-line]],
+            _buffer_handle --[[@diagnostic disable-line]],
             changedtick,
-            _start_row, ---@diagnostic disable-line
-            _start_column, ---@diagnostic disable-line
-            byte_offset,
-            _old_end_row, ---@diagnostic disable-line
-            _old_end_column, ---@diagnostic disable-line
-            old_end_byte_length,
-            _new_end_row, ---@diagnostic disable-line
-            _new_end_column, ---@diagnostic disable-line
-            new_end_byte_length
+            first_line,
+            last_line,
+            new_last_line
         )
-            -- TODO: When substituting with :s, the "current buffer content" doesn't seem to be correct.
-            -- Can we fix that, maybe using vim.schedule somehow, without breaking correctness?
-            local content = utils.contentOfCurrentBuffer()
+            --client.notify("debug", { first_line = first_line, last_line = last_line, new_last_line = new_last_line })
+            local curr_lines = vim.api.nvim_buf_get_lines(0, 0, -1, true)
 
             -- Did the change come from us? If so, ignore it.
             if ignored_ticks[changedtick] then
                 ignored_ticks[changedtick] = nil
-                previousContent = content
+                prev_lines = curr_lines
                 return
             end
 
-            if byte_offset + new_end_byte_length > vim.fn.strlen(content) then
-                -- Tried to insert something *after* the end of the (resulting) file.
-                -- I think this is probably a bug, that happens when you use the 'o' command, for example.
-                -- See for example https://github.com/neovim/neovim/issues/25966.
-                byte_offset = vim.fn.strlen(content) - new_end_byte_length
-            end
+            -- TODO: dirty fix that I don't understand any more
+            table.insert(curr_lines, "")
+            table.insert(prev_lines, "")
+            table.insert(prev_lines, "")
 
-            local charOffset = utils.byteOffsetToCharOffset(byte_offset, content)
-            local oldCharEnd = utils.byteOffsetToCharOffset(byte_offset + old_end_byte_length, previousContent)
-            local newCharEnd = utils.byteOffsetToCharOffset(byte_offset + new_end_byte_length, content)
+            --client.notify("debug", { curr_lines = curr_lines, prev_lines = prev_lines })
+            local diff = sync.compute_diff(prev_lines, curr_lines, first_line, last_line, new_last_line, "utf-8", "\n")
+            --client.notify("debug", { diff = diff })
 
-            local oldCharLength = oldCharEnd - charOffset
-            local newCharLength = newCharEnd - charOffset
+            local start_row = diff.range.start.line + 1
+            local start_col = diff.range.start.character
+            local end_row = diff.range["end"].line + 1
+            local end_col = diff.range["end"].character
 
-            if oldCharLength > 0 then
+            --client.notify(
+            --    "debug",
+            --    { start_row = start_row, start_col = start_col, end_row = end_row, end_col = end_col }
+            --)
+
+            local range_start_char = utils.rowColToIndexInLines(start_row, start_col, prev_lines)
+            local range_end_char = utils.rowColToIndexInLines(end_row, end_col, prev_lines)
+
+            --client.notify("debug", { range_start_char = range_start_char, range_end_char = range_end_char })
+
+            local deleted_chars = range_end_char - range_start_char
+            if deleted_chars > 0 then
                 editorRevision = editorRevision + 1
                 if online then
-                    client.notify("delete", { filename, daemonRevision, charOffset, oldCharLength })
+                    client.notify("delete", { "", daemonRevision, range_start_char, deleted_chars })
                 else
-                    table.insert(opQueueForDaemon, {
-                        "delete",
-                        { filename, daemonRevision, charOffset, oldCharLength },
-                    })
+                    table.insert(
+                        opQueueForDaemon,
+                        { "delete", { "", daemonRevision, range_start_char, deleted_chars } }
+                    )
                 end
             end
 
-            if newCharLength > 0 then
+            if #diff.text > 0 then
                 editorRevision = editorRevision + 1
-                local insertedString = vim.fn.strcharpart(content, charOffset, newCharLength)
                 if online then
-                    client.notify("insert", { filename, daemonRevision, charOffset, insertedString })
+                    client.notify("insert", { "", daemonRevision, range_start_char, diff.text })
                 else
-                    table.insert(opQueueForDaemon, {
-                        "insert",
-                        { filename, daemonRevision, charOffset, insertedString },
-                    })
+                    table.insert(opQueueForDaemon, { "insert", { "", daemonRevision, range_start_char, diff.text } })
                 end
             end
 
-            previousContent = content
+            prev_lines = curr_lines
+
+            --print_current_content()
         end,
+        --on_bytes = function(
+        --    _the_string_bytes, ---@diagnostic disable-line
+        --    _buffer_handle, ---@diagnostic disable-line
+        --    changedtick,
+        --    _start_row, ---@diagnostic disable-line
+        --    _start_column, ---@diagnostic disable-line
+        --    byte_offset,
+        --    _old_end_row, ---@diagnostic disable-line
+        --    _old_end_column, ---@diagnostic disable-line
+        --    old_end_byte_length,
+        --    _new_end_row, ---@diagnostic disable-line
+        --    _new_end_column, ---@diagnostic disable-line
+        --    new_end_byte_length
+        --)
+        --    -- TODO: When substituting with :s, the "current buffer content" doesn't seem to be correct.
+        --    -- Can we fix that, maybe using vim.schedule somehow, without breaking correctness?
+        --    local content = utils.contentOfCurrentBuffer()
+        --    client.notify("debug", {
+        --        changedtick = changedtick,
+        --        byte_offset = byte_offset,
+        --        old_end_byte_length = old_end_byte_length,
+        --        new_end_byte_length = new_end_byte_length,
+        --        currentContent = content,
+        --    })
+
+        --    -- Did the change come from us? If so, ignore it.
+        --    if ignored_ticks[changedtick] then
+        --        ignored_ticks[changedtick] = nil
+        --        previousContent = content
+        --        return
+        --    end
+
+        --    if byte_offset + new_end_byte_length > vim.fn.strlen(content) then
+        --        -- Tried to insert something *after* the end of the (resulting) file.
+        --        -- I think this is probably a bug, that happens when you use the 'o' command, for example.
+        --        -- See for example https://github.com/neovim/neovim/issues/25966.
+        --        byte_offset = vim.fn.strlen(content) - new_end_byte_length
+        --    end
+
+        --    local charOffset = utils.byteOffsetToCharOffset(byte_offset, content)
+        --    local oldCharEnd = utils.byteOffsetToCharOffset(byte_offset + old_end_byte_length, previousContent)
+        --    local newCharEnd = utils.byteOffsetToCharOffset(byte_offset + new_end_byte_length, content)
+
+        --    local oldCharLength = oldCharEnd - charOffset
+        --    local newCharLength = newCharEnd - charOffset
+
+        --    if oldCharLength > 0 then
+        --        editorRevision = editorRevision + 1
+        --        if online then
+        --            client.notify("delete", { filename, daemonRevision, charOffset, oldCharLength })
+        --        else
+        --            table.insert(opQueueForDaemon, {
+        --                "delete",
+        --                { filename, daemonRevision, charOffset, oldCharLength },
+        --            })
+        --        end
+        --    end
+
+        --    if newCharLength > 0 then
+        --        editorRevision = editorRevision + 1
+        --        local insertedString = vim.fn.strcharpart(content, charOffset, newCharLength)
+        --        if online then
+        --            client.notify("insert", { filename, daemonRevision, charOffset, insertedString })
+        --        else
+        --            table.insert(opQueueForDaemon, {
+        --                "insert",
+        --                { filename, daemonRevision, charOffset, insertedString },
+        --            })
+        --        end
+        --    end
+
+        --    previousContent = content
+        --end,
     })
 
     if vim.api.nvim_get_option_value("fixeol", { buf = 0 }) then

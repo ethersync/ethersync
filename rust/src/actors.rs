@@ -244,7 +244,7 @@ pub mod tests {
             let mut cmd = tokio::process::Command::new("nvim");
             cmd.arg("--headless").arg("--embed");
             let (nvim, _, _) = new_child_cmd(&mut cmd, handler).await.unwrap();
-            nvim.command("Ethersinc")
+            nvim.command("Ethersync")
                 .await
                 .expect("Failed to run Ethersync");
         });
@@ -313,25 +313,27 @@ pub mod tests {
         assert_vim_input_yields_text_deltas("a\n", "rb", vec![delete(0, 1), insert(0, "b")]);
         assert_vim_input_yields_text_deltas("a\n", "Ab", vec![insert(1, "b")]);
         assert_vim_input_yields_text_deltas("a\n", "Ib", vec![insert(0, "b")]);
-        assert_vim_input_yields_text_deltas("a\n", "o", vec![insert(1, "\n")]);
+
         assert_vim_input_yields_text_deltas("a\n", "O", vec![insert(0, "\n")]);
-        assert_vim_input_yields_text_deltas("a\n", "yyp", vec![insert(1, "\na")]);
         assert_vim_input_yields_text_deltas("a\nb\n", "dd", vec![delete(0, 2)]);
-        assert_vim_input_yields_text_deltas("a\nb\n", "jdd", vec![delete(1, 2)]);
+        assert_vim_input_yields_text_deltas("a\nb\n", "jdd", vec![delete(2, 2)]);
+        assert_vim_input_yields_text_deltas("a\n", "dd", vec![delete(0, 2)]);
 
-        // TODO: Broken tests:
+        assert_vim_input_yields_text_deltas(
+            "a\n",
+            ":s/a/b<CR>",
+            vec![delete(0, 1), insert(0, "b")],
+        );
 
-        // Doesn't do anything.
-        //assert_vim_input_yields_text_deltas("a\n", "dd", vec![delete(0, 1)]);
+        // TODO: Tests that are a bit weird:
 
-        // Inserts "\n" instead of " ".
-        //assert_vim_input_yields_text_deltas("a\nb\n", "J", vec![delete(1, 1), insert(1, " ")]);
+        // A direct insert(1, "\n") would be nicer.
+        assert_vim_input_yields_text_deltas("a\n", "o", vec![delete(1, 1), insert(1, "\n\n")]);
 
-        // Inserts "a" instead of "b".
-        //assert_vim_input_yields_text_deltas(
-        //    "a\n",
-        //    ":s/a/b<CR>",
-        //    vec![delete(0, 1), insert(0, "b")],
-        //);
+        // A direct insert(1, "\na") would be nicer.
+        assert_vim_input_yields_text_deltas("a\n", "yyp", vec![delete(1, 1), insert(1, "\na\n")]);
+
+        // vec![delete(1, 1), insert(1, " b")] would be nicer.
+        assert_vim_input_yields_text_deltas("a\nb\n", "J", vec![insert(1, " b"), delete(4, 2)]);
     }
 }

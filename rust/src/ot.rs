@@ -107,7 +107,10 @@ impl OTServer {
         self.editor_revision += 1;
         match daemon_revision.cmp(&self.daemon_revision) {
             Ordering::Greater => {
-                panic!("must not happen, editor has seen a daemon revision from the future.");
+                panic!(
+                    "must not happen, editor has seen a daemon revision from the future ({} > {})",
+                    daemon_revision, self.daemon_revision
+                );
             }
             Ordering::Equal => {
                 // The sent operation applies to the current daemon revision. We can apply it immediately.
