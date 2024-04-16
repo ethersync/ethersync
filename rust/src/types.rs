@@ -97,11 +97,113 @@ impl Range {
 // Right now, we use the Vim plugin as it is, which only uses a character position.
 type Position = usize;
 
-//#[derive(Debug, Clone, PartialEq)]
-//struct Position {
-//    line: usize,
-//    column: usize,
-//}
+#[derive(Debug, Default, Clone, PartialEq)]
+struct PositionLC {
+    line: usize,
+    column: usize,
+}
+
+impl PositionLC {
+    /// will panic when used with not matching offset/content
+    fn from_offset(full_offset: Position, content: &str) -> Self {
+        let mut column_offset = full_offset;
+        let mut line_count = 0;
+        assert!(full_offset <= content.chars().count());
+        for line in content.lines() {
+            let chars_in_line = line.chars().count() + 1; // including newline
+            if column_offset < chars_in_line {
+                // line reached
+                break;
+            }
+            column_offset -= chars_in_line;
+            line_count += 1;
+        }
+        Self {
+            line: line_count,
+            column: column_offset,
+        }
+    }
+}
+
+#[cfg(test)]
+mod conv_test {
+    use super::*;
+
+    #[test]
+    fn zero_offset() {
+        assert_eq!(
+            //       position           0123456 78901 2345
+            //       column             0123456 01234 0124
+            PositionLC::from_offset(0, "hallo,\nneue\nwelt"),
+            PositionLC { line: 0, column: 0 }
+        );
+    }
+
+    #[test]
+    fn more_offset_first_line() {
+        assert_eq!(
+            PositionLC::from_offset(3, "hallo,\nneue\nwelt"),
+            PositionLC { line: 0, column: 3 }
+        );
+        assert_eq!(
+            PositionLC::from_offset(3, "h🥕llo,\nneue\nwelt"),
+            PositionLC { line: 0, column: 3 }
+        );
+    }
+
+    #[test]
+    fn offset_second_line() {
+        assert_eq!(
+            PositionLC::from_offset(7, "hallo,\nneue\nwelt"),
+            PositionLC { line: 1, column: 0 }
+        );
+        assert_eq!(
+            PositionLC::from_offset(7, "h🥕llo,\nneue\nwelt"),
+            PositionLC { line: 1, column: 0 }
+        );
+        assert_eq!(
+            PositionLC::from_offset(9, "hallo,\nneue\nwelt"),
+            PositionLC { line: 1, column: 2 }
+        );
+        assert_eq!(
+            PositionLC::from_offset(9, "h🥕llo,\nneue\nwelt"),
+            PositionLC { line: 1, column: 2 }
+        );
+    }
+
+    #[test]
+    fn offset_third_line() {
+        assert_eq!(
+            PositionLC::from_offset(12, "hallo,\nneue\nwelt"),
+            PositionLC { line: 2, column: 0 }
+        );
+        assert_eq!(
+            PositionLC::from_offset(12, "h🥕llo,\nneue\nwelt"),
+            PositionLC { line: 2, column: 0 }
+        );
+        assert_eq!(
+            PositionLC::from_offset(15, "hallo,\nneue\nwelt"),
+            PositionLC { line: 2, column: 3 }
+        );
+        assert_eq!(
+            PositionLC::from_offset(15, "h🥕llo,\nneue\nwelt"),
+            PositionLC { line: 2, column: 3 }
+        );
+    }
+    #[test]
+    fn last_implicit_newline_does_not_panic() {
+        assert_eq!(
+            PositionLC::from_offset(16, "h🥕llo,\nneue\nwelt"),
+            PositionLC { line: 2, column: 4 }
+        );
+    }
+
+    #[test]
+    #[should_panic]
+    fn offset_out_of_bounds() {
+        PositionLC::from_offset(17, "h🥕llo,\nneue\nwelt");
+    }
+}
 
 /// Used to encapsulate our understanding of an OT change
 impl TextDelta {
