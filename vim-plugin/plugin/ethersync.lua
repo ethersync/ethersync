@@ -120,8 +120,20 @@ local function processOperationForEditor(method, parameters)
     end
 end
 
+-- Reset the state on editor side and re-open the current buffer
+--
+-- (this is to be called on buffer change, once we have the ability to detect that)
+local function resetState()
+    daemonRevision = 0
+    editorRevision = 0
+    opQueueForDaemon = {}
+    opQueueForEditor = {}
+end
+
 -- Connect to the daemon.
 local function connect(socket_path)
+    resetState()
+
     params = { "client" }
     if socket_path then
         table.insert(params, "--socket-path=" .. socket_path)
@@ -171,18 +183,6 @@ local function goOnline()
     opQueueForDaemon = {}
     opQueueForEditor = {}
     online = true
-end
-
--- Reset the state on editor side and re-open the current buffer
---
--- (this is to be called on buffer change, once we have the ability to detect that)
-local function resetState()
-    daemonRevision = 0
-    editorRevision = 0
-    opQueueForDaemon = {}
-    opQueueForEditor = {}
-    local filename = vim.fs.basename(vim.api.nvim_buf_get_name(0))
-    client.notify("open", { filename })
 end
 
 -- Initialization function.
