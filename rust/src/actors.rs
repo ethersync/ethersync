@@ -333,7 +333,7 @@ pub mod tests {
         // A direct insert(1, "\na") would be nicer.
         assert_vim_input_yields_text_deltas("a\n", "yyp", vec![delete(1, 1), insert(1, "\na\n")]);
 
-        // vec![delete(1, 1), insert(1, " b")] would be nicer.
+        // vec![delete(1, 1), insert(1, " ")] would be nicer.
         assert_vim_input_yields_text_deltas("a\nb\n", "J", vec![insert(1, " b"), delete(4, 2)]);
     }
 }
