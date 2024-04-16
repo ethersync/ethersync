@@ -31,7 +31,7 @@ local editorRevision = 0
 local prev_lines
 
 local function ignoreNextUpdate()
-    local nextTick = vim.api.nvim_buf_get_changedtick(0)
+    local nextTick = vim.api.nvim_buf_get_changedtick(0) + 1
     ignored_ticks[nextTick] = true
 end
 
