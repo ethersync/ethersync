@@ -327,6 +327,16 @@ pub mod tests {
             vec![delete(0, 1), insert(0, "b")],
         );
 
+        assert_vim_input_yields_text_deltas(
+            "a\n",
+            "ddix<CR><BS>",
+            vec![delete(0, 2), insert(0, "x"), insert(1, "\n"), delete(2, 1)],
+        );
+
+        // When opening a file without trailing newline, it is expected that Vim "wants" to add an
+        // extra newline.
+        assert_vim_input_yields_text_deltas("a", "", vec![insert(1, "\n")]);
+
         // TODO: Tests that are a bit weird:
 
         // A direct insert(1, "\n") would be nicer.
