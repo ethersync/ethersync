@@ -755,11 +755,11 @@ pub fn jsonrpc_to_docmessage(s: &str) -> Result<DocMessage> {
                                             range: Range {
                                                 anchor: Position {
                                                     line: 0,
-                                                    column: position as usize,
+                                                    character: position as usize,
                                                 },
                                                 head: Position {
                                                     line: 0,
-                                                    column: position as usize,
+                                                    character: position as usize,
                                                 },
                                             },
                                             replacement: text,
@@ -806,11 +806,11 @@ pub fn jsonrpc_to_docmessage(s: &str) -> Result<DocMessage> {
                                             range: Range {
                                                 anchor: Position {
                                                     line: 0,
-                                                    column: position as usize,
+                                                    character: position as usize,
                                                 },
                                                 head: Position {
                                                     line: 0,
-                                                    column: position as usize + length as usize,
+                                                    character: position as usize + length as usize,
                                                 },
                                             },
                                             replacement: String::new(),
@@ -935,8 +935,14 @@ mod tests {
                     revision: 0,
                     delta: EditorTextDelta(vec![EditorTextOp {
                         range: Range {
-                            anchor: Position { line: 0, column: 1 },
-                            head: Position { line: 0, column: 1 }
+                            anchor: Position {
+                                line: 0,
+                                character: 1
+                            },
+                            head: Position {
+                                line: 0,
+                                character: 1
+                            }
                         },
                         replacement: "a".to_string(),
                     }])
@@ -959,8 +965,14 @@ mod tests {
                     revision: 2,
                     delta: EditorTextDelta(vec![EditorTextOp {
                         range: Range {
-                            anchor: Position { line: 0, column: 1 },
-                            head: Position { line: 0, column: 4 }
+                            anchor: Position {
+                                line: 0,
+                                character: 1
+                            },
+                            head: Position {
+                                line: 0,
+                                character: 4
+                            }
                         },
                         replacement: "".to_string(),
                     }])
