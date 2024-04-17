@@ -65,7 +65,8 @@ impl RevisionedTextDelta {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-enum EditorProtocolMessage {
+#[serde(tag = "method", content = "params", rename_all = "camelCase")]
+pub enum EditorProtocolMessage {
     Open {
         uri: DocumentUri,
     },
