@@ -7,6 +7,7 @@ local sync = require("vim.lsp.sync")
 --
 -- TODO: how big will this list get? should we optimize it?
 local ignored_ticks = {}
+local ignore_edits = false
 
 local ns_id = vim.api.nvim_create_namespace("Ethersync")
 local virtual_cursor
@@ -31,7 +32,7 @@ local editorRevision = 0
 local prev_lines
 
 local function debug(tbl)
-    if false then
+    if true then
         client.notify("debug", tbl)
     end
 end
@@ -84,7 +85,7 @@ end
 
 local function applyDelta(delta)
     local text_edits = {}
-    for replacement in delta do
+    for _, replacement in ipairs(delta) do
         local text_edit = {
             range = {
                 start = replacement.range.anchor,
@@ -95,9 +96,11 @@ local function applyDelta(delta)
         table.insert(text_edits, text_edit)
     end
 
+    ignore_edits = true
     local changedtick_before = vim.api.nvim_buf_get_changedtick(0)
-    vim.lsp.apply_text_edits(text_edits, 0, "utf-32")
+    vim.lsp.util.apply_text_edits(text_edits, 0, "utf-32")
     local changedtick_after = vim.api.nvim_buf_get_changedtick(0)
+    ignore_edits = false
 
     debug({ changedtick_before = changedtick_before, changedtick_after = changedtick_after })
 
@@ -231,6 +234,11 @@ function Ethersync()
             if ignored_ticks[changedtick] then
                 ignored_ticks[changedtick] = nil
                 prev_lines = curr_lines
+                return
+            end
+
+            -- Are we currently ignoring edits?
+            if ignore_edits then
                 return
             end
 

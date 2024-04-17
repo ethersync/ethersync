@@ -4,14 +4,19 @@ updated: 2024-04-17
 ---
 # Reusable data types
 
-```
-DocumentUri = string // For example: "file:///home/user/bla/fu.txt"
-Delta: {range: Range, replacement: string}[]
-RevisionedDelta: {delta: Delta, revision: number}
-Position: {line: number, character: number}
-Range: {head: Position, anchor: Position}
-RevisionedRanges: {ranges: Range[], revision: number}
-```
+## `DocumentUri = string // For example: "file:///home/user/bla/fu.txt"`
+
+## `Delta: {range: Range, replacement: string}[]`
+
+A complex text manipulation, similar to LSP's [`TextEdit[]`](https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#textEditArray). Like in LSP, all ranges refer to the starting content, and must never overlap, see the linked LSP documentation.
+
+## `RevisionedDelta: {delta: Delta, revision: number}`
+
+## `Position: {line: number, character: number}`
+
+## `Range: {head: Position, anchor: Position}`
+
+## `RevisionedRanges: {ranges: Range[], revision: number}`
 
 # Editor to daemon
 

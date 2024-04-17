@@ -261,12 +261,20 @@ pub mod tests {
             let mut socket = MockSocket::new("/tmp/ethersync").await;
             let nvim = Neovim::new_ethersync_enabled("").await;
             socket
-                .send(r#"{"jsonrpc":"2.0","method":"operation","params":[0,["bananas"]]}"#)
+                .send(r#"{"jsonrpc":"2.0","method":"edit","params":{"uri":"file","delta":{"revision":0,"delta":[{"range":{"anchor":{"line":0,"character":0},"head":{"line":0,"character":0}},"replacement":"bananas"}]}}}"#)
                 .await;
             socket.send("\n").await;
             tokio::time::sleep(Duration::from_millis(0)).await; // TODO: This is a bit funny, but it
                                                                 // seems necessary.
             assert_eq!(nvim.content().await, "bananas");
+
+            socket
+                .send(r#"{"jsonrpc":"2.0","method":"edit","params":{"uri":"file","delta":{"revision":0,"delta":[{"range":{"anchor":{"line":0,"character":2},"head":{"line":0,"character":3}},"replacement":""},{"range":{"anchor":{"line":0,"character":4},"head":{"line":0,"character":5}},"replacement":""}]}}}"#)
+                .await;
+            socket.send("\n").await;
+            tokio::time::sleep(Duration::from_millis(0)).await;
+
+            assert_eq!(nvim.content().await, "baaas");
         });
     }
 
