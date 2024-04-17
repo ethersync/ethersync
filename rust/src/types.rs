@@ -120,149 +120,20 @@ impl Position {
     }
 }
 
-#[derive(Debug, Default, Clone, PartialEq)]
-struct PositionLC {
-    line: usize,
-    column: usize,
-}
-
-impl PositionLC {
-    /// will panic when used with not matching offset/content
-    fn from_offset(full_offset: usize, content: &str) -> Self {
-        let mut column_offset = full_offset;
-        let mut line_count = 0;
-        assert!(full_offset <= content.chars().count());
-        for line in content.lines() {
-            let chars_in_line = line.chars().count() + 1; // including newline
-            if column_offset < chars_in_line {
-                // line reached
-                break;
-            }
-            column_offset -= chars_in_line;
-            line_count += 1;
-        }
-        Self {
-            line: line_count,
-            column: column_offset,
-        }
-    }
-}
-
-#[derive(Debug, Default, Clone, PartialEq)]
-struct PositionLCRope {
-    line: usize,
-    column: usize,
-}
-
-impl PositionLCRope {
-    /// will panic when used with not matching offset/content
-    fn from_offset(full_offset: usize, content: &str) -> Self {
-        let rope = Rope::from_str(content);
-        let line = rope.char_to_line(full_offset);
-        let column = full_offset - rope.line_to_char(line);
-        Self { line, column }
-    }
-
-    fn to_offset(&self, content: &str) -> usize {
-        let rope = Rope::from_str(content);
-        rope.line_to_char(self.line) + self.column
-    }
-}
-
-#[cfg(test)]
-mod conv_test {
-    use super::*;
-
-    #[test]
-    fn zero_offset() {
-        assert_eq!(
-            //       position           0123456 78901 2345
-            //       column             0123456 01234 0124
-            PositionLC::from_offset(0, "hallo,\nneue\nwelt"),
-            PositionLC { line: 0, column: 0 }
-        );
-    }
-
-    #[test]
-    fn more_offset_first_line() {
-        assert_eq!(
-            PositionLC::from_offset(3, "hallo,\nneue\nwelt"),
-            PositionLC { line: 0, column: 3 }
-        );
-        assert_eq!(
-            PositionLC::from_offset(3, "h🥕llo,\nneue\nwelt"),
-            PositionLC { line: 0, column: 3 }
-        );
-    }
-
-    #[test]
-    fn offset_second_line() {
-        assert_eq!(
-            PositionLC::from_offset(7, "hallo,\nneue\nwelt"),
-            PositionLC { line: 1, column: 0 }
-        );
-        assert_eq!(
-            PositionLC::from_offset(7, "h🥕llo,\nneue\nwelt"),
-            PositionLC { line: 1, column: 0 }
-        );
-        assert_eq!(
-            PositionLC::from_offset(9, "hallo,\nneue\nwelt"),
-            PositionLC { line: 1, column: 2 }
-        );
-        assert_eq!(
-            PositionLC::from_offset(9, "h🥕llo,\nneue\nwelt"),
-            PositionLC { line: 1, column: 2 }
-        );
-    }
-
-    #[test]
-    fn offset_third_line() {
-        assert_eq!(
-            PositionLC::from_offset(12, "hallo,\nneue\nwelt"),
-            PositionLC { line: 2, column: 0 }
-        );
-        assert_eq!(
-            PositionLC::from_offset(12, "h🥕llo,\nneue\nwelt"),
-            PositionLC { line: 2, column: 0 }
-        );
-        assert_eq!(
-            PositionLC::from_offset(15, "hallo,\nneue\nwelt"),
-            PositionLC { line: 2, column: 3 }
-        );
-        assert_eq!(
-            PositionLC::from_offset(15, "h🥕llo,\nneue\nwelt"),
-            PositionLC { line: 2, column: 3 }
-        );
-    }
-    #[test]
-    fn last_implicit_newline_does_not_panic() {
-        assert_eq!(
-            PositionLC::from_offset(16, "h🥕llo,\nneue\nwelt"),
-            PositionLC { line: 2, column: 4 }
-        );
-    }
-
-    #[test]
-    #[should_panic]
-    fn offset_out_of_bounds() {
-        PositionLC::from_offset(17, "h🥕llo,\nneue\nwelt");
-    }
-}
-
 #[cfg(test)]
 mod ropey_test {
-    use super::PositionLCRope as PositionLC;
+    use super::Position;
 
     #[test]
     fn zero_offset() {
         assert_eq!(
             //       position           0123456 78901 2345
             //       column             0123456 01234 0124
-            PositionLC::from_offset(0, "hallo,\nneue\nwelt"),
-            PositionLC { line: 0, column: 0 }
+            Position::from_offset(0, "hallo,\nneue\nwelt"),
+            Position { line: 0, column: 0 }
         );
         assert_eq!(
-            PositionLC { line: 0, column: 0 }.to_offset("hallo,\nneue\nwelt"),
+            Position { line: 0, column: 0 }.to_offset("hallo,\nneue\nwelt"),
             0
         );
     }
@@ -270,19 +141,19 @@ mod ropey_test {
     #[test]
     fn more_offset_first_line() {
         assert_eq!(
-            PositionLC::from_offset(3, "hallo,\nneue\nwelt"),
-            PositionLC { line: 0, column: 3 }
+            Position::from_offset(3, "hallo,\nneue\nwelt"),
+            Position { line: 0, column: 3 }
         );
         assert_eq!(
-            PositionLC::from_offset(3, "h🥕llo,\nneue\nwelt"),
-            PositionLC { line: 0, column: 3 }
+            Position::from_offset(3, "h🥕llo,\nneue\nwelt"),
+            Position { line: 0, column: 3 }
         );
         assert_eq!(
-            PositionLC { line: 0, column: 3 }.to_offset("hallo,\nneue\nwelt"),
+            Position { line: 0, column: 3 }.to_offset("hallo,\nneue\nwelt"),
             3
         );
         assert_eq!(
-            PositionLC { line: 0, column: 3 }.to_offset("h🥕llo,\nneue\nwelt"),
+            Position { line: 0, column: 3 }.to_offset("h🥕llo,\nneue\nwelt"),
             3
         );
     }
@@ -290,35 +161,35 @@ mod ropey_test {
     #[test]
     fn offset_second_line() {
         assert_eq!(
-            PositionLC::from_offset(7, "hallo,\nneue\nwelt"),
-            PositionLC { line: 1, column: 0 }
+            Position::from_offset(7, "hallo,\nneue\nwelt"),
+            Position { line: 1, column: 0 }
         );
         assert_eq!(
-            PositionLC::from_offset(7, "h🥕llo,\nneue\nwelt"),
-            PositionLC { line: 1, column: 0 }
+            Position::from_offset(7, "h🥕llo,\nneue\nwelt"),
+            Position { line: 1, column: 0 }
         );
         assert_eq!(
-            PositionLC::from_offset(9, "hallo,\nneue\nwelt"),
-            PositionLC { line: 1, column: 2 }
+            Position::from_offset(9, "hallo,\nneue\nwelt"),
+            Position { line: 1, column: 2 }
         );
         assert_eq!(
-            PositionLC::from_offset(9, "h🥕llo,\nneue\nwelt"),
-            PositionLC { line: 1, column: 2 }
+            Position::from_offset(9, "h🥕llo,\nneue\nwelt"),
+            Position { line: 1, column: 2 }
         );
         assert_eq!(
-            PositionLC { line: 1, column: 0 }.to_offset("hallo,\nneue\nwelt"),
+            Position { line: 1, column: 0 }.to_offset("hallo,\nneue\nwelt"),
             7
         );
         assert_eq!(
-            PositionLC { line: 1, column: 0 }.to_offset("h🥕llo,\nneue\nwelt"),
+            Position { line: 1, column: 0 }.to_offset("h🥕llo,\nneue\nwelt"),
             7
         );
         assert_eq!(
-            PositionLC { line: 1, column: 2 }.to_offset("hallo,\nneue\nwelt"),
+            Position { line: 1, column: 2 }.to_offset("hallo,\nneue\nwelt"),
             9
         );
         assert_eq!(
-            PositionLC { line: 1, column: 2 }.to_offset("h🥕llo,\nneue\nwelt"),
+            Position { line: 1, column: 2 }.to_offset("h🥕llo,\nneue\nwelt"),
             9
         );
     }
@@ -326,35 +197,35 @@ mod ropey_test {
     #[test]
     fn offset_third_line() {
         assert_eq!(
-            PositionLC::from_offset(12, "hallo,\nneue\nwelt"),
-            PositionLC { line: 2, column: 0 }
+            Position::from_offset(12, "hallo,\nneue\nwelt"),
+            Position { line: 2, column: 0 }
         );
         assert_eq!(
-            PositionLC::from_offset(12, "h🥕llo,\nneue\nwelt"),
-            PositionLC { line: 2, column: 0 }
+            Position::from_offset(12, "h🥕llo,\nneue\nwelt"),
+            Position { line: 2, column: 0 }
         );
         assert_eq!(
-            PositionLC::from_offset(15, "hallo,\nneue\nwelt"),
-            PositionLC { line: 2, column: 3 }
+            Position::from_offset(15, "hallo,\nneue\nwelt"),
+            Position { line: 2, column: 3 }
         );
         assert_eq!(
-            PositionLC::from_offset(15, "h🥕llo,\nneue\nwelt"),
-            PositionLC { line: 2, column: 3 }
+            Position::from_offset(15, "h🥕llo,\nneue\nwelt"),
+            Position { line: 2, column: 3 }
         );
         assert_eq!(
-            PositionLC { line: 2, column: 0 }.to_offset("hallo,\nneue\nwelt"),
+            Position { line: 2, column: 0 }.to_offset("hallo,\nneue\nwelt"),
             12
         );
         assert_eq!(
-            PositionLC { line: 2, column: 0 }.to_offset("h🥕llo,\nneue\nwelt"),
+            Position { line: 2, column: 0 }.to_offset("h🥕llo,\nneue\nwelt"),
             12
         );
         assert_eq!(
-            PositionLC { line: 2, column: 3 }.to_offset("hallo,\nneue\nwelt"),
+            Position { line: 2, column: 3 }.to_offset("hallo,\nneue\nwelt"),
             15
         );
         assert_eq!(
-            PositionLC { line: 2, column: 3 }.to_offset("h🥕llo,\nneue\nwelt"),
+            Position { line: 2, column: 3 }.to_offset("h🥕llo,\nneue\nwelt"),
             15
         );
     }
@@ -362,11 +233,11 @@ mod ropey_test {
     #[test]
     fn last_implicit_newline_does_not_panic() {
         assert_eq!(
-            PositionLC::from_offset(16, "h🥕llo,\nneue\nwelt"),
-            PositionLC { line: 2, column: 4 }
+            Position::from_offset(16, "h🥕llo,\nneue\nwelt"),
+            Position { line: 2, column: 4 }
         );
         assert_eq!(
-            PositionLC { line: 2, column: 4 }.to_offset("h🥕llo,\nneue\nwelt"),
+            Position { line: 2, column: 4 }.to_offset("h🥕llo,\nneue\nwelt"),
             16
         );
     }
@@ -374,7 +245,7 @@ mod ropey_test {
     #[test]
     #[should_panic]
     fn offset_out_of_bounds_from_offset() {
-        PositionLC::from_offset(17, "h🥕llo,\nneue\nwelt");
+        Position::from_offset(17, "h🥕llo,\nneue\nwelt");
     }
 
     #[ignore] // WIP, see below.
@@ -382,9 +253,9 @@ mod ropey_test {
     #[should_panic]
     fn offset_out_of_bounds_to_offset() {
         // TODO: do we want this to panic?
-        PositionLC { line: 2, column: 5 }.to_offset("h🥕llo,\nneue\nwelt");
+        Position { line: 2, column: 5 }.to_offset("h🥕llo,\nneue\nwelt");
         // even this doesn't panic, that surprises me. Check.
-        PositionLC { line: 3, column: 5 }.to_offset("h🥕llo,\nneue\nwelt");
+        Position { line: 3, column: 5 }.to_offset("h🥕llo,\nneue\nwelt");
     }
 }
 
