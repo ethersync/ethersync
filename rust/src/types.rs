@@ -2,6 +2,7 @@
 use automerge::PatchAction;
 use operational_transform::{Operation as OTOperation, OperationSeq};
 use ropey::Rope;
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct TextDelta(pub Vec<TextOp>);
@@ -22,7 +23,7 @@ pub enum TextOp {
     Delete(usize),
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct EditorTextDelta(pub Vec<EditorTextOp>);
 
 impl IntoIterator for EditorTextDelta {
@@ -34,7 +35,7 @@ impl IntoIterator for EditorTextDelta {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct RevisionedEditorTextDelta {
     pub revision: usize,
     pub delta: EditorTextDelta,
@@ -63,13 +64,31 @@ impl RevisionedTextDelta {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+enum EditorProtocolMessage {
+    Open {
+        uri: DocumentUri,
+    },
+    Close {
+        uri: DocumentUri,
+    },
+    Edit {
+        uri: DocumentUri,
+        delta: RevisionedEditorTextDelta,
+    },
+    // TODO coming later:
+    // Cursor{uri: DocumentUri, ranges: RevisionedRanges}
+}
+
+type DocumentUri = String;
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct EditorTextOp {
     pub range: Range,
     pub replacement: String,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Range {
     pub anchor: Position,
     pub head: Position,
