@@ -31,7 +31,7 @@ local editorRevision = 0
 local prev_lines
 
 local function debug(tbl)
-    if true then
+    if false then
         client.notify("debug", tbl)
     end
 end
@@ -82,35 +82,37 @@ local function setCursor(head, anchor)
     })
 end
 
+local function applyDelta(delta)
+    local text_edits = {}
+    for replacement in delta do
+        local text_edit = {
+            range = {
+                start = replacement.range.anchor,
+                ["end"] = replacement.range.head,
+            },
+            newText = replacement.replacement,
+        }
+        table.insert(text_edits, text_edit)
+    end
+
+    local changedtick_before = vim.api.nvim_buf_get_changedtick(0)
+    vim.lsp.apply_text_edits(text_edits, 0, "utf-32")
+    local changedtick_after = vim.api.nvim_buf_get_changedtick(0)
+
+    debug({ changedtick_before = changedtick_before, changedtick_after = changedtick_after })
+
+    daemonRevision = daemonRevision + 1
+end
+
 -- Take an operation from the daemon and apply it to the editor.
 local function processOperationForEditor(method, parameters)
-    if method == "operation" then
-        local theEditorRevision = tonumber(parameters[1])
-        local changes = parameters[2]
+    if method == "edit" then
+        local _uri = parameters.uri --[[@diagnostic disable-line]]
+        local delta = parameters.delta.delta
+        local theEditorRevision = parameters.delta.revision
 
         if theEditorRevision == editorRevision then
-            local position = 0
-            for _, change in ipairs(changes) do
-                if type(change) == "number" then
-                    if change > 0 then
-                        position = position + change
-                    elseif change < 0 then
-                        ignoreNextUpdate()
-                        utils.delete(position, -change)
-                    else
-                        -- Ignore.
-                    end
-                elseif type(change) == "string" then
-                    ignoreNextUpdate()
-                    utils.insert(position, change)
-                end
-            end
-            -- log the operation to LOGFILE
-            local file = io.open("/tmp/ethersync-vim-log", "a")
-            file:write(vim.inspect(parameters) .. "\n")
-            file:close()
-
-            daemonRevision = daemonRevision + 1
+            applyDelta(delta)
         else
             -- Operation is not up-to-date to our content, skip it!
             -- The daemon will send a transformed one later.
@@ -140,16 +142,16 @@ end
 local function connect(socket_path)
     resetState()
 
-    params = { "client" }
+    local params = { "client" }
     if socket_path then
         table.insert(params, "--socket-path=" .. socket_path)
     end
     client = vim.lsp.rpc.start("ethersync", params, {
-        notification = function(method, params)
+        notification = function(method, notification_params)
             if online then
-                processOperationForEditor(method, params)
+                processOperationForEditor(method, notification_params)
             else
-                table.insert(opQueueForEditor, { method, params })
+                table.insert(opQueueForEditor, { method, notification_params })
             end
         end,
     })
@@ -232,8 +234,10 @@ function Ethersync()
                 return
             end
 
+            editorRevision = editorRevision + 1
+
             debug({ curr_lines = curr_lines, prev_lines = prev_lines })
-            local diff = sync.compute_diff(prev_lines, curr_lines, first_line, last_line, new_last_line, "utf-8", "\n")
+            local diff = sync.compute_diff(prev_lines, curr_lines, first_line, last_line, new_last_line, "utf-32", "\n")
             -- line/character indices in diff are zero-based.
             debug({ diff = diff })
 
@@ -262,43 +266,26 @@ function Ethersync()
 
             debug({ fixed_diff = diff })
 
-            -- For an insertion that references the line after the last one (happens for yyp on the last line, for example),
-            -- we need to add an empty line to the end of the previous buffer in order to look up the text correctly.
-            table.insert(prev_lines, "")
+            local rev_delta = {
+                delta = {
+                    {
+                        range = {
+                            anchor = diff.range.start,
+                            head = diff.range["end"],
+                        },
+                        replacement = diff.text,
+                    },
+                },
+                revision = daemonRevision,
+            }
 
-            -- Add some +1 here to convert it into a row range that starts at 1.
-            local start_row = diff.range.start.line + 1
-            local start_col = diff.range.start.character
-            local end_row = diff.range["end"].line + 1
-            local end_col = diff.range["end"].character
+            local uri = "file://" .. vim.api.nvim_buf_get_name(0)
+            local params = { uri = uri, delta = rev_delta }
 
-            debug({ start_row = start_row, start_col = start_col, end_row = end_row, end_col = end_col })
-
-            local range_start_char = utils.rowColToIndexInLines(start_row, start_col, prev_lines)
-            local range_end_char = utils.rowColToIndexInLines(end_row, end_col, prev_lines)
-
-            debug({ range_start_char = range_start_char, range_end_char = range_end_char })
-
-            local deleted_chars = range_end_char - range_start_char
-            if deleted_chars > 0 then
-                editorRevision = editorRevision + 1
-                if online then
-                    client.notify("delete", { "", daemonRevision, range_start_char, deleted_chars })
-                else
-                    table.insert(
-                        opQueueForDaemon,
-                        { "delete", { "", daemonRevision, range_start_char, deleted_chars } }
-                    )
-                end
-            end
-
-            if #diff.text > 0 then
-                editorRevision = editorRevision + 1
-                if online then
-                    client.notify("insert", { "", daemonRevision, range_start_char, diff.text })
-                else
-                    table.insert(opQueueForDaemon, { "insert", { "", daemonRevision, range_start_char, diff.text } })
-                end
+            if online then
+                client.notify("edit", params)
+            else
+                table.insert(opQueueForDaemon, { "edit", params })
             end
 
             prev_lines = curr_lines
