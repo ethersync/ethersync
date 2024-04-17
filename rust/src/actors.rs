@@ -228,14 +228,10 @@ impl MockSocket {
 #[cfg(test)]
 pub mod tests {
     use super::*;
-    /*
-    use crate::daemon::jsonrpc_to_docmessage;
-    use crate::daemon::DocMessage;
-    use crate::types::{factories::*, TextDelta};
-    */
+    use crate::types::{factories::*, EditorProtocolMessage, EditorTextOp};
     use tokio::{
         runtime::Runtime,
-        time::{/*timeout, */ Duration},
+        time::{timeout, Duration},
     };
 
     #[test]
@@ -278,11 +274,10 @@ pub mod tests {
         });
     }
 
-    /*
-    fn assert_vim_input_yields_text_deltas(
+    fn assert_vim_input_yields_replacements(
         initial_content: &str,
         input: &str,
-        expected: Vec<TextDelta>,
+        expected_replacements: Vec<EditorTextOp>,
     ) {
         let runtime = Runtime::new().expect("Could not create Tokio runtime");
         runtime.block_on(async {
@@ -294,15 +289,15 @@ pub mod tests {
                 let msg = socket.recv().await;
                 assert_eq!(msg["method"], "open");
 
-                for expected_delta in expected {
+                for expected_replacement in expected_replacements {
                     let msg = socket.recv().await;
-                    let docmessage = jsonrpc_to_docmessage(&msg.to_string())
-                        .expect("Could not convert JSON to DocMessage");
-                    if let DocMessage::RevDelta(rev_delta) = docmessage {
-                        let text_delta: TextDelta = rev_delta.delta.into();
-                        assert_eq!(text_delta, expected_delta);
+                    let message: EditorProtocolMessage = serde_json::from_str(&msg.to_string())
+                        .expect("Could not parse EditorProtocolMessage");
+                    if let EditorProtocolMessage::Edit{ delta, ..} = message {
+                        let actual_replacement = delta.delta.into_iter().next().expect("No replacements found in delta");
+                        assert_eq!(actual_replacement, expected_replacement);
                     } else {
-                        panic!("Expected RevDelta message, got something else");
+                        panic!("Expected edit message, got {:?}", message);
                     }
                 }
             })
@@ -318,43 +313,46 @@ pub mod tests {
     #[test]
     #[ignore]
     fn vim_sends_correct_delta() {
-        assert_vim_input_yields_text_deltas("", "ia", vec![insert(0, "a")]);
-        assert_vim_input_yields_text_deltas("a\n", "x", vec![delete(0, 1)]);
-        assert_vim_input_yields_text_deltas("abc\n", "lx", vec![delete(1, 1)]);
-        assert_vim_input_yields_text_deltas("abc\n", "vlld", vec![delete(0, 3)]);
-        assert_vim_input_yields_text_deltas("a\n", "rb", vec![delete(0, 1), insert(0, "b")]);
-        assert_vim_input_yields_text_deltas("a\n", "Ab", vec![insert(1, "b")]);
-        assert_vim_input_yields_text_deltas("a\n", "Ib", vec![insert(0, "b")]);
+        assert_vim_input_yields_replacements("", "ia", vec![replacement((0, 0), (0, 0), "a")]);
+        assert_vim_input_yields_replacements("a\n", "x", vec![replacement((0, 0), (0, 1), "")]);
 
-        assert_vim_input_yields_text_deltas("a\n", "O", vec![insert(0, "\n")]);
-        assert_vim_input_yields_text_deltas("a\nb\n", "dd", vec![delete(0, 2)]);
-        assert_vim_input_yields_text_deltas("a\nb\n", "jdd", vec![delete(1, 2)]);
+        /*
+        assert_vim_input_yields_replacements("a\n", "x", vec![delete(0, 1)]);
+        assert_vim_input_yields_replacements("abc\n", "lx", vec![delete(1, 1)]);
+        assert_vim_input_yields_replacements("abc\n", "vlld", vec![delete(0, 3)]);
+        assert_vim_input_yields_replacements("a\n", "rb", vec![delete(0, 1), insert(0, "b")]);
+        assert_vim_input_yields_replacements("a\n", "Ab", vec![insert(1, "b")]);
+        assert_vim_input_yields_replacements("a\n", "Ib", vec![insert(0, "b")]);
+
+        assert_vim_input_yields_replacements("a\n", "O", vec![insert(0, "\n")]);
+        assert_vim_input_yields_replacements("a\nb\n", "dd", vec![delete(0, 2)]);
+        assert_vim_input_yields_replacements("a\nb\n", "jdd", vec![delete(1, 2)]);
 
         // TODO: Fix this test.
-        //assert_vim_input_yields_text_deltas("a\n", "dd", vec![delete(0, 2)]);
+        //assert_vim_input_yields_replacements("a\n", "dd", vec![delete(0, 2)]);
 
-        assert_vim_input_yields_text_deltas("", "ia<Esc>dd", vec![insert(0, "a"), delete(0, 1)]);
+        assert_vim_input_yields_replacements("", "ia<Esc>dd", vec![insert(0, "a"), delete(0, 1)]);
 
-        assert_vim_input_yields_text_deltas(
+        assert_vim_input_yields_replacements(
             "",
             "ia\na",
             vec![insert(0, "a"), insert(1, "\n"), insert(2, "a")],
         );
 
-        assert_vim_input_yields_text_deltas(
+        assert_vim_input_yields_replacements(
             "a\n",
             ":s/a/b<CR>",
             vec![delete(0, 1), insert(0, "b")],
         );
 
         // TODO: Fix this.
-        //assert_vim_input_yields_text_deltas(
+        //assert_vim_input_yields_replacements(
         //    "a\n",
         //    "ddix<CR><BS>",
         //    vec![delete(0, 2), insert(0, "x"), insert(1, "\n"), delete(1, 1)],
         //);
 
-        assert_vim_input_yields_text_deltas(
+        assert_vim_input_yields_replacements(
             "",
             "ix<CR><BS>",
             vec![insert(0, "x"), insert(1, "\n"), delete(1, 1)],
@@ -363,18 +361,18 @@ pub mod tests {
         // When opening a file without trailing newline, it is expected that Vim "wants" to add an
         // TODO: Currently, this is disabled in code.
         //// extra newline.
-        //assert_vim_input_yields_text_deltas("a", "", vec![insert(1, "\n")]);
+        //assert_vim_input_yields_replacements("a", "", vec![insert(1, "\n")]);
 
         // TODO: Tests that are a bit weird:
 
         // A direct insert(1, "\n") would be nicer.
-        assert_vim_input_yields_text_deltas("a\n", "o", vec![delete(1, 1), insert(1, "\n\n")]);
+        assert_vim_input_yields_replacements("a\n", "o", vec![delete(1, 1), insert(1, "\n\n")]);
 
         // A direct insert(1, "\na") would be nicer.
-        assert_vim_input_yields_text_deltas("a\n", "yyp", vec![delete(1, 1), insert(1, "\na\n")]);
+        assert_vim_input_yields_replacements("a\n", "yyp", vec![delete(1, 1), insert(1, "\na\n")]);
 
         // vec![delete(1, 1), insert(1, " ")] would be nicer.
-        assert_vim_input_yields_text_deltas("a\nb\n", "J", vec![insert(1, " b"), delete(3, 2)]);
+        assert_vim_input_yields_replacements("a\nb\n", "J", vec![insert(1, " b"), delete(3, 2)]);
+        */
     }
-    */
 }

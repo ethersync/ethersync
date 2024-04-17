@@ -589,6 +589,26 @@ pub mod factories {
     pub fn rev_delta(revision: usize, delta: TextDelta) -> RevisionedTextDelta {
         RevisionedTextDelta::new(revision, delta)
     }
+
+    pub fn replacement(
+        anchor: (usize, usize),
+        head: (usize, usize),
+        replacement: &str,
+    ) -> EditorTextOp {
+        EditorTextOp {
+            range: Range {
+                anchor: Position {
+                    line: anchor.0,
+                    character: anchor.1,
+                },
+                head: Position {
+                    line: head.0,
+                    character: head.1,
+                },
+            },
+            replacement: replacement.to_string(),
+        }
+    }
 }
 
 #[cfg(test)]
