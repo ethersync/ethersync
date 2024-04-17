@@ -93,9 +93,8 @@ impl Actor for Neovim {
 
         // TODO: There seems to be a bug when enabling multiline insertions and/or multi-line
         // deletions. Something to do with empty lines?
-        if false {
-            //rand::thread_rng().gen_bool(0.5) {
-            let deletion_components = vec!["x"]; //, "dd", "vllld"];
+        if rand::thread_rng().gen_bool(0.5) {
+            let deletion_components = vec!["x", "dd", "vllld"];
             vim_normal_command.push_str(&random_string(
                 rand_usize_inclusive(1, 2),
                 &deletion_components,
@@ -103,7 +102,7 @@ impl Actor for Neovim {
         } else {
             vim_normal_command.push('i');
             //let vim_components = vec!["x", "🥕", "_", "💚"]; //, "\n"];
-            let vim_components = vec!["x", "_"]; //, "\n"];
+            let vim_components = vec!["x", "_", "\n"];
             vim_normal_command
                 .push_str(&random_string(rand_usize_inclusive(1, 10), &vim_components));
         }
@@ -322,6 +321,12 @@ pub mod tests {
         assert_vim_input_yields_text_deltas("a\n", "dd", vec![delete(0, 2)]);
 
         assert_vim_input_yields_text_deltas(
+            "",
+            "ia\na",
+            vec![insert(0, "a"), insert(1, "\n"), insert(2, "a")],
+        );
+
+        assert_vim_input_yields_text_deltas(
             "a\n",
             ":s/a/b<CR>",
             vec![delete(0, 1), insert(0, "b")],
@@ -332,6 +337,12 @@ pub mod tests {
             "ddix<CR><BS>",
             vec![delete(0, 2), insert(0, "x"), insert(1, "\n"), delete(2, 1)],
         );
+
+        /*assert_vim_input_yields_text_deltas(
+            "",
+            "ix<CR><BS>",
+            vec![insert(0, "x"), insert(1, "\n"), delete(1, 1)],
+        );*/
 
         // When opening a file without trailing newline, it is expected that Vim "wants" to add an
         // extra newline.

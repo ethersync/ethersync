@@ -30,6 +30,12 @@ local editorRevision = 0
 -- calculate the difference between the previous and the current content.
 local prev_lines
 
+local function debug(tbl)
+    if true then
+        client.notify("debug", tbl)
+    end
+end
+
 local function ignoreNextUpdate()
     local nextTick = vim.api.nvim_buf_get_changedtick(0) + 1
     ignored_ticks[nextTick] = true
@@ -208,7 +214,7 @@ function Ethersync()
             last_line,
             new_last_line
         )
-            --client.notify("debug", { first_line = first_line, last_line = last_line, new_last_line = new_last_line })
+            debug({ first_line = first_line, last_line = last_line, new_last_line = new_last_line })
             local curr_lines = vim.api.nvim_buf_get_lines(0, 0, -1, true)
 
             -- Did the change come from us? If so, ignore it.
@@ -221,26 +227,23 @@ function Ethersync()
             -- TODO: dirty fix that I don't understand any more
             table.insert(curr_lines, "")
             table.insert(prev_lines, "")
-            table.insert(prev_lines, "")
 
-            --client.notify("debug", { curr_lines = curr_lines, prev_lines = prev_lines })
+            debug({ curr_lines = curr_lines, prev_lines = prev_lines })
             local diff = sync.compute_diff(prev_lines, curr_lines, first_line, last_line, new_last_line, "utf-8", "\n")
-            --client.notify("debug", { diff = diff })
+            debug({ diff = diff })
 
+            -- Add some +1 here to convert it into a row range that starts at 1.
             local start_row = diff.range.start.line + 1
             local start_col = diff.range.start.character
             local end_row = diff.range["end"].line + 1
             local end_col = diff.range["end"].character
 
-            --client.notify(
-            --    "debug",
-            --    { start_row = start_row, start_col = start_col, end_row = end_row, end_col = end_col }
-            --)
+            debug({ start_row = start_row, start_col = start_col, end_row = end_row, end_col = end_col })
 
             local range_start_char = utils.rowColToIndexInLines(start_row, start_col, prev_lines)
             local range_end_char = utils.rowColToIndexInLines(end_row, end_col, prev_lines)
 
-            --client.notify("debug", { range_start_char = range_start_char, range_end_char = range_end_char })
+            debug({ range_start_char = range_start_char, range_end_char = range_end_char })
 
             local deleted_chars = range_end_char - range_start_char
             if deleted_chars > 0 then

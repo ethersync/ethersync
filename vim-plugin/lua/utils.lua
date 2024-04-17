@@ -62,7 +62,7 @@ function M.byteOffsetToCharOffset(byteOffset, content)
         if value ~= -1 then
             return value + 1
         else
-            error("Could not look up byte offset " .. tostring(byteOffset) .. " in given content.")
+            error("Could not look up byte offset " .. tostring(byteOffset) .. " in content '" .. content .. "'")
         end
     end
     return value
@@ -121,6 +121,7 @@ function M.rowColToIndex(row, col)
     return M.byteOffsetToCharOffset(byte)
 end
 
+-- Same as before, but with a given line array.
 function M.rowColToIndexInLines(row, col, lines)
     local byte = 0
     for i = 1, row - 1 do
@@ -199,7 +200,9 @@ function M.testAllUnits()
     assertEqual(M.rowColToIndex(3, 4), 7)
 
     assertEqual(M.rowColToIndexInLines(1, 0, { "x", "y", "zöz" }), 0)
+    assertEqual(M.rowColToIndexInLines(1, 1, { "x", "y", "zöz" }), 1)
     assertEqual(M.rowColToIndexInLines(2, 0, { "x", "y", "zöz" }), 2)
+    assertEqual(M.rowColToIndexInLines(2, 1, { "x", "y", "zöz" }), 3)
     assertEqual(M.rowColToIndexInLines(3, 4, { "x", "y", "zöz" }), 7)
 
     print("Ethersync tests successful!")

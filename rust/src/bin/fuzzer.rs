@@ -27,7 +27,7 @@ fn create_ethersync_dir(dir: &Path) {
 #[tokio::main]
 async fn main() {
     let subscriber = FmtSubscriber::builder()
-        .with_max_level(tracing::Level::DEBUG)
+        .with_max_level(tracing::Level::INFO)
         .finish();
     tracing::subscriber::set_global_default(subscriber)
         .expect("Setting default log subscriber failed");
@@ -43,6 +43,7 @@ async fn main() {
 
     let nvim = Neovim::new(file).await;
 
+    /*
     let peer = Daemon::new(
         Some(daemon.tcp_address()),
         Path::new("/tmp/etherbonk"),
@@ -51,12 +52,13 @@ async fn main() {
 
     let mut nvim2 = Neovim::new(file2).await;
     nvim2.etherbonk().await;
+    */
 
     let mut actors: HashMap<String, Box<dyn Actor>> = HashMap::new();
     actors.insert("daemon".to_string(), Box::new(daemon));
     actors.insert("nvim".to_string(), Box::new(nvim));
-    actors.insert("peer".to_string(), Box::new(peer));
-    actors.insert("nvim2".to_string(), Box::new(nvim2));
+    //actors.insert("peer".to_string(), Box::new(peer));
+    //actors.insert("nvim2".to_string(), Box::new(nvim2));
 
     sleep(std::time::Duration::from_millis(100)).await;
 
@@ -71,7 +73,7 @@ async fn main() {
     .expect_err("Random edits died unexpectedly");
 
     info!("Sleep a bit, so that the actors can sync");
-    sleep(std::time::Duration::from_millis(500)).await;
+    sleep(std::time::Duration::from_millis(1000)).await;
     // TODO: Maybe broadcast "ready" message? Wait for roundtrip?
 
     let mut contents: HashMap<String, String> = HashMap::new();
