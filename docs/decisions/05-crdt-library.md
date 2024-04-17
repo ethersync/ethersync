@@ -61,7 +61,7 @@ General:
 * "ergonomic" API (the interface is easy to understand and to use)
     * almost bad? It's quite an extensive API and that makes it a bit complex and we'd need to invest in learning it.
         * For example there are multiple "levels of abstraction" available and it's not yet clear which one we would want to operate on.
-        * This might be, for our use-case, accidental complexity rather than essential, because we don't need all the power that 
+        * This might be, for our use-case, accidental complexity rather than essential, because we don't need all the power that
 * how is the community around the library?
     * ✅ active and friendly community
 

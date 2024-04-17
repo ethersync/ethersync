@@ -5,7 +5,7 @@
   <script lang="ts">
   	export let name: string;
   </script>
- 
+
   As well as validating the code for CI.
   */
 
