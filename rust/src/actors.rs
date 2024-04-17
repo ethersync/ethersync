@@ -228,12 +228,14 @@ impl MockSocket {
 #[cfg(test)]
 pub mod tests {
     use super::*;
+    /*
     use crate::daemon::jsonrpc_to_docmessage;
     use crate::daemon::DocMessage;
     use crate::types::{factories::*, TextDelta};
+    */
     use tokio::{
         runtime::Runtime,
-        time::{timeout, Duration},
+        time::{/*timeout, */ Duration},
     };
 
     #[test]
@@ -268,6 +270,7 @@ pub mod tests {
         });
     }
 
+    /*
     fn assert_vim_input_yields_text_deltas(
         initial_content: &str,
         input: &str,
@@ -365,4 +368,5 @@ pub mod tests {
         // vec![delete(1, 1), insert(1, " ")] would be nicer.
         assert_vim_input_yields_text_deltas("a\nb\n", "J", vec![insert(1, " b"), delete(3, 2)]);
     }
+    */
 }

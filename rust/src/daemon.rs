@@ -879,7 +879,8 @@ mod tests {
 
             let delta = insert(0, "foobar");
 
-            document.apply_delta_to_doc(&delta.into());
+            let ed_delta = EditorTextDelta::from_delta(delta, &text);
+            document.apply_delta_to_doc(&ed_delta);
             assert_eq!(document.current_content().unwrap(), "foobar");
         }
 
@@ -891,7 +892,8 @@ mod tests {
 
             let delta = delete(3, 3);
 
-            document.apply_delta_to_doc(&delta.into());
+            let ed_delta = EditorTextDelta::from_delta(delta, &text);
+            document.apply_delta_to_doc(&ed_delta);
             assert_eq!(document.current_content().unwrap(), "foo");
         }
 
@@ -909,7 +911,8 @@ mod tests {
             delta.delete(2); // "be"
             delta.insert("you");
 
-            document.apply_delta_to_doc(&delta.into());
+            let ed_delta = EditorTextDelta::from_delta(delta, &text);
+            document.apply_delta_to_doc(&ed_delta);
             assert_eq!(
                 document.current_content().unwrap(),
                 "To me or to you, that is the question"
@@ -931,7 +934,10 @@ mod tests {
                 RevisionedEditorTextDelta {
                     revision: 0,
                     delta: EditorTextDelta(vec![EditorTextOp {
-                        range: Range { anchor: 1, head: 1 },
+                        range: Range {
+                            anchor: Position { line: 0, column: 1 },
+                            head: Position { line: 0, column: 1 }
+                        },
                         replacement: "a".to_string(),
                     }])
                 }
@@ -952,7 +958,10 @@ mod tests {
                 RevisionedEditorTextDelta {
                     revision: 2,
                     delta: EditorTextDelta(vec![EditorTextOp {
-                        range: Range { anchor: 1, head: 4 },
+                        range: Range {
+                            anchor: Position { line: 0, column: 1 },
+                            head: Position { line: 0, column: 4 }
+                        },
                         replacement: "".to_string(),
                     }])
                 }
