@@ -41,7 +41,13 @@ function M.contentOfCurrentBuffer()
     local lines = vim.api.nvim_buf_get_lines(buffer, start, end_, strict_indexing)
     -- TODO: might be brittle to rely on \n as line delimiter?
     -- TODO: what happens if we open a latin-1 encoded file?
-    return vim.fn.join(lines, "\n")
+    local result = vim.fn.join(lines, "\n")
+
+    --if vim.bo.eol then
+    --    result = result .. "\n"
+    --end
+
+    return result
 end
 
 -- Converts a UTF-8 byte offset to a Unicode character offset.

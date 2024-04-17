@@ -205,6 +205,11 @@ function Ethersync()
 
     prev_lines = vim.api.nvim_buf_get_lines(0, 0, -1, true)
 
+    -- If there are no lines, set 'eol' to true. We didn't find a way to tell if the file contains '\n' or ''.
+    if #prev_lines == 0 then
+        vim.bo.eol = false
+    end
+
     vim.api.nvim_buf_attach(0, false, {
         on_lines = function(
             _the_literal_string_lines --[[@diagnostic disable-line]],
@@ -214,6 +219,9 @@ function Ethersync()
             last_line,
             new_last_line
         )
+            -- line counts that we get called with are zero-based.
+            -- last_line and new_last_line are exclusive
+
             debug({ first_line = first_line, last_line = last_line, new_last_line = new_last_line })
             local curr_lines = vim.api.nvim_buf_get_lines(0, 0, -1, true)
 
@@ -224,13 +232,39 @@ function Ethersync()
                 return
             end
 
-            -- TODO: dirty fix that I don't understand any more
-            table.insert(curr_lines, "")
-            table.insert(prev_lines, "")
-
             debug({ curr_lines = curr_lines, prev_lines = prev_lines })
             local diff = sync.compute_diff(prev_lines, curr_lines, first_line, last_line, new_last_line, "utf-8", "\n")
+            -- line/character indices in diff are zero-based.
             debug({ diff = diff })
+
+            -- Sometimes, Vim deletes full lines by deleting the last line, plus an imaginary newline at the end. For example, to delete the second line, Vim would delete from (line: 1, column: 0) to (line: 2, column 0).
+            -- But, in the case of deleting the last line, what we expect in the rest of Ethersync is to delete the newline *before* the line.
+            -- So let's change the deleted range to (line: 0, column: [last character of the first line]) to (line: 1, column: [last character of the second line]).
+
+            if
+                diff.range["end"].line == #prev_lines
+                and diff.range.start.line == #prev_lines - 1
+                and diff.range["end"].character == 0
+                and diff.range.start.character == 0
+            then
+                if diff.range.start.line > 0 then
+                    diff.range.start.character = #prev_lines[diff.range.start.line]
+                    diff.range.start.line = diff.range.start.line - 1
+                    diff.range["end"].character = #prev_lines[diff.range["end"].line]
+                    diff.range["end"].line = diff.range["end"].line - 1
+                else
+                    -- Special case: if start line already is 0, we can't shift the deletion backwards like that.
+                    -- TODO: Find out whether or not there is a newline in the end?
+                    diff.range["end"].character = #prev_lines[diff.range["end"].line]
+                    diff.range["end"].line = diff.range["end"].line - 1
+                end
+            end
+
+            debug({ fixed_diff = diff })
+
+            -- For an insertion that references the line after the last one (happens for yyp on the last line, for example),
+            -- we need to add an empty line to the end of the previous buffer in order to look up the text correctly.
+            table.insert(prev_lines, "")
 
             -- Add some +1 here to convert it into a row range that starts at 1.
             local start_row = diff.range.start.line + 1
@@ -271,13 +305,14 @@ function Ethersync()
         end,
     })
 
-    if vim.api.nvim_get_option_value("fixeol", { buf = 0 }) then
-        if not vim.api.nvim_get_option_value("eol", { buf = 0 }) then
-            utils.appendNewline()
-            vim.api.nvim_set_option_value("eol", true, { buf = 0 })
-        end
-        vim.api.nvim_set_option_value("fixeol", false, { buf = 0 })
-    end
+    -- TODO: Re-enable this?
+    --if vim.api.nvim_get_option_value("fixeol", { buf = 0 }) then
+    --    if not vim.api.nvim_get_option_value("eol", { buf = 0 }) then
+    --        utils.appendNewline()
+    --        vim.api.nvim_set_option_value("eol", true, { buf = 0 })
+    --    end
+    --    vim.api.nvim_set_option_value("fixeol", false, { buf = 0 })
+    --end
 
     --vim.api.nvim_create_autocmd({ "CursorMoved", "CursorMovedI" }, {
     --    callback = function()
