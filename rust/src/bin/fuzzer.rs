@@ -43,7 +43,6 @@ async fn main() {
 
     let nvim = Neovim::new(file).await;
 
-    /*
     let peer = Daemon::new(
         Some(daemon.tcp_address()),
         Path::new("/tmp/etherbonk"),
@@ -52,13 +51,12 @@ async fn main() {
 
     let mut nvim2 = Neovim::new(file2).await;
     nvim2.etherbonk().await;
-    */
 
     let mut actors: HashMap<String, Box<dyn Actor>> = HashMap::new();
     actors.insert("daemon".to_string(), Box::new(daemon));
     actors.insert("nvim".to_string(), Box::new(nvim));
-    //actors.insert("peer".to_string(), Box::new(peer));
-    //actors.insert("nvim2".to_string(), Box::new(nvim2));
+    actors.insert("peer".to_string(), Box::new(peer));
+    actors.insert("nvim2".to_string(), Box::new(nvim2));
 
     sleep(std::time::Duration::from_millis(100)).await;
 
