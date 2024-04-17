@@ -1,7 +1,7 @@
 #![allow(dead_code)]
 use crate::ot::OTServer;
 use crate::types::{
-    EditorTextDelta, EditorTextOp, Position, Range, RevisionedEditorTextDelta, RevisionedTextDelta,
+    EditorProtocolMessage, EditorTextDelta, RevisionedEditorTextDelta, RevisionedTextDelta,
     TextDelta, TextOp,
 };
 use anyhow::Result;
@@ -45,6 +45,17 @@ pub enum DocMessage {
         state: SyncState,
         response_tx: oneshot::Sender<(SyncState, Option<Message>)>,
     },
+}
+
+impl From<EditorProtocolMessage> for DocMessage {
+    fn from(rpc_message: EditorProtocolMessage) -> Self {
+        match rpc_message {
+            // EditorProtocolMessage::Debug => DocMessage::Debug,
+            EditorProtocolMessage::Open { uri: _ } => DocMessage::Open,
+            EditorProtocolMessage::Close { uri: _ } => DocMessage::Close,
+            EditorProtocolMessage::Edit { uri: _, delta } => DocMessage::RevDelta(delta),
+        }
+    }
 }
 
 // These messages are sent to tasks that own peer sync states.
@@ -644,9 +655,10 @@ async fn listen_socket(
                             match line_maybe {
                                 Ok(Some(line)) => {
                                     debug!("Received line from editor: {:#?}", line);
-                                    match jsonrpc_to_docmessage(&line) {
+                                    let msg: Result<EditorProtocolMessage, serde_json::Error> = serde_json::from_str(&line);
+                                    match msg {
                                         Ok(message) => {
-                                            tx.send(message).await?;
+                                            tx.send(message.into()).await?;
                                         }
                                         Err(e) => {
                                             error!("Failed to parse message from editor: {:#?}", e);
@@ -730,128 +742,6 @@ async fn sync_receive(mut sync_receiver: SyncReceiver) {
     warn!("Sync Receive loop stopped");
 }
 
-// TODO: Move this somewhere else? We set it pub to use it from actors::tests.
-pub fn jsonrpc_to_docmessage(s: &str) -> Result<DocMessage> {
-    let json = serde_json::from_str(s)?;
-    match json {
-        serde_json::Value::Object(map) => {
-            if let Some(serde_json::Value::String(method)) = map.get("method") {
-                match method.as_str() {
-                    "debug" => Ok(DocMessage::Debug),
-                    "open" => Ok(DocMessage::Open),
-                    "close" => Ok(DocMessage::Close),
-                    "insert" => {
-                        if let Some(serde_json::Value::Array(array)) = map.get("params") {
-                            if let Some(serde_json::Value::Number(revision)) = array.get(1) {
-                                if let Some(serde_json::Value::Number(position)) = array.get(2) {
-                                    if let Some(serde_json::Value::String(text)) = array.get(3) {
-                                        let revision =
-                                            revision.as_u64().expect("Failed to parse revision");
-                                        let position =
-                                            position.as_u64().expect("Failed to parse position");
-                                        let text = text.as_str().to_string();
-                                        // TODO: parse correctly from new protocol
-                                        let op = EditorTextOp {
-                                            range: Range {
-                                                anchor: Position {
-                                                    line: 0,
-                                                    column: position as usize,
-                                                },
-                                                head: Position {
-                                                    line: 0,
-                                                    column: position as usize,
-                                                },
-                                            },
-                                            replacement: text,
-                                        };
-                                        let delta = EditorTextDelta(vec![op]);
-                                        Ok(DocMessage::RevDelta(RevisionedEditorTextDelta {
-                                            revision: revision as usize,
-                                            delta,
-                                        }))
-                                    } else {
-                                        Err(anyhow::anyhow!(
-                                            "Could not find text param in position #3"
-                                        ))
-                                    }
-                                } else {
-                                    Err(anyhow::anyhow!(
-                                        "Could not find position param in position #2"
-                                    ))
-                                }
-                            } else {
-                                Err(anyhow::anyhow!(
-                                    "Could not find revision param in position #1"
-                                ))
-                            }
-                        } else {
-                            Err(anyhow::anyhow!("Could not find params for insert method"))
-                        }
-                    }
-                    "delete" => {
-                        if let Some(serde_json::Value::Array(array)) = map.get("params") {
-                            if let Some(serde_json::Value::Number(revision)) = array.get(1) {
-                                if let Some(serde_json::Value::Number(position)) = array.get(2) {
-                                    if let Some(serde_json::Value::Number(length)) = array.get(3) {
-                                        let revision =
-                                            revision.as_u64().expect("Failed to parse revision");
-                                        let position =
-                                            position.as_u64().expect("Failed to parse position");
-
-                                        let length =
-                                            length.as_u64().expect("Failed to parse length");
-
-                                        // TODO: parse correctly from new protocol
-                                        let op = EditorTextOp {
-                                            range: Range {
-                                                anchor: Position {
-                                                    line: 0,
-                                                    column: position as usize,
-                                                },
-                                                head: Position {
-                                                    line: 0,
-                                                    column: position as usize + length as usize,
-                                                },
-                                            },
-                                            replacement: String::new(),
-                                        };
-                                        let delta = EditorTextDelta(vec![op]);
-                                        Ok(DocMessage::RevDelta(RevisionedEditorTextDelta {
-                                            revision: revision as usize,
-                                            delta,
-                                        }))
-                                    } else {
-                                        Err(anyhow::anyhow!(
-                                            "Could not find length param in position #3"
-                                        ))
-                                    }
-                                } else {
-                                    Err(anyhow::anyhow!(
-                                        "Could not find position param in position #2"
-                                    ))
-                                }
-                            } else {
-                                Err(anyhow::anyhow!("Could not find params for delete method"))
-                            }
-                        } else {
-                            Err(anyhow::anyhow!(
-                                "Could not find revision param in position #1"
-                            ))
-                        }
-                    }
-                    _ => Err(anyhow::anyhow!("Unknown JSON method: {}", method)),
-                }
-            } else {
-                Err(anyhow::anyhow!("Could not find method in JSON message"))
-            }
-        }
-        _ => Err(anyhow::anyhow!(
-            "JSON message is not an object: {:#?}",
-            json
-        )),
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -917,57 +807,6 @@ mod tests {
                 document.current_content().unwrap(),
                 "To me or to you, that is the question"
             );
-        }
-    }
-
-    #[test]
-    fn json_to_docmessage() {
-        let json = serde_json::json!({
-            "method": "insert",
-            "params": ["", 0, 1, "a"]
-        });
-
-        let message = jsonrpc_to_docmessage(&json.to_string()).unwrap();
-        if let DocMessage::RevDelta(delta) = message {
-            assert_eq!(
-                delta,
-                RevisionedEditorTextDelta {
-                    revision: 0,
-                    delta: EditorTextDelta(vec![EditorTextOp {
-                        range: Range {
-                            anchor: Position { line: 0, column: 1 },
-                            head: Position { line: 0, column: 1 }
-                        },
-                        replacement: "a".to_string(),
-                    }])
-                }
-            );
-        } else {
-            panic!("Expected DocMessage::Delta, got something else.");
-        }
-
-        let json = serde_json::json!({
-            "method": "delete",
-            "params": ["", 2, 1, 3]
-        });
-
-        let message = jsonrpc_to_docmessage(&json.to_string()).unwrap();
-        if let DocMessage::RevDelta(delta) = message {
-            assert_eq!(
-                delta,
-                RevisionedEditorTextDelta {
-                    revision: 2,
-                    delta: EditorTextDelta(vec![EditorTextOp {
-                        range: Range {
-                            anchor: Position { line: 0, column: 1 },
-                            head: Position { line: 0, column: 4 }
-                        },
-                        replacement: "".to_string(),
-                    }])
-                }
-            );
-        } else {
-            panic!("Expected DocMessage::Delta, got something else.");
         }
     }
 }

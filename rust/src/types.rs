@@ -2,6 +2,7 @@
 use automerge::PatchAction;
 use operational_transform::{Operation as OTOperation, OperationSeq};
 use ropey::Rope;
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct TextDelta(pub Vec<TextOp>);
@@ -22,7 +23,7 @@ pub enum TextOp {
     Delete(usize),
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct EditorTextDelta(pub Vec<EditorTextOp>);
 
 impl IntoIterator for EditorTextDelta {
@@ -34,7 +35,7 @@ impl IntoIterator for EditorTextDelta {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct RevisionedEditorTextDelta {
     pub revision: usize,
     pub delta: EditorTextDelta,
@@ -63,13 +64,32 @@ impl RevisionedTextDelta {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "method", content = "params", rename_all = "camelCase")]
+pub enum EditorProtocolMessage {
+    Open {
+        uri: DocumentUri,
+    },
+    Close {
+        uri: DocumentUri,
+    },
+    Edit {
+        uri: DocumentUri,
+        delta: RevisionedEditorTextDelta,
+    },
+    // TODO coming later:
+    // Cursor{uri: DocumentUri, ranges: RevisionedRanges}
+}
+
+type DocumentUri = String;
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct EditorTextOp {
     pub range: Range,
     pub replacement: String,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Range {
     pub anchor: Position,
     pub head: Position,
@@ -84,7 +104,7 @@ impl Range {
     #[must_use]
     pub fn is_forward(&self) -> bool {
         (self.anchor.line < self.head.line)
-            || (self.anchor.line == self.head.line && self.anchor.column <= self.head.column)
+            || (self.anchor.line == self.head.line && self.anchor.character <= self.head.character)
     }
 
     #[must_use]
@@ -99,10 +119,10 @@ impl Range {
     }
 }
 
-#[derive(Debug, Default, Clone, PartialEq)]
+#[derive(Debug, Default, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Position {
     pub line: usize,
-    pub column: usize,
+    pub character: usize,
 }
 
 impl Position {
@@ -110,13 +130,13 @@ impl Position {
     fn from_offset(full_offset: usize, content: &str) -> Self {
         let rope = Rope::from_str(content);
         let line = rope.char_to_line(full_offset);
-        let column = full_offset - rope.line_to_char(line);
-        Self { line, column }
+        let character = full_offset - rope.line_to_char(line);
+        Self { line, character }
     }
 
     fn to_offset(&self, content: &str) -> usize {
         let rope = Rope::from_str(content);
-        rope.line_to_char(self.line) + self.column
+        rope.line_to_char(self.line) + self.character
     }
 }
 
@@ -128,12 +148,19 @@ mod ropey_test {
     fn zero_offset() {
         assert_eq!(
             //       position           0123456 78901 2345
-            //       column             0123456 01234 0124
+            //       character             0123456 01234 0124
             Position::from_offset(0, "hallo,\nneue\nwelt"),
-            Position { line: 0, column: 0 }
+            Position {
+                line: 0,
+                character: 0
+            }
         );
         assert_eq!(
-            Position { line: 0, column: 0 }.to_offset("hallo,\nneue\nwelt"),
+            Position {
+                line: 0,
+                character: 0
+            }
+            .to_offset("hallo,\nneue\nwelt"),
             0
         );
     }
@@ -142,18 +169,32 @@ mod ropey_test {
     fn more_offset_first_line() {
         assert_eq!(
             Position::from_offset(3, "hallo,\nneue\nwelt"),
-            Position { line: 0, column: 3 }
+            Position {
+                line: 0,
+                character: 3
+            }
         );
         assert_eq!(
             Position::from_offset(3, "h🥕llo,\nneue\nwelt"),
-            Position { line: 0, column: 3 }
+            Position {
+                line: 0,
+                character: 3
+            }
         );
         assert_eq!(
-            Position { line: 0, column: 3 }.to_offset("hallo,\nneue\nwelt"),
+            Position {
+                line: 0,
+                character: 3
+            }
+            .to_offset("hallo,\nneue\nwelt"),
             3
         );
         assert_eq!(
-            Position { line: 0, column: 3 }.to_offset("h🥕llo,\nneue\nwelt"),
+            Position {
+                line: 0,
+                character: 3
+            }
+            .to_offset("h🥕llo,\nneue\nwelt"),
             3
         );
     }
@@ -162,34 +203,62 @@ mod ropey_test {
     fn offset_second_line() {
         assert_eq!(
             Position::from_offset(7, "hallo,\nneue\nwelt"),
-            Position { line: 1, column: 0 }
+            Position {
+                line: 1,
+                character: 0
+            }
         );
         assert_eq!(
             Position::from_offset(7, "h🥕llo,\nneue\nwelt"),
-            Position { line: 1, column: 0 }
+            Position {
+                line: 1,
+                character: 0
+            }
         );
         assert_eq!(
             Position::from_offset(9, "hallo,\nneue\nwelt"),
-            Position { line: 1, column: 2 }
+            Position {
+                line: 1,
+                character: 2
+            }
         );
         assert_eq!(
             Position::from_offset(9, "h🥕llo,\nneue\nwelt"),
-            Position { line: 1, column: 2 }
+            Position {
+                line: 1,
+                character: 2
+            }
         );
         assert_eq!(
-            Position { line: 1, column: 0 }.to_offset("hallo,\nneue\nwelt"),
+            Position {
+                line: 1,
+                character: 0
+            }
+            .to_offset("hallo,\nneue\nwelt"),
             7
         );
         assert_eq!(
-            Position { line: 1, column: 0 }.to_offset("h🥕llo,\nneue\nwelt"),
+            Position {
+                line: 1,
+                character: 0
+            }
+            .to_offset("h🥕llo,\nneue\nwelt"),
             7
         );
         assert_eq!(
-            Position { line: 1, column: 2 }.to_offset("hallo,\nneue\nwelt"),
+            Position {
+                line: 1,
+                character: 2
+            }
+            .to_offset("hallo,\nneue\nwelt"),
             9
         );
         assert_eq!(
-            Position { line: 1, column: 2 }.to_offset("h🥕llo,\nneue\nwelt"),
+            Position {
+                line: 1,
+                character: 2
+            }
+            .to_offset("h🥕llo,\nneue\nwelt"),
             9
         );
     }
@@ -198,34 +267,62 @@ mod ropey_test {
     fn offset_third_line() {
         assert_eq!(
             Position::from_offset(12, "hallo,\nneue\nwelt"),
-            Position { line: 2, column: 0 }
+            Position {
+                line: 2,
+                character: 0
+            }
         );
         assert_eq!(
             Position::from_offset(12, "h🥕llo,\nneue\nwelt"),
-            Position { line: 2, column: 0 }
+            Position {
+                line: 2,
+                character: 0
+            }
         );
         assert_eq!(
             Position::from_offset(15, "hallo,\nneue\nwelt"),
-            Position { line: 2, column: 3 }
+            Position {
+                line: 2,
+                character: 3
+            }
         );
         assert_eq!(
             Position::from_offset(15, "h🥕llo,\nneue\nwelt"),
-            Position { line: 2, column: 3 }
+            Position {
+                line: 2,
+                character: 3
+            }
         );
         assert_eq!(
-            Position { line: 2, column: 0 }.to_offset("hallo,\nneue\nwelt"),
+            Position {
+                line: 2,
+                character: 0
+            }
+            .to_offset("hallo,\nneue\nwelt"),
             12
         );
         assert_eq!(
-            Position { line: 2, column: 0 }.to_offset("h🥕llo,\nneue\nwelt"),
+            Position {
+                line: 2,
+                character: 0
+            }
+            .to_offset("h🥕llo,\nneue\nwelt"),
             12
         );
         assert_eq!(
-            Position { line: 2, column: 3 }.to_offset("hallo,\nneue\nwelt"),
+            Position {
+                line: 2,
+                character: 3
+            }
+            .to_offset("hallo,\nneue\nwelt"),
             15
         );
         assert_eq!(
-            Position { line: 2, column: 3 }.to_offset("h🥕llo,\nneue\nwelt"),
+            Position {
+                line: 2,
+                character: 3
+            }
+            .to_offset("h🥕llo,\nneue\nwelt"),
             15
         );
     }
@@ -234,10 +331,17 @@ mod ropey_test {
     fn last_implicit_newline_does_not_panic() {
         assert_eq!(
             Position::from_offset(16, "h🥕llo,\nneue\nwelt"),
-            Position { line: 2, column: 4 }
+            Position {
+                line: 2,
+                character: 4
+            }
         );
         assert_eq!(
-            Position { line: 2, column: 4 }.to_offset("h🥕llo,\nneue\nwelt"),
+            Position {
+                line: 2,
+                character: 4
+            }
+            .to_offset("h🥕llo,\nneue\nwelt"),
             16
         );
     }
@@ -253,9 +357,17 @@ mod ropey_test {
     #[should_panic]
     fn offset_out_of_bounds_to_offset() {
         // TODO: do we want this to panic?
-        Position { line: 2, column: 5 }.to_offset("h🥕llo,\nneue\nwelt");
+        Position {
+            line: 2,
+            character: 5,
+        }
+        .to_offset("h🥕llo,\nneue\nwelt");
         // even this doesn't panic, that surprises me. Check.
-        Position { line: 3, column: 5 }.to_offset("h🥕llo,\nneue\nwelt");
+        Position {
+            line: 3,
+            character: 5,
+        }
+        .to_offset("h🥕llo,\nneue\nwelt");
     }
 }
 
@@ -487,23 +599,47 @@ mod tests {
     #[test]
     fn range_forward() {
         assert!(Range {
-            anchor: Position { line: 0, column: 0 },
-            head: Position { line: 0, column: 1 }
+            anchor: Position {
+                line: 0,
+                character: 0
+            },
+            head: Position {
+                line: 0,
+                character: 1
+            }
         }
         .is_forward());
         assert!(Range {
-            anchor: Position { line: 0, column: 1 },
-            head: Position { line: 1, column: 0 }
+            anchor: Position {
+                line: 0,
+                character: 1
+            },
+            head: Position {
+                line: 1,
+                character: 0
+            }
         }
         .is_forward());
         assert!(!Range {
-            anchor: Position { line: 0, column: 1 },
-            head: Position { line: 0, column: 0 }
+            anchor: Position {
+                line: 0,
+                character: 1
+            },
+            head: Position {
+                line: 0,
+                character: 0
+            }
         }
         .is_forward());
         assert!(!Range {
-            anchor: Position { line: 1, column: 0 },
-            head: Position { line: 0, column: 1 }
+            anchor: Position {
+                line: 1,
+                character: 0
+            },
+            head: Position {
+                line: 0,
+                character: 1
+            }
         }
         .is_forward());
     }
@@ -512,8 +648,14 @@ mod tests {
     fn conversion_editor_to_text_delta_insert() {
         let ed_delta = EditorTextDelta(vec![EditorTextOp {
             range: Range {
-                anchor: Position { line: 0, column: 1 },
-                head: Position { line: 0, column: 1 },
+                anchor: Position {
+                    line: 0,
+                    character: 1,
+                },
+                head: Position {
+                    line: 0,
+                    character: 1,
+                },
             },
             replacement: "a".to_string(),
         }]);

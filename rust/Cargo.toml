@@ -22,6 +22,7 @@ async-trait = "0.1.79"
 pretty_assertions = "1.4.0"
 futures = "0.3.30"
 ropey = "1.6.1"
+serde = "1.0.198"
 
 [features]
 
