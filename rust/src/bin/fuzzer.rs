@@ -71,7 +71,7 @@ async fn main() {
     .expect_err("Random edits died unexpectedly");
 
     info!("Sleep a bit, so that the actors can sync");
-    sleep(std::time::Duration::from_millis(500)).await;
+    sleep(std::time::Duration::from_millis(1000)).await;
     // TODO: Maybe broadcast "ready" message? Wait for roundtrip?
 
     let mut contents: HashMap<String, String> = HashMap::new();

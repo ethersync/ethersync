@@ -70,6 +70,8 @@ Note: The `contentOfCurrentBuffer` function should probably always look at 'eol'
 
 Note: Vim doesn't seem to set 'eol' to false when the file is completely empty.
 
+Note: Vim only applies 'fixeol' when the file is modified!
+
 Observation:
 
 - Have a file not ending in \n.

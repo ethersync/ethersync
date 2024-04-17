@@ -1,4 +1,5 @@
 local utils = require("utils")
+local sync = require("vim.lsp.sync")
 
 -- Used to store the changedtick of the buffer when we make changes to it.
 -- We do this to avoid infinite loops, where we make a change, which would
@@ -27,10 +28,16 @@ local editorRevision = 0
 
 -- Used to remember the previous content of the buffer, so that we can
 -- calculate the difference between the previous and the current content.
-local previousContent
+local prev_lines
+
+local function debug(tbl)
+    if true then
+        client.notify("debug", tbl)
+    end
+end
 
 local function ignoreNextUpdate()
-    local nextTick = vim.api.nvim_buf_get_changedtick(0)
+    local nextTick = vim.api.nvim_buf_get_changedtick(0) + 1
     ignored_ticks[nextTick] = true
 end
 
@@ -98,6 +105,11 @@ local function processOperationForEditor(method, parameters)
                     utils.insert(position, change)
                 end
             end
+            -- log the operation to LOGFILE
+            local file = io.open("/tmp/ethersync-vim-log", "a")
+            file:write(vim.inspect(parameters) .. "\n")
+            file:close()
+
             daemonRevision = daemonRevision + 1
         else
             -- Operation is not up-to-date to our content, skip it!
@@ -114,8 +126,20 @@ local function processOperationForEditor(method, parameters)
     end
 end
 
+-- Reset the state on editor side and re-open the current buffer
+--
+-- (this is to be called on buffer change, once we have the ability to detect that)
+local function resetState()
+    daemonRevision = 0
+    editorRevision = 0
+    opQueueForDaemon = {}
+    opQueueForEditor = {}
+end
+
 -- Connect to the daemon.
 local function connect(socket_path)
+    resetState()
+
     params = { "client" }
     if socket_path then
         table.insert(params, "--socket-path=" .. socket_path)
@@ -167,18 +191,6 @@ local function goOnline()
     online = true
 end
 
--- Reset the state on editor side and re-open the current buffer
---
--- (this is to be called on buffer change, once we have the ability to detect that)
-local function resetState()
-    daemonRevision = 0
-    editorRevision = 0
-    opQueueForDaemon = {}
-    opQueueForEditor = {}
-    local filename = vim.fs.basename(vim.api.nvim_buf_get_name(0))
-    client.notify("open", { filename })
-end
-
 -- Initialization function.
 function Ethersync()
     if vim.fn.isdirectory(vim.fn.expand("%:p:h") .. "/.ethersync") ~= 1 then
@@ -191,84 +203,116 @@ function Ethersync()
 
     createCursor()
 
-    previousContent = utils.contentOfCurrentBuffer()
+    prev_lines = vim.api.nvim_buf_get_lines(0, 0, -1, true)
+
+    -- If there are no lines, set 'eol' to true. We didn't find a way to tell if the file contains '\n' or ''.
+    if #prev_lines == 0 then
+        vim.bo.eol = false
+    end
 
     vim.api.nvim_buf_attach(0, false, {
-        on_bytes = function(
-            _the_string_bytes, ---@diagnostic disable-line
-            _buffer_handle, ---@diagnostic disable-line
+        on_lines = function(
+            _the_literal_string_lines --[[@diagnostic disable-line]],
+            _buffer_handle --[[@diagnostic disable-line]],
             changedtick,
-            _start_row, ---@diagnostic disable-line
-            _start_column, ---@diagnostic disable-line
-            byte_offset,
-            _old_end_row, ---@diagnostic disable-line
-            _old_end_column, ---@diagnostic disable-line
-            old_end_byte_length,
-            _new_end_row, ---@diagnostic disable-line
-            _new_end_column, ---@diagnostic disable-line
-            new_end_byte_length
+            first_line,
+            last_line,
+            new_last_line
         )
-            -- TODO: When substituting with :s, the "current buffer content" doesn't seem to be correct.
-            -- Can we fix that, maybe using vim.schedule somehow, without breaking correctness?
-            local content = utils.contentOfCurrentBuffer()
+            -- line counts that we get called with are zero-based.
+            -- last_line and new_last_line are exclusive
+
+            debug({ first_line = first_line, last_line = last_line, new_last_line = new_last_line })
+            local curr_lines = vim.api.nvim_buf_get_lines(0, 0, -1, true)
 
             -- Did the change come from us? If so, ignore it.
             if ignored_ticks[changedtick] then
                 ignored_ticks[changedtick] = nil
-                previousContent = content
+                prev_lines = curr_lines
                 return
             end
 
-            if byte_offset + new_end_byte_length > vim.fn.strlen(content) then
-                -- Tried to insert something *after* the end of the (resulting) file.
-                -- I think this is probably a bug, that happens when you use the 'o' command, for example.
-                -- See for example https://github.com/neovim/neovim/issues/25966.
-                byte_offset = vim.fn.strlen(content) - new_end_byte_length
-            end
+            debug({ curr_lines = curr_lines, prev_lines = prev_lines })
+            local diff = sync.compute_diff(prev_lines, curr_lines, first_line, last_line, new_last_line, "utf-8", "\n")
+            -- line/character indices in diff are zero-based.
+            debug({ diff = diff })
 
-            local charOffset = utils.byteOffsetToCharOffset(byte_offset, content)
-            local oldCharEnd = utils.byteOffsetToCharOffset(byte_offset + old_end_byte_length, previousContent)
-            local newCharEnd = utils.byteOffsetToCharOffset(byte_offset + new_end_byte_length, content)
+            -- Sometimes, Vim deletes full lines by deleting the last line, plus an imaginary newline at the end. For example, to delete the second line, Vim would delete from (line: 1, column: 0) to (line: 2, column 0).
+            -- But, in the case of deleting the last line, what we expect in the rest of Ethersync is to delete the newline *before* the line.
+            -- So let's change the deleted range to (line: 0, column: [last character of the first line]) to (line: 1, column: [last character of the second line]).
 
-            local oldCharLength = oldCharEnd - charOffset
-            local newCharLength = newCharEnd - charOffset
-
-            if oldCharLength > 0 then
-                editorRevision = editorRevision + 1
-                if online then
-                    client.notify("delete", { filename, daemonRevision, charOffset, oldCharLength })
+            if
+                diff.range["end"].line == #prev_lines
+                and diff.range.start.line == #prev_lines - 1
+                and diff.range["end"].character == 0
+                and diff.range.start.character == 0
+            then
+                if diff.range.start.line > 0 then
+                    diff.range.start.character = #prev_lines[diff.range.start.line]
+                    diff.range.start.line = diff.range.start.line - 1
+                    diff.range["end"].character = #prev_lines[diff.range["end"].line]
+                    diff.range["end"].line = diff.range["end"].line - 1
                 else
-                    table.insert(opQueueForDaemon, {
-                        "delete",
-                        { filename, daemonRevision, charOffset, oldCharLength },
-                    })
+                    -- Special case: if start line already is 0, we can't shift the deletion backwards like that.
+                    -- TODO: Find out whether or not there is a newline in the end?
+                    diff.range["end"].character = #prev_lines[diff.range["end"].line]
+                    diff.range["end"].line = diff.range["end"].line - 1
                 end
             end
 
-            if newCharLength > 0 then
+            debug({ fixed_diff = diff })
+
+            -- For an insertion that references the line after the last one (happens for yyp on the last line, for example),
+            -- we need to add an empty line to the end of the previous buffer in order to look up the text correctly.
+            table.insert(prev_lines, "")
+
+            -- Add some +1 here to convert it into a row range that starts at 1.
+            local start_row = diff.range.start.line + 1
+            local start_col = diff.range.start.character
+            local end_row = diff.range["end"].line + 1
+            local end_col = diff.range["end"].character
+
+            debug({ start_row = start_row, start_col = start_col, end_row = end_row, end_col = end_col })
+
+            local range_start_char = utils.rowColToIndexInLines(start_row, start_col, prev_lines)
+            local range_end_char = utils.rowColToIndexInLines(end_row, end_col, prev_lines)
+
+            debug({ range_start_char = range_start_char, range_end_char = range_end_char })
+
+            local deleted_chars = range_end_char - range_start_char
+            if deleted_chars > 0 then
                 editorRevision = editorRevision + 1
-                local insertedString = vim.fn.strcharpart(content, charOffset, newCharLength)
                 if online then
-                    client.notify("insert", { filename, daemonRevision, charOffset, insertedString })
+                    client.notify("delete", { "", daemonRevision, range_start_char, deleted_chars })
                 else
-                    table.insert(opQueueForDaemon, {
-                        "insert",
-                        { filename, daemonRevision, charOffset, insertedString },
-                    })
+                    table.insert(
+                        opQueueForDaemon,
+                        { "delete", { "", daemonRevision, range_start_char, deleted_chars } }
+                    )
                 end
             end
 
-            previousContent = content
+            if #diff.text > 0 then
+                editorRevision = editorRevision + 1
+                if online then
+                    client.notify("insert", { "", daemonRevision, range_start_char, diff.text })
+                else
+                    table.insert(opQueueForDaemon, { "insert", { "", daemonRevision, range_start_char, diff.text } })
+                end
+            end
+
+            prev_lines = curr_lines
         end,
     })
 
-    if vim.api.nvim_get_option_value("fixeol", { buf = 0 }) then
-        if not vim.api.nvim_get_option_value("eol", { buf = 0 }) then
-            utils.appendNewline()
-            vim.api.nvim_set_option_value("eol", true, { buf = 0 })
-        end
-        vim.api.nvim_set_option_value("fixeol", false, { buf = 0 })
-    end
+    -- TODO: Re-enable this?
+    --if vim.api.nvim_get_option_value("fixeol", { buf = 0 }) then
+    --    if not vim.api.nvim_get_option_value("eol", { buf = 0 }) then
+    --        utils.appendNewline()
+    --        vim.api.nvim_set_option_value("eol", true, { buf = 0 })
+    --    end
+    --    vim.api.nvim_set_option_value("fixeol", false, { buf = 0 })
+    --end
 
     --vim.api.nvim_create_autocmd({ "CursorMoved", "CursorMovedI" }, {
     --    callback = function()
