@@ -1,7 +1,7 @@
 #![allow(dead_code)]
 use crate::ot::OTServer;
 use crate::types::{
-    EditorTextDelta, EditorTextOp, Range, RevisionedEditorTextDelta, RevisionedTextDelta,
+    EditorTextDelta, EditorTextOp, Position, Range, RevisionedEditorTextDelta, RevisionedTextDelta,
     TextDelta, TextOp,
 };
 use anyhow::Result;
@@ -109,7 +109,10 @@ impl Document {
             .text_obj()
             .expect("Couldn't get automerge text object, so not able to modify it");
         for op in &delta.0 {
-            let (position, length) = op.range.as_relative();
+            let text = self
+                .current_content()
+                .expect("Should have initialized text before performing random edit");
+            let (position, length) = op.range.as_relative(&text);
             self.doc
                 .splice_text(text_obj.clone(), position, length as isize, &op.replacement)
                 .expect("Failed to splice Automerge text object");
@@ -183,11 +186,18 @@ impl DaemonActor {
             }
             DocMessage::RandomEdit => {
                 let delta = self.random_delta();
-                self.apply_delta_to_doc(&delta.clone().into());
+                let text = self
+                    .current_content()
+                    .expect("Should have initialized text before performing random edit");
+                let ed_delta = EditorTextDelta::from_delta(delta.clone(), &text);
+                self.apply_delta_to_doc(&ed_delta);
                 self.process_crdt_delta_in_ot(delta);
             }
             DocMessage::Delta(delta) => {
-                let editor_delta: EditorTextDelta = delta.clone().into();
+                let text = self
+                    .current_content()
+                    .expect("Should have initialized text before performing random edit");
+                let editor_delta = EditorTextDelta::from_delta(delta.clone(), &text);
                 self.apply_delta_to_doc(&editor_delta);
                 self.process_crdt_delta_in_ot(delta);
             }
@@ -250,17 +260,21 @@ impl DaemonActor {
 
     fn apply_delta_to_ot(
         &mut self,
-        rev_delta: RevisionedEditorTextDelta,
+        rev_ed_delta: RevisionedEditorTextDelta,
     ) -> (EditorTextDelta, Vec<RevisionedTextDelta>) {
+        let text = self
+            .current_content()
+            .expect("Should have initialized text before performing random edit");
         let ot_server = self
             .ot_server
             .as_mut()
             .expect("No editor connected, where does this delta come from?");
 
-        let (delta_for_crdt, rev_deltas_for_editor) =
-            ot_server.apply_editor_operation(rev_delta.into());
+        let rev_delta = RevisionedTextDelta::from_rev_ed_delta(rev_ed_delta, &text);
+        let (delta_for_crdt, rev_deltas_for_editor) = ot_server.apply_editor_operation(rev_delta);
 
-        (delta_for_crdt.into(), rev_deltas_for_editor)
+        let editor_delta_for_crdt = EditorTextDelta::from_delta(delta_for_crdt, &text);
+        (editor_delta_for_crdt, rev_deltas_for_editor)
     }
 
     fn random_delta(&self) -> TextDelta {
@@ -736,10 +750,17 @@ pub fn jsonrpc_to_docmessage(s: &str) -> Result<DocMessage> {
                                         let position =
                                             position.as_u64().expect("Failed to parse position");
                                         let text = text.as_str().to_string();
+                                        // TODO: parse correctly from new protocol
                                         let op = EditorTextOp {
                                             range: Range {
-                                                anchor: position as usize,
-                                                head: position as usize,
+                                                anchor: Position {
+                                                    line: 0,
+                                                    column: position as usize,
+                                                },
+                                                head: Position {
+                                                    line: 0,
+                                                    column: position as usize,
+                                                },
                                             },
                                             replacement: text,
                                         };
@@ -780,10 +801,17 @@ pub fn jsonrpc_to_docmessage(s: &str) -> Result<DocMessage> {
                                         let length =
                                             length.as_u64().expect("Failed to parse length");
 
+                                        // TODO: parse correctly from new protocol
                                         let op = EditorTextOp {
                                             range: Range {
-                                                anchor: position as usize,
-                                                head: position as usize + length as usize,
+                                                anchor: Position {
+                                                    line: 0,
+                                                    column: position as usize,
+                                                },
+                                                head: Position {
+                                                    line: 0,
+                                                    column: position as usize + length as usize,
+                                                },
                                             },
                                             replacement: String::new(),
                                         };

@@ -54,10 +54,12 @@ impl RevisionedTextDelta {
     }
 }
 
-impl From<RevisionedEditorTextDelta> for RevisionedTextDelta {
-    #[must_use]
-    fn from(rev_ed_delta: RevisionedEditorTextDelta) -> Self {
-        Self::new(rev_ed_delta.revision, rev_ed_delta.delta.into())
+impl RevisionedTextDelta {
+    pub fn from_rev_ed_delta(rev_ed_delta: RevisionedEditorTextDelta, content: &str) -> Self {
+        Self::new(
+            rev_ed_delta.revision,
+            TextDelta::from_ed_delta(rev_ed_delta.delta, content),
+        )
     }
 }
 
@@ -81,22 +83,42 @@ impl Range {
 
     #[must_use]
     pub fn is_forward(&self) -> bool {
-        self.anchor <= self.head
+        (self.anchor.line < self.head.line)
+            || (self.anchor.line == self.head.line && self.anchor.column <= self.head.column)
     }
 
     #[must_use]
-    pub fn as_relative(&self) -> (usize, usize) {
+    pub fn as_relative(&self, content: &str) -> (usize, usize) {
+        let anchor_offset = self.anchor.to_offset(content);
+        let head_offset = self.head.to_offset(content);
         if self.is_forward() {
-            (self.anchor, self.head - self.anchor)
+            (anchor_offset, head_offset - anchor_offset)
         } else {
-            (self.head, self.anchor - self.head)
+            (head_offset, anchor_offset - head_offset)
         }
     }
 }
 
-// TODO: Expand this type to be a line + column description.
-// Right now, we use the Vim plugin as it is, which only uses a character position.
-type Position = usize;
+#[derive(Debug, Default, Clone, PartialEq)]
+pub struct Position {
+    pub line: usize,
+    pub column: usize,
+}
+
+impl Position {
+    /// will panic when used with not matching offset/content
+    fn from_offset(full_offset: usize, content: &str) -> Self {
+        let rope = Rope::from_str(content);
+        let line = rope.char_to_line(full_offset);
+        let column = full_offset - rope.line_to_char(line);
+        Self { line, column }
+    }
+
+    fn to_offset(&self, content: &str) -> usize {
+        let rope = Rope::from_str(content);
+        rope.line_to_char(self.line) + self.column
+    }
+}
 
 #[derive(Debug, Default, Clone, PartialEq)]
 struct PositionLC {
@@ -106,7 +128,7 @@ struct PositionLC {
 
 impl PositionLC {
     /// will panic when used with not matching offset/content
-    fn from_offset(full_offset: Position, content: &str) -> Self {
+    fn from_offset(full_offset: usize, content: &str) -> Self {
         let mut column_offset = full_offset;
         let mut line_count = 0;
         assert!(full_offset <= content.chars().count());
@@ -134,14 +156,14 @@ struct PositionLCRope {
 
 impl PositionLCRope {
     /// will panic when used with not matching offset/content
-    fn from_offset(full_offset: Position, content: &str) -> Self {
+    fn from_offset(full_offset: usize, content: &str) -> Self {
         let rope = Rope::from_str(content);
         let line = rope.char_to_line(full_offset);
         let column = full_offset - rope.line_to_char(line);
         Self { line, column }
     }
 
-    fn to_offset(&self, content: &str) -> Position {
+    fn to_offset(&self, content: &str) -> usize {
         let rope = Rope::from_str(content);
         rope.line_to_char(self.line) + self.column
     }
@@ -500,8 +522,8 @@ impl From<TextDelta> for OperationSeq {
     }
 }
 
-impl From<EditorTextDelta> for TextDelta {
-    fn from(ed_delta: EditorTextDelta) -> Self {
+impl TextDelta {
+    pub fn from_ed_delta(ed_delta: EditorTextDelta, content: &str) -> Self {
         let mut delta = TextDelta::default();
         // TODO: add support, when needed
         assert!(
@@ -513,12 +535,12 @@ impl From<EditorTextDelta> for TextDelta {
             if ed_op.range.is_empty() {
                 if !ed_op.replacement.is_empty() {
                     // insert
-                    delta_step.retain(ed_op.range.anchor);
+                    delta_step.retain(ed_op.range.anchor.to_offset(content));
                     delta_step.insert(&ed_op.replacement);
                 }
             } else {
                 // delete or replace
-                let (position, length) = ed_op.range.as_relative();
+                let (position, length) = ed_op.range.as_relative(content);
                 delta_step.retain(position);
                 delta_step.delete(length);
                 if ed_op.replacement.is_empty() {
@@ -532,8 +554,8 @@ impl From<EditorTextDelta> for TextDelta {
     }
 }
 
-impl From<TextDelta> for EditorTextDelta {
-    fn from(delta: TextDelta) -> Self {
+impl EditorTextDelta {
+    pub fn from_delta(delta: TextDelta, content: &str) -> Self {
         let mut editor_ops = vec![];
         let mut position = 0;
         for op in delta {
@@ -542,8 +564,8 @@ impl From<TextDelta> for EditorTextDelta {
                 TextOp::Delete(n) => {
                     editor_ops.push(EditorTextOp {
                         range: Range {
-                            anchor: position,
-                            head: (position + n),
+                            anchor: Position::from_offset(position, content),
+                            head: Position::from_offset(position + n, content),
                         },
                         replacement: String::new(),
                     });
@@ -551,8 +573,8 @@ impl From<TextDelta> for EditorTextDelta {
                 TextOp::Insert(s) => {
                     editor_ops.push(EditorTextOp {
                         range: Range {
-                            anchor: position,
-                            head: position,
+                            anchor: Position::from_offset(position, content),
+                            head: Position::from_offset(position, content),
                         },
                         replacement: s.to_string(),
                     });
