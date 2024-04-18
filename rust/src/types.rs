@@ -611,6 +611,14 @@ pub mod factories {
         delta
     }
 
+    pub fn replace(from: usize, length: usize, s: &str) -> TextDelta {
+        let mut delta: TextDelta = Default::default();
+        delta.retain(from);
+        delta.delete(length);
+        delta.insert(s);
+        delta
+    }
+
     pub fn rev_delta(revision: usize, delta: TextDelta) -> RevisionedTextDelta {
         RevisionedTextDelta::new(revision, delta)
     }
@@ -619,7 +627,7 @@ pub mod factories {
         RevisionedEditorTextDelta::new(revision, delta)
     }
 
-    pub fn replacement(
+    pub fn replace_ed(
         anchor: (usize, usize),
         head: (usize, usize),
         replacement: &str,

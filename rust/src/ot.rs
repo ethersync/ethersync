@@ -388,6 +388,25 @@ mod tests {
             // we have already seen one op, so now the queue has only 2 left.
             assert_eq!(ot_server.editor_queue.len(), 2);
         }
+
+        #[test]
+        fn replace_single_character() {
+            let mut ot_server: OTServer = OTServer::new("hello".into());
+
+            let (to_crdt, to_editor) =
+                ot_server.apply_editor_operation(rev_delta(0, replace(1, 1, "u")));
+
+            let mut expected = TextDelta::default();
+            expected.retain(1);
+            expected.insert("u");
+            expected.delete(1);
+
+            assert_eq!(expected, to_crdt);
+            //assert_eq!(Vec::, to_editor);
+
+            assert_eq!(ot_server.apply_to_initial_content(), "hullo");
+            assert_eq!(ot_server.last_confirmed_editor_content, "hullo");
+        }
     }
 
     mod operational_transform_internals {

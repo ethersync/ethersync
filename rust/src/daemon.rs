@@ -118,14 +118,22 @@ impl Document {
         let text_obj = self
             .text_obj()
             .expect("Couldn't get automerge text object, so not able to modify it");
+        let mut offset = 0i32;
         for op in &delta.0 {
             let text = self
                 .current_content()
                 .expect("Should have initialized text before performing random edit");
-            let (position, length) = op.range.as_relative(&text);
+            let (start, length) = op.range.as_relative(&text);
             self.doc
-                .splice_text(text_obj.clone(), position, length as isize, &op.replacement)
+                .splice_text(
+                    text_obj.clone(),
+                    (start as i32 + offset) as usize,
+                    length as isize,
+                    &op.replacement,
+                )
                 .expect("Failed to splice Automerge text object");
+            offset -= length as i32;
+            offset += op.replacement.chars().count() as i32;
         }
     }
 
@@ -778,6 +786,19 @@ mod tests {
             let ed_delta = EditorTextDelta::from_delta(delta, &text);
             document.apply_delta_to_doc(&ed_delta);
             assert_eq!(document.current_content().unwrap(), "foo");
+        }
+
+        #[test]
+        fn can_apply_delta_basic_replacement() {
+            let mut document = Document::default();
+            let text = "foobar".to_string();
+            document.initialize_text(&text);
+
+            let delta = replace(1, 2, "uu");
+
+            let ed_delta = EditorTextDelta::from_delta(delta, &text);
+            document.apply_delta_to_doc(&ed_delta);
+            assert_eq!(document.current_content().unwrap(), "fuubar");
         }
 
         #[test]

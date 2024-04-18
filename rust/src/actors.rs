@@ -316,36 +316,28 @@ pub mod tests {
     #[ignore]
     fn vim_sends_correct_delta() {
         // Edits on a single line.
-        assert_vim_input_yields_replacements("", "ia", vec![replacement((0, 0), (0, 0), "a")]);
-        assert_vim_input_yields_replacements("a\n", "x", vec![replacement((0, 0), (0, 1), "")]);
-        assert_vim_input_yields_replacements("abc\n", "lx", vec![replacement((0, 1), (0, 2), "")]);
-        assert_vim_input_yields_replacements(
-            "abc\n",
-            "vlld",
-            vec![replacement((0, 0), (0, 3), "")],
-        );
-        assert_vim_input_yields_replacements("a\n", "rb", vec![replacement((0, 0), (0, 1), "b")]);
-        assert_vim_input_yields_replacements("a\n", "Ab", vec![replacement((0, 1), (0, 1), "b")]);
-        assert_vim_input_yields_replacements("a\n", "Ib", vec![replacement((0, 0), (0, 0), "b")]);
+        assert_vim_input_yields_replacements("", "ia", vec![replace_ed((0, 0), (0, 0), "a")]);
+        assert_vim_input_yields_replacements("a\n", "x", vec![replace_ed((0, 0), (0, 1), "")]);
+        assert_vim_input_yields_replacements("abc\n", "lx", vec![replace_ed((0, 1), (0, 2), "")]);
+        assert_vim_input_yields_replacements("abc\n", "vlld", vec![replace_ed((0, 0), (0, 3), "")]);
+        assert_vim_input_yields_replacements("a\n", "rb", vec![replace_ed((0, 0), (0, 1), "b")]);
+        assert_vim_input_yields_replacements("a\n", "Ab", vec![replace_ed((0, 1), (0, 1), "b")]);
+        assert_vim_input_yields_replacements("a\n", "Ib", vec![replace_ed((0, 0), (0, 0), "b")]);
 
         // Edits involving multiple lines.
-        assert_vim_input_yields_replacements("a\n", "O", vec![replacement((0, 0), (0, 0), "\n")]);
-        assert_vim_input_yields_replacements("a\nb\n", "dd", vec![replacement((0, 0), (1, 0), "")]);
-        assert_vim_input_yields_replacements(
-            "a\nb\n",
-            "jdd",
-            vec![replacement((0, 1), (1, 1), "")],
-        );
+        assert_vim_input_yields_replacements("a\n", "O", vec![replace_ed((0, 0), (0, 0), "\n")]);
+        assert_vim_input_yields_replacements("a\nb\n", "dd", vec![replace_ed((0, 0), (1, 0), "")]);
+        assert_vim_input_yields_replacements("a\nb\n", "jdd", vec![replace_ed((0, 1), (1, 1), "")]);
 
         // TODO: Is this test correct? Does it delete the newline or not in Vim?
-        assert_vim_input_yields_replacements("a\n", "dd", vec![replacement((0, 0), (0, 1), "")]);
+        assert_vim_input_yields_replacements("a\n", "dd", vec![replace_ed((0, 0), (0, 1), "")]);
 
         assert_vim_input_yields_replacements(
             "",
             "ia<Esc>dd",
             vec![
-                replacement((0, 0), (0, 0), "a"),
-                replacement((0, 0), (0, 1), ""),
+                replace_ed((0, 0), (0, 0), "a"),
+                replace_ed((0, 0), (0, 1), ""),
             ],
         );
 
@@ -353,16 +345,16 @@ pub mod tests {
             "",
             "ia\na",
             vec![
-                replacement((0, 0), (0, 0), "a"),
-                replacement((0, 1), (0, 1), "\n"),
-                replacement((1, 0), (1, 0), "a"),
+                replace_ed((0, 0), (0, 0), "a"),
+                replace_ed((0, 1), (0, 1), "\n"),
+                replace_ed((1, 0), (1, 0), "a"),
             ],
         );
 
         assert_vim_input_yields_replacements(
             "a\n",
             ":s/a/b<CR>",
-            vec![replacement((0, 0), (0, 1), "b")],
+            vec![replace_ed((0, 0), (0, 1), "b")],
         );
 
         // TODO: Fix these tests.
@@ -371,10 +363,10 @@ pub mod tests {
             "a\n",
             "ddix<CR><BS>",
             vec![
-                replacement((0, 0), (0, 1), ""),
-                replacement((0, 0), (0, 0), "x"),
-                replacement((0, 1), (0, 1), "\n"),
-                replacement((0, 1), (1, 0), ""),
+                replace_ed((0, 0), (0, 1), ""),
+                replace_ed((0, 0), (0, 0), "x"),
+                replace_ed((0, 1), (0, 1), "\n"),
+                replace_ed((0, 1), (1, 0), ""),
             ],
         );
 
@@ -382,32 +374,32 @@ pub mod tests {
             "",
             "ix<CR><BS>",
             vec![
-                replacement((0, 0), (0, 0), "x"),
-                replacement((0, 1), (0, 1), "\n"),
-                replacement((0, 1), (1, 0), ""),
+                replace_ed((0, 0), (0, 0), "x"),
+                replace_ed((0, 1), (0, 1), "\n"),
+                replace_ed((0, 1), (1, 0), ""),
             ],
         );
         */
 
         // Tests where Vim behaves a bit weirdly.
 
-        // A direct replacement((0, 1), (0, 1), "\n") would be nicer.
-        assert_vim_input_yields_replacements("a", "o", vec![replacement((0, 1), (1, 0), "\n\n")]);
+        // A direct replace_ed((0, 1), (0, 1), "\n") would be nicer.
+        assert_vim_input_yields_replacements("a", "o", vec![replace_ed((0, 1), (1, 0), "\n\n")]);
 
-        // A direct replacement((0, 1), (0, 1), "a\n") would be nicer.
+        // A direct replace_ed((0, 1), (0, 1), "a\n") would be nicer.
         assert_vim_input_yields_replacements(
             "a\n",
             "yyp",
-            vec![replacement((0, 1), (1, 0), "\na\n")],
+            vec![replace_ed((0, 1), (1, 0), "\na\n")],
         );
 
-        // A direct replacement((0, 1), (1, 0), " ") would be nicer.
+        // A direct replace_ed((0, 1), (1, 0), " ") would be nicer.
         assert_vim_input_yields_replacements(
             "a\nb\n",
             "J",
             vec![
-                replacement((0, 1), (0, 1), " b"),
-                replacement((0, 3), (1, 1), ""),
+                replace_ed((0, 1), (0, 1), " b"),
+                replace_ed((0, 3), (1, 1), ""),
             ],
         );
     }
