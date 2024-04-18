@@ -41,6 +41,13 @@ pub struct RevisionedEditorTextDelta {
     pub delta: EditorTextDelta,
 }
 
+impl RevisionedEditorTextDelta {
+    #[must_use]
+    pub fn new(revision: usize, delta: EditorTextDelta) -> Self {
+        Self { revision, delta }
+    }
+}
+
 /// When doing OT, many `TextDelta`s need a revision metadata, to see whether they apply.
 #[derive(Debug, Clone, PartialEq)]
 pub struct RevisionedTextDelta {
@@ -586,8 +593,13 @@ pub mod factories {
         delta.delete(length);
         delta
     }
+
     pub fn rev_delta(revision: usize, delta: TextDelta) -> RevisionedTextDelta {
         RevisionedTextDelta::new(revision, delta)
+    }
+
+    pub fn rev_ed_delta(revision: usize, delta: EditorTextDelta) -> RevisionedEditorTextDelta {
+        RevisionedEditorTextDelta::new(revision, delta)
     }
 
     pub fn replacement(

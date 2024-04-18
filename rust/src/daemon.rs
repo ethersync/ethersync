@@ -2,7 +2,7 @@
 use crate::ot::OTServer;
 use crate::types::{
     EditorProtocolMessage, EditorTextDelta, RevisionedEditorTextDelta, RevisionedTextDelta,
-    TextDelta, TextOp,
+    TextDelta,
 };
 use anyhow::Result;
 use automerge::{
@@ -12,7 +12,6 @@ use automerge::{
     AutoCommit, ObjType, Patch, PatchLog, ReadDoc,
 };
 use rand::{distributions::Alphanumeric, Rng};
-use serde_json::json;
 use std::fs;
 use std::path::{Path, PathBuf};
 use tokio::{
@@ -66,7 +65,7 @@ enum SyncerMessage {
 
 type DocMessageSender = mpsc::Sender<DocMessage>;
 type DocChangedSender = broadcast::Sender<()>;
-type EditorMessageSender = broadcast::Sender<RevisionedTextDelta>;
+type EditorMessageSender = broadcast::Sender<RevisionedEditorTextDelta>;
 type SyncerMessageSender = mpsc::Sender<SyncerMessage>;
 
 /// Encapsulates the Automerge `AutoCommit` and provides a generic interface,
@@ -261,7 +260,7 @@ impl DaemonActor {
         result
     }
 
-    fn send_deltas_to_editor(&self, rev_deltas: Vec<RevisionedTextDelta>) {
+    fn send_deltas_to_editor(&self, rev_deltas: Vec<RevisionedEditorTextDelta>) {
         for rev_delta in rev_deltas {
             self.socket_message_tx
                 .send(rev_delta)
@@ -271,8 +270,8 @@ impl DaemonActor {
 
     fn apply_delta_to_ot(
         &mut self,
-        rev_ed_delta: RevisionedEditorTextDelta,
-    ) -> (EditorTextDelta, Vec<RevisionedTextDelta>) {
+        rev_editor_delta: RevisionedEditorTextDelta,
+    ) -> (EditorTextDelta, Vec<RevisionedEditorTextDelta>) {
         let text = self
             .current_content()
             .expect("Should have initialized text before performing random edit");
@@ -281,7 +280,7 @@ impl DaemonActor {
             .as_mut()
             .expect("No editor connected, where does this delta come from?");
 
-        let rev_delta = RevisionedTextDelta::from_rev_ed_delta(rev_ed_delta, &text);
+        let rev_delta = RevisionedTextDelta::from_rev_ed_delta(rev_editor_delta, &text);
         let (delta_for_crdt, rev_deltas_for_editor) = ot_server.apply_editor_operation(rev_delta);
 
         let editor_delta_for_crdt = EditorTextDelta::from_delta(delta_for_crdt, &text);
@@ -389,7 +388,8 @@ impl Daemon {
         let (doc_changed_ping_tx, _doc_changed_ping_rx) = broadcast::channel::<()>(16);
 
         // The document task will send messages intended for the socket connection on this channel.
-        let (socket_message_tx, _socket_message_rx) = broadcast::channel::<RevisionedTextDelta>(16);
+        let (socket_message_tx, _socket_message_rx) =
+            broadcast::channel::<RevisionedEditorTextDelta>(16);
 
         let mut daemon_actor = DaemonActor::new(
             doc_message_rx,
@@ -674,26 +674,13 @@ async fn listen_socket(
                             }
                         }
                         Ok(rev_delta) = editor_message_rx.recv() => {
-                            debug!("Received editor message.");
-
-                            let mut json_params = vec![];
-                            for op in rev_delta.delta {
-                                match op {
-                                    TextOp::Retain(n) => {
-                                        json_params.push(json!(n));
-                                    }
-                                    TextOp::Insert(s) => {
-                                        json_params.push(json!(s));
-                                    }
-                                    TextOp::Delete(n) => {
-                                        json_params.push(json!(-(n as i64)));
-                                    }
-                                }
-                            }
-                            let payload = json!({
-                                "method": "operation",
-                                "params": [rev_delta.revision, json_params]
-                            });
+                            // TODO: add 2.0
+                            debug!("Received editor message to send to it.");
+                            let message = EditorProtocolMessage::Edit {
+                                uri: "file://hamwanich".to_string(),
+                                delta: rev_delta
+                            };
+                            let payload = serde_json::to_string(&message)?;
                             debug!("Sending message to editor: {:#?}", payload);
                             tcp_write.write_all(format!("{payload}\n").as_bytes()).await?;
                         }
