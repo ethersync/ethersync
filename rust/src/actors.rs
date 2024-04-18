@@ -102,17 +102,17 @@ impl Actor for Neovim {
         } else {
             vim_normal_command.push('i');
             //let vim_components = vec!["x", "🥕", "_", "💚"]; //, "\n"];
-            let vim_components = vec!["x", "_"];
+            let vim_components = vec!["x", "_", "\n"];
             vim_normal_command
                 .push_str(&random_string(rand_usize_inclusive(1, 10), &vim_components));
         }
 
-        // We run the commands using :silent!, so that they don't stop on errors (e.g. when trying
-        // to navigate outside of the buffer).
+        vim_normal_command.push_str("<Esc>");
+
         self.nvim
-            .command(&format!(r#"silent! execute "normal {vim_normal_command}""#))
+            .input(&vim_normal_command)
             .await
-            .expect("Executing normal command failed");
+            .expect("Failed to send input to Neovim");
     }
     async fn content(&self) -> String {
         self.buffer
@@ -328,6 +328,15 @@ pub mod tests {
         assert_vim_input_yields_replacements("a\n", "O", vec![replace_ed((0, 0), (0, 0), "\n")]);
         assert_vim_input_yields_replacements("a\nb\n", "dd", vec![replace_ed((0, 0), (1, 0), "")]);
         assert_vim_input_yields_replacements("a\nb\n", "jdd", vec![replace_ed((0, 1), (1, 1), "")]);
+        assert_vim_input_yields_replacements("", "i\n", vec![replace_ed((0, 0), (0, 0), "\n")]);
+        assert_vim_input_yields_replacements(
+            "",
+            "i\ni",
+            vec![
+                replace_ed((0, 0), (0, 0), "\n"),
+                replace_ed((1, 0), (1, 0), "i"),
+            ],
+        );
 
         // TODO: Is this test correct? Does it delete the newline or not in Vim?
         assert_vim_input_yields_replacements("a\n", "dd", vec![replace_ed((0, 0), (0, 1), "")]);
