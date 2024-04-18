@@ -784,50 +784,36 @@ mod tests {
             assert_eq!(document.current_content().unwrap(), text);
         }
 
+        fn apply_delta_to_doc_works(initial: &str, ed_delta: &EditorTextDelta, expected: &str) {
+            let mut document = Document::default();
+            document.initialize_text(initial);
+            document.apply_delta_to_doc(ed_delta);
+
+            // unfortunately anyhow::Error doesn't implement PartialEq, so we'll rather unwrap.
+            assert_eq!(document.current_content().unwrap(), expected);
+        }
+
         #[test]
         fn can_apply_delta_basic_insertion() {
-            let mut document = Document::default();
-            let text = String::new();
-            document.initialize_text(&text);
-
-            let delta = insert(0, "foobar");
-
-            let ed_delta = EditorTextDelta::from_delta(delta, &text);
-            document.apply_delta_to_doc(&ed_delta);
-            assert_eq!(document.current_content().unwrap(), "foobar");
+            let ed_delta = ed_delta_single((0, 0), (0, 0), "foobar");
+            apply_delta_to_doc_works("", &ed_delta, "foobar");
         }
 
         #[test]
         fn can_apply_delta_basic_deletion() {
-            let mut document = Document::default();
-            let text = "foobar".to_string();
-            document.initialize_text(&text);
-
-            let delta = delete(3, 3);
-
-            let ed_delta = EditorTextDelta::from_delta(delta, &text);
-            document.apply_delta_to_doc(&ed_delta);
-            assert_eq!(document.current_content().unwrap(), "foo");
+            let ed_delta = ed_delta_single((0, 3), (0, 6), "");
+            apply_delta_to_doc_works("foobar", &ed_delta, "foo");
         }
 
         #[test]
         fn can_apply_delta_basic_replacement() {
-            let mut document = Document::default();
-            let text = "foobar".to_string();
-            document.initialize_text(&text);
-
-            let delta = replace(1, 2, "uu");
-
-            let ed_delta = EditorTextDelta::from_delta(delta, &text);
-            document.apply_delta_to_doc(&ed_delta);
-            assert_eq!(document.current_content().unwrap(), "fuubar");
+            let ed_delta = ed_delta_single((0, 1), (0, 3), "uu");
+            apply_delta_to_doc_works("foobar", &ed_delta, "fuubar");
         }
 
         #[test]
         fn can_apply_delta_multiple_ops() {
-            let mut document = Document::default();
-            let text = "To be or not to be, that is the question".to_string();
-            document.initialize_text(&text);
+            let initial_text = "To be or not to be, that is the question";
 
             let mut delta = insert(3, "m");
             delta.delete(1); // "b"
@@ -837,11 +823,10 @@ mod tests {
             delta.delete(2); // "be"
             delta.insert("you");
 
-            let ed_delta = EditorTextDelta::from_delta(delta, &text);
-            document.apply_delta_to_doc(&ed_delta);
-            assert_eq!(
-                document.current_content().unwrap(),
-                "To me or to you, that is the question"
+            apply_delta_to_doc_works(
+                initial_text,
+                &EditorTextDelta::from_delta(delta, initial_text),
+                "To me or to you, that is the question",
             );
         }
     }

@@ -627,6 +627,14 @@ pub mod factories {
         RevisionedEditorTextDelta::new(revision, delta)
     }
 
+    pub fn ed_delta_single(
+        anchor: (usize, usize),
+        head: (usize, usize),
+        replacement: &str,
+    ) -> EditorTextDelta {
+        EditorTextDelta(vec![replace_ed(anchor, head, replacement)])
+    }
+
     pub fn replace_ed(
         anchor: (usize, usize),
         head: (usize, usize),
@@ -653,10 +661,7 @@ pub mod factories {
         head: (usize, usize),
         replacement: &str,
     ) -> RevisionedEditorTextDelta {
-        rev_ed_delta(
-            revision,
-            EditorTextDelta(vec![replace_ed(anchor, head, replacement)]),
-        )
+        rev_ed_delta(revision, ed_delta_single(anchor, head, replacement))
     }
 }
 
