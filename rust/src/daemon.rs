@@ -740,7 +740,7 @@ async fn sync_receive(mut sync_receiver: SyncReceiver) {
     while let Ok(message) = sync_receiver.read_message().await {
         sync_receiver.forward_sync_message(message).await;
     }
-    panic!("Sync Receive loop stopped");
+    info!("Sync Receive loop stopped (peer disconnected)");
 }
 
 #[cfg(test)]
