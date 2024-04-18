@@ -137,8 +137,10 @@ impl OTServer {
                     "Whoopsie, we don't have enough operations cached. Was this already processed?"
                 );
                 let seen_operations = self.editor_queue.len() - daemon_operations_to_transform;
-                // TODO: should we use split_off instead and drop the first one?
-                // What is the most efficient+readable way to cut off the first elements?
+                debug!(
+                    "We have now {} confirmed operations, there are {} unconfirmed operations",
+                    seen_operations, daemon_operations_to_transform,
+                );
                 let confirmed_queue = self.editor_queue.drain(..seen_operations);
                 for confirmed_editor_op in confirmed_queue {
                     debug!(
