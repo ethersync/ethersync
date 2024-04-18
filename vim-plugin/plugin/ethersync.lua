@@ -6,7 +6,6 @@ local sync = require("vim.lsp.sync")
 -- trigger normally an "on_bytes" event.
 --
 -- TODO: how big will this list get? should we optimize it?
-local ignored_ticks = {}
 local ignore_edits = false
 
 local ns_id = vim.api.nvim_create_namespace("Ethersync")
@@ -35,11 +34,6 @@ local function debug(tbl)
     if true then
         client.notify("debug", tbl)
     end
-end
-
-local function ignoreNextUpdate()
-    local nextTick = vim.api.nvim_buf_get_changedtick(0) + 1
-    ignored_ticks[nextTick] = true
 end
 
 -- Creates a virtual cursor.
@@ -230,15 +224,9 @@ function Ethersync()
             debug({ first_line = first_line, last_line = last_line, new_last_line = new_last_line })
             local curr_lines = vim.api.nvim_buf_get_lines(0, 0, -1, true)
 
-            -- Did the change come from us? If so, ignore it.
-            if ignored_ticks[changedtick] then
-                ignored_ticks[changedtick] = nil
-                prev_lines = curr_lines
-                return
-            end
-
             -- Are we currently ignoring edits?
             if ignore_edits then
+                prev_lines = curr_lines
                 return
             end
 
