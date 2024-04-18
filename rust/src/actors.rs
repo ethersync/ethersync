@@ -390,6 +390,12 @@ pub mod tests {
                 replace_ed((0, 1), (1, 0), ""),
             ],
         );
+
+        assert_vim_input_yields_replacements(
+            "hello\nworld\n",
+            "llvjd",
+            vec![replace_ed((0, 2), (1, 3), "")],
+        );
         */
 
         // Tests where Vim behaves a bit weirdly.
