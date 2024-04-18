@@ -182,7 +182,7 @@ impl DaemonActor {
     }
     fn handle_message(&mut self, message: DocMessage) {
         // TODO: Show the type in the debug message, or implement Debug for DocMessage.
-        debug!("Handling message from editor.");
+        debug!("Handling doc message.");
         match message {
             DocMessage::GetContent { response_tx } => {
                 response_tx

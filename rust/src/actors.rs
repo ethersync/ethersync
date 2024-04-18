@@ -93,8 +93,9 @@ impl Actor for Neovim {
 
         // TODO: There seems to be a bug when enabling multiline insertions and/or multi-line
         // deletions. Something to do with empty lines?
-        if false && rand::thread_rng().gen_bool(0.5) {
-            let deletion_components = vec!["x", "dd", "vllld"];
+        if rand::thread_rng().gen_bool(0.5) {
+            //let deletion_components = vec!["x", "dd", "vllld"];
+            let deletion_components = vec!["x", "vllld", "rü"];
             vim_normal_command.push_str(&random_string(
                 rand_usize_inclusive(1, 2),
                 &deletion_components,
@@ -102,15 +103,16 @@ impl Actor for Neovim {
         } else {
             vim_normal_command.push('i');
             //let vim_components = vec!["x", "🥕", "_", "💚"]; //, "\n"];
-            let vim_components = vec!["x", "_", "\n"];
+            let vim_components = vec!["x", "_"];
             vim_normal_command
                 .push_str(&random_string(rand_usize_inclusive(1, 10), &vim_components));
         }
 
-        vim_normal_command.push_str("<Esc>");
+        //vim_normal_command.push_str("<Esc>");
 
         self.nvim
-            .input(&vim_normal_command)
+            .command(&format!(r#"silent! execute "normal {vim_normal_command}""#))
+            //.input(&vim_normal_command)
             .await
             .expect("Failed to send input to Neovim");
     }
