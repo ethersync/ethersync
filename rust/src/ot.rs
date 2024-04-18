@@ -348,6 +348,44 @@ mod tests {
             assert_eq!(ot_server.last_confirmed_editor_content, "hzlo!\nblubb");
             assert_eq!(ot_server.apply_to_initial_content(), "ho\nzlo!\nblubb");
         }
+
+        #[test]
+        fn can_do_newline_stuff() {
+            let mut ot_server: OTServer = OTServer::default();
+            ot_server.apply_crdt_change(insert(0, "Let's say\nthis could be\na poem."));
+            ot_server.apply_editor_operation(rev_ed_delta_single(
+                ot_server.daemon_revision,
+                (0, 0),
+                (0, 0),
+                "THE POEM\n",
+            ));
+
+            assert_eq!(
+                ot_server.apply_to_initial_content(),
+                "THE POEM\nLet's say\nthis could be\na poem."
+            );
+
+            // both do a replacemenet at the "same time", but not overlapping.
+
+            // Note: using len because all is ascii and .chars().count() is more noise.
+            ot_server.apply_crdt_change(replace(
+                "THE POEM\nLet's say\n".len(), // skip
+                "this could".len(),            // replace
+                "I want to",                   // by
+            ));
+
+            ot_server.apply_editor_operation(rev_ed_delta_single(
+                ot_server.daemon_revision - 1, // same time
+                (3, 0),
+                (3, "a poem".len()),
+                "the boss",
+            ));
+
+            assert_eq!(
+                ot_server.apply_to_initial_content(),
+                "THE POEM\nLet's say\nI want to be\nthe boss."
+            );
+        }
     }
 
     mod ot_server_internal_state {
