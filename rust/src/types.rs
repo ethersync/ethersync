@@ -565,34 +565,27 @@ impl EditorTextDelta {
     pub fn from_delta(delta: TextDelta, content: &str) -> Self {
         let mut editor_ops = vec![];
         let mut position = 0;
-        let mut content = content.to_string();
         for op in delta {
             match op {
                 TextOp::Retain(n) => position += n,
                 TextOp::Delete(n) => {
                     editor_ops.push(EditorTextOp {
                         range: Range {
-                            anchor: Position::from_offset(position, &content),
-                            head: Position::from_offset(position + n, &content),
+                            anchor: Position::from_offset(position, content),
+                            head: Position::from_offset(position + n, content),
                         },
                         replacement: String::new(),
                     });
-                    let first_part = content.chars().take(position).collect::<String>();
-                    let second_part = content.chars().skip(position + n).collect::<String>();
-                    content = format!("{}{}", first_part, second_part);
+                    position += n;
                 }
                 TextOp::Insert(s) => {
                     editor_ops.push(EditorTextOp {
                         range: Range {
-                            anchor: Position::from_offset(position, &content),
-                            head: Position::from_offset(position, &content),
+                            anchor: Position::from_offset(position, content),
+                            head: Position::from_offset(position, content),
                         },
                         replacement: s.to_string(),
                     });
-                    position += s.chars().count();
-                    let first_part = content.chars().take(position).collect::<String>();
-                    let second_part = content.chars().skip(position).collect::<String>();
-                    content = format!("{}{}{}", first_part, s, second_part);
                 }
             }
         }
@@ -792,20 +785,34 @@ mod tests {
 
         let ed_delta = EditorTextDelta::from_delta(delta, content);
 
-        let expected_ed_delta = EditorTextDelta(vec![EditorTextOp {
-            range: Range {
-                anchor: Position {
-                    line: 0,
-                    character: 5,
+        let expected_ed_delta = EditorTextDelta(vec![
+            EditorTextOp {
+                range: Range {
+                    anchor: Position {
+                        line: 0,
+                        character: 5,
+                    },
+                    head: Position {
+                        line: 0,
+                        character: 5,
+                    },
                 },
-                head: Position {
-                    line: 1,
-                    character: 0,
-                },
+                replacement: "\nhello\n".to_string(),
             },
-            replacement: "\nhello\n".to_string(),
-        }]);
-        // Weiter: Die replacements LSP-conform machen.
+            EditorTextOp {
+                range: Range {
+                    anchor: Position {
+                        line: 0,
+                        character: 5,
+                    },
+                    head: Position {
+                        line: 1,
+                        character: 0,
+                    },
+                },
+                replacement: "".to_string(),
+            },
+        ]);
 
         assert_eq!(expected_ed_delta, ed_delta);
     }
