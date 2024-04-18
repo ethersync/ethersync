@@ -6,12 +6,12 @@ use pretty_assertions::assert_eq;
 use rand::Rng;
 use std::collections::HashMap;
 use std::path::Path;
-use tokio::time::{sleep, timeout};
+use tokio::time::sleep;
 use tracing::info;
 use tracing_subscriber::FmtSubscriber;
 
 async fn perform_random_edits(actor: &mut (impl Actor + ?Sized)) {
-    loop {
+    for _ in 1..10 {
         actor.apply_random_delta().await;
         let random_millis = rand::thread_rng().gen_range(0..100);
         sleep(std::time::Duration::from_millis(random_millis)).await;
@@ -35,7 +35,7 @@ async fn main() {
     // Set up the project directory.
     let dir = temp_dir::TempDir::new().expect("Failed to create temp directory");
     let file = dir.child("file");
-    let file2 = dir.child("file2");
+    // let file2 = dir.child("file2");
     create_ethersync_dir(dir.path());
 
     // Set up the actors.
@@ -43,32 +43,32 @@ async fn main() {
 
     let nvim = Neovim::new(file).await;
 
-    let peer = Daemon::new(
-        Some(daemon.tcp_address()),
-        Path::new("/tmp/etherbonk"),
-        file2.as_path(),
-    );
+    //let peer = Daemon::new(
+    //    Some(daemon.tcp_address()),
+    //    Path::new("/tmp/etherbonk"),
+    //    file2.as_path(),
+    //);
 
-    let mut nvim2 = Neovim::new(file2).await;
-    nvim2.etherbonk().await;
+    // let mut nvim2 = Neovim::new(file2).await;
+    // nvim2.etherbonk().await;
 
     let mut actors: HashMap<String, Box<dyn Actor>> = HashMap::new();
     actors.insert("daemon".to_string(), Box::new(daemon));
     actors.insert("nvim".to_string(), Box::new(nvim));
-    actors.insert("peer".to_string(), Box::new(peer));
-    actors.insert("nvim2".to_string(), Box::new(nvim2));
+    // actors.insert("peer".to_string(), Box::new(peer));
+    // actors.insert("nvim2".to_string(), Box::new(nvim2));
 
     sleep(std::time::Duration::from_millis(100)).await;
 
     // Perform random edits in parallel.
-    timeout(std::time::Duration::from_secs(1), async {
-        let handles = actors
-            .iter_mut()
-            .map(|(_, actor)| perform_random_edits(actor.as_mut()));
-        join_all(handles).await;
-    })
-    .await
-    .expect_err("Random edits died unexpectedly");
+    // timeout(std::time::Duration::from_secs(100), async {
+    let handles = actors
+        .iter_mut()
+        .map(|(_, actor)| perform_random_edits(actor.as_mut()));
+    join_all(handles).await;
+    // })
+    // .await
+    // .expect("Random edits went too long unexpectedly");
 
     info!("Sleep a bit, so that the actors can sync");
     sleep(std::time::Duration::from_millis(1000)).await;

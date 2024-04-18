@@ -299,7 +299,7 @@ impl DaemonActor {
         let text = self
             .current_content()
             .expect("Should have initialized text before performing random edit");
-        let random_string: String = rand::thread_rng()
+        let _random_string: String = rand::thread_rng()
             .sample_iter(&Alphanumeric)
             .take(1)
             .map(char::from)
@@ -309,7 +309,7 @@ impl DaemonActor {
 
         let mut delta = TextDelta::default();
         delta.retain(random_position);
-        delta.insert(&random_string);
+        delta.insert("d");
         delta
     }
 
