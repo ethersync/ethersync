@@ -627,6 +627,19 @@ pub mod factories {
         RevisionedEditorTextDelta::new(revision, delta)
     }
 
+    pub fn range(anchor: (usize, usize), head: (usize, usize)) -> Range {
+        Range {
+            anchor: Position {
+                line: anchor.0,
+                character: anchor.1,
+            },
+            head: Position {
+                line: head.0,
+                character: head.1,
+            },
+        }
+    }
+
     pub fn ed_delta_single(
         anchor: (usize, usize),
         head: (usize, usize),
@@ -641,16 +654,7 @@ pub mod factories {
         replacement: &str,
     ) -> EditorTextOp {
         EditorTextOp {
-            range: Range {
-                anchor: Position {
-                    line: anchor.0,
-                    character: anchor.1,
-                },
-                head: Position {
-                    line: head.0,
-                    character: head.1,
-                },
-            },
+            range: range(anchor, head),
             replacement: replacement.to_string(),
         }
     }
@@ -692,105 +696,29 @@ mod tests {
 
     #[test]
     fn range_forward() {
-        assert!(Range {
-            anchor: Position {
-                line: 0,
-                character: 0
-            },
-            head: Position {
-                line: 0,
-                character: 1
-            }
-        }
-        .is_forward());
-        assert!(Range {
-            anchor: Position {
-                line: 0,
-                character: 1
-            },
-            head: Position {
-                line: 1,
-                character: 0
-            }
-        }
-        .is_forward());
-        assert!(!Range {
-            anchor: Position {
-                line: 0,
-                character: 1
-            },
-            head: Position {
-                line: 0,
-                character: 0
-            }
-        }
-        .is_forward());
-        assert!(!Range {
-            anchor: Position {
-                line: 1,
-                character: 0
-            },
-            head: Position {
-                line: 0,
-                character: 1
-            }
-        }
-        .is_forward());
+        assert!(range((0, 0), (0, 1)).is_forward());
+        assert!(range((0, 1), (1, 0)).is_forward());
+        assert!(!range((0, 1), (0, 0)).is_forward());
+        assert!(!range((1, 0), (0, 1)).is_forward());
     }
 
     #[test]
     fn conversion_editor_to_text_delta_insert() {
-        let ed_delta = EditorTextDelta(vec![EditorTextOp {
-            range: Range {
-                anchor: Position {
-                    line: 0,
-                    character: 1,
-                },
-                head: Position {
-                    line: 0,
-                    character: 1,
-                },
-            },
-            replacement: "a".to_string(),
-        }]);
+        let ed_delta = ed_delta_single((0, 1), (0, 1), "a");
         let delta: TextDelta = TextDelta::from_ed_delta(ed_delta, "foo");
         assert_eq!(delta, insert(1, "a"));
     }
 
     #[test]
     fn conversion_editor_to_text_delta_delete() {
-        let ed_delta = EditorTextDelta(vec![EditorTextOp {
-            range: Range {
-                anchor: Position {
-                    line: 0,
-                    character: 0,
-                },
-                head: Position {
-                    line: 0,
-                    character: 1,
-                },
-            },
-            replacement: "".to_string(),
-        }]);
+        let ed_delta = ed_delta_single((0, 0), (0, 1), "");
         let delta: TextDelta = TextDelta::from_ed_delta(ed_delta, "foo");
         assert_eq!(delta, delete(0, 1));
     }
 
     #[test]
     fn conversion_editor_to_text_delta_replacement() {
-        let ed_delta = EditorTextDelta(vec![EditorTextOp {
-            range: Range {
-                anchor: Position {
-                    line: 0,
-                    character: 5,
-                },
-                head: Position {
-                    line: 1,
-                    character: 0,
-                },
-            },
-            replacement: "\nhello\n".to_string(),
-        }]);
+        let ed_delta = ed_delta_single((0, 5), (1, 0), "\nhello\n");
         let delta: TextDelta = TextDelta::from_ed_delta(ed_delta, "hello\n");
         let mut expected_delta = TextDelta::default();
         expected_delta.retain(5);
@@ -811,64 +739,21 @@ mod tests {
         let ed_delta = EditorTextDelta::from_delta(delta, content);
 
         let expected_ed_delta = EditorTextDelta(vec![
-            EditorTextOp {
-                range: Range {
-                    anchor: Position {
-                        line: 0,
-                        character: 5,
-                    },
-                    head: Position {
-                        line: 0,
-                        character: 5,
-                    },
-                },
-                replacement: "\nhello\n".to_string(),
-            },
-            EditorTextOp {
-                range: Range {
-                    anchor: Position {
-                        line: 0,
-                        character: 5,
-                    },
-                    head: Position {
-                        line: 1,
-                        character: 0,
-                    },
-                },
-                replacement: "".to_string(),
-            },
+            replace_ed((0, 5), (0, 5), "\nhello\n"),
+            replace_ed((0, 5), (1, 0), ""),
         ]);
 
         assert_eq!(expected_ed_delta, ed_delta);
-    }
-
-    /*
-    #[test]
-    fn conversion_editor_to_text_delta_delete() {
-        let ed_delta = EditorTextDelta(vec![EditorTextOp {
-            range: Range { anchor:
-                1,
-                head: 3 },
-            replacement: "".to_string(),
-        }]);
-        let delta: TextDelta = ed_delta.into();
-        assert_eq!(delta, delete(1, 2));
     }
 
     #[test]
     #[ignore] // TODO: enable, when we support multiple ops in one delta
     fn conversion_editor_to_text_delta_insert_twice() {
         let ed_delta = EditorTextDelta(vec![
-            EditorTextOp {
-                range: Range { anchor: 1, head: 1 },
-                replacement: "long".to_string(),
-            },
-            EditorTextOp {
-                range: Range { anchor: 2, head: 2 },
-                replacement: "short".to_string(),
-            },
+            replace_ed((0, 1), (0, 1), "long"),
+            replace_ed((0, 2), (0, 2), "short"),
         ]);
-        let delta: TextDelta = ed_delta.into();
+        let delta: TextDelta = TextDelta::from_ed_delta(ed_delta, "oneliner");
         let mut expected = TextDelta::default();
         expected.retain(1);
         expected.insert("l");
@@ -876,5 +761,4 @@ mod tests {
         expected.insert("ong");
         assert_eq!(delta, expected);
     }
-    */
 }
