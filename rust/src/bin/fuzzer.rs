@@ -1,6 +1,7 @@
 #![allow(dead_code)]
 use ethersync::actors::{Actor, Neovim};
 use ethersync::daemon::Daemon;
+use ethersync::logging;
 use futures::future::join_all;
 use pretty_assertions::assert_eq;
 use rand::Rng;
@@ -8,7 +9,6 @@ use std::collections::HashMap;
 use std::path::Path;
 use tokio::time::sleep;
 use tracing::info;
-use tracing_subscriber::FmtSubscriber;
 
 async fn perform_random_edits(actor: &mut (impl Actor + ?Sized)) {
     for _ in 1..10 {
@@ -26,11 +26,7 @@ fn create_ethersync_dir(dir: &Path) {
 
 #[tokio::main]
 async fn main() {
-    let subscriber = FmtSubscriber::builder()
-        .with_max_level(tracing::Level::DEBUG)
-        .finish();
-    tracing::subscriber::set_global_default(subscriber)
-        .expect("Setting default log subscriber failed");
+    logging::initialize();
 
     // Set up the project directory.
     let dir = temp_dir::TempDir::new().expect("Failed to create temp directory");

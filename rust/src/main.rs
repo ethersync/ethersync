@@ -1,10 +1,9 @@
 use clap::{Parser, Subcommand};
 use ethersync::daemon::Daemon;
+use ethersync::logging;
 use std::io;
 use std::path::PathBuf;
-use time;
 use tokio::signal;
-use tracing_subscriber::{fmt, FmtSubscriber};
 
 mod client;
 
@@ -35,21 +34,7 @@ enum Commands {
 
 #[tokio::main]
 async fn main() -> io::Result<()> {
-    let timer = time::format_description::parse("[hour]:[minute]:[second]")
-        .expect("Could not create time format description");
-    let time_offset =
-        time::UtcOffset::current_local_offset().unwrap_or_else(|_| time::UtcOffset::UTC);
-    let timer = fmt::time::OffsetTime::new(time_offset, timer);
-
-    let subscriber = FmtSubscriber::builder()
-        // .pretty()
-        .with_max_level(tracing::Level::DEBUG)
-        // .with_thread_names(true)
-        .with_thread_ids(true)
-        .with_timer(timer)
-        .finish();
-    tracing::subscriber::set_global_default(subscriber)
-        .expect("Setting default log subscriber failed");
+    logging::initialize();
 
     let cli = Cli::parse();
 
