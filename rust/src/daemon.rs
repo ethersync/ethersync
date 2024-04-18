@@ -368,7 +368,7 @@ impl DaemonActor {
             self.handle_message(message);
             self.write_current_content_to_file();
         }
-        debug!("Channel towards document task has been closed");
+        panic!("Channel towards document task has been closed");
     }
 }
 
@@ -579,14 +579,14 @@ async fn start_sync(
             doc_changed_ping_rx
                 .recv()
                 .await
-                .expect("Doc changed channel has been closed.");
+                .expect("Doc changed channel has been closed");
         }
     });
 
     loop {
         match syncer_message_rx.recv().await {
             None => {
-                panic!("Channel towards sync task has been closed.");
+                panic!("Channel towards sync task has been closed");
             }
             Some(message) => match message {
                 SyncerMessage::ReceiveSyncMessage { message } => {
@@ -732,7 +732,7 @@ async fn sync_receive(mut sync_receiver: SyncReceiver) {
     while let Ok(message) = sync_receiver.read_message().await {
         sync_receiver.forward_sync_message(message).await;
     }
-    warn!("Sync Receive loop stopped");
+    panic!("Sync Receive loop stopped");
 }
 
 #[cfg(test)]

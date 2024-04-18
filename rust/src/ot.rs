@@ -187,13 +187,16 @@ impl OTServer {
 
     pub fn apply_to_initial_content(&mut self) -> String {
         let mut document = self.initial_content.clone();
-
+        debug!(
+            "Applying operation from list of truth™ to content {:?}",
+            &document
+        );
         // TODO: fold?
         for op_seq in &self.operations {
-            debug!(
-                "Applying operation from list of truth™ {:#?} to content {:?}",
-                &op_seq, &document
-            );
+            // debug!(
+            //     "Applying operation from list of truth™ {:#?} to content {:?}",
+            //     &op_seq, &document
+            // );
             document = Self::force_apply(&document, op_seq.clone());
         }
         document
