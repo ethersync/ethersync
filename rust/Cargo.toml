@@ -23,6 +23,7 @@ pretty_assertions = "1.4.0"
 futures = "0.3.30"
 ropey = "1.6.1"
 serde = "1.0.198"
+tracing-test = "0.2.4"
 
 [features]
 

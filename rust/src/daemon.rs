@@ -49,7 +49,7 @@ pub enum DocMessage {
 impl From<EditorProtocolMessage> for DocMessage {
     fn from(rpc_message: EditorProtocolMessage) -> Self {
         match rpc_message {
-            // EditorProtocolMessage::Debug => DocMessage::Debug,
+            EditorProtocolMessage::Debug(_) => DocMessage::Debug,
             EditorProtocolMessage::Open { uri: _ } => DocMessage::Open,
             EditorProtocolMessage::Close { uri: _ } => DocMessage::Close,
             EditorProtocolMessage::Edit { uri: _, delta } => DocMessage::RevDelta(delta),

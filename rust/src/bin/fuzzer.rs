@@ -27,7 +27,7 @@ fn create_ethersync_dir(dir: &Path) {
 #[tokio::main]
 async fn main() {
     let subscriber = FmtSubscriber::builder()
-        .with_max_level(tracing::Level::INFO)
+        .with_max_level(tracing::Level::DEBUG)
         .finish();
     tracing::subscriber::set_global_default(subscriber)
         .expect("Setting default log subscriber failed");

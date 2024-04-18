@@ -3,6 +3,7 @@ use automerge::PatchAction;
 use operational_transform::{Operation as OTOperation, OperationSeq};
 use ropey::Rope;
 use serde::{Deserialize, Serialize};
+use serde_json::Value as JSONValue;
 
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct TextDelta(pub Vec<TextOp>);
@@ -84,6 +85,7 @@ pub enum EditorProtocolMessage {
         uri: DocumentUri,
         delta: RevisionedEditorTextDelta,
     },
+    Debug(JSONValue),
     // TODO coming later:
     // Cursor{uri: DocumentUri, ranges: RevisionedRanges}
 }
@@ -154,8 +156,8 @@ mod ropey_test {
     #[test]
     fn zero_offset() {
         assert_eq!(
-            //       position           0123456 78901 2345
-            //       character             0123456 01234 0124
+            //       position         0123456 78901 2345
+            //       character        0123456 01234 0124
             Position::from_offset(0, "hallo,\nneue\nwelt"),
             Position {
                 line: 0,
@@ -204,6 +206,14 @@ mod ropey_test {
             .to_offset("h🥕llo,\nneue\nwelt"),
             3
         );
+        assert_eq!(
+            Position {
+                line: 0,
+                character: 6
+            }
+            .to_offset("h🥕llo,\nneue\nwelt"),
+            6
+        );
     }
 
     #[test]
@@ -234,6 +244,13 @@ mod ropey_test {
             Position {
                 line: 1,
                 character: 2
+            }
+        );
+        assert_eq!(
+            Position::from_offset(11, "h🥕llo,\nneue\nwelt"),
+            Position {
+                line: 1,
+                character: 4
             }
         );
         assert_eq!(

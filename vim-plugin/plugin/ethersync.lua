@@ -160,8 +160,8 @@ local function connect(socket_path)
     })
     online = true
 
-    local filename = vim.fs.basename(vim.api.nvim_buf_get_name(0))
-    client.notify("open", { filename })
+    local filename = "file://" .. vim.fs.basename(vim.api.nvim_buf_get_name(0))
+    client.notify("open", { uri = filename })
 end
 
 local function connect2()
@@ -346,8 +346,9 @@ function EthersyncClose()
     if vim.fn.isdirectory(vim.fn.expand("%:p:h") .. "/.ethersync") ~= 1 then
         return
     end
-    local filename = vim.fs.basename(vim.api.nvim_buf_get_name(0))
-    client.notify("close", { filename })
+
+    local filename = "file://" .. vim.fs.basename(vim.api.nvim_buf_get_name(0))
+    client.notify("close", { uri = filename })
 end
 
 -- When new buffer is loaded, run Ethersync automatically.

@@ -2,6 +2,7 @@
 use crate::types::{EditorTextDelta, RevisionedEditorTextDelta, RevisionedTextDelta, TextDelta};
 use operational_transform::OperationSeq;
 use std::cmp::Ordering;
+use tracing::debug;
 
 ///    `OTServer` receives operations from both the CRDT world, and one editor and makes sure that
 ///    the editor operations (which might be based on an older document) are applicable to the
@@ -140,11 +141,20 @@ impl OTServer {
                 // What is the most efficient+readable way to cut off the first elements?
                 let confirmed_queue = self.editor_queue.drain(..seen_operations);
                 for confirmed_editor_op in confirmed_queue {
+                    debug!(
+                        "Applying confirmed operation {:#?} to last confirmed editor content {:?}",
+                        &confirmed_editor_op, &self.last_confirmed_editor_content
+                    );
                     self.last_confirmed_editor_content = Self::force_apply(
                         &self.last_confirmed_editor_content,
                         confirmed_editor_op.clone(),
                     );
                 }
+
+                debug!(
+                    "Applying incoming editor operation {:#?} to last confirmed editor content {:?}",
+                    &op_seq, &self.last_confirmed_editor_content
+                );
                 self.last_confirmed_editor_content =
                     Self::force_apply(&self.last_confirmed_editor_content, op_seq.clone());
                 (op_seq, self.editor_queue) =
@@ -166,6 +176,8 @@ impl OTServer {
                 self.editor_revision,
                 ed_delta,
             ));
+
+            debug!("Applying unconfirmed operation from editor queue {:#?} to last confirmed editor content {:?}", &editor_op, &document);
             document = Self::force_apply(&document, editor_op.clone());
         }
         to_editor
@@ -176,6 +188,10 @@ impl OTServer {
 
         // TODO: fold?
         for op_seq in &self.operations {
+            debug!(
+                "Applying operation from list of truth™ {:#?} to content {:?}",
+                &op_seq, &document
+            );
             document = Self::force_apply(&document, op_seq.clone());
         }
         document
@@ -189,8 +205,8 @@ impl OTServer {
         }
         op_seq.apply(document).unwrap_or_else(|_| {
             panic!(
-                "Could not apply operation {:?} to string with length {}.",
-                op_seq, doc_chars
+                "Could not apply operation {:?} to string with length {} ('{:?}')",
+                op_seq, doc_chars, document
             )
         })
     }
@@ -250,6 +266,7 @@ fn transform_through_operations(
 mod tests {
     use super::*;
     use crate::types::factories::*;
+    use tracing_test::traced_test;
 
     fn compose(delta1: TextDelta, delta2: TextDelta) -> TextDelta {
         operational_transform_internals::ot_compose(delta1.into(), delta2.into()).into()
@@ -258,6 +275,7 @@ mod tests {
     mod ot_server_public_interface {
         use super::*;
 
+        #[traced_test]
         #[test]
         fn routes_operations_through_server() {
             let mut ot_server: OTServer = OTServer::new("hello".into());
@@ -287,7 +305,7 @@ mod tests {
             // editor thinks: hxeyllo -> hlo
             let (to_crdt, to_editor) = ot_server.apply_editor_operation(rev_delta(1, delete(1, 4)));
             assert_eq!(to_crdt, compose(delete(1, 2), delete(2, 2)));
-            let expected = EditorTextDelta::from_delta(insert(1, "z"), "hxeyllo");
+            let expected = EditorTextDelta::from_delta(insert(1, "z"), "hlo");
             assert_eq!(to_editor, vec![rev_ed_delta(2, expected)]);
 
             assert_eq!(ot_server.apply_to_initial_content(), "hzlo");
@@ -300,6 +318,25 @@ mod tests {
                     compose(delete(1, 2), delete(2, 2)).into()
                 ]
             );
+
+            assert_eq!(ot_server.editor_queue, vec![insert(1, "z").into(),]);
+            assert_eq!(ot_server.last_confirmed_editor_content, "hlo");
+
+            // Note: We're not testing some of the returned values.
+            // We're mostly interested in the created structure.
+            let (_to_crdt, _to_editor) =
+                ot_server.apply_editor_operation(rev_delta(2, insert(4, "!")));
+            assert_eq!(ot_server.editor_queue, vec![]);
+            assert_eq!(ot_server.last_confirmed_editor_content, "hzlo!");
+
+            let _to_editor = ot_server.apply_crdt_change(insert(1, "o"));
+            let _to_editor = ot_server.apply_crdt_change(insert(2, "\n"));
+            let (_to_crdt, _to_editor) =
+                ot_server.apply_editor_operation(rev_delta(2, insert(5, "\nblubb")));
+
+            assert_eq!(ot_server.editor_queue.len(), 2);
+            assert_eq!(ot_server.last_confirmed_editor_content, "hzlo!\nblubb");
+            assert_eq!(ot_server.apply_to_initial_content(), "ho\nzlo!\nblubb");
         }
     }
 
