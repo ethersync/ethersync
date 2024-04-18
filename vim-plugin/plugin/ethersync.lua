@@ -1,15 +1,8 @@
 local utils = require("utils")
 local sync = require("vim.lsp.sync")
 
--- Used to store the changedtick of the buffer when we make changes to it.
--- We do this to avoid infinite loops, where we make a change, which would
--- trigger normally an "on_bytes" event.
---
--- TODO: how big will this list get? should we optimize it?
+-- Used to note that changes to the buffer should be ignored, and not be sent out as deltas.
 local ignore_edits = false
-
-local ns_id = vim.api.nvim_create_namespace("Ethersync")
-local virtual_cursor
 
 -- JSON-RPC connection.
 local client
@@ -34,47 +27,6 @@ local function debug(tbl)
     if true then
         client.notify("debug", tbl)
     end
-end
-
--- Creates a virtual cursor.
-local function createCursor()
-    local row = 0
-    local col = 0
-    virtual_cursor = vim.api.nvim_buf_set_extmark(0, ns_id, row, col, {
-        hl_mode = "combine",
-        hl_group = "TermCursor",
-        end_col = col,
-    })
-end
-
--- Set the cursor position in the current buffer. If head and anchor are different,
--- a visual selection is created. head and anchor are in UTF-16 code units.
-local function setCursor(head, anchor)
-    if head == anchor then
-        anchor = head + 1
-    end
-
-    if head > anchor then
-        head, anchor = anchor, head
-    end
-
-    -- If the cursor is at the end of the buffer, don't show it.
-    -- This is because otherwise, the calculation that follows (to find the location for head+1 would fail.
-    -- TODO: Find a way to display the cursor nevertheless.
-    if head == utils.contentOfCurrentBuffer() then
-        return
-    end
-
-    local row, col = utils.indexToRowCol(head)
-    local rowAnchor, colAnchor = utils.indexToRowCol(anchor)
-
-    vim.api.nvim_buf_set_extmark(0, ns_id, row, col, {
-        id = virtual_cursor,
-        hl_mode = "combine",
-        hl_group = "TermCursor",
-        end_col = colAnchor,
-        end_row = rowAnchor,
-    })
 end
 
 local function applyDelta(delta)
@@ -200,8 +152,6 @@ function Ethersync()
 
     connect()
 
-    createCursor()
-
     prev_lines = vim.api.nvim_buf_get_lines(0, 0, -1, true)
 
     -- If there are no lines, set 'eol' to true. We didn't find a way to tell if the file contains '\n' or ''.
@@ -213,12 +163,12 @@ function Ethersync()
         on_lines = function(
             _the_literal_string_lines --[[@diagnostic disable-line]],
             _buffer_handle --[[@diagnostic disable-line]],
-            changedtick,
+            _changedtick, --[[@diagnostic disable-line]]
             first_line,
             last_line,
             new_last_line
         )
-            -- line counts that we get called with are zero-based.
+            -- Line counts that we get called with are zero-based.
             -- last_line and new_last_line are exclusive
 
             debug({ first_line = first_line, last_line = last_line, new_last_line = new_last_line })
@@ -296,38 +246,6 @@ function Ethersync()
     --    end
     --    vim.api.nvim_set_option_value("fixeol", false, { buf = 0 })
     --end
-
-    --vim.api.nvim_create_autocmd({ "CursorMoved", "CursorMovedI" }, {
-    --    callback = function()
-    --        local row, col = unpack(vim.api.nvim_win_get_cursor(0))
-    --        local head = utils.rowColToIndex(row, col)
-    --        local headUTF16CodeUnits = utils.charOffsetToUTF16CodeUnitOffset(head)
-
-    --        if headUTF16CodeUnits == -1 then
-    --            -- TODO what happens here?
-    --            return
-    --        end
-
-    --        -- Is there a visual selection?
-    --        local visualSelection = vim.fn.mode() == "v" or vim.fn.mode() == "V" or vim.fn.mode() == ""
-
-    --        local anchorUTF16CodeUnits = headUTF16CodeUnits
-    --        if visualSelection then
-    --            -- Note: colV is the *byte* position, starting at *1*!
-    --            local _, rowV, colV = unpack(vim.fn.getpos("v"))
-    --            local anchor = utils.rowColToIndex(rowV, colV - 1)
-    --            if head >= anchor then
-    --                head = head + 1
-    --            else
-    --                anchor = anchor + 1
-    --            end
-    --            headUTF16CodeUnits = utils.charOffsetToUTF16CodeUnitOffset(head)
-    --            anchorUTF16CodeUnits = utils.charOffsetToUTF16CodeUnitOffset(anchor)
-    --        end
-    --        local filename = vim.fs.basename(vim.api.nvim_buf_get_name(0))
-    --        client:notify("cursor", { filename, headUTF16CodeUnits, anchorUTF16CodeUnits })
-    --    end,
-    --})
 end
 
 function EthersyncClose()
@@ -358,11 +276,3 @@ vim.api.nvim_create_user_command("EthersyncGoOffline", goOffline, {})
 vim.api.nvim_create_user_command("EthersyncGoOnline", goOnline, {})
 vim.api.nvim_create_user_command("EthersyncReload", resetState, {})
 vim.api.nvim_create_user_command("Etherbonk", connect2, {})
-
--- TODO For debugging purposes. Remove before merging branch.
-vim.api.nvim_create_user_command("EthersyncInsert", function()
-    print(vim.fn.strchars(utils.contentOfCurrentBuffer()))
-    local row, col = utils.indexToRowCol(2)
-    print(row, col)
-    utils.insert(2, "a")
-end, {})
