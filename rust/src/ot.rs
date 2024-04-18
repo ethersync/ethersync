@@ -105,12 +105,14 @@ impl OTServer {
     /// daemonRevision is the revision this operation applies to.
     pub fn apply_editor_operation(
         &mut self,
-        rev_delta: RevisionedTextDelta,
+        rev_editor_delta: RevisionedEditorTextDelta,
     ) -> (TextDelta, Vec<RevisionedEditorTextDelta>) {
         let mut to_editor = vec![];
-        let mut op_seq: OperationSeq = rev_delta.delta.into();
-        let daemon_revision = rev_delta.revision;
+        let daemon_revision = rev_editor_delta.revision;
         self.editor_revision += 1;
+
+        let mut op_seq: OperationSeq;
+
         match daemon_revision.cmp(&self.daemon_revision) {
             Ordering::Greater => {
                 panic!(
@@ -120,6 +122,11 @@ impl OTServer {
             }
             Ordering::Equal => {
                 // The sent operation applies to the current daemon revision. We can apply it immediately.
+                let rev_delta = RevisionedTextDelta::from_rev_ed_delta(
+                    rev_editor_delta,
+                    &self.last_confirmed_editor_content,
+                );
+                op_seq = rev_delta.delta.into();
                 self.operations.push(op_seq.clone());
                 self.last_confirmed_editor_content = self.apply_to_initial_content();
                 // All pending editor operation are confirmed.
@@ -152,6 +159,11 @@ impl OTServer {
                         confirmed_editor_op.clone(),
                     );
                 }
+                let rev_delta = RevisionedTextDelta::from_rev_ed_delta(
+                    rev_editor_delta,
+                    &self.last_confirmed_editor_content,
+                );
+                op_seq = rev_delta.delta.into();
 
                 debug!(
                     "Applying incoming editor operation {:#?} to last confirmed editor content {:?}",
@@ -187,16 +199,8 @@ impl OTServer {
 
     pub fn apply_to_initial_content(&mut self) -> String {
         let mut document = self.initial_content.clone();
-        debug!(
-            "Applying operation from list of truth™ to content {:?}",
-            &document
-        );
         // TODO: fold?
         for op_seq in &self.operations {
-            // debug!(
-            //     "Applying operation from list of truth™ {:#?} to content {:?}",
-            //     &op_seq, &document
-            // );
             document = Self::force_apply(&document, op_seq.clone());
         }
         document
@@ -290,7 +294,7 @@ mod tests {
             assert_eq!(to_editor, rev_ed_delta(0, expected));
 
             let (to_crdt, to_editor) =
-                ot_server.apply_editor_operation(rev_delta(0, insert(2, "y")));
+                ot_server.apply_editor_operation(rev_ed_delta_single(0, (0, 2), (0, 2), "y"));
             assert_eq!(to_crdt, insert(3, "y"));
             let expected = EditorTextDelta::from_delta(insert(1, "x"), "heyllo");
             assert_eq!(to_editor, vec![rev_ed_delta(1, expected)]);
@@ -308,7 +312,8 @@ mod tests {
             assert_eq!(ot_server.apply_to_initial_content(), "hxezyllo");
 
             // editor thinks: hxeyllo -> hlo
-            let (to_crdt, to_editor) = ot_server.apply_editor_operation(rev_delta(1, delete(1, 4)));
+            let (to_crdt, to_editor) =
+                ot_server.apply_editor_operation(rev_ed_delta_single(1, (0, 1), (0, 5), ""));
             assert_eq!(to_crdt, compose(delete(1, 2), delete(2, 2)));
             let expected = EditorTextDelta::from_delta(insert(1, "z"), "hlo");
             assert_eq!(to_editor, vec![rev_ed_delta(2, expected)]);
@@ -330,14 +335,14 @@ mod tests {
             // Note: We're not testing some of the returned values.
             // We're mostly interested in the created structure.
             let (_to_crdt, _to_editor) =
-                ot_server.apply_editor_operation(rev_delta(2, insert(4, "!")));
+                ot_server.apply_editor_operation(rev_ed_delta_single(2, (0, 4), (0, 4), "!"));
             assert_eq!(ot_server.editor_queue, vec![]);
             assert_eq!(ot_server.last_confirmed_editor_content, "hzlo!");
 
             let _to_editor = ot_server.apply_crdt_change(insert(1, "o"));
             let _to_editor = ot_server.apply_crdt_change(insert(2, "\n"));
             let (_to_crdt, _to_editor) =
-                ot_server.apply_editor_operation(rev_delta(2, insert(5, "\nblubb")));
+                ot_server.apply_editor_operation(rev_ed_delta_single(2, (0, 5), (0, 5), "\nblubb"));
 
             assert_eq!(ot_server.editor_queue.len(), 2);
             assert_eq!(ot_server.last_confirmed_editor_content, "hzlo!\nblubb");
@@ -363,7 +368,7 @@ mod tests {
         #[test]
         fn editor_operation_tracks_revision() {
             let mut ot_server: OTServer = OTServer::new("foobar".to_string());
-            ot_server.apply_editor_operation(rev_delta(0, dummy_insert(2)));
+            ot_server.apply_editor_operation(rev_ed_delta_single(0, (0, 0), (0, 0), "x"));
             assert_eq!(ot_server.editor_revision, 1);
             assert_eq!(ot_server.daemon_revision, 0);
         }
@@ -384,7 +389,7 @@ mod tests {
             ot_server.apply_crdt_change(dummy_insert(8));
             assert_eq!(ot_server.editor_queue.len(), 3);
 
-            ot_server.apply_editor_operation(rev_delta(1, dummy_insert(2)));
+            ot_server.apply_editor_operation(rev_ed_delta_single(1, (0, 2), (0, 2), "foo"));
             // we have already seen one op, so now the queue has only 2 left.
             assert_eq!(ot_server.editor_queue.len(), 2);
         }
@@ -393,8 +398,8 @@ mod tests {
         fn replace_single_character() {
             let mut ot_server: OTServer = OTServer::new("hello".into());
 
-            let (to_crdt, to_editor) =
-                ot_server.apply_editor_operation(rev_delta(0, replace(1, 1, "u")));
+            let (to_crdt, _to_editor) =
+                ot_server.apply_editor_operation(rev_ed_delta_single(0, (0, 1), (0, 2), "u"));
 
             let mut expected = TextDelta::default();
             expected.retain(1);

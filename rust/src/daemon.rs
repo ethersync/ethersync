@@ -1,9 +1,6 @@
 #![allow(dead_code)]
 use crate::ot::OTServer;
-use crate::types::{
-    EditorProtocolMessage, EditorTextDelta, RevisionedEditorTextDelta, RevisionedTextDelta,
-    TextDelta,
-};
+use crate::types::{EditorProtocolMessage, EditorTextDelta, RevisionedEditorTextDelta, TextDelta};
 use anyhow::Result;
 use automerge::{
     patches::TextRepresentation,
@@ -184,6 +181,8 @@ impl DaemonActor {
         }
     }
     fn handle_message(&mut self, message: DocMessage) {
+        // TODO: Show the type in the debug message, or implement Debug for DocMessage.
+        debug!("Handling message from editor.");
         match message {
             DocMessage::GetContent { response_tx } => {
                 response_tx
@@ -220,6 +219,7 @@ impl DaemonActor {
                 self.process_crdt_delta_in_ot(delta);
             }
             DocMessage::RevDelta(rev_delta) => {
+                debug!("Handling RevDelta from editor: {:#?}", rev_delta);
                 let (editor_delta_for_crdt, rev_deltas_for_editor) =
                     self.apply_delta_to_ot(rev_delta);
 
@@ -287,9 +287,8 @@ impl DaemonActor {
             .ot_server
             .as_mut()
             .expect("No editor connected, where does this delta come from?");
-
-        let rev_delta = RevisionedTextDelta::from_rev_ed_delta(rev_editor_delta, &text);
-        let (delta_for_crdt, rev_deltas_for_editor) = ot_server.apply_editor_operation(rev_delta);
+        let (delta_for_crdt, rev_deltas_for_editor) =
+            ot_server.apply_editor_operation(rev_editor_delta);
 
         let editor_delta_for_crdt = EditorTextDelta::from_delta(delta_for_crdt, &text);
         (editor_delta_for_crdt, rev_deltas_for_editor)
@@ -373,8 +372,13 @@ impl DaemonActor {
 
     async fn run(&mut self) {
         while let Some(message) = self.doc_message_rx.recv().await {
-            self.handle_message(message);
-            self.write_current_content_to_file();
+            if let DocMessage::Debug = &message {
+                // No need to do anything.
+                continue;
+            } else {
+                self.handle_message(message);
+                self.write_current_content_to_file();
+            }
         }
         panic!("Channel towards document task has been closed");
     }
@@ -662,7 +666,6 @@ async fn listen_socket(
                         line_maybe = lines.next_line() => {
                             match line_maybe {
                                 Ok(Some(line)) => {
-                                    debug!("Received line from editor: {:#?}", line);
                                     let msg: Result<EditorProtocolMessage, serde_json::Error> = serde_json::from_str(&line);
                                     match msg {
                                         Ok(message) => {

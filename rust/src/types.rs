@@ -646,6 +646,18 @@ pub mod factories {
             replacement: replacement.to_string(),
         }
     }
+
+    pub fn rev_ed_delta_single(
+        revision: usize,
+        anchor: (usize, usize),
+        head: (usize, usize),
+        replacement: &str,
+    ) -> RevisionedEditorTextDelta {
+        rev_ed_delta(
+            revision,
+            EditorTextDelta(vec![replace_ed(anchor, head, replacement)]),
+        )
+    }
 }
 
 #[cfg(test)]
