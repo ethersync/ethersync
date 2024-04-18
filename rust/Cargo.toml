@@ -26,6 +26,7 @@ serde = "1.0.198"
 tracing-test = "0.2.4"
 time = { version = "0.3.36", features = ["formatting"] }
 time-macros = { version = "0.2.0-alpha.1" }
+local-ip-address = "0.6.1"
 
 [features]
 

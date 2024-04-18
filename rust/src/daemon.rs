@@ -8,6 +8,7 @@ use automerge::{
     transaction::Transactable,
     AutoCommit, ObjType, Patch, PatchLog, ReadDoc,
 };
+use local_ip_address::local_ip;
 use rand::{distributions::Alphanumeric, Rng};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -386,6 +387,7 @@ impl DaemonActor {
 
 pub struct Daemon {
     doc_message_tx: DocMessageSender,
+    tcp_address: Option<String>,
 }
 
 impl Daemon {
@@ -465,6 +467,7 @@ impl Daemon {
         let doc_changed_ping_tx_clone = doc_changed_ping_tx.clone();
         let doc_message_tx_clone_2 = doc_message_tx_clone.clone();
 
+        let mut maybe_tcp_address = None;
         if let Some(peer) = peer {
             tokio::spawn(async {
                 dial_tcp(doc_message_tx_clone, doc_changed_ping_tx_clone, peer)
@@ -472,10 +475,21 @@ impl Daemon {
                     .expect("Failed to dial peer");
             });
         } else {
+            maybe_tcp_address = Some(
+                local_ip()
+                    .expect("Failed to get local IP address")
+                    .to_string()
+                    + ":4242",
+            );
+            let maybe_tcp_address_clone = maybe_tcp_address.clone();
             tokio::spawn(async {
-                listen_tcp(doc_message_tx_clone, doc_changed_ping_tx_clone)
-                    .await
-                    .expect("Failed to listen on TCP port");
+                listen_tcp(
+                    doc_message_tx_clone,
+                    doc_changed_ping_tx_clone,
+                    maybe_tcp_address_clone.unwrap(),
+                )
+                .await
+                .expect("Failed to listen on TCP port");
             });
         }
 
@@ -492,7 +506,10 @@ impl Daemon {
         });
 
         tokio::spawn(async move { daemon_actor.run().await });
-        Self { doc_message_tx }
+        Self {
+            doc_message_tx,
+            tcp_address: maybe_tcp_address,
+        }
     }
 
     pub async fn content(&self) -> Result<String> {
@@ -519,17 +536,20 @@ impl Daemon {
             .expect("Failed to send delta to document task");
     }
 
-    #[allow(dead_code)]
     #[must_use]
     pub fn tcp_address(&self) -> String {
-        // TODO: Get the actual address.
-        "0.0.0.0:4242".to_string()
+        let ip = local_ip().expect("Failed to get local IP address");
+        format!("{ip}:4242")
     }
 }
 
-async fn listen_tcp(tx: DocMessageSender, doc_changed_ping_tx: DocChangedSender) -> Result<()> {
-    let listener = TcpListener::bind("0.0.0.0:4242").await?;
-    info!("Listening on TCP port: {}", listener.local_addr()?);
+async fn listen_tcp(
+    tx: DocMessageSender,
+    doc_changed_ping_tx: DocChangedSender,
+    addr: String,
+) -> Result<()> {
+    let listener = TcpListener::bind(&addr).await?;
+    info!("Listening on TCP port: {}", addr);
 
     loop {
         let Ok((stream, _addr)) = listener.accept().await else {
@@ -685,7 +705,6 @@ async fn listen_socket(
                             }
                         }
                         Ok(rev_delta) = editor_message_rx.recv() => {
-                            // TODO: add 2.0
                             debug!("Received editor message to send to it.");
                             let message = EditorProtocolMessage::Edit {
                                 uri: "file://hamwanich".to_string(),
