@@ -680,9 +680,15 @@ async fn listen_socket(
                                 uri: "file://hamwanich".to_string(),
                                 delta: rev_delta
                             };
-                            let payload = serde_json::to_string(&message)?;
-                            debug!("Sending message to editor: {:#?}", payload);
-                            tcp_write.write_all(format!("{payload}\n").as_bytes()).await?;
+                            let json_value = serde_json::to_value(message).expect("Failed to convert editor message to a JSON value");
+                            if let serde_json::Value::Object(mut map) = json_value {
+                                map.insert("jsonrpc".to_string(), "2.0".into());
+                                let payload = serde_json::to_string(&map).expect("Failed to serialize modified editor message");
+                                debug!("Sending message to editor: {:#?}", payload);
+                                tcp_write.write_all(format!("{payload}\n").as_bytes()).await.expect("Failed to write to TCP stream");
+                            } else {
+                                panic!("EditorProtocolMessage was not serialized to a map");
+                            }
                         }
                     }
                 }
