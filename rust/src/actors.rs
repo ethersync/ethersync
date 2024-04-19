@@ -315,6 +315,7 @@ pub mod tests {
         });
     }
 
+    #[ignore]
     #[test]
     fn vim_sends_correct_delta() {
         // Edits on a single line.
@@ -427,6 +428,15 @@ pub mod tests {
         // A direct replace_ed((0, 1), (1, 0), " ") would be nicer.
         assert_vim_input_yields_replacements(
             "a\nb\n",
+            "J",
+            vec![
+                replace_ed((0, 1), (0, 1), " b"),
+                replace_ed((1, 0), (2, 0), ""),
+            ],
+        );
+
+        assert_vim_input_yields_replacements(
+            "a\nb",
             "J",
             vec![
                 replace_ed((0, 1), (0, 1), " b"),

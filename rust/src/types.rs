@@ -412,6 +412,19 @@ mod ropey_test {
 
     #[test]
     #[should_panic]
+    fn referencing_two_lines_after_last_line_fails() {
+        assert_eq!(
+            Position {
+                line: 2,
+                character: 0
+            }
+            .to_offset("a"),
+            1
+        );
+    }
+
+    #[test]
+    #[should_panic]
     fn offset_out_of_bounds_from_offset() {
         Position::from_offset(17, "h🥕llo,\nneue\nwelt");
     }
@@ -764,6 +777,21 @@ mod tests {
         expected_delta.retain(5);
         expected_delta.insert("\nhello\n");
         expected_delta.delete(1);
+        assert_eq!(expected_delta, delta);
+    }
+
+    #[test]
+    fn conversion_editor_to_text_delta_full_line_deletion() {
+        let ed_delta = ed_delta_single((0, 0), (1, 0), "");
+        let delta: TextDelta = TextDelta::from_ed_delta(ed_delta, "a");
+        let mut expected_delta = TextDelta::default();
+        expected_delta.delete(1);
+        assert_eq!(expected_delta, delta);
+
+        let ed_delta = ed_delta_single((0, 0), (1, 0), "");
+        let delta: TextDelta = TextDelta::from_ed_delta(ed_delta, "a\n");
+        let mut expected_delta = TextDelta::default();
+        expected_delta.delete(2);
         assert_eq!(expected_delta, delta);
     }
 
