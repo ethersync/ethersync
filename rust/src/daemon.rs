@@ -10,6 +10,7 @@ use automerge::{
 };
 use local_ip_address::local_ip;
 use rand::{distributions::Alphanumeric, Rng};
+use std::fmt;
 use std::fs;
 use std::path::{Path, PathBuf};
 use tokio::{
@@ -42,6 +43,23 @@ pub enum DocMessage {
         state: SyncState,
         response_tx: oneshot::Sender<(SyncState, Option<Message>)>,
     },
+}
+
+impl fmt::Debug for DocMessage {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let repr = match self {
+            DocMessage::GetContent { .. } => "get content",
+            DocMessage::Open => "open",
+            DocMessage::Close => "close",
+            DocMessage::Debug => "debug",
+            DocMessage::RandomEdit => "random edit",
+            DocMessage::RevDelta(_) => "delta from editor",
+            DocMessage::Delta(_) => "delta from peer",
+            DocMessage::ReceiveSyncMessage { .. } => "<automerge internal sync rcv>",
+            DocMessage::GenerateSyncMessage { .. } => "<automerge internal sync gen>",
+        };
+        write!(f, "{repr}")
+    }
 }
 
 impl From<EditorProtocolMessage> for DocMessage {
@@ -183,7 +201,7 @@ impl DaemonActor {
     }
     fn handle_message(&mut self, message: DocMessage) {
         // TODO: Show the type in the debug message, or implement Debug for DocMessage.
-        debug!("Handling doc message.");
+        debug!("Handling doc message: {message:?}");
         match message {
             DocMessage::GetContent { response_tx } => {
                 response_tx
