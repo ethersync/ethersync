@@ -386,6 +386,37 @@ mod tests {
                 "THE POEM\nLet's say\nI want to be\nthe boss."
             );
         }
+
+        #[test]
+        fn newline_join_behavior() {
+            let content = "hello\nworld\n";
+            let mut ot_server: OTServer = OTServer::new(content.to_string());
+            let (to_crdt_1, _) =
+                ot_server.apply_editor_operation(rev_ed_delta_single(0, (0, 5), (0, 5), " world"));
+            // Drop the newline (*could* be implicit, see below).
+            let (to_crdt_2, _) =
+                ot_server.apply_editor_operation(rev_ed_delta_single(0, (1, 0), (2, 0), ""));
+
+            assert_eq!(to_crdt_1, insert(5, " world"));
+            assert_eq!(to_crdt_2, delete(12, 6));
+
+            let mut ot_server2: OTServer = OTServer::new(content.to_string());
+            let to_2nd_editor = ot_server2.apply_crdt_change(to_crdt_1);
+            let to_2nd_editor_2 = ot_server2.apply_crdt_change(to_crdt_2);
+
+            assert_eq!(
+                to_2nd_editor,
+                rev_ed_delta_single(0, (0, 5), (0, 5), " world")
+            );
+            // If the content would be "hello\nworld", without a final newline, the following delta
+            // would not correctly "drop" the implicit newline.
+            // For details, check out ../../docs/decisions/02-working-with-vims-eol-behavior.md.
+            assert_eq!(to_2nd_editor_2, rev_ed_delta_single(0, (1, 0), (2, 0), ""));
+            assert_eq!(
+                ot_server.apply_to_initial_content(),
+                ot_server2.apply_to_initial_content()
+            );
+        }
     }
 
     mod ot_server_internal_state {
