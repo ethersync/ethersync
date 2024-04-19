@@ -172,6 +172,7 @@ function Ethersync()
             -- last_line and new_last_line are exclusive
 
             debug({ first_line = first_line, last_line = last_line, new_last_line = new_last_line })
+            -- TODO: optimize with a cache
             local curr_lines = vim.api.nvim_buf_get_lines(0, 0, -1, true)
 
             -- Are we currently ignoring edits?
@@ -190,27 +191,6 @@ function Ethersync()
             -- Sometimes, Vim deletes full lines by deleting the last line, plus an imaginary newline at the end. For example, to delete the second line, Vim would delete from (line: 1, column: 0) to (line: 2, column 0).
             -- But, in the case of deleting the last line, what we expect in the rest of Ethersync is to delete the newline *before* the line.
             -- So let's change the deleted range to (line: 0, column: [last character of the first line]) to (line: 1, column: [last character of the second line]).
-
-            if
-                diff.range["end"].line == #prev_lines
-                and diff.range.start.line == #prev_lines - 1
-                and diff.range["end"].character == 0
-                and diff.range.start.character == 0
-            then
-                if diff.range.start.line > 0 then
-                    diff.range.start.character = #prev_lines[diff.range.start.line]
-                    diff.range.start.line = diff.range.start.line - 1
-                    diff.range["end"].character = #prev_lines[diff.range["end"].line]
-                    diff.range["end"].line = diff.range["end"].line - 1
-                else
-                    -- Special case: if start line already is 0, we can't shift the deletion backwards like that.
-                    -- TODO: Find out whether or not there is a newline in the end?
-                    diff.range["end"].character = #prev_lines[diff.range["end"].line]
-                    diff.range["end"].line = diff.range["end"].line - 1
-                end
-            end
-
-            debug({ fixed_diff = diff })
 
             local rev_delta = {
                 delta = {
