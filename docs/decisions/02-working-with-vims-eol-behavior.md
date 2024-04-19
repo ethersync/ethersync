@@ -21,10 +21,17 @@ The Vim connected to that daemon deletes the "world", but doesn't remove the lin
 
 The source of this problem is that in the first Vim's representation of the content "hello\n", the newline is implicit, but in the second, it's explicit.
 
+### Vim-Internal solution
+
 A solution might be to always make newlines at end of files explicit, by inserting newlines there into the buffer content in two cases:
 
 1. When a file without a trailing newline is opened.
 2. When going from empty content to content.
+
+Special case: When we have that visible empty last line (for example, as a second line), and run dd on it, Vim should not emit ((1,0), (2,0), ""), but ((0, <length of line 0>), (1,0), "").
+Otherwise, the daemon will interpret it as a no-op, because it doesn't know about any newline after our "visible final newline".
+
+### Invariant solution
 
 Another possible solution might be that all involved components (OT & CRDT) assume the following invariant:
 

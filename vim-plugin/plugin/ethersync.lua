@@ -3,6 +3,8 @@ local sync = require("vim.lsp.sync")
 
 -- Used to note that changes to the buffer should be ignored, and not be sent out as deltas.
 local ignore_edits = false
+-- Same, but for use in async code. TODO: Occasionally clean it up.
+local ignored_changedticks = {}
 
 -- JSON-RPC connection.
 local client
@@ -62,6 +64,7 @@ local function processOperationForEditor(method, parameters)
 
         if theEditorRevision == editorRevision then
             applyDelta(delta)
+            EnsureNewlineAtEndOfFile(true)
         else
             -- Operation is not up-to-date to our content, skip it!
             -- The daemon will send a transformed one later.
@@ -176,7 +179,9 @@ function Ethersync()
             local curr_lines = vim.api.nvim_buf_get_lines(0, 0, -1, true)
 
             -- Are we currently ignoring edits?
-            if ignore_edits then
+            local current_changedtick = vim.api.nvim_buf_get_changedtick(0)
+            local current_changedtick_is_ignored = ignored_changedticks[current_changedtick]
+            if ignore_edits or current_changedtick_is_ignored then
                 prev_lines = curr_lines
                 return
             end
@@ -214,11 +219,16 @@ function Ethersync()
                 table.insert(opQueueForDaemon, { "edit", params })
             end
 
+            EnsureNewlineAtEndOfFile(true)
+
             prev_lines = curr_lines
         end,
     })
 
-    -- TODO: Re-enable this?
+    local send_this_out = not vim.api.nvim_get_option_value("eol", { buf = 0 })
+    EnsureNewlineAtEndOfFile(send_this_out)
+
+    -- Always make the implicit newline at the end of the file visible.
     --if vim.api.nvim_get_option_value("fixeol", { buf = 0 }) then
     --    if not vim.api.nvim_get_option_value("eol", { buf = 0 }) then
     --        utils.appendNewline()
@@ -226,6 +236,26 @@ function Ethersync()
     --    end
     --    vim.api.nvim_set_option_value("fixeol", false, { buf = 0 })
     --end
+end
+
+function EnsureNewlineAtEndOfFile(send_this_out)
+    vim.schedule(function()
+        if not send_this_out then
+            local next_changedtick = vim.api.nvim_buf_get_changedtick(0) + 1
+            ignored_changedticks[next_changedtick] = true
+        end
+        local last_line_array = vim.api.nvim_buf_get_lines(0, -2, -1, true)
+        local last_line = last_line_array[1]
+        print(vim.inspect(last_line))
+        if #last_line > 0 then
+            local row = vim.api.nvim_buf_line_count(0) - 1
+            local col = #last_line
+            local cursor_position = vim.api.nvim_win_get_cursor(0)
+
+            vim.api.nvim_buf_set_text(0, row, col, row, col, { "", "" })
+            vim.api.nvim_win_set_cursor(0, cursor_position)
+        end
+    end)
 end
 
 function EthersyncClose()
