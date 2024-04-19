@@ -371,6 +371,46 @@ mod ropey_test {
     }
 
     #[test]
+    fn referencing_after_last_lines() {
+        assert_eq!(
+            Position {
+                line: 1,
+                character: 0
+            },
+            Position::from_offset(2, "a\n")
+        );
+
+        assert_eq!(
+            Position {
+                line: 1,
+                character: 0
+            }
+            .to_offset("a\n"),
+            2
+        );
+        assert_eq!(
+            Position {
+                line: 1,
+                character: 0
+            }
+            .to_offset("a"),
+            1
+        );
+    }
+
+    #[test]
+    #[should_panic]
+    fn referencing_after_last_lines_fails() {
+        assert_eq!(
+            Position {
+                line: 1,
+                character: 0
+            },
+            Position::from_offset(2, "a")
+        );
+    }
+
+    #[test]
     #[should_panic]
     fn offset_out_of_bounds_from_offset() {
         Position::from_offset(17, "h🥕llo,\nneue\nwelt");
