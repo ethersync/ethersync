@@ -292,6 +292,8 @@ pub mod tests {
                 let msg = socket.recv().await;
                 assert_eq!(msg["method"], "open");
 
+                // TODO: This doesn't check whether there are more replacements pending than the
+                // expected ones.
                 for expected_replacement in expected_replacements {
                     let msg = socket.recv().await;
                     let message: EditorProtocolMessage = serde_json::from_str(&msg.to_string())
@@ -375,35 +377,40 @@ pub mod tests {
             vec![replace_ed((0, 0), (0, 1), "b")],
         );
 
-        // TODO: Fix these tests.
-        /*
         assert_vim_input_yields_replacements(
-            "a\n",
-            "ddix<CR><BS>",
+            "",
+            "i<CR><BS>",
             vec![
-                replace_ed((0, 0), (0, 1), ""),
-                replace_ed((0, 0), (0, 0), "x"),
-                replace_ed((0, 1), (0, 1), "\n"),
-                replace_ed((0, 1), (1, 0), ""),
+                replace_ed((0, 0), (0, 0), "\n"),
+                // no-op: Copy nothing to previous line.
+                replace_ed((0, 0), (0, 0), ""),
+                replace_ed((1, 0), (2, 0), ""),
             ],
         );
 
         assert_vim_input_yields_replacements(
-            "",
-            "ix<CR><BS>",
+            "a\n",
+            "ddix<CR><BS>",
             vec![
+                replace_ed((0, 0), (1, 0), ""),
                 replace_ed((0, 0), (0, 0), "x"),
                 replace_ed((0, 1), (0, 1), "\n"),
-                replace_ed((0, 1), (1, 0), ""),
+                // no-op: Copy nothing to previous line.
+                replace_ed((0, 1), (0, 1), ""),
+                replace_ed((1, 0), (2, 0), ""),
             ],
         );
 
         assert_vim_input_yields_replacements(
             "hello\nworld\n",
             "llvjd",
-            vec![replace_ed((0, 2), (1, 3), "")],
+            vec![
+                replace_ed((0, 2), (0, 5), ""), // d: llo
+                replace_ed((1, 0), (1, 3), ""), // d: wor
+                replace_ed((0, 2), (0, 2), "ld"),
+                replace_ed((1, 0), (2, 0), ""),
+            ],
         );
-        */
 
         // Tests where Vim behaves a bit weirdly.
 
