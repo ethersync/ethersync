@@ -10,6 +10,26 @@ When a file ends with a newline and is opened in Vim, the newline exists in Vim 
 
 In addition, when the 'fixeol' option is set, and both 'eol' and 'binary' are false, Vim will add a trailing newline to content that has no newline on save. This insertion needs to be reflected in the shared content.
 
+### Update 2024-04-19
+
+By now, we've switched to a line + column-based indexing in the editors. A problem case is the content "hello\nworld", which, in Vim, is displayed in two lines.
+
+When deleting the second line (using `dd`), Vim emits ((1,0), (2,0), ""), which is correct.
+The daemon transforms this into retain(6).delete(5) for the CRDT.
+It sends it to a peered daemon, which converts it back into ((1,0), (1,5), "") for its client.
+The Vim connected to that daemon deletes the "world", but doesn't remove the line. So now the buffer content is wrong, consisting of two lines, "hello", and "".
+
+The source of this problem is that in the first Vim's representation of the content "hello\n", the newline is implicit, but in the second, it's explicit.
+
+A solution might be to always make newlines at end of files explicit, by inserting newlines there into the buffer content in two cases:
+
+1. When a file without a trailing newline is opened.
+2. When going from empty content to content.
+
+Another possible solution might be that all involved components (OT & CRDT) assume the following invariant:
+
+"Content *always* ends with a newline, except when it's completely empty."
+
 ## Considered Options
 
 * Always force 'eol' and 'fixeol' off.
