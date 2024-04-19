@@ -284,7 +284,7 @@ pub mod tests {
     ) {
         let runtime = Runtime::new().expect("Could not create Tokio runtime");
         runtime.block_on(async {
-            timeout(Duration::from_millis(500), async {
+            timeout(Duration::from_millis(2500), async {
                 let mut socket = MockSocket::new("/tmp/ethersync").await;
                 let mut nvim = Neovim::new_ethersync_enabled(initial_content).await;
                 nvim.input(input).await;
@@ -299,7 +299,6 @@ pub mod tests {
                     if let EditorProtocolMessage::Edit{ delta, ..} = message {
                         let actual_replacement = delta.delta.into_iter().next().expect("No replacements found in delta");
                         assert_eq!(expected_replacement, actual_replacement, "Different replacements when applying input '{}' to content '{:?}'", input, initial_content);
-
                     } else {
                         panic!("Expected edit message, got {:?}", message);
                     }
@@ -308,7 +307,7 @@ pub mod tests {
             .await
             .unwrap_or_else(|_| {
                 panic!(
-                    "Nvim test for input '{input}' timed out. We probably received too few messages?"
+                    "Nvim test for input '{input}' timed out. Maybe increase timeout to make sure vim started fast enough. We probably received too few messages?"
                 )
             });
         });
