@@ -34,6 +34,12 @@ enum Commands {
 
 #[tokio::main]
 async fn main() -> io::Result<()> {
+    let default_panic = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |info| {
+        default_panic(info);
+        std::process::exit(1);
+    }));
+
     logging::initialize();
 
     let cli = Cli::parse();

@@ -26,6 +26,12 @@ fn create_ethersync_dir(dir: &Path) {
 
 #[tokio::main]
 async fn main() {
+    let default_panic = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |info| {
+        default_panic(info);
+        std::process::exit(1);
+    }));
+
     logging::initialize();
 
     // Set up the project directory.
