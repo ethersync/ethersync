@@ -203,11 +203,14 @@ function Ethersync()
                 if diff.range["start"].line ~= 0 then
                     -- Only shift, if range doesn't start on first line.
                     -- Modify edit, s.t. not the last \n, but the one before is replaced.
-                    diff.range["start"].line = diff.range["start"].line - 1
-                    diff.range["end"].line = diff.range["end"].line - 1
-                    -- TODO: Count unicode characters correctly.
-                    diff.range["start"].character = #prev_lines[#prev_lines - 1]
-                    diff.range["end"].character = #prev_lines[#prev_lines]
+                    if diff.range["start"].character == 0 then
+                        -- Operation applies to beginning of line, that means it's possible to shift it back.
+                        diff.range["start"].line = diff.range["start"].line - 1
+                        diff.range["end"].line = diff.range["end"].line - 1
+                        -- TODO: Count unicode characters correctly.
+                        diff.range["start"].character = #prev_lines[#prev_lines - 1]
+                        diff.range["end"].character = #prev_lines[#prev_lines]
+                    end
                 else
                     if not vim.api.nvim_get_option_value("eol", { buf = 0 }) then
                         -- There's no implicit newline at the end of the file.

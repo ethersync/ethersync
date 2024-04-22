@@ -422,6 +422,12 @@ pub mod tests {
         // A direct replace_ed((0, 1), (0, 1), "\n") would be nicer.
         assert_vim_input_yields_replacements("a", "o", vec![replace_ed((0, 1), (0, 1), "\n")]);
 
+        assert_vim_input_yields_replacements(
+            "eins\ntwo\n",
+            "jo",
+            vec![replace_ed((1, 3), (2, 0), "\n\n")],
+        );
+
         assert_vim_input_yields_replacements("a", "yyp", vec![replace_ed((0, 1), (0, 1), "\na")]);
 
         // A direct replace_ed((1, 0), (1, 0), "a\n") would be nicer.
