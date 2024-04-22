@@ -150,6 +150,12 @@ function Ethersync()
 
     print("Ethersync activated!")
 
+    -- Vim enables eol for an empty file, but we do use this option values
+    -- assuming there's a trailing newline iff eol is true.
+    if vim.fn.getfsize(vim.api.nvim_buf_get_name(0)) == 0 then
+        vim.bo.eol = false
+    end
+
     connect()
 
     prev_lines = vim.api.nvim_buf_get_lines(0, 0, -1, true)
@@ -191,6 +197,30 @@ function Ethersync()
             -- Sometimes, Vim deletes full lines by deleting the last line, plus an imaginary newline at the end. For example, to delete the second line, Vim would delete from (line: 1, column: 0) to (line: 2, column 0).
             -- But, in the case of deleting the last line, what we expect in the rest of Ethersync is to delete the newline *before* the line.
             -- So let's change the deleted range to (line: 0, column: [last character of the first line]) to (line: 1, column: [last character of the second line]).
+
+            if diff.range["end"].line == #prev_lines then
+                -- Range spans to a line one after the visible buffer lines.
+                if diff.range["start"].line ~= 0 then
+                    -- Only shift, if range doesn't start on first line.
+                    -- Modify edit, s.t. not the last \n, but the one before is replaced.
+                    diff.range["start"].line = diff.range["start"].line - 1
+                    diff.range["end"].line = diff.range["end"].line - 1
+                    -- TODO: Count unicode characters correctly.
+                    diff.range["start"].character = #prev_lines[#prev_lines - 1]
+                    diff.range["end"].character = #prev_lines[#prev_lines]
+                else
+                    if not vim.api.nvim_get_option_value("eol", { buf = 0 }) then
+                        -- There's no implicit newline at the end of the file.
+                        diff.range["end"].line = diff.range["end"].line - 1
+                        diff.range["end"].character = #prev_lines[#prev_lines]
+                        -- TODO: Take unicode characters into account in these sub's.
+                        if string.sub(diff.text, #diff.text) == "\n" then
+                            -- Drop trailing newline in replacement, because there "never was one" in the range.
+                            diff.text = string.sub(diff.text, 1, -2)
+                        end
+                    end
+                end
+            end
 
             local rev_delta = {
                 delta = {
