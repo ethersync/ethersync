@@ -19,7 +19,7 @@ The daemon transforms this into retain(6).delete(5) for the CRDT.
 It sends it to a peered daemon, which converts it back into ((1,0), (1,5), "") for its client.
 The Vim connected to that daemon deletes the "world", but doesn't remove the line. So now the buffer content is wrong, consisting of two lines, "hello", and "".
 
-The source of this problem is that in the first Vim's representation of the content "hello\n", the newline is implicit, but in the second, it's explicit.
+The source of this problem is that in the first Vim's representation of the daemon content "hello\n", the newline is implicit, but in the second, it's explicit.
 
 A solution might be to always make newlines at end of files explicit, by inserting newlines there into the buffer content in two cases:
 
