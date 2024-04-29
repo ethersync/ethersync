@@ -475,6 +475,16 @@ pub mod tests {
             ],
         );
 
+        // TODO: Fix this!
+        /*assert_vim_input_yields_replacements(
+            "a\n",
+            "ddo",
+            vec![
+                replace_ed((0, 0), (1, 0), ""),
+                replace_ed((0, 0), (0, 0), "\n"),
+            ],
+        );*/
+
         // Unicode tests
         assert_vim_input_yields_replacements("ä\nü\n", "dd", vec![replace_ed((0, 0), (1, 0), "")]);
         assert_vim_input_yields_replacements("ä💚🥕", "vlld", vec![replace_ed((0, 0), (0, 3), "")]);
