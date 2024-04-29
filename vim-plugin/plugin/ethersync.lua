@@ -160,11 +160,6 @@ function Ethersync()
 
     prev_lines = vim.api.nvim_buf_get_lines(0, 0, -1, true)
 
-    -- If there are no lines, set 'eol' to true. We didn't find a way to tell if the file contains '\n' or ''.
-    if #prev_lines == 0 then
-        vim.bo.eol = false
-    end
-
     vim.api.nvim_buf_attach(0, false, {
         on_lines = function(
             _the_literal_string_lines --[[@diagnostic disable-line]],
