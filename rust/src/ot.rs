@@ -107,77 +107,55 @@ impl OTServer {
         &mut self,
         rev_editor_delta: RevisionedEditorTextDelta,
     ) -> (TextDelta, Vec<RevisionedEditorTextDelta>) {
-        let mut to_editor = vec![];
         let daemon_revision = rev_editor_delta.revision;
         self.editor_revision += 1;
 
         let mut op_seq: OperationSeq;
 
-        match daemon_revision.cmp(&self.daemon_revision) {
-            Ordering::Greater => {
-                panic!(
-                    "must not happen, editor has seen a daemon revision from the future ({} > {})",
-                    daemon_revision, self.daemon_revision
-                );
-            }
-            Ordering::Equal => {
-                // The sent operation applies to the current daemon revision. We can apply it immediately.
-                let rev_delta = RevisionedTextDelta::from_rev_ed_delta(
-                    rev_editor_delta,
-                    &self.last_confirmed_editor_content,
-                );
-                op_seq = rev_delta.delta.into();
-                self.operations.push(op_seq.clone());
-                self.last_confirmed_editor_content = self.apply_to_initial_content();
-                // All pending editor operation are confirmed.
-                self.editor_queue.clear();
-            }
-            Ordering::Less => {
-                // The operation applies to an older daemon revision.
-                // We need to transform it through the daemon operations that have happened since then.
+        assert!(daemon_revision <= self.daemon_revision);
 
-                // But we at least we know that the editor has seen all daemon operations until
-                // daemon_revision. So we can remove them from the editor queue.
-                let daemon_operations_to_transform = self.daemon_revision - daemon_revision;
-                assert!(
-                    self.editor_queue.len() >= daemon_operations_to_transform,
-                    "Whoopsie, we don't have enough operations cached. Was this already processed?"
-                );
-                let seen_operations = self.editor_queue.len() - daemon_operations_to_transform;
-                debug!(
-                    "We have now {} confirmed operations, there are {} unconfirmed operations",
-                    seen_operations, daemon_operations_to_transform,
-                );
-                let confirmed_queue = self.editor_queue.drain(..seen_operations);
-                for confirmed_editor_op in confirmed_queue {
-                    debug!(
-                        "Applying confirmed operation {:#?} to last confirmed editor content {:?}",
-                        &confirmed_editor_op, &self.last_confirmed_editor_content
-                    );
-                    self.last_confirmed_editor_content = Self::force_apply(
-                        &self.last_confirmed_editor_content,
-                        confirmed_editor_op.clone(),
-                    );
-                }
-                let rev_delta = RevisionedTextDelta::from_rev_ed_delta(
-                    rev_editor_delta,
-                    &self.last_confirmed_editor_content,
-                );
-                op_seq = rev_delta.delta.into();
+        // The operation might apply to an older daemon revision.
+        // We need to transform it through the daemon operations that have happened since then.
 
-                debug!(
-                    "Applying incoming editor operation {:#?} to last confirmed editor content {:?}",
-                    &op_seq, &self.last_confirmed_editor_content
-                );
-                self.last_confirmed_editor_content =
-                    Self::force_apply(&self.last_confirmed_editor_content, op_seq.clone());
-                (op_seq, self.editor_queue) =
-                    transform_through_operations(op_seq, &self.editor_queue);
-                self.operations.push(op_seq.clone());
-                to_editor = self.deltas_for_editor();
-            }
+        // But we at least we know that the editor has seen all daemon operations until
+        // daemon_revision. So we can remove them from the editor queue.
+        let daemon_operations_to_transform = self.daemon_revision - daemon_revision;
+        assert!(
+            self.editor_queue.len() >= daemon_operations_to_transform,
+            "Whoopsie, we don't have enough operations cached. Was this already processed?"
+        );
+        let seen_operations = self.editor_queue.len() - daemon_operations_to_transform;
+        debug!(
+            "We have now {} confirmed operations, there are {} unconfirmed operations",
+            seen_operations, daemon_operations_to_transform,
+        );
+        let confirmed_queue = self.editor_queue.drain(..seen_operations);
+        for confirmed_editor_op in confirmed_queue {
+            debug!(
+                "Applying confirmed operation {:#?} to last confirmed editor content {:?}",
+                &confirmed_editor_op, &self.last_confirmed_editor_content
+            );
+            self.last_confirmed_editor_content = Self::force_apply(
+                &self.last_confirmed_editor_content,
+                confirmed_editor_op.clone(),
+            );
         }
-        (op_seq.into(), to_editor)
+        let rev_delta = RevisionedTextDelta::from_rev_ed_delta(
+            rev_editor_delta,
+            &self.last_confirmed_editor_content,
+        );
+        op_seq = rev_delta.delta.into();
+
+        debug!(
+            "Applying incoming editor operation {:#?} to last confirmed editor content {:?}",
+            &op_seq, &self.last_confirmed_editor_content
+        );
+        self.last_confirmed_editor_content =
+            Self::force_apply(&self.last_confirmed_editor_content, op_seq.clone());
+        (op_seq, self.editor_queue) = transform_through_operations(op_seq, &self.editor_queue);
+        self.operations.push(op_seq.clone());
+
+        (op_seq.into(), self.deltas_for_editor())
     }
 
     fn deltas_for_editor(&self) -> Vec<RevisionedEditorTextDelta> {
