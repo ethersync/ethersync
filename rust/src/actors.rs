@@ -417,10 +417,22 @@ pub mod tests {
             ],
         );
 
+        assert_vim_input_yields_replacements(
+            "",
+            "ox",
+            vec![
+                replace_ed((0, 0), (0, 0), "\n"),
+                replace_ed((1, 0), (1, 0), "x"),
+            ],
+        );
+
         // Tests where Vim behaves a bit weirdly.
 
         // A direct replace_ed((0, 1), (0, 1), "\n") would be nicer.
         assert_vim_input_yields_replacements("a", "o", vec![replace_ed((0, 1), (0, 1), "\n")]);
+
+        // A direct replace_ed((0, 1), (0, 1), "\n") would be nicer.
+        assert_vim_input_yields_replacements("a\n", "o", vec![replace_ed((0, 1), (1, 0), "\n\n")]);
 
         assert_vim_input_yields_replacements(
             "eins\ntwo\n",
