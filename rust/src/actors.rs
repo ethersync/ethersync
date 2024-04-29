@@ -85,30 +85,36 @@ impl Actor for Neovim {
     async fn apply_random_delta(&mut self) {
         let mut vim_normal_command = String::new();
 
-        let directions = ["h", "j", "k", "l"];
-        (0..10).for_each(|_| {
-            vim_normal_command
-                .push_str(directions[rand::thread_rng().gen_range(0..(directions.len()))]);
-        });
+        let string_components = vec![
+            "e".to_string(),
+            "💚".to_string(),
+            "🥕".to_string(),
+            "\n".to_string(),
+        ];
+        let s = random_string(rand_usize_inclusive(1, 4), string_components);
 
-        // TODO: There seems to be a bug when enabling multiline insertions and/or multi-line
-        // deletions. Something to do with empty lines?
-        if rand::thread_rng().gen_bool(0.5) {
-            //let deletion_components = vec!["x", "dd", "vllld"];
-            let deletion_components = vec!["x", "vllld", "rü"];
-            vim_normal_command.push_str(&random_string(
-                rand_usize_inclusive(1, 2),
-                &deletion_components,
-            ));
-        } else {
-            vim_normal_command.push('i');
-            //let vim_components = vec!["x", "🥕", "_", "💚"]; //, "\n"];
-            let vim_components = vec!["x", "_"];
-            vim_normal_command
-                .push_str(&random_string(rand_usize_inclusive(1, 10), &vim_components));
-        }
+        let components = vec![
+            "h".to_string(),
+            "j".to_string(),
+            "k".to_string(),
+            "l".to_string(),
+            "gg".to_string(),
+            "G".to_string(),
+            "$".to_string(),
+            "^".to_string(),
+            "x".to_string(),
+            "vllld".to_string(),
+            "rü".to_string(),
+            "dd".to_string(),
+            "J".to_string(),
+            format!("i{}", s),
+            format!("o{}", s),
+            format!("O{}", s),
+            format!("A{}", s),
+            format!("I{}", s),
+        ];
 
-        //vim_normal_command.push_str("<Esc>");
+        vim_normal_command.push_str(&random_string(rand_usize_inclusive(1, 10), components));
 
         self.nvim
             .command(&format!(r#"silent! execute "normal {vim_normal_command}""#))
@@ -146,9 +152,9 @@ impl Actor for Neovim {
     }*/
 }
 
-fn random_string(length: usize, components: &[&str]) -> String {
+fn random_string(length: usize, components: Vec<String>) -> String {
     (0..length)
-        .map(|_| components[rand_usize_inclusive(0, components.len() - 1)])
+        .map(|_| components[rand_usize_inclusive(0, components.len() - 1)].clone())
         .collect::<String>()
 }
 

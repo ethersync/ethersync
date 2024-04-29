@@ -9,7 +9,7 @@ use automerge::{
     AutoCommit, ObjType, Patch, PatchLog, ReadDoc,
 };
 use local_ip_address::local_ip;
-use rand::{distributions::Alphanumeric, Rng};
+use rand::Rng;
 use std::fmt;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -317,7 +317,7 @@ impl DaemonActor {
         let text = self
             .current_content()
             .expect("Should have initialized text before performing random edit");
-        let options = ["d", "\n"];
+        let options = ["d", "_", "🥕", "💚", "\n"];
         let random_text: String = (0..5)
             .map(|_| {
                 let random_option = rand::thread_rng().gen_range(0..options.len());

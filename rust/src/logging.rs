@@ -11,7 +11,7 @@ pub fn initialize() {
 
     let subscriber = FmtSubscriber::builder()
         // .pretty()
-        .with_max_level(tracing::Level::DEBUG)
+        .with_max_level(tracing::Level::INFO)
         // .with_thread_names(true)
         .with_thread_ids(true)
         .with_timer(timer)

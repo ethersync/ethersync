@@ -1,7 +1,6 @@
 #![allow(dead_code)]
 use crate::types::{EditorTextDelta, RevisionedEditorTextDelta, RevisionedTextDelta, TextDelta};
 use operational_transform::OperationSeq;
-use std::cmp::Ordering;
 use tracing::debug;
 
 ///    `OTServer` receives operations from both the CRDT world, and one editor and makes sure that
