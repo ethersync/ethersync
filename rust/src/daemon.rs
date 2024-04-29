@@ -704,15 +704,8 @@ async fn listen_socket(
                         line_maybe = lines.next_line() => {
                             match line_maybe {
                                 Ok(Some(line)) => {
-                                    let msg: Result<EditorProtocolMessage, serde_json::Error> = serde_json::from_str(&line);
-                                    match msg {
-                                        Ok(message) => {
-                                            tx.send(message.into()).await?;
-                                        }
-                                        Err(e) => {
-                                            error!("Failed to parse message from editor: {:#?}", e);
-                                        }
-                                    }
+                                    let jsonrpc = EditorProtocolMessage::from_jsonrpc(&line).expect("Failed to parse JSON-RPC message");
+                                    tx.send(jsonrpc.into()).await?;
                                 }
                                 Ok(None) => {
                                     break;
@@ -728,15 +721,9 @@ async fn listen_socket(
                                 uri: "file://hamwanich".to_string(),
                                 delta: rev_delta
                             };
-                            let json_value = serde_json::to_value(message).expect("Failed to convert editor message to a JSON value");
-                            if let serde_json::Value::Object(mut map) = json_value {
-                                map.insert("jsonrpc".to_string(), "2.0".into());
-                                let payload = serde_json::to_string(&map).expect("Failed to serialize modified editor message");
-                                debug!("Sending message to editor: {:#?}", payload);
-                                tcp_write.write_all(format!("{payload}\n").as_bytes()).await.expect("Failed to write to TCP stream");
-                            } else {
-                                panic!("EditorProtocolMessage was not serialized to a map");
-                            }
+                            let payload = message.to_jsonrpc().expect("Failed to serialize JSON-RPC message");
+                            debug!("Sending message to editor: {:#?}", payload);
+                            tcp_write.write_all(format!("{payload}\n").as_bytes()).await.expect("Failed to write to TCP stream");
                         }
                     }
                 }

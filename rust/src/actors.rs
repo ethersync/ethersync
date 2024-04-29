@@ -117,11 +117,23 @@ impl Actor for Neovim {
             .expect("Failed to send input to Neovim");
     }
     async fn content(&self) -> String {
-        self.buffer
+        let mut content = self
+            .buffer
             .get_lines(0, -1, false)
             .await
             .unwrap()
-            .join("\n")
+            .join("\n");
+        if self
+            .nvim
+            .command_output("set eol?")
+            .await
+            .expect("Failed to get value of eol")
+            .trim()
+            == "endofline"
+        {
+            content.push('\n');
+        }
+        content
     }
 
     /*
@@ -230,7 +242,10 @@ impl MockSocket {
 #[cfg(test)]
 pub mod tests {
     use super::*;
-    use crate::types::{factories::*, EditorProtocolMessage, EditorTextOp};
+    use crate::types::{
+        factories::*, EditorProtocolMessage, EditorTextDelta, EditorTextOp,
+        RevisionedEditorTextDelta,
+    };
     use pretty_assertions::assert_eq;
     use tokio::{
         runtime::Runtime,
@@ -252,29 +267,57 @@ pub mod tests {
         });
     }
 
-    #[test]
-    #[ignore]
-    fn vim_processes_delta() {
+    fn assert_vim_deltas_yield_content(
+        initial_content: &str,
+        deltas: Vec<EditorTextOp>,
+        expected_content: &str,
+    ) {
         let runtime = Runtime::new().expect("Could not create Tokio runtime");
         runtime.block_on(async {
             let mut socket = MockSocket::new("/tmp/ethersync").await;
-            let nvim = Neovim::new_ethersync_enabled("").await;
-            socket
-                .send(r#"{"jsonrpc":"2.0","method":"edit","params":{"uri":"file","delta":{"revision":0,"delta":[{"range":{"anchor":{"line":0,"character":0},"head":{"line":0,"character":0}},"replacement":"bananas"}]}}}"#)
-                .await;
-            socket.send("\n").await;
-            tokio::time::sleep(Duration::from_millis(0)).await; // TODO: This is a bit funny, but it
-                                                                // seems necessary.
-            assert_eq!(nvim.content().await, "bananas");
+            let nvim = Neovim::new_ethersync_enabled(initial_content).await;
 
-            socket
-                .send(r#"{"jsonrpc":"2.0","method":"edit","params":{"uri":"file","delta":{"revision":0,"delta":[{"range":{"anchor":{"line":0,"character":2},"head":{"line":0,"character":3}},"replacement":""},{"range":{"anchor":{"line":0,"character":4},"head":{"line":0,"character":5}},"replacement":""}]}}}"#)
-                .await;
-            socket.send("\n").await;
-            tokio::time::sleep(Duration::from_millis(0)).await;
+            for op in deltas {
+                let rev_editor_delta = RevisionedEditorTextDelta {
+                    revision: 0,
+                    delta: EditorTextDelta(vec![op]),
+                };
+                let editor_message = EditorProtocolMessage::Edit {
+                    uri: "<tbd>".to_string(),
+                    delta: rev_editor_delta,
+                };
+                let payload = editor_message
+                    .to_jsonrpc()
+                    .expect("Could not serialize EditorTextDelta");
+                socket.send(&format!("{payload}\n")).await;
+            }
 
-            assert_eq!(nvim.content().await, "baaas");
+            tokio::time::sleep(Duration::from_millis(10)).await; // TODO: This is a bit funny, but it seems necessary?
+
+            assert_eq!(nvim.content().await, expected_content);
         });
+    }
+
+    #[test]
+    #[ignore]
+    fn vim_processes_deltas_correctly() {
+        assert_vim_deltas_yield_content("", vec![replace_ed((0, 0), (0, 0), "a")], "a");
+
+        assert_vim_deltas_yield_content("x\n", vec![replace_ed((0, 1), (1, 0), "\n\n")], "x\n\n");
+
+        // TODO: Is it important that this works?
+        // assert_vim_deltas_yield_content("x\n", vec![replace_ed((0, 1), (1, 0), "")], "x");
+
+        assert_vim_deltas_yield_content(
+            "bananas",
+            vec![
+                replace_ed((0, 2), (0, 3), ""),
+                replace_ed((0, 3), (0, 4), ""),
+            ],
+            "baaas",
+        );
+
+        assert_vim_deltas_yield_content("ba\nna\nnas", vec![replace_ed((0, 1), (2, 1), "")], "bas");
     }
 
     fn assert_vim_input_yields_replacements(

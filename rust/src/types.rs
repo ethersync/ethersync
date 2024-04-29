@@ -90,6 +90,26 @@ pub enum EditorProtocolMessage {
     // Cursor{uri: DocumentUri, ranges: RevisionedRanges}
 }
 
+impl EditorProtocolMessage {
+    pub fn to_jsonrpc(&self) -> Result<String, anyhow::Error> {
+        let json_value =
+            serde_json::to_value(self).expect("Failed to convert editor message to a JSON value");
+        if let serde_json::Value::Object(mut map) = json_value {
+            map.insert("jsonrpc".to_string(), "2.0".into());
+            let payload =
+                serde_json::to_string(&map).expect("Failed to serialize modified editor message");
+            return Ok(payload);
+        } else {
+            panic!("EditorProtocolMessage was not serialized to a map");
+        }
+    }
+
+    pub fn from_jsonrpc(jsonrpc: &str) -> Result<Self, anyhow::Error> {
+        let message = serde_json::from_str(jsonrpc).expect("Failed to deserialize editor message");
+        Ok(message)
+    }
+}
+
 type DocumentUri = String;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
