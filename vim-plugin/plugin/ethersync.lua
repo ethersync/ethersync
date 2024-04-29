@@ -207,17 +207,15 @@ function Ethersync()
                         -- Operation applies to beginning of line, that means it's possible to shift it back.
                         diff.range["start"].line = diff.range["start"].line - 1
                         diff.range["end"].line = diff.range["end"].line - 1
-                        -- TODO: Count unicode characters correctly.
-                        diff.range["start"].character = #prev_lines[#prev_lines - 1]
-                        diff.range["end"].character = #prev_lines[#prev_lines]
+                        diff.range["start"].character = vim.fn.strchars(prev_lines[#prev_lines - 1], false)
+                        diff.range["end"].character = vim.fn.strchars(prev_lines[#prev_lines], false)
                     end
                 else
                     if not vim.api.nvim_get_option_value("eol", { buf = 0 }) then
                         -- There's no implicit newline at the end of the file.
                         diff.range["end"].line = diff.range["end"].line - 1
-                        diff.range["end"].character = #prev_lines[#prev_lines]
-                        -- TODO: Take unicode characters into account in these sub's.
-                        if string.sub(diff.text, #diff.text) == "\n" then
+                        diff.range["end"].character = vim.fn.strchars(prev_lines[#prev_lines])
+                        if string.sub(diff.text, vim.fn.strchars(diff.text)) == "\n" then
                             -- Drop trailing newline in replacement, because there "never was one" in the range.
                             diff.text = string.sub(diff.text, 1, -2)
                         end

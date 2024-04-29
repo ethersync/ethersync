@@ -469,6 +469,11 @@ pub mod tests {
             ],
         );
 
+        // Unicode tests
+        assert_vim_input_yields_replacements("ä\nü\n", "dd", vec![replace_ed((0, 0), (1, 0), "")]);
+        assert_vim_input_yields_replacements("ä💚🥕", "vlld", vec![replace_ed((0, 0), (0, 3), "")]);
+        assert_vim_input_yields_replacements("ä", "dd", vec![replace_ed((0, 0), (0, 1), "")]);
+
         // Tests where Vim behaves a bit weirdly.
 
         // A direct replace_ed((0, 1), (0, 1), "\n") would be nicer.
