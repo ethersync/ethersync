@@ -44,7 +44,7 @@ local function applyDelta(delta)
 
     ignore_edits = true
     local changedtick_before = vim.api.nvim_buf_get_changedtick(0)
-    vim.lsp.util.apply_text_edits(text_edits, 0, "utf-32")
+    utils.apply_text_edits(text_edits, 0, "utf-32")
     local changedtick_after = vim.api.nvim_buf_get_changedtick(0)
     ignore_edits = false
 
