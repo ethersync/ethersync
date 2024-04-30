@@ -206,10 +206,15 @@ function Ethersync()
                         diff.range["end"].character = vim.fn.strchars(prev_lines[#prev_lines], false)
                     end
                 else
-                    if not vim.api.nvim_get_option_value("eol", { buf = 0 }) then
-                        -- There's no implicit newline at the end of the file.
-                        diff.range["end"].line = diff.range["end"].line - 1
-                        diff.range["end"].character = vim.fn.strchars(prev_lines[#prev_lines])
+                    diff.range["end"].line = diff.range["end"].line - 1
+                    diff.range["end"].character = vim.fn.strchars(prev_lines[#prev_lines])
+                    if vim.api.nvim_get_option_value("eol", { buf = 0 }) then
+                        -- There's an implicit newline at the end of the file.
+                        if string.sub(diff.text, 1, 1) == "\n" then
+                            -- Drop leading newline in replacement, because we shortened the range not to replace it.
+                            diff.text = string.sub(diff.text, 2)
+                        end
+                    else
                         if string.sub(diff.text, vim.fn.strchars(diff.text)) == "\n" then
                             -- Drop trailing newline in replacement, because there "never was one" in the range.
                             diff.text = string.sub(diff.text, 1, -2)

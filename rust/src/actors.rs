@@ -405,8 +405,8 @@ pub mod tests {
         assert_vim_input_yields_replacements("a\nb\n", "jdd", vec![replace_ed((0, 1), (1, 1), "")]);
         // Also works without \n at the end.
         assert_vim_input_yields_replacements("a\nb", "jdd", vec![replace_ed((0, 1), (1, 1), "")]);
-        // This seems to be the default behavior in vim: The newline goes away.
-        assert_vim_input_yields_replacements("a\n", "dd", vec![replace_ed((0, 0), (1, 0), "")]);
+        // 'eol' will still be on, so let's keep the newline.
+        assert_vim_input_yields_replacements("a\n", "dd", vec![replace_ed((0, 0), (0, 1), "")]);
         // Our design goal: produce something, that works without any implict newlines.
         assert_vim_input_yields_replacements("a", "dd", vec![replace_ed((0, 0), (0, 1), "")]);
         // Test what happens when we start with empty buffer:
@@ -460,9 +460,9 @@ pub mod tests {
             "a\n",
             "ddix<CR><BS>",
             vec![
-                replace_ed((0, 0), (1, 0), ""),
-                replace_ed((0, 0), (0, 0), "x"),
-                replace_ed((0, 1), (0, 1), "\n"),
+                replace_ed((0, 0), (0, 1), ""),
+                replace_ed((0, 0), (0, 0), "x"),  // d: "x\n"
+                replace_ed((0, 1), (0, 1), "\n"), // d: "x\n\n"
                 // no-op: Copy nothing to previous line.
                 replace_ed((0, 1), (0, 1), ""),
                 replace_ed((0, 1), (1, 0), ""),
@@ -489,28 +489,33 @@ pub mod tests {
             ],
         );
 
-        // TODO: Fix this!
-        /*assert_vim_input_yields_replacements(
+        assert_vim_input_yields_replacements(
             "a\n",
             "ddo",
             vec![
-                replace_ed((0, 0), (1, 0), ""),
+                replace_ed((0, 0), (0, 1), ""), // 'eol' is still on, so we keep the newline.
                 replace_ed((0, 0), (0, 0), "\n"),
             ],
-        );*/
+        );
+
+        assert_vim_input_yields_replacements("a\n", "o", vec![replace_ed((0, 1), (0, 1), "\n")]);
 
         // Unicode tests
         assert_vim_input_yields_replacements("ä\nü\n", "dd", vec![replace_ed((0, 0), (1, 0), "")]);
         assert_vim_input_yields_replacements("ä💚🥕", "vlld", vec![replace_ed((0, 0), (0, 3), "")]);
         assert_vim_input_yields_replacements("ä", "dd", vec![replace_ed((0, 0), (0, 1), "")]);
 
+        assert_vim_input_yields_replacements(
+            "a\n",
+            "yyp",
+            // Could change depending on what's easier to handle implementation-wise.
+            vec![replace_ed((0, 1), (0, 1), "a\n")],
+        );
+
         // Tests where Vim behaves a bit weirdly.
 
         // A direct replace_ed((0, 1), (0, 1), "\n") would be nicer.
         assert_vim_input_yields_replacements("a", "o", vec![replace_ed((0, 1), (0, 1), "\n")]);
-
-        // A direct replace_ed((0, 1), (0, 1), "\n") would be nicer.
-        assert_vim_input_yields_replacements("a\n", "o", vec![replace_ed((0, 1), (1, 0), "\n\n")]);
 
         assert_vim_input_yields_replacements(
             "eins\ntwo\n",
@@ -519,14 +524,6 @@ pub mod tests {
         );
 
         assert_vim_input_yields_replacements("a", "yyp", vec![replace_ed((0, 1), (0, 1), "\na")]);
-
-        // A direct replace_ed((1, 0), (1, 0), "a\n") would be nicer.
-        assert_vim_input_yields_replacements(
-            "a\n",
-            "yyp",
-            // Could change depending on what's easier to handle implementation-wise.
-            vec![replace_ed((0, 1), (1, 0), "\na\n")],
-        );
 
         // A direct replace_ed((0, 1), (1, 0), " ") would be nicer.
         assert_vim_input_yields_replacements(
