@@ -111,7 +111,10 @@ impl OTServer {
 
         let mut op_seq: OperationSeq;
 
-        assert!(daemon_revision <= self.daemon_revision);
+        assert!(
+            daemon_revision <= self.daemon_revision,
+            "This must not happen, editor has seen a daemon revision from the future."
+        );
 
         // The operation might apply to an older daemon revision.
         // We need to transform it through the daemon operations that have happened since then.
