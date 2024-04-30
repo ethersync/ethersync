@@ -91,7 +91,8 @@ function M.apply_text_edits(text_edits, bufnr, offset_encoding)
     end
 
     -- Apply text edits.
-    local has_eol_text_edit = false
+    --local has_eol_text_edit = false
+    local disable_eol = false
     for _, text_edit in ipairs(text_edits) do
         -- Normalize line ending
         text_edit.newText, _ = string.gsub(text_edit.newText, "\r\n?", "\n")
@@ -117,7 +118,10 @@ function M.apply_text_edits(text_edits, bufnr, offset_encoding)
             if max <= e.end_row then
                 e.end_row = max - 1
                 e.end_col = last_line_len
-                has_eol_text_edit = true
+                --has_eol_text_edit = true
+                disable_eol = true
+                -- "a" + 'eol' + replace((0,1), (1,0), "") => "a" + 'noeol'
+                -- "a" + 'eol' + replace((0,1), (1,0), "\n\n") => "a\n\n" + 'noeol' (I guess?)
             else
                 -- If the replacement is over the end of a line (i.e. e.end_col is out of bounds and the
                 -- replacement text ends with a newline We can likely assume that the replacement is assumed
@@ -156,13 +160,15 @@ function M.apply_text_edits(text_edits, bufnr, offset_encoding)
         end
     end
 
-    -- Remove final line if needed
-    local fix_eol = has_eol_text_edit
-    fix_eol = fix_eol and (vim.bo[bufnr].eol or (vim.bo[bufnr].fixeol and not vim.bo[bufnr].binary))
-    fix_eol = fix_eol and get_line(bufnr, max - 1) == ""
-    if fix_eol then
-        vim.api.nvim_buf_set_lines(bufnr, -2, -1, false, {})
+    if disable_eol then
+        vim.bo.eol = false
     end
+    --local fix_eol = has_eol_text_edit
+    --fix_eol = fix_eol and (vim.bo[bufnr].eol or (vim.bo[bufnr].fixeol and not vim.bo[bufnr].binary))
+    --fix_eol = fix_eol and get_line(bufnr, max - 1) == ""
+    --if fix_eol then
+    --    vim.api.nvim_buf_set_lines(bufnr, -2, -1, false, {})
+    --end
 end
 
 -- TEST SUITE

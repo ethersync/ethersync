@@ -283,10 +283,10 @@ pub mod tests {
             let mut socket = MockSocket::new("/tmp/ethersync").await;
             let nvim = Neovim::new_ethersync_enabled(initial_content).await;
 
-            for op in deltas {
+            for op in &deltas {
                 let rev_editor_delta = RevisionedEditorTextDelta {
                     revision: 0,
-                    delta: EditorTextDelta(vec![op]),
+                    delta: EditorTextDelta(vec![op.clone()]),
                 };
                 let editor_message = EditorProtocolMessage::Edit {
                     uri: "<tbd>".to_string(),
@@ -300,7 +300,16 @@ pub mod tests {
 
             tokio::time::sleep(Duration::from_millis(10)).await; // TODO: This is a bit funny, but it seems necessary?
 
-            assert_eq!(nvim.content().await, expected_content);
+            let actual_content = nvim.content().await;
+            assert_eq!(
+                expected_content,
+                actual_content,
+                "Different content when we start with content '{:?}' and apply deltas '{:?}'. Expected '{:?}', actual '{:?}'.",
+                initial_content,
+                deltas,
+                expected_content,
+                actual_content
+            );
         });
     }
 
@@ -308,11 +317,16 @@ pub mod tests {
     #[ignore]
     fn vim_processes_deltas_correctly() {
         assert_vim_deltas_yield_content("", vec![replace_ed((0, 0), (0, 0), "a")], "a");
-
+        assert_vim_deltas_yield_content("x\n", vec![replace_ed((0, 1), (1, 0), "")], "x");
+        assert_vim_deltas_yield_content("x\n", vec![replace_ed((0, 1), (1, 0), "y")], "xy");
+        assert_vim_deltas_yield_content("x\n", vec![replace_ed((0, 1), (1, 0), "\n")], "x\n");
         assert_vim_deltas_yield_content("x\n", vec![replace_ed((0, 1), (1, 0), "\n\n")], "x\n\n");
-
-        // TODO: Is it important that this works?
-        // assert_vim_deltas_yield_content("x\n", vec![replace_ed((0, 1), (1, 0), "")], "x");
+        assert_vim_deltas_yield_content(
+            "x\n123\nz",
+            vec![replace_ed((1, 1), (2, 1), "y")],
+            "x\n1y",
+        );
+        assert_vim_deltas_yield_content("x", vec![replace_ed((0, 1), (0, 1), "\n")], "x\n");
 
         assert_vim_deltas_yield_content(
             "bananas",
