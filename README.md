@@ -40,14 +40,10 @@ For the next steps to succeed you need to make sure that the resulting `ethersyn
 To confirm that worked, try running it:
 
 ```bash
-ethersync -V
+ethersync
 ```
 
-should result in:
-
-```
-ethersync 0.1.0
-```
+This should show the available options.
 
 ### Neovim Plugin
 
