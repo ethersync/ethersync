@@ -174,7 +174,7 @@ struct MockSocket {
 
 #[allow(dead_code)]
 impl MockSocket {
-    async fn new(socket_path: &str) -> Self {
+    async fn new(socket_path: &str, ignore_reads: bool) -> Self {
         if Path::new(socket_path).exists() {
             fs::remove_file(socket_path).expect("Could not remove existing socket file");
         }
@@ -203,16 +203,18 @@ impl MockSocket {
                 }
             });
 
-            tokio::spawn(async move {
-                let mut buffer = String::new();
-                while reader.read_line(&mut buffer).await.is_ok() {
-                    reader_tx
-                        .send(buffer.clone())
-                        .await
-                        .expect("Could not send message to reader channel");
-                    buffer.clear();
-                }
-            });
+            if !ignore_reads {
+                tokio::spawn(async move {
+                    let mut buffer = String::new();
+                    while reader.read_line(&mut buffer).await.is_ok() {
+                        reader_tx
+                            .send(buffer.clone())
+                            .await
+                            .expect("Could not send message to reader channel");
+                        buffer.clear();
+                    }
+                });
+            }
         });
 
         Self {
@@ -280,7 +282,7 @@ pub mod tests {
     ) {
         let runtime = Runtime::new().expect("Could not create Tokio runtime");
         runtime.block_on(async {
-            let mut socket = MockSocket::new("/tmp/ethersync").await;
+            let mut socket = MockSocket::new("/tmp/ethersync", true).await;
             let nvim = Neovim::new_ethersync_enabled(initial_content).await;
 
             for op in &deltas {
@@ -298,7 +300,7 @@ pub mod tests {
                 socket.send(&format!("{payload}\n")).await;
             }
 
-            tokio::time::sleep(Duration::from_millis(10)).await; // TODO: This is a bit funny, but it seems necessary?
+            tokio::time::sleep(Duration::from_millis(2000)).await; // TODO: This is a bit funny, but it seems necessary?
 
             let actual_content = nvim.content().await;
             assert_eq!(
@@ -348,7 +350,7 @@ pub mod tests {
         let runtime = Runtime::new().expect("Could not create Tokio runtime");
         runtime.block_on(async {
             timeout(Duration::from_millis(5000), async {
-                let mut socket = MockSocket::new("/tmp/ethersync").await;
+                let mut socket = MockSocket::new("/tmp/ethersync", false).await;
                 let mut nvim = Neovim::new_ethersync_enabled(initial_content).await;
                 nvim.input(input).await;
 
