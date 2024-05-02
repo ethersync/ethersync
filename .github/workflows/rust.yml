@@ -1,14 +1,14 @@
-name: Rust
+name: Rust Daemon
 
 on:
   push:
     branches:
       - 'main'
     paths:
-      - 'rust/**'
+      - 'daemon/**'
   pull_request:
     paths:
-      - 'rust/**'
+      - 'daemon/**'
 
 env:
   CARGO_TERM_COLOR: always
@@ -19,7 +19,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: ./rust
+        working-directory: ./daemon
     steps:
       - uses: actions/checkout@v4
       - uses: rhysd/action-setup-vim@v1
@@ -32,7 +32,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: ./rust
+        working-directory: ./daemon
     steps:
       - uses: actions/checkout@v4
       - run: cargo fmt --check
