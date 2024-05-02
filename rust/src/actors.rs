@@ -85,30 +85,36 @@ impl Actor for Neovim {
     async fn apply_random_delta(&mut self) {
         let mut vim_normal_command = String::new();
 
-        let directions = ["h", "j", "k", "l"];
-        (0..10).for_each(|_| {
-            vim_normal_command
-                .push_str(directions[rand::thread_rng().gen_range(0..(directions.len()))]);
-        });
+        let string_components = vec![
+            "e".to_string(),
+            "💚".to_string(),
+            "🥕".to_string(),
+            "\n".to_string(),
+        ];
+        let s = random_string(rand_usize_inclusive(1, 4), string_components);
 
-        // TODO: There seems to be a bug when enabling multiline insertions and/or multi-line
-        // deletions. Something to do with empty lines?
-        if rand::thread_rng().gen_bool(0.5) {
-            //let deletion_components = vec!["x", "dd", "vllld"];
-            let deletion_components = vec!["x", "vllld", "rü"];
-            vim_normal_command.push_str(&random_string(
-                rand_usize_inclusive(1, 2),
-                &deletion_components,
-            ));
-        } else {
-            vim_normal_command.push('i');
-            //let vim_components = vec!["x", "🥕", "_", "💚"]; //, "\n"];
-            let vim_components = vec!["x", "_"];
-            vim_normal_command
-                .push_str(&random_string(rand_usize_inclusive(1, 10), &vim_components));
-        }
+        let components = vec![
+            "h".to_string(),
+            "j".to_string(),
+            "k".to_string(),
+            "l".to_string(),
+            "gg".to_string(),
+            "G".to_string(),
+            "$".to_string(),
+            "^".to_string(),
+            "x".to_string(),
+            "vllld".to_string(),
+            "rü".to_string(),
+            "dd".to_string(),
+            "J".to_string(),
+            format!("i{}", s),
+            format!("o{}", s),
+            format!("O{}", s),
+            format!("A{}", s),
+            format!("I{}", s),
+        ];
 
-        //vim_normal_command.push_str("<Esc>");
+        vim_normal_command.push_str(&random_string(rand_usize_inclusive(1, 10), components));
 
         self.nvim
             .command(&format!(r#"silent! execute "normal {vim_normal_command}""#))
@@ -117,11 +123,23 @@ impl Actor for Neovim {
             .expect("Failed to send input to Neovim");
     }
     async fn content(&self) -> String {
-        self.buffer
+        let mut content = self
+            .buffer
             .get_lines(0, -1, false)
             .await
             .unwrap()
-            .join("\n")
+            .join("\n");
+        if self
+            .nvim
+            .command_output("set eol?")
+            .await
+            .expect("Failed to get value of eol")
+            .trim()
+            == "endofline"
+        {
+            content.push('\n');
+        }
+        content
     }
 
     /*
@@ -134,9 +152,9 @@ impl Actor for Neovim {
     }*/
 }
 
-fn random_string(length: usize, components: &[&str]) -> String {
+fn random_string(length: usize, components: Vec<String>) -> String {
     (0..length)
-        .map(|_| components[rand_usize_inclusive(0, components.len() - 1)])
+        .map(|_| components[rand_usize_inclusive(0, components.len() - 1)].clone())
         .collect::<String>()
 }
 
@@ -156,7 +174,7 @@ struct MockSocket {
 
 #[allow(dead_code)]
 impl MockSocket {
-    async fn new(socket_path: &str) -> Self {
+    async fn new(socket_path: &str, ignore_reads: bool) -> Self {
         if Path::new(socket_path).exists() {
             fs::remove_file(socket_path).expect("Could not remove existing socket file");
         }
@@ -185,16 +203,18 @@ impl MockSocket {
                 }
             });
 
-            tokio::spawn(async move {
-                let mut buffer = String::new();
-                while reader.read_line(&mut buffer).await.is_ok() {
-                    reader_tx
-                        .send(buffer.clone())
-                        .await
-                        .expect("Could not send message to reader channel");
-                    buffer.clear();
-                }
-            });
+            if !ignore_reads {
+                tokio::spawn(async move {
+                    let mut buffer = String::new();
+                    while reader.read_line(&mut buffer).await.is_ok() {
+                        reader_tx
+                            .send(buffer.clone())
+                            .await
+                            .expect("Could not send message to reader channel");
+                        buffer.clear();
+                    }
+                });
+            }
         });
 
         Self {
@@ -230,7 +250,10 @@ impl MockSocket {
 #[cfg(test)]
 pub mod tests {
     use super::*;
-    use crate::types::{factories::*, EditorProtocolMessage, EditorTextOp};
+    use crate::types::{
+        factories::*, EditorProtocolMessage, EditorTextDelta, EditorTextOp,
+        RevisionedEditorTextDelta,
+    };
     use pretty_assertions::assert_eq;
     use tokio::{
         runtime::Runtime,
@@ -252,29 +275,71 @@ pub mod tests {
         });
     }
 
-    #[test]
-    #[ignore]
-    fn vim_processes_delta() {
+    fn assert_vim_deltas_yield_content(
+        initial_content: &str,
+        deltas: Vec<EditorTextOp>,
+        expected_content: &str,
+    ) {
         let runtime = Runtime::new().expect("Could not create Tokio runtime");
         runtime.block_on(async {
-            let mut socket = MockSocket::new("/tmp/ethersync").await;
-            let nvim = Neovim::new_ethersync_enabled("").await;
-            socket
-                .send(r#"{"jsonrpc":"2.0","method":"edit","params":{"uri":"file","delta":{"revision":0,"delta":[{"range":{"anchor":{"line":0,"character":0},"head":{"line":0,"character":0}},"replacement":"bananas"}]}}}"#)
-                .await;
-            socket.send("\n").await;
-            tokio::time::sleep(Duration::from_millis(0)).await; // TODO: This is a bit funny, but it
-                                                                // seems necessary.
-            assert_eq!(nvim.content().await, "bananas");
+            let mut socket = MockSocket::new("/tmp/ethersync", true).await;
+            let nvim = Neovim::new_ethersync_enabled(initial_content).await;
 
-            socket
-                .send(r#"{"jsonrpc":"2.0","method":"edit","params":{"uri":"file","delta":{"revision":0,"delta":[{"range":{"anchor":{"line":0,"character":2},"head":{"line":0,"character":3}},"replacement":""},{"range":{"anchor":{"line":0,"character":4},"head":{"line":0,"character":5}},"replacement":""}]}}}"#)
-                .await;
-            socket.send("\n").await;
-            tokio::time::sleep(Duration::from_millis(0)).await;
+            for op in &deltas {
+                let rev_editor_delta = RevisionedEditorTextDelta {
+                    revision: 0,
+                    delta: EditorTextDelta(vec![op.clone()]),
+                };
+                let editor_message = EditorProtocolMessage::Edit {
+                    uri: "<tbd>".to_string(),
+                    delta: rev_editor_delta,
+                };
+                let payload = editor_message
+                    .to_jsonrpc()
+                    .expect("Could not serialize EditorTextDelta");
+                socket.send(&format!("{payload}\n")).await;
+            }
 
-            assert_eq!(nvim.content().await, "baaas");
+            tokio::time::sleep(Duration::from_millis(2000)).await; // TODO: This is a bit funny, but it seems necessary?
+
+            let actual_content = nvim.content().await;
+            assert_eq!(
+                expected_content,
+                actual_content,
+                "Different content when we start with content '{:?}' and apply deltas '{:?}'. Expected '{:?}', actual '{:?}'.",
+                initial_content,
+                deltas,
+                expected_content,
+                actual_content
+            );
         });
+    }
+
+    #[test]
+    #[ignore]
+    fn vim_processes_deltas_correctly() {
+        assert_vim_deltas_yield_content("", vec![replace_ed((0, 0), (0, 0), "a")], "a");
+        assert_vim_deltas_yield_content("x\n", vec![replace_ed((0, 1), (1, 0), "")], "x");
+        assert_vim_deltas_yield_content("x\n", vec![replace_ed((0, 1), (1, 0), "y")], "xy");
+        assert_vim_deltas_yield_content("x\n", vec![replace_ed((0, 1), (1, 0), "\n")], "x\n");
+        assert_vim_deltas_yield_content("x\n", vec![replace_ed((0, 1), (1, 0), "\n\n")], "x\n\n");
+        assert_vim_deltas_yield_content(
+            "x\n123\nz",
+            vec![replace_ed((1, 1), (2, 1), "y")],
+            "x\n1y",
+        );
+        assert_vim_deltas_yield_content("x", vec![replace_ed((0, 1), (0, 1), "\n")], "x\n");
+
+        assert_vim_deltas_yield_content(
+            "bananas",
+            vec![
+                replace_ed((0, 2), (0, 3), ""),
+                replace_ed((0, 3), (0, 4), ""),
+            ],
+            "baaas",
+        );
+
+        assert_vim_deltas_yield_content("ba\nna\nnas", vec![replace_ed((0, 1), (2, 1), "")], "bas");
     }
 
     fn assert_vim_input_yields_replacements(
@@ -285,7 +350,7 @@ pub mod tests {
         let runtime = Runtime::new().expect("Could not create Tokio runtime");
         runtime.block_on(async {
             timeout(Duration::from_millis(5000), async {
-                let mut socket = MockSocket::new("/tmp/ethersync").await;
+                let mut socket = MockSocket::new("/tmp/ethersync", false).await;
                 let mut nvim = Neovim::new_ethersync_enabled(initial_content).await;
                 nvim.input(input).await;
 
@@ -309,7 +374,7 @@ pub mod tests {
             .await
             .unwrap_or_else(|_| {
                 panic!(
-                    "Nvim test for input '{input}' timed out. Maybe increase timeout to make sure vim started fast enough. We probably received too few messages?"
+                    "Nvim test for input '{input}' on '{initial_content:?}' timed out. Maybe increase timeout to make sure vim started fast enough. We probably received too few messages?"
                 )
             });
         });
@@ -339,24 +404,28 @@ pub mod tests {
             vec![replace_ed((0, 0), (0, 0), "    \n")],
         );
         assert_vim_input_yields_replacements("a\nb\n", "dd", vec![replace_ed((0, 0), (1, 0), "")]);
-        assert_vim_input_yields_replacements("a\nb\n", "jdd", vec![replace_ed((1, 0), (2, 0), "")]);
+        assert_vim_input_yields_replacements("a\nb\n", "jdd", vec![replace_ed((0, 1), (1, 1), "")]);
         // Also works without \n at the end.
-        assert_vim_input_yields_replacements("a\nb", "jdd", vec![replace_ed((1, 0), (2, 0), "")]);
-        // This seems to be the default behavior in vim: The newline goes away.
-        assert_vim_input_yields_replacements("a\n", "dd", vec![replace_ed((0, 0), (1, 0), "")]);
+        assert_vim_input_yields_replacements("a\nb", "jdd", vec![replace_ed((0, 1), (1, 1), "")]);
+        // 'eol' will still be on, so let's keep the newline.
+        assert_vim_input_yields_replacements("a\n", "dd", vec![replace_ed((0, 0), (0, 1), "")]);
+        // Our design goal: produce something, that works without any implict newlines.
+        assert_vim_input_yields_replacements("a", "dd", vec![replace_ed((0, 0), (0, 1), "")]);
+        // Test what happens when we start with empty buffer:
+        // The eol option can be "true" unexpectedly.
         assert_vim_input_yields_replacements(
             "",
             "ia<Esc>dd",
             vec![
                 replace_ed((0, 0), (0, 0), "a"),
-                replace_ed((0, 0), (1, 0), ""),
+                replace_ed((0, 0), (0, 1), ""),
             ],
         );
 
-        assert_vim_input_yields_replacements("", "i\n", vec![replace_ed((0, 0), (0, 0), "\n")]);
+        assert_vim_input_yields_replacements("", "i<CR>", vec![replace_ed((0, 0), (0, 0), "\n")]);
         assert_vim_input_yields_replacements(
             "",
-            "i\ni",
+            "i<CR>i",
             vec![
                 replace_ed((0, 0), (0, 0), "\n"),
                 replace_ed((1, 0), (1, 0), "i"),
@@ -364,7 +433,7 @@ pub mod tests {
         );
         assert_vim_input_yields_replacements(
             "",
-            "ia\na",
+            "ia<CR>a",
             vec![
                 replace_ed((0, 0), (0, 0), "a"),
                 replace_ed((0, 1), (0, 1), "\n"),
@@ -385,7 +454,7 @@ pub mod tests {
                 replace_ed((0, 0), (0, 0), "\n"),
                 // no-op: Copy nothing to previous line.
                 replace_ed((0, 0), (0, 0), ""),
-                replace_ed((1, 0), (2, 0), ""),
+                replace_ed((0, 0), (1, 0), ""),
             ],
         );
 
@@ -393,12 +462,12 @@ pub mod tests {
             "a\n",
             "ddix<CR><BS>",
             vec![
-                replace_ed((0, 0), (1, 0), ""),
-                replace_ed((0, 0), (0, 0), "x"),
-                replace_ed((0, 1), (0, 1), "\n"),
+                replace_ed((0, 0), (0, 1), ""),
+                replace_ed((0, 0), (0, 0), "x"),  // d: "x\n"
+                replace_ed((0, 1), (0, 1), "\n"), // d: "x\n\n"
                 // no-op: Copy nothing to previous line.
                 replace_ed((0, 1), (0, 1), ""),
-                replace_ed((1, 0), (2, 0), ""),
+                replace_ed((0, 1), (1, 0), ""),
             ],
         );
 
@@ -409,21 +478,54 @@ pub mod tests {
                 replace_ed((0, 2), (0, 5), ""), // d: llo
                 replace_ed((1, 0), (1, 3), ""), // d: wor
                 replace_ed((0, 2), (0, 2), "ld"),
-                replace_ed((1, 0), (2, 0), ""),
+                replace_ed((0, 4), (1, 2), ""), // d: \nld
             ],
+        );
+
+        assert_vim_input_yields_replacements(
+            "",
+            "ox",
+            vec![
+                replace_ed((0, 0), (0, 0), "\n"),
+                replace_ed((1, 0), (1, 0), "x"),
+            ],
+        );
+
+        assert_vim_input_yields_replacements(
+            "a\n",
+            "ddo",
+            vec![
+                replace_ed((0, 0), (0, 1), ""), // 'eol' is still on, so we keep the newline.
+                replace_ed((0, 0), (0, 0), "\n"),
+            ],
+        );
+
+        assert_vim_input_yields_replacements("a\n", "o", vec![replace_ed((0, 1), (0, 1), "\n")]);
+
+        // Unicode tests
+        assert_vim_input_yields_replacements("ä\nü\n", "dd", vec![replace_ed((0, 0), (1, 0), "")]);
+        assert_vim_input_yields_replacements("ä💚🥕", "vlld", vec![replace_ed((0, 0), (0, 3), "")]);
+        assert_vim_input_yields_replacements("ä", "dd", vec![replace_ed((0, 0), (0, 1), "")]);
+
+        assert_vim_input_yields_replacements(
+            "a\n",
+            "yyp",
+            // Could change depending on what's easier to handle implementation-wise.
+            vec![replace_ed((0, 1), (0, 1), "a\n")],
         );
 
         // Tests where Vim behaves a bit weirdly.
 
         // A direct replace_ed((0, 1), (0, 1), "\n") would be nicer.
-        assert_vim_input_yields_replacements("a", "o", vec![replace_ed((0, 1), (1, 0), "\n\n")]);
+        assert_vim_input_yields_replacements("a", "o", vec![replace_ed((0, 1), (0, 1), "\n")]);
 
-        // A direct replace_ed((0, 1), (0, 1), "a\n") would be nicer.
         assert_vim_input_yields_replacements(
-            "a\n",
-            "yyp",
-            vec![replace_ed((0, 1), (1, 0), "\na\n")],
+            "eins\ntwo\n",
+            "jo",
+            vec![replace_ed((1, 3), (2, 0), "\n\n")],
         );
+
+        assert_vim_input_yields_replacements("a", "yyp", vec![replace_ed((0, 1), (0, 1), "\na")]);
 
         // A direct replace_ed((0, 1), (1, 0), " ") would be nicer.
         assert_vim_input_yields_replacements(
@@ -431,7 +533,7 @@ pub mod tests {
             "J",
             vec![
                 replace_ed((0, 1), (0, 1), " b"),
-                replace_ed((1, 0), (2, 0), ""),
+                replace_ed((0, 3), (1, 1), ""),
             ],
         );
 
@@ -440,8 +542,15 @@ pub mod tests {
             "J",
             vec![
                 replace_ed((0, 1), (0, 1), " b"),
-                replace_ed((1, 0), (2, 0), ""),
+                replace_ed((0, 3), (1, 1), ""),
             ],
+        );
+
+        // Visual on multiple lines
+        assert_vim_input_yields_replacements(
+            "abc\nde\nf\n",
+            "jVjd",
+            vec![replace_ed((0, 3), (2, 1), "")],
         );
     }
 }
