@@ -17,7 +17,8 @@ Ethersync consists of two components:
 
 ## Setup
 
-We need to set up these two components. First, clone this repository:
+Each participant (one is the **host**, all others are **peers**) need to set up these two components.
+First, clone this repository:
 
 ```bash
 git clone git@github.com:ethersync/ethersync
@@ -28,16 +29,30 @@ cd ethersync
 
 To install the daemon component, you need a [Rust](https://www.rust-lang.org) installation. You can compile the daemon like this:
 
-```
+```bash
 cd daemon
 cargo build
 ```
 
-This should successfully download all dependencies, and compile the project.
+This should download all dependencies, and successfully compile the project (currently as a debug build, as we're in early development).
+
+For the next steps to succeed you need to make sure that the resulting `ethersync` binary is in your shell PATH.
+To confirm that worked, try running it:
+
+```bash
+ethersync -V
+```
+
+should result in:
+
+```
+ethersync 0.1.0
+```
 
 ### Neovim Plugin
 
-Install the [plugin](./vim-plugin) using your favorite plugin manager. For now, use the path to the `vim-plugin` directory in this repository. Consult the documentation of your plugin manager on how to do that. Example configuration for [Lazy](https://github.com/folke/lazy.nvim):
+Install the [plugin](./vim-plugin) using your favorite plugin manager. For now, use the path to the `vim-plugin` directory in this repository.
+Consult the documentation of your plugin manager on how to do that. Example configuration for [Lazy](https://github.com/folke/lazy.nvim):
 
 ```lua
 {
@@ -51,32 +66,33 @@ To collaborate on a file called `file` in a directory called `playground`, follo
 
 1. Right now, our convention to mark an "Ethersync-enabled" directory is that there is a subdirectory called `.ethersync` in it. (A more convenient way to use Ethersync is planned.) So you need to create it:
 
-        mkdir -p playground/.ethersync
+    ```bash
+    mkdir -p playground/.ethersync
+    ```
 
 2. After that, start the daemon. In a group, one person needs to "host" the session, while the others join it. (Peer-to-peer support is planned.)
 
     - As the **host**, run:
 
-        ```
-        cd daemon
-        cargo run -- daemon --file=path/to/playground/file
+        ```bash
+        ethersync daemon --file=path/to/playground/file
         ```
 
         This will print an IP address and port (like `192.168.178.23:4242`), which others can use to connect to you.
 
     - As a **peer**, specify the IP address and port of the host:
 
-        ```
-        cd daemon
-        cargo run -- daemon --file=path/to/playground/file 192.168.178.23:4242
+        ```bash
+        ethersync daemon --file=path/to/playground/file 192.168.178.23:4242
         ```
 
 3. Finally, open the file in Vim:
 
-    ```
+    ```bash
     nvim path/to/playground/file
     ```
 
+    If everything went correctly, you should see `Ethersync activated!` in the nvim messages and `Client connection established.` in the logs of the daemon.
     You can now collaboratively edit the file together in real-time!
 
 ## Sponsors
