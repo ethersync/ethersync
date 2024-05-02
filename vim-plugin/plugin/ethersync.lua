@@ -197,13 +197,13 @@ function Ethersync()
                 -- Range spans to a line one after the visible buffer lines.
                 if diff.range["start"].line ~= 0 then
                     -- Only shift, if range doesn't start on first line.
-                    -- Modify edit, s.t. not the last \n, but the one before is replaced.
                     if diff.range["start"].character == 0 then
                         -- Operation applies to beginning of line, that means it's possible to shift it back.
+                        -- Modify edit, s.t. not the last \n, but the one before is replaced.
                         diff.range["start"].line = diff.range["start"].line - 1
                         diff.range["end"].line = diff.range["end"].line - 1
-                        diff.range["start"].character = vim.fn.strchars(prev_lines[#prev_lines - 1], false)
-                        diff.range["end"].character = vim.fn.strchars(prev_lines[#prev_lines], false)
+                        diff.range["start"].character = vim.fn.strchars(prev_lines[diff.range["start"].line + 1], false)
+                        diff.range["end"].character = vim.fn.strchars(prev_lines[diff.range["end"].line + 1], false)
                     end
                 else
                     diff.range["end"].line = diff.range["end"].line - 1

@@ -545,5 +545,12 @@ pub mod tests {
                 replace_ed((0, 3), (1, 1), ""),
             ],
         );
+
+        // Visual on multiple lines
+        assert_vim_input_yields_replacements(
+            "abc\nde\nf\n",
+            "jVjd",
+            vec![replace_ed((0, 3), (2, 1), "")],
+        );
     }
 }
