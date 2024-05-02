@@ -135,10 +135,10 @@ impl Document {
             .text_obj()
             .expect("Couldn't get automerge text object, so not able to modify it");
         let mut offset = 0i32;
+        let text = self
+            .current_content()
+            .expect("Should have initialized text before performing random edit");
         for op in &delta.0 {
-            let text = self
-                .current_content()
-                .expect("Should have initialized text before performing random edit");
             let (start, length) = op.range.as_relative(&text);
             self.doc
                 .splice_text(
@@ -359,7 +359,7 @@ impl DaemonActor {
     fn write_current_content_to_file(&mut self) {
         let content = self.current_content();
         if let Ok(text) = content {
-            debug!(current_text = text);
+            debug!(current_text__ = text);
             if let Some(ot_server) = &mut self.ot_server {
                 debug!(current_ot_doc = ot_server.apply_to_initial_content());
             } else {
@@ -835,6 +835,18 @@ mod tests {
                 &EditorTextDelta::from_delta(delta, initial_text),
                 "To me or to you, that is the question",
             );
+        }
+
+        #[test]
+        fn can_apply_delta_multiple_ops_bug() {
+            let content = "xeins\nzwei\ndrei\n";
+
+            let ed_delta = EditorTextDelta(vec![
+                replace_ed((1, 0), (1, 0), "xzwei\nx"),
+                replace_ed((1, 0), (2, 0), ""),
+            ]);
+
+            apply_delta_to_doc_works(content, &ed_delta, "xeins\nxzwei\nxdrei\n");
         }
     }
 }

@@ -816,6 +816,35 @@ mod tests {
     }
 
     #[test]
+    fn conversion_editor_to_text_delta_multiline_replacement() {
+        let ed_delta = ed_delta_single((1, 0), (2, 0), "xzwei\nx");
+        let delta: TextDelta = TextDelta::from_ed_delta(ed_delta, "xeins\nzwei\ndrei\n");
+        let mut expected_delta = TextDelta::default();
+        expected_delta.retain(6);
+        expected_delta.insert("xzwei\nx");
+        expected_delta.delete(5);
+        assert_eq!(expected_delta, delta);
+    }
+
+    #[test]
+    fn conversion_text_delta_to_editor_delta_multiline_replacement() {
+        let content = "xeins\nzwei\ndrei\n";
+
+        let mut delta = TextDelta::default();
+        delta.retain(6);
+        delta.insert("xzwei\nx");
+        delta.delete(5);
+
+        let ed_delta = EditorTextDelta::from_delta(delta, content);
+
+        let expected_ed_delta = EditorTextDelta(vec![
+            replace_ed((1, 0), (1, 0), "xzwei\nx"),
+            replace_ed((1, 0), (2, 0), ""),
+        ]);
+        assert_eq!(ed_delta, expected_ed_delta);
+    }
+
+    #[test]
     fn conversion_text_delta_to_editor_delta_replacement() {
         let content = "blubb\n";
 
