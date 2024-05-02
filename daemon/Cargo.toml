@@ -1,7 +1,7 @@
 [package]
 name = "ethersync"
 description = "Enables real-time co-editing of local text files."
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 default-run = "ethersync"
 
