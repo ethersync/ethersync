@@ -2,64 +2,40 @@
 
 Ethersync enables real-time co-editing of local text files. You will be able to use it for pair programming or note-taking, for example.
 
-Currently, we have a **simple working prototype**, but we're still at the beginning of development.
+Currently, we have a **simple working prototype**, but we're still near the beginning of development.
 Thus be warned, that everything is in flux and can change/break/move around quickly.
+
+Currently, we only allow collaborating on one single file at a time. Multi-file collaboration will be one of the next steps.
 
 ## Components
 
-Ethersync consists of three components:
+Ethersync consists of two components:
 
-- A central **server** is responsible for connecting people.
-- Every participant needs a **daemon**, that runs on their local machine, and connects directories to the server.
+- Every participant needs a **daemon**, that runs on their local machine, and connects to other peers.
 - **Editor plugins** connect to the daemon, send it what you type, and receive other peoples' changes.
-Currently, there's a plugin for Neovim, but other editor integrations are planned.
+  Currently, there's a plugin for Neovim, but other editor integrations are planned.
 
 ## Setup
 
-We need to set up these three components. First, clone this repository:
+We need to set up these two components. First, clone this repository:
 
 ```bash
 git clone git@github.com:ethersync/ethersync
 cd ethersync
 ```
 
-### Server
-
-First, let's start a local server instance:
-
-```bash
-cd server
-npm install
-npm run dev
-```
-
-The server also works without the other components, and offers a browser UI. You can try it by navigating to <http://localhost:5000). Create a wiki, and some pages.
-
 ### Daemon
 
-But we also allow you to edit the content from your own text editor. For that, we need to connect the wiki to a local directory, using a daemon.
-
-Let's say we want to connect a wiki running at <http://localhost:5000#playground> to the directory `playground`. Here's how you would configure it.
-
-1. Create the directory, which will create the locally synced files and a configuration file:
-
-        mkdir -p playground/.ethersync
-
-2. Create the configuration file:
-
-        echo "etherwiki=http://localhost:5000#playground" > playground/.ethersync/config
-
-After that, let's start the daemon:
+To install the daemon component, you need a [Rust](https://www.rust-lang.org) installation. You can compile the daemon like this:
 
 ```
 cd daemon
-npm install
-npm run ethersync --directory=path/to/playground
+cargo build
 ```
 
-### Neovim Plugin
+This should successfully download all dependencies, and compile the project.
 
-Finally, we need an editor plugin, for you to be able to edit the files in real time.
+### Neovim Plugin
 
 Install the [plugin](./vim-plugin) using your favorite plugin manager. For now, use the path to the `vim-plugin` directory in this repository. Consult the documentation of your plugin manager on how to do that. Example configuration for [Lazy](https://github.com/folke/lazy.nvim):
 
@@ -71,11 +47,37 @@ Install the [plugin](./vim-plugin) using your favorite plugin manager. For now, 
 
 ## Usage
 
-- Right now, you can only edit files which exist on the server
-    - You might want to add one via the web interface :)
-- When you edit a file in the output directory:
-    - If it's installed correctly, you'll get an "Ethersync activated!" greeting.
-    - Everything you edit is kept in sync.
+To collaborate on a file called `file` in a directory called `playground`, follow these steps:
+
+1. Right now, our convention to mark an "Ethersync-enabled" directory is that there is a subdirectory called `.ethersync` in it. (A more convenient way to use Ethersync is planned.) So you need to create it:
+
+        mkdir -p playground/.ethersync
+
+2. After that, start the daemon. In a group, one person needs to "host" the session, while the others join it. (Peer-to-peer support is planned.)
+
+    - As the **host**, run:
+
+        ```
+        cd daemon
+        cargo run -- daemon --file=path/to/playground/file
+        ```
+
+        This will print an IP address and port (like `192.168.178.23:4242`), which others can use to connect to you.
+
+    - As a **peer**, specify the IP address and port of the host:
+
+        ```
+        cd daemon
+        cargo run -- daemon --file=path/to/playground/file 192.168.178.23:4242
+        ```
+
+3. Finally, open the file in Vim:
+
+    ```
+    nvim path/to/playground/file
+    ```
+
+    You can now collaboratively edit the file together in real-time!
 
 ## Sponsors
 
