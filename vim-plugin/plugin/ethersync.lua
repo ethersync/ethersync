@@ -9,6 +9,8 @@ local client
 
 -- Toggle to simulate the editor going offline.
 local online = false
+-- currently we're only supporting editing *one* file. This string identifies, which one that is.
+local theFile
 
 -- Queues filled during simulated "offline" mode, and consumed when we go online again.
 local opQueueForDaemon = {}
@@ -105,7 +107,10 @@ local function connect(socket_path)
         end,
     })
     online = true
+end
 
+-- Send "open" message to daemon for this buffer.
+local function openCurrentBuffer()
     local filename = "file://" .. vim.fs.basename(vim.api.nvim_buf_get_name(0))
     client.notify("open", { uri = filename })
 end
@@ -148,7 +153,22 @@ function Ethersync()
         return
     end
 
-    print("Ethersync activated!")
+    -- Only sync the *first* file loaded and nothing else.
+    theFile = vim.fn.expand("%:p")
+
+    print("Ethersync activated!" .. "(file: " .. theFile .. ")")
+
+    connect()
+
+    -- Load buffer initially (as VimEnter seems to happen after BufWinEnter)
+    EthersyncEnterBuffer()
+end
+
+-- Forward buffer edits to daemon as well as subscribe to daemon events ("open").
+function EthersyncEnterBuffer()
+    if theFile ~= vim.api.nvim_buf_get_name(0) then
+        return
+    end
 
     -- Vim enables eol for an empty file, but we do use this option values
     -- assuming there's a trailing newline iff eol is true.
@@ -156,9 +176,9 @@ function Ethersync()
         vim.bo.eol = false
     end
 
-    connect()
-
     prev_lines = vim.api.nvim_buf_get_lines(0, 0, -1, true)
+
+    openCurrentBuffer()
 
     vim.api.nvim_buf_attach(0, false, {
         on_lines = function(
@@ -255,11 +275,13 @@ function Ethersync()
     --end
 end
 
-function EthersyncClose()
-    if vim.fn.isdirectory(vim.fn.expand("%:p:h") .. "/.ethersync") ~= 1 then
+function EthersyncCloseBuffer()
+    if theFile ~= vim.api.nvim_buf_get_name(0) then
         return
     end
-
+    -- TODO: We should detach from the buffer events here. Not sure how.
+    -- vim.api.nvim_buf_detach(0) isn't a thing. https://github.com/neovim/neovim/issues/17874
+    -- It's not a high priority, as we can only generate edits when we show the buffer anyways.
     local filename = "file://" .. vim.fs.basename(vim.api.nvim_buf_get_name(0))
     client.notify("close", { uri = filename })
 end
@@ -268,9 +290,20 @@ end
 vim.api.nvim_exec(
     [[
 augroup Ethersync
+    " remove previous Ethersync autocommands
     autocmd!
-    autocmd BufEnter * lua Ethersync()
-    autocmd BufUnload * lua EthersyncClose()
+    autocmd BufWinEnter * lua EthersyncEnterBuffer()
+    autocmd BufWinLeave * lua EthersyncCloseBuffer()
+    " TODO: not sure why we need this conditional, but the docs recommend this
+    if v:vim_did_enter
+      lua print("loading via vim_did_enter codepath")
+      lua Ethersync()
+    else
+      lua print("loading autocmd for VimEnter")
+      autocmd VimEnter * lua Ethersync()
+    endif
+    " make sure we close the buffer on leave
+    autocmd VimLeavePre * call EthersyncCloseBuffer()
 augroup END
 ]],
     false
