@@ -44,10 +44,13 @@ local function applyDelta(delta)
         table.insert(text_edits, text_edit)
     end
 
+    -- Find correct buffer to apply edits to.
+    local bufnr = vim.uri_to_bufnr("file://" .. theFile)
+
     ignore_edits = true
-    local changedtick_before = vim.api.nvim_buf_get_changedtick(0)
-    utils.apply_text_edits(text_edits, 0, "utf-32")
-    local changedtick_after = vim.api.nvim_buf_get_changedtick(0)
+    local changedtick_before = vim.api.nvim_buf_get_changedtick(bufnr)
+    utils.apply_text_edits(text_edits, bufnr, "utf-32")
+    local changedtick_after = vim.api.nvim_buf_get_changedtick(bufnr)
     ignore_edits = false
 
     debug({ changedtick_before = changedtick_before, changedtick_after = changedtick_after })
