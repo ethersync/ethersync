@@ -9,7 +9,7 @@ local client
 
 -- Toggle to simulate the editor going offline.
 local online = false
--- currently we're only supporting editing *one* file. This string identifies, which one that is.
+-- Currently we're only supporting editing *one* file. This string identifies, which one that is.
 local theFile
 
 -- Queues filled during simulated "offline" mode, and consumed when we go online again.
@@ -290,11 +290,11 @@ end
 vim.api.nvim_exec(
     [[
 augroup Ethersync
-    " remove previous Ethersync autocommands
+    " Remove previous Ethersync autocommands.
     autocmd!
     autocmd BufWinEnter * lua EthersyncEnterBuffer()
     autocmd BufWinLeave * lua EthersyncCloseBuffer()
-    " TODO: not sure why we need this conditional, but the docs recommend this
+    " TODO: Not sure why we need this conditional, but the docs recommend this.
     if v:vim_did_enter
       lua print("loading via vim_did_enter codepath")
       lua Ethersync()
@@ -302,7 +302,7 @@ augroup Ethersync
       lua print("loading autocmd for VimEnter")
       autocmd VimEnter * lua Ethersync()
     endif
-    " make sure we close the buffer on leave
+    " Make sure we close the buffer on leave.
     autocmd VimLeavePre * call EthersyncCloseBuffer()
 augroup END
 ]],
