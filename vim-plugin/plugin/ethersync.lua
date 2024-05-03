@@ -207,6 +207,7 @@ function Ethersync()
                     end
                 else
                     -- The range doesn't start on the first line.
+                    -- We can shift it back.
                     if diff.range["start"].character == 0 then
                         -- Operation applies to beginning of line, that means it's possible to shift it back.
                         -- Modify edit, s.t. not the last \n, but the one before is replaced.
