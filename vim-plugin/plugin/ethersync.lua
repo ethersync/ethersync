@@ -195,8 +195,18 @@ function Ethersync()
 
             if diff.range["end"].line == #prev_lines then
                 -- Range spans to a line one after the visible buffer lines.
-                if diff.range["start"].line ~= 0 then
-                    -- Only shift, if range doesn't start on first line.
+                if diff.range["start"].line == 0 then
+                    -- The range starts on the first line, so we can't "shift the range backwards".
+                    -- Instead, we just shorten the range by one character.
+                    diff.range["end"].line = diff.range["end"].line - 1
+                    diff.range["end"].character = vim.fn.strchars(prev_lines[#prev_lines])
+                    if string.sub(diff.text, vim.fn.strchars(diff.text)) == "\n" then
+                        -- The replacement ends with a newline.
+                        -- Drop it, because we shortened the range not to include the newline.
+                        diff.text = string.sub(diff.text, 1, -2)
+                    end
+                else
+                    -- The range doesn't start on the first line.
                     if diff.range["start"].character == 0 then
                         -- Operation applies to beginning of line, that means it's possible to shift it back.
                         -- Modify edit, s.t. not the last \n, but the one before is replaced.
@@ -204,21 +214,6 @@ function Ethersync()
                         diff.range["end"].line = diff.range["end"].line - 1
                         diff.range["start"].character = vim.fn.strchars(prev_lines[diff.range["start"].line + 1], false)
                         diff.range["end"].character = vim.fn.strchars(prev_lines[diff.range["end"].line + 1], false)
-                    end
-                else
-                    diff.range["end"].line = diff.range["end"].line - 1
-                    diff.range["end"].character = vim.fn.strchars(prev_lines[#prev_lines])
-                    if vim.api.nvim_get_option_value("eol", { buf = 0 }) then
-                        -- There's an implicit newline at the end of the file.
-                        if string.sub(diff.text, 1, 1) == "\n" then
-                            -- Drop leading newline in replacement, because we shortened the range not to replace it.
-                            diff.text = string.sub(diff.text, 2)
-                        end
-                    else
-                        if string.sub(diff.text, vim.fn.strchars(diff.text)) == "\n" then
-                            -- Drop trailing newline in replacement, because there "never was one" in the range.
-                            diff.text = string.sub(diff.text, 1, -2)
-                        end
                     end
                 end
             end
