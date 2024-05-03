@@ -41,11 +41,12 @@ async fn main() {
     create_ethersync_dir(dir.path());
 
     // Set up the actors.
-    let daemon = Daemon::new(None, Path::new("/tmp/ethersync"), file.as_path());
+    let daemon = Daemon::new(None, None, Path::new("/tmp/ethersync"), file.as_path());
 
     let nvim = Neovim::new(file).await;
 
     let peer = Daemon::new(
+        None,
         Some(daemon.tcp_address()),
         Path::new("/tmp/etherbonk"),
         file2.as_path(),

@@ -412,7 +412,12 @@ pub struct Daemon {
 
 impl Daemon {
     // Launch the daemon. Optionally, connect to given peer.
-    pub fn new(peer: Option<String>, socket_path: &Path, file_path: &Path) -> Self {
+    pub fn new(
+        port: Option<u16>,
+        peer: Option<String>,
+        socket_path: &Path,
+        file_path: &Path,
+    ) -> Self {
         // The document task will receive messages on this channel.
         // The TCP and socket connections will send messages to it when they receive something.
         let (doc_message_tx, doc_message_rx) = mpsc::channel(1);
@@ -499,7 +504,8 @@ impl Daemon {
                 local_ip()
                     .expect("Failed to get local IP address")
                     .to_string()
-                    + ":4242",
+                    + ":"
+                    + &port.unwrap_or(4242).to_string(),
             );
             let maybe_tcp_address_clone = maybe_tcp_address.clone();
             tokio::spawn(async {

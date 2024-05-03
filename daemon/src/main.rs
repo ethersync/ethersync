@@ -23,6 +23,9 @@ struct Cli {
 enum Commands {
     /// Launch Ethersync's background process that connects with clients and other nodes.
     Daemon {
+        /// Port to listen on as a hosting peer.
+        #[arg(short, long)]
+        port: Option<u16>,
         /// IP + port of a peer to connect to. Example: 192.168.1.42:1234
         peer: Option<String>,
         #[arg(short, long)]
@@ -47,8 +50,8 @@ async fn main() -> io::Result<()> {
     let socket_path = cli.socket_path.unwrap_or(DEFAULT_SOCKET_PATH.into());
 
     match cli.command {
-        Commands::Daemon { peer, file } => {
-            Daemon::new(peer, &socket_path, &file);
+        Commands::Daemon { port, peer, file } => {
+            Daemon::new(port, peer, &socket_path, &file);
             match signal::ctrl_c().await {
                 Ok(()) => {}
                 Err(err) => {
