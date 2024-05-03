@@ -521,11 +521,13 @@ impl Daemon {
 
         let socket_message_tx_clone = socket_message_tx.clone();
         let socket_path_clone = socket_path.to_path_buf();
+        let file_path_clone = file_path.to_path_buf();
         tokio::spawn(async move {
             listen_socket(
                 doc_message_tx_clone_2,
                 socket_message_tx_clone,
                 &socket_path_clone,
+                &file_path_clone,
             )
             .await
             .expect("Failed to listen on UNIX socket");
@@ -683,6 +685,7 @@ async fn listen_socket(
     tx: DocMessageSender,
     editor_message_tx: EditorMessageSender,
     socket_path: &Path,
+    file_path: &Path,
 ) -> Result<()> {
     if Path::new(&socket_path).exists() {
         fs::remove_file(socket_path)?;
@@ -726,7 +729,7 @@ async fn listen_socket(
                         Ok(rev_delta) = editor_message_rx.recv() => {
                             debug!("Received editor message to send to it.");
                             let message = EditorProtocolMessage::Edit {
-                                uri: "file://hamwanich".to_string(),
+                                uri: format!("file://{}", file_path.display()),
                                 delta: rev_delta
                             };
                             let payload = message.to_jsonrpc().expect("Failed to serialize JSON-RPC message");
