@@ -111,8 +111,8 @@ end
 
 -- Send "open" message to daemon for this buffer.
 local function openCurrentBuffer()
-    local filename = "file://" .. vim.fs.basename(vim.api.nvim_buf_get_name(0))
-    client.notify("open", { uri = filename })
+    local uri = "file://" .. theFile
+    client.notify("open", { uri = uri })
 end
 
 local function connect2()
@@ -120,6 +120,7 @@ local function connect2()
         client.terminate()
     end
     connect("/tmp/etherbonk")
+    openCurrentBuffer()
 end
 
 -- Simulate disconnecting from the daemon.
@@ -161,12 +162,12 @@ function Ethersync()
     connect()
 
     -- Load buffer initially (as VimEnter seems to happen after BufWinEnter)
-    EthersyncEnterBuffer()
+    EthersyncOpenBuffer()
 end
 
 -- Forward buffer edits to daemon as well as subscribe to daemon events ("open").
-function EthersyncEnterBuffer()
-    if theFile ~= vim.api.nvim_buf_get_name(0) then
+function EthersyncOpenBuffer()
+    if theFile ~= vim.fn.expand("%:p") then
         return
     end
 
@@ -276,14 +277,15 @@ function EthersyncEnterBuffer()
 end
 
 function EthersyncCloseBuffer()
-    if theFile ~= vim.api.nvim_buf_get_name(0) then
+    local closedFile = vim.fn.expand("<afile>:p")
+    if theFile ~= closedFile then
         return
     end
     -- TODO: We should detach from the buffer events here. Not sure how.
     -- vim.api.nvim_buf_detach(0) isn't a thing. https://github.com/neovim/neovim/issues/17874
     -- It's not a high priority, as we can only generate edits when we show the buffer anyways.
-    local filename = "file://" .. vim.fs.basename(vim.api.nvim_buf_get_name(0))
-    client.notify("close", { uri = filename })
+    local uri = "file://" .. closedFile
+    client.notify("close", { uri = uri })
 end
 
 -- When new buffer is loaded, run Ethersync automatically.
@@ -292,8 +294,8 @@ vim.api.nvim_exec(
 augroup Ethersync
     " Remove previous Ethersync autocommands.
     autocmd!
-    autocmd BufWinEnter * lua EthersyncEnterBuffer()
-    autocmd BufWinLeave * lua EthersyncCloseBuffer()
+    autocmd BufRead * lua EthersyncOpenBuffer()
+    autocmd BufUnload * lua EthersyncCloseBuffer()
     " TODO: Not sure why we need this conditional, but the docs recommend this.
     if v:vim_did_enter
       lua print("loading via vim_did_enter codepath")
