@@ -82,9 +82,7 @@ local function processOperationForEditor(method, parameters)
     end
 end
 
--- Reset the state on editor side and re-open the current buffer
---
--- (this is to be called on buffer change, once we have the ability to detect that)
+-- Reset the state on editor side.
 local function resetState()
     daemonRevision = 0
     editorRevision = 0
@@ -225,7 +223,6 @@ function EthersyncOpenBuffer()
                     end
                 else
                     -- The range doesn't start on the first line.
-                    -- We can shift it back.
                     if diff.range["start"].character == 0 then
                         -- Operation applies to beginning of line, that means it's possible to shift it back.
                         -- Modify edit, s.t. not the last \n, but the one before is replaced.
@@ -269,17 +266,16 @@ function EthersyncCloseBuffer()
     if theFile ~= closedFile then
         return
     end
-    -- TODO: We should detach from the buffer events here. Not sure how.
+    -- TODO: Is the on_lines callback un-registered automatically when the buffer closes,
+    -- or should we detach it ourselves?
     -- vim.api.nvim_buf_detach(0) isn't a thing. https://github.com/neovim/neovim/issues/17874
-    -- It's not a high priority, as we can only generate edits when we show the buffer anyways.
+    -- It's not a high priority, as we can only generate edits when the buffer exists anyways.
     local uri = "file://" .. closedFile
     client.notify("close", { uri = uri })
 end
 
 vim.api.nvim_create_autocmd({ "BufRead", "BufNewFile" }, { callback = EthersyncOpenBuffer })
 vim.api.nvim_create_autocmd("BufUnload", { callback = EthersyncCloseBuffer })
--- Is this needed?
--- vim.api.nvim_create_autocmd("VimLeavePre", { callback = EthersyncCloseBuffer })
 
 vim.api.nvim_create_user_command("EthersyncRunTests", utils.testAllUnits, {})
 vim.api.nvim_create_user_command("EthersyncGoOffline", goOffline, {})

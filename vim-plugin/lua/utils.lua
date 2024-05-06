@@ -5,6 +5,9 @@ function M.appendNewline()
     vim.cmd("normal! Go")
 end
 
+-- The following functions are taken from the Neovim source code:
+-- https://github.com/neovim/neovim/blob/master/runtime/lua/vim/lsp/util.lua
+
 --- Gets the zero-indexed lines from the given buffer.
 ---
 ---@param bufnr integer bufnr to get the lines from
