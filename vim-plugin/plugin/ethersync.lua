@@ -262,15 +262,6 @@ function EthersyncOpenBuffer()
             prev_lines = curr_lines
         end,
     })
-
-    -- TODO: Re-enable this?
-    --if vim.api.nvim_get_option_value("fixeol", { buf = 0 }) then
-    --    if not vim.api.nvim_get_option_value("eol", { buf = 0 }) then
-    --        utils.appendNewline()
-    --        vim.api.nvim_set_option_value("eol", true, { buf = 0 })
-    --    end
-    --    vim.api.nvim_set_option_value("fixeol", false, { buf = 0 })
-    --end
 end
 
 function EthersyncCloseBuffer()
@@ -285,20 +276,10 @@ function EthersyncCloseBuffer()
     client.notify("close", { uri = uri })
 end
 
--- When new buffer is loaded, run Ethersync automatically.
-vim.api.nvim_exec(
-    [[
-augroup Ethersync
-    " Remove previous Ethersync autocommands.
-    autocmd!
-    autocmd BufRead * lua EthersyncOpenBuffer()
-    autocmd BufUnload * lua EthersyncCloseBuffer()
-    " Make sure we close the buffer on leave.
-    autocmd VimLeavePre * call EthersyncCloseBuffer()
-augroup END
-]],
-    false
-)
+vim.api.nvim_create_autocmd({ "BufRead", "BufNewFile" }, { callback = EthersyncOpenBuffer })
+vim.api.nvim_create_autocmd("BufUnload", { callback = EthersyncCloseBuffer })
+-- Is this needed?
+-- vim.api.nvim_create_autocmd("VimLeavePre", { callback = EthersyncCloseBuffer })
 
 vim.api.nvim_create_user_command("EthersyncRunTests", utils.testAllUnits, {})
 vim.api.nvim_create_user_command("EthersyncGoOffline", goOffline, {})
