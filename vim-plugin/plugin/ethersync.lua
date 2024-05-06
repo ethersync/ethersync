@@ -151,25 +151,19 @@ local function goOnline()
     online = true
 end
 
--- Initialization function.
-function Ethersync()
+-- Forward buffer edits to daemon as well as subscribe to daemon events ("open").
+function EthersyncOpenBuffer()
     if vim.fn.isdirectory(vim.fn.expand("%:p:h") .. "/.ethersync") ~= 1 then
         return
     end
 
-    -- Only sync the *first* file loaded and nothing else.
-    theFile = vim.fn.expand("%:p")
+    if not theFile then
+        -- Only sync the *first* file loaded and nothing else.
+        theFile = vim.fn.expand("%:p")
+        connect()
+        print("Ethersync activated for file " .. theFile)
+    end
 
-    print("Ethersync activated!" .. "(file: " .. theFile .. ")")
-
-    connect()
-
-    -- Load buffer initially (as VimEnter seems to happen after BufWinEnter)
-    EthersyncOpenBuffer()
-end
-
--- Forward buffer edits to daemon as well as subscribe to daemon events ("open").
-function EthersyncOpenBuffer()
     if theFile ~= vim.fn.expand("%:p") then
         return
     end
@@ -299,22 +293,12 @@ augroup Ethersync
     autocmd!
     autocmd BufRead * lua EthersyncOpenBuffer()
     autocmd BufUnload * lua EthersyncCloseBuffer()
-    " TODO: Not sure why we need this conditional, but the docs recommend this.
-    if v:vim_did_enter
-      lua print("loading via vim_did_enter codepath")
-      lua Ethersync()
-    else
-      lua print("loading autocmd for VimEnter")
-      autocmd VimEnter * lua Ethersync()
-    endif
     " Make sure we close the buffer on leave.
     autocmd VimLeavePre * call EthersyncCloseBuffer()
 augroup END
 ]],
     false
 )
-
-vim.api.nvim_create_user_command("Ethersync", Ethersync, {})
 
 vim.api.nvim_create_user_command("EthersyncRunTests", utils.testAllUnits, {})
 vim.api.nvim_create_user_command("EthersyncGoOffline", goOffline, {})
