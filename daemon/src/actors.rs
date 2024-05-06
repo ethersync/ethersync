@@ -58,14 +58,14 @@ impl Neovim {
     }
 
     #[allow(dead_code)]
-    async fn new_ethersync_enabled(initial_content: &str) -> Self {
+    async fn new_ethersync_enabled(initial_content: &str) -> (Self, PathBuf) {
         let dir = TempDir::new().unwrap();
         let ethersync_dir = dir.child(".ethersync");
         std::fs::create_dir(ethersync_dir).unwrap();
         let file_path = dir.child("test");
         std::fs::write(&file_path, initial_content).unwrap();
 
-        Self::new(file_path).await
+        (Self::new(file_path.clone()).await, file_path)
     }
 }
 
@@ -283,7 +283,7 @@ pub mod tests {
         let runtime = Runtime::new().expect("Could not create Tokio runtime");
         runtime.block_on(async {
             let mut socket = MockSocket::new("/tmp/ethersync", true).await;
-            let nvim = Neovim::new_ethersync_enabled(initial_content).await;
+            let (nvim, file_path) = Neovim::new_ethersync_enabled(initial_content).await;
 
             for op in &deltas {
                 let rev_editor_delta = RevisionedEditorTextDelta {
@@ -291,7 +291,7 @@ pub mod tests {
                     delta: EditorTextDelta(vec![op.clone()]),
                 };
                 let editor_message = EditorProtocolMessage::Edit {
-                    uri: "<tbd>".to_string(),
+                    uri: format!("file://{}", file_path.display()),
                     delta: rev_editor_delta,
                 };
                 let payload = editor_message
@@ -351,7 +351,7 @@ pub mod tests {
         runtime.block_on(async {
             timeout(Duration::from_millis(5000), async {
                 let mut socket = MockSocket::new("/tmp/ethersync", false).await;
-                let mut nvim = Neovim::new_ethersync_enabled(initial_content).await;
+                let (mut nvim, _file_path) = Neovim::new_ethersync_enabled(initial_content).await;
                 nvim.input(input).await;
 
                 let msg = socket.recv().await;

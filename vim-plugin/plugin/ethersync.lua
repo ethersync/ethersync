@@ -9,6 +9,8 @@ local client
 
 -- Toggle to simulate the editor going offline.
 local online = false
+-- Currently we're only supporting editing *one* file. This string identifies, which one that is.
+local theFile
 
 -- Queues filled during simulated "offline" mode, and consumed when we go online again.
 local opQueueForDaemon = {}
@@ -42,10 +44,13 @@ local function applyDelta(delta)
         table.insert(text_edits, text_edit)
     end
 
+    -- Find correct buffer to apply edits to.
+    local bufnr = vim.uri_to_bufnr("file://" .. theFile)
+
     ignore_edits = true
-    local changedtick_before = vim.api.nvim_buf_get_changedtick(0)
-    utils.apply_text_edits(text_edits, 0, "utf-32")
-    local changedtick_after = vim.api.nvim_buf_get_changedtick(0)
+    local changedtick_before = vim.api.nvim_buf_get_changedtick(bufnr)
+    utils.apply_text_edits(text_edits, bufnr, "utf-32")
+    local changedtick_after = vim.api.nvim_buf_get_changedtick(bufnr)
     ignore_edits = false
 
     debug({ changedtick_before = changedtick_before, changedtick_after = changedtick_after })
@@ -77,9 +82,7 @@ local function processOperationForEditor(method, parameters)
     end
 end
 
--- Reset the state on editor side and re-open the current buffer
---
--- (this is to be called on buffer change, once we have the ability to detect that)
+-- Reset the state on editor side.
 local function resetState()
     daemonRevision = 0
     editorRevision = 0
@@ -105,9 +108,12 @@ local function connect(socket_path)
         end,
     })
     online = true
+end
 
-    local filename = "file://" .. vim.fs.basename(vim.api.nvim_buf_get_name(0))
-    client.notify("open", { uri = filename })
+-- Send "open" message to daemon for this buffer.
+local function openCurrentBuffer()
+    local uri = "file://" .. theFile
+    client.notify("open", { uri = uri })
 end
 
 local function connect2()
@@ -115,6 +121,7 @@ local function connect2()
         client.terminate()
     end
     connect("/tmp/etherbonk")
+    openCurrentBuffer()
 end
 
 -- Simulate disconnecting from the daemon.
@@ -142,13 +149,22 @@ local function goOnline()
     online = true
 end
 
--- Initialization function.
-function Ethersync()
+-- Forward buffer edits to daemon as well as subscribe to daemon events ("open").
+function EthersyncOpenBuffer()
     if vim.fn.isdirectory(vim.fn.expand("%:p:h") .. "/.ethersync") ~= 1 then
         return
     end
 
-    print("Ethersync activated!")
+    if not theFile then
+        -- Only sync the *first* file loaded and nothing else.
+        theFile = vim.fn.expand("%:p")
+        connect()
+        print("Ethersync activated for file " .. theFile)
+    end
+
+    if theFile ~= vim.fn.expand("%:p") then
+        return
+    end
 
     -- Vim enables eol for an empty file, but we do use this option values
     -- assuming there's a trailing newline iff eol is true.
@@ -156,9 +172,9 @@ function Ethersync()
         vim.bo.eol = false
     end
 
-    connect()
-
     prev_lines = vim.api.nvim_buf_get_lines(0, 0, -1, true)
+
+    openCurrentBuffer()
 
     vim.api.nvim_buf_attach(0, false, {
         on_lines = function(
@@ -207,7 +223,6 @@ function Ethersync()
                     end
                 else
                     -- The range doesn't start on the first line.
-                    -- We can shift it back.
                     if diff.range["start"].character == 0 then
                         -- Operation applies to beginning of line, that means it's possible to shift it back.
                         -- Modify edit, s.t. not the last \n, but the one before is replaced.
@@ -244,39 +259,23 @@ function Ethersync()
             prev_lines = curr_lines
         end,
     })
-
-    -- TODO: Re-enable this?
-    --if vim.api.nvim_get_option_value("fixeol", { buf = 0 }) then
-    --    if not vim.api.nvim_get_option_value("eol", { buf = 0 }) then
-    --        utils.appendNewline()
-    --        vim.api.nvim_set_option_value("eol", true, { buf = 0 })
-    --    end
-    --    vim.api.nvim_set_option_value("fixeol", false, { buf = 0 })
-    --end
 end
 
-function EthersyncClose()
-    if vim.fn.isdirectory(vim.fn.expand("%:p:h") .. "/.ethersync") ~= 1 then
+function EthersyncCloseBuffer()
+    local closedFile = vim.fn.expand("<afile>:p")
+    if theFile ~= closedFile then
         return
     end
-
-    local filename = "file://" .. vim.fs.basename(vim.api.nvim_buf_get_name(0))
-    client.notify("close", { uri = filename })
+    -- TODO: Is the on_lines callback un-registered automatically when the buffer closes,
+    -- or should we detach it ourselves?
+    -- vim.api.nvim_buf_detach(0) isn't a thing. https://github.com/neovim/neovim/issues/17874
+    -- It's not a high priority, as we can only generate edits when the buffer exists anyways.
+    local uri = "file://" .. closedFile
+    client.notify("close", { uri = uri })
 end
 
--- When new buffer is loaded, run Ethersync automatically.
-vim.api.nvim_exec(
-    [[
-augroup Ethersync
-    autocmd!
-    autocmd BufEnter * lua Ethersync()
-    autocmd BufUnload * lua EthersyncClose()
-augroup END
-]],
-    false
-)
-
-vim.api.nvim_create_user_command("Ethersync", Ethersync, {})
+vim.api.nvim_create_autocmd({ "BufRead", "BufNewFile" }, { callback = EthersyncOpenBuffer })
+vim.api.nvim_create_autocmd("BufUnload", { callback = EthersyncCloseBuffer })
 
 vim.api.nvim_create_user_command("EthersyncRunTests", utils.testAllUnits, {})
 vim.api.nvim_create_user_command("EthersyncGoOffline", goOffline, {})
