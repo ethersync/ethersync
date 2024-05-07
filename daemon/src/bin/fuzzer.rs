@@ -47,7 +47,7 @@ async fn main() {
 
     let peer = Daemon::new(
         None,
-        Some(daemon.tcp_address()),
+        Some("127.0.0.1:4242".to_string()),
         Path::new("/tmp/etherbonk"),
         file2.as_path(),
     );

@@ -407,7 +407,6 @@ impl DaemonActor {
 
 pub struct Daemon {
     doc_message_tx: DocMessageSender,
-    tcp_address: Option<String>,
 }
 
 impl Daemon {
@@ -492,7 +491,6 @@ impl Daemon {
         let doc_changed_ping_tx_clone = doc_changed_ping_tx.clone();
         let doc_message_tx_clone_2 = doc_message_tx_clone.clone();
 
-        let mut maybe_tcp_address = None;
         if let Some(peer) = peer {
             tokio::spawn(async {
                 dial_tcp(doc_message_tx_clone, doc_changed_ping_tx_clone, peer)
@@ -500,22 +498,11 @@ impl Daemon {
                     .expect("Failed to dial peer");
             });
         } else {
-            maybe_tcp_address = Some(
-                local_ip()
-                    .expect("Failed to get local IP address")
-                    .to_string()
-                    + ":"
-                    + &port.unwrap_or(4242).to_string(),
-            );
-            let maybe_tcp_address_clone = maybe_tcp_address.clone();
-            tokio::spawn(async {
-                listen_tcp(
-                    doc_message_tx_clone,
-                    doc_changed_ping_tx_clone,
-                    maybe_tcp_address_clone.unwrap(),
-                )
-                .await
-                .expect("Failed to listen on TCP port");
+            let port = port.unwrap_or(4242);
+            tokio::spawn(async move {
+                listen_tcp(doc_message_tx_clone, doc_changed_ping_tx_clone, port)
+                    .await
+                    .expect("Failed to listen on TCP port");
             });
         }
 
@@ -534,10 +521,7 @@ impl Daemon {
         });
 
         tokio::spawn(async move { daemon_actor.run().await });
-        Self {
-            doc_message_tx,
-            tcp_address: maybe_tcp_address,
-        }
+        Self { doc_message_tx }
     }
 
     pub async fn content(&self) -> Result<String> {
@@ -563,21 +547,22 @@ impl Daemon {
             .await
             .expect("Failed to send delta to document task");
     }
-
-    #[must_use]
-    pub fn tcp_address(&self) -> String {
-        let ip = local_ip().expect("Failed to get local IP address");
-        format!("{ip}:4242")
-    }
 }
 
 async fn listen_tcp(
     tx: DocMessageSender,
     doc_changed_ping_tx: DocChangedSender,
-    addr: String,
+    port: u16,
 ) -> Result<()> {
-    let listener = TcpListener::bind(&addr).await?;
-    info!("Listening on TCP port: {}", addr);
+    let listener = TcpListener::bind(format!("0.0.0.0:{}", port)).await?;
+
+    if let Ok(ip) = local_ip() {
+        info!("Listening on local TCP: {}:{}", ip, port);
+    }
+
+    if let Some(ip) = public_ip::addr().await {
+        info!("Listening on public TCP: {}:{}", ip, port);
+    }
 
     loop {
         let Ok((stream, _addr)) = listener.accept().await else {
