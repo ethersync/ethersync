@@ -53,22 +53,27 @@ This should show the available options.
 
 ### Neovim Plugin
 
-Install the [plugin](./vim-plugin) using your favorite plugin manager.
+- If you're not using a plugin manager, here's a "quick and dirty" way to install the plugin:
 
-If you're using [Lazy](https://github.com/folke/lazy.nvim), you can directly use the path to the `vim-plugin` directory in this repository:
+    ```bash
+    mkdir -p $HOME/.local/share/nvim/site/pack/plugins/start
+    ln -s $HOME/path/to/ethersync/vim-plugin $HOME/.local/share/nvim/site/pack/plugins/start/ethersync
+    ```
 
-```lua
-{
-    dir = os.getenv("HOME") .. "/path/to/ethersync/vim-plugin",
-}
-```
+- If you're using [Lazy](https://github.com/folke/lazy.nvim), you can specify the path to the `vim-plugin` directory in this repository like this:
 
-For other plugin managers, it's often convenient to provide a Git repository which contains the plugin at the top level.
+    ```lua
+    {
+        dir = os.getenv("HOME") .. "/path/to/ethersync/vim-plugin",
+    }
+    ```
+
+- For other plugin managers, it's often convenient to provide a Git repository which contains the plugin at the top level.
 We manually publish the latest version at <https://github.com/ethersync/ethersync-vim>, so you can specify the repo like this (for example, for [vim-plug](https://github.com/junegunn/vim-plug)):
 
-```vim
-Plug 'ethersync/ethersync-vim'
-```
+    ```vim
+    Plug 'ethersync/ethersync-vim'
+    ```
 
 ## Usage
 
