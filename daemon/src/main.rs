@@ -15,7 +15,8 @@ const DEFAULT_SOCKET_PATH: &str = "/tmp/ethersync";
 struct Cli {
     #[command(subcommand)]
     command: Commands,
-    #[arg(short, long, global = true)]
+    /// Path to the Unix domain socket to use for communication between daemon and editors.
+    #[arg(short, long, global = true, default_value = DEFAULT_SOCKET_PATH)]
     socket_path: Option<PathBuf>,
 }
 
@@ -23,8 +24,9 @@ struct Cli {
 enum Commands {
     /// Launch Ethersync's background process that connects with clients and other nodes.
     Daemon {
+        // TODO: Move the default port definition to a constant.
         /// Port to listen on as a hosting peer.
-        #[arg(short, long)]
+        #[arg(short, long, default_value = "4242")]
         port: Option<u16>,
         /// IP + port of a peer to connect to. Example: 192.168.1.42:1234
         peer: Option<String>,
