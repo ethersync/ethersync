@@ -37,6 +37,12 @@ cargo build
 This should download all dependencies, and successfully compile the project (currently as a debug build, as we're in early development).
 
 For the next steps to succeed you need to make sure that the resulting `ethersync` binary is in your shell PATH.
+One option to do this temporarily is to run this command in the terminal:
+
+```bash
+export PATH="$HOME/path/to/ethersync/daemon/target/debug:$PATH"
+```
+
 To confirm that worked, try running it:
 
 ```bash
@@ -47,13 +53,21 @@ This should show the available options.
 
 ### Neovim Plugin
 
-Install the [plugin](./vim-plugin) using your favorite plugin manager. For now, use the path to the `vim-plugin` directory in this repository.
-Consult the documentation of your plugin manager on how to do that. Example configuration for [Lazy](https://github.com/folke/lazy.nvim):
+Install the [plugin](./vim-plugin) using your favorite plugin manager.
+
+If you're using [Lazy](https://github.com/folke/lazy.nvim), you can directly use the path to the `vim-plugin` directory in this repository:
 
 ```lua
 {
     dir = os.getenv("HOME") .. "/path/to/ethersync/vim-plugin",
 }
+```
+
+For other plugin managers, it's often convenient to provide a Git repository which contains the plugin at the top level.
+We manually publish the latest version at <https://github.com/ethersync/ethersync-vim>, so you can specify the repo like this (for example, for [vim-plug](https://github.com/junegunn/vim-plug)):
+
+```vim
+Plug 'ethersync/ethersync-vim'
 ```
 
 ## Usage
@@ -74,7 +88,7 @@ To collaborate on a file called `file` in a directory called `playground`, follo
         ethersync daemon --file=path/to/playground/file
         ```
 
-        This will print an IP address and port (like `192.168.178.23:4242`), which others can use to connect to you.
+        This will print an IP address and port (like `192.168.178.23:4242`), which others can use to connect to you. (It prints the local IP address by default, but you can also be reached using your public IP address. Right now, you might need to configure the host computer to open the port to the outside. A more convenient way to do that is planned.)
 
     - As a **peer**, specify the IP address and port of the host:
 
@@ -89,6 +103,7 @@ To collaborate on a file called `file` in a directory called `playground`, follo
     ```
 
     If everything went correctly, you should see `Ethersync activated!` in the nvim messages and `Client connection established.` in the logs of the daemon.
+    If that doesn't work, make sure that there's an `.ethersync` directory next to the `file`, and that the `ethersync` command is in the PATH in the terminal where you run Neovim.
     You can now collaboratively edit the file together in real-time!
 
 ## Sponsors
