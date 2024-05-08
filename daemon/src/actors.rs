@@ -261,7 +261,7 @@ pub mod tests {
             let mut cmd = tokio::process::Command::new("nvim");
             cmd.arg("--headless").arg("--embed");
             let (nvim, _, _) = new_child_cmd(&mut cmd, handler).await.unwrap();
-            nvim.command("Ethersync")
+            nvim.command("EthersyncInfo")
                 .await
                 .expect("Failed to run Ethersync");
         });

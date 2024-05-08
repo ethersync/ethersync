@@ -103,7 +103,6 @@ function EthersyncOpenBuffer()
         theFile = vim.fn.expand("%:p")
         vim.bo.modifiable = false
         connect()
-        print("Ethersync activated for file " .. theFile)
     end
 
     if theFile ~= vim.fn.expand("%:p") then
@@ -148,5 +147,18 @@ function EthersyncCloseBuffer()
     sendNotification("close", { uri = uri })
 end
 
+function EthersyncInfo()
+    if client then
+        print("Connected to Ethersync daemon!")
+        print("File: " .. theFile)
+        print("Editor revision: " .. editorRevision)
+        print("Daemon revision: " .. daemonRevision)
+    else
+        print("Not connected to Ethersync daemon.")
+    end
+end
+
 vim.api.nvim_create_autocmd({ "BufRead", "BufNewFile" }, { callback = EthersyncOpenBuffer })
 vim.api.nvim_create_autocmd("BufUnload", { callback = EthersyncCloseBuffer })
+
+vim.api.nvim_create_user_command("EthersyncInfo", EthersyncInfo, {})
