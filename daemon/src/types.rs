@@ -169,305 +169,6 @@ impl Position {
     }
 }
 
-#[cfg(test)]
-mod ropey_test {
-    use super::Position;
-
-    #[test]
-    fn zero_offset() {
-        assert_eq!(
-            //       position         0123456 78901 2345
-            //       character        0123456 01234 0124
-            Position::from_offset(0, "hallo,\nneue\nwelt"),
-            Position {
-                line: 0,
-                character: 0
-            }
-        );
-        assert_eq!(
-            Position {
-                line: 0,
-                character: 0
-            }
-            .to_offset("hallo,\nneue\nwelt"),
-            0
-        );
-    }
-
-    #[test]
-    fn more_offset_first_line() {
-        assert_eq!(
-            Position::from_offset(3, "hallo,\nneue\nwelt"),
-            Position {
-                line: 0,
-                character: 3
-            }
-        );
-        assert_eq!(
-            Position::from_offset(3, "h🥕llo,\nneue\nwelt"),
-            Position {
-                line: 0,
-                character: 3
-            }
-        );
-        assert_eq!(
-            Position {
-                line: 0,
-                character: 3
-            }
-            .to_offset("hallo,\nneue\nwelt"),
-            3
-        );
-        assert_eq!(
-            Position {
-                line: 0,
-                character: 3
-            }
-            .to_offset("h🥕llo,\nneue\nwelt"),
-            3
-        );
-        assert_eq!(
-            Position {
-                line: 0,
-                character: 6
-            }
-            .to_offset("h🥕llo,\nneue\nwelt"),
-            6
-        );
-    }
-
-    #[test]
-    fn offset_second_line() {
-        assert_eq!(
-            Position::from_offset(7, "hallo,\nneue\nwelt"),
-            Position {
-                line: 1,
-                character: 0
-            }
-        );
-        assert_eq!(
-            Position::from_offset(7, "h🥕llo,\nneue\nwelt"),
-            Position {
-                line: 1,
-                character: 0
-            }
-        );
-        assert_eq!(
-            Position::from_offset(9, "hallo,\nneue\nwelt"),
-            Position {
-                line: 1,
-                character: 2
-            }
-        );
-        assert_eq!(
-            Position::from_offset(9, "h🥕llo,\nneue\nwelt"),
-            Position {
-                line: 1,
-                character: 2
-            }
-        );
-        assert_eq!(
-            Position::from_offset(11, "h🥕llo,\nneue\nwelt"),
-            Position {
-                line: 1,
-                character: 4
-            }
-        );
-        assert_eq!(
-            Position {
-                line: 1,
-                character: 0
-            }
-            .to_offset("hallo,\nneue\nwelt"),
-            7
-        );
-        assert_eq!(
-            Position {
-                line: 1,
-                character: 0
-            }
-            .to_offset("h🥕llo,\nneue\nwelt"),
-            7
-        );
-        assert_eq!(
-            Position {
-                line: 1,
-                character: 2
-            }
-            .to_offset("hallo,\nneue\nwelt"),
-            9
-        );
-        assert_eq!(
-            Position {
-                line: 1,
-                character: 2
-            }
-            .to_offset("h🥕llo,\nneue\nwelt"),
-            9
-        );
-    }
-
-    #[test]
-    fn offset_third_line() {
-        assert_eq!(
-            Position::from_offset(12, "hallo,\nneue\nwelt"),
-            Position {
-                line: 2,
-                character: 0
-            }
-        );
-        assert_eq!(
-            Position::from_offset(12, "h🥕llo,\nneue\nwelt"),
-            Position {
-                line: 2,
-                character: 0
-            }
-        );
-        assert_eq!(
-            Position::from_offset(15, "hallo,\nneue\nwelt"),
-            Position {
-                line: 2,
-                character: 3
-            }
-        );
-        assert_eq!(
-            Position::from_offset(15, "h🥕llo,\nneue\nwelt"),
-            Position {
-                line: 2,
-                character: 3
-            }
-        );
-        assert_eq!(
-            Position {
-                line: 2,
-                character: 0
-            }
-            .to_offset("hallo,\nneue\nwelt"),
-            12
-        );
-        assert_eq!(
-            Position {
-                line: 2,
-                character: 0
-            }
-            .to_offset("h🥕llo,\nneue\nwelt"),
-            12
-        );
-        assert_eq!(
-            Position {
-                line: 2,
-                character: 3
-            }
-            .to_offset("hallo,\nneue\nwelt"),
-            15
-        );
-        assert_eq!(
-            Position {
-                line: 2,
-                character: 3
-            }
-            .to_offset("h🥕llo,\nneue\nwelt"),
-            15
-        );
-    }
-
-    #[test]
-    fn last_implicit_newline_does_not_panic() {
-        assert_eq!(
-            Position::from_offset(16, "h🥕llo,\nneue\nwelt"),
-            Position {
-                line: 2,
-                character: 4
-            }
-        );
-        assert_eq!(
-            Position {
-                line: 2,
-                character: 4
-            }
-            .to_offset("h🥕llo,\nneue\nwelt"),
-            16
-        );
-    }
-
-    #[test]
-    fn referencing_after_last_lines() {
-        assert_eq!(
-            Position {
-                line: 1,
-                character: 0
-            },
-            Position::from_offset(2, "a\n")
-        );
-
-        assert_eq!(
-            Position {
-                line: 1,
-                character: 0
-            }
-            .to_offset("a\n"),
-            2
-        );
-        assert_eq!(
-            Position {
-                line: 1,
-                character: 0
-            }
-            .to_offset("a"),
-            1
-        );
-    }
-
-    #[test]
-    #[should_panic]
-    fn referencing_after_last_lines_fails() {
-        assert_eq!(
-            Position {
-                line: 1,
-                character: 0
-            },
-            Position::from_offset(2, "a")
-        );
-    }
-
-    #[test]
-    #[should_panic]
-    fn referencing_two_lines_after_last_line_fails() {
-        assert_eq!(
-            Position {
-                line: 2,
-                character: 0
-            }
-            .to_offset("a"),
-            1
-        );
-    }
-
-    #[test]
-    #[should_panic]
-    fn offset_out_of_bounds_from_offset() {
-        Position::from_offset(17, "h🥕llo,\nneue\nwelt");
-    }
-
-    #[ignore] // WIP, see below.
-    #[test]
-    #[should_panic]
-    fn offset_out_of_bounds_to_offset() {
-        // TODO: do we want this to panic?
-        Position {
-            line: 2,
-            character: 5,
-        }
-        .to_offset("h🥕llo,\nneue\nwelt");
-        // even this doesn't panic, that surprises me. Check.
-        Position {
-            line: 3,
-            character: 5,
-        }
-        .to_offset("h🥕llo,\nneue\nwelt");
-    }
-}
-
 /// Used to encapsulate our understanding of an OT change
 impl TextDelta {
     pub fn retain(&mut self, n: usize) {
@@ -877,5 +578,303 @@ mod tests {
         expected.insert("short");
         expected.insert("ong");
         assert_eq!(delta, expected);
+    }
+    #[cfg(test)]
+    mod position {
+        use super::Position;
+
+        #[test]
+        fn zero_offset() {
+            assert_eq!(
+                //       position         0123456 78901 2345
+                //       character        0123456 01234 0124
+                Position::from_offset(0, "hallo,\nneue\nwelt"),
+                Position {
+                    line: 0,
+                    character: 0
+                }
+            );
+            assert_eq!(
+                Position {
+                    line: 0,
+                    character: 0
+                }
+                .to_offset("hallo,\nneue\nwelt"),
+                0
+            );
+        }
+
+        #[test]
+        fn more_offset_first_line() {
+            assert_eq!(
+                Position::from_offset(3, "hallo,\nneue\nwelt"),
+                Position {
+                    line: 0,
+                    character: 3
+                }
+            );
+            assert_eq!(
+                Position::from_offset(3, "h🥕llo,\nneue\nwelt"),
+                Position {
+                    line: 0,
+                    character: 3
+                }
+            );
+            assert_eq!(
+                Position {
+                    line: 0,
+                    character: 3
+                }
+                .to_offset("hallo,\nneue\nwelt"),
+                3
+            );
+            assert_eq!(
+                Position {
+                    line: 0,
+                    character: 3
+                }
+                .to_offset("h🥕llo,\nneue\nwelt"),
+                3
+            );
+            assert_eq!(
+                Position {
+                    line: 0,
+                    character: 6
+                }
+                .to_offset("h🥕llo,\nneue\nwelt"),
+                6
+            );
+        }
+
+        #[test]
+        fn offset_second_line() {
+            assert_eq!(
+                Position::from_offset(7, "hallo,\nneue\nwelt"),
+                Position {
+                    line: 1,
+                    character: 0
+                }
+            );
+            assert_eq!(
+                Position::from_offset(7, "h🥕llo,\nneue\nwelt"),
+                Position {
+                    line: 1,
+                    character: 0
+                }
+            );
+            assert_eq!(
+                Position::from_offset(9, "hallo,\nneue\nwelt"),
+                Position {
+                    line: 1,
+                    character: 2
+                }
+            );
+            assert_eq!(
+                Position::from_offset(9, "h🥕llo,\nneue\nwelt"),
+                Position {
+                    line: 1,
+                    character: 2
+                }
+            );
+            assert_eq!(
+                Position::from_offset(11, "h🥕llo,\nneue\nwelt"),
+                Position {
+                    line: 1,
+                    character: 4
+                }
+            );
+            assert_eq!(
+                Position {
+                    line: 1,
+                    character: 0
+                }
+                .to_offset("hallo,\nneue\nwelt"),
+                7
+            );
+            assert_eq!(
+                Position {
+                    line: 1,
+                    character: 0
+                }
+                .to_offset("h🥕llo,\nneue\nwelt"),
+                7
+            );
+            assert_eq!(
+                Position {
+                    line: 1,
+                    character: 2
+                }
+                .to_offset("hallo,\nneue\nwelt"),
+                9
+            );
+            assert_eq!(
+                Position {
+                    line: 1,
+                    character: 2
+                }
+                .to_offset("h🥕llo,\nneue\nwelt"),
+                9
+            );
+        }
+
+        #[test]
+        fn offset_third_line() {
+            assert_eq!(
+                Position::from_offset(12, "hallo,\nneue\nwelt"),
+                Position {
+                    line: 2,
+                    character: 0
+                }
+            );
+            assert_eq!(
+                Position::from_offset(12, "h🥕llo,\nneue\nwelt"),
+                Position {
+                    line: 2,
+                    character: 0
+                }
+            );
+            assert_eq!(
+                Position::from_offset(15, "hallo,\nneue\nwelt"),
+                Position {
+                    line: 2,
+                    character: 3
+                }
+            );
+            assert_eq!(
+                Position::from_offset(15, "h🥕llo,\nneue\nwelt"),
+                Position {
+                    line: 2,
+                    character: 3
+                }
+            );
+            assert_eq!(
+                Position {
+                    line: 2,
+                    character: 0
+                }
+                .to_offset("hallo,\nneue\nwelt"),
+                12
+            );
+            assert_eq!(
+                Position {
+                    line: 2,
+                    character: 0
+                }
+                .to_offset("h🥕llo,\nneue\nwelt"),
+                12
+            );
+            assert_eq!(
+                Position {
+                    line: 2,
+                    character: 3
+                }
+                .to_offset("hallo,\nneue\nwelt"),
+                15
+            );
+            assert_eq!(
+                Position {
+                    line: 2,
+                    character: 3
+                }
+                .to_offset("h🥕llo,\nneue\nwelt"),
+                15
+            );
+        }
+
+        #[test]
+        fn last_implicit_newline_does_not_panic() {
+            assert_eq!(
+                Position::from_offset(16, "h🥕llo,\nneue\nwelt"),
+                Position {
+                    line: 2,
+                    character: 4
+                }
+            );
+            assert_eq!(
+                Position {
+                    line: 2,
+                    character: 4
+                }
+                .to_offset("h🥕llo,\nneue\nwelt"),
+                16
+            );
+        }
+
+        #[test]
+        fn referencing_after_last_lines() {
+            assert_eq!(
+                Position {
+                    line: 1,
+                    character: 0
+                },
+                Position::from_offset(2, "a\n")
+            );
+
+            assert_eq!(
+                Position {
+                    line: 1,
+                    character: 0
+                }
+                .to_offset("a\n"),
+                2
+            );
+            assert_eq!(
+                Position {
+                    line: 1,
+                    character: 0
+                }
+                .to_offset("a"),
+                1
+            );
+        }
+
+        #[test]
+        #[should_panic]
+        fn referencing_after_last_lines_fails() {
+            assert_eq!(
+                Position {
+                    line: 1,
+                    character: 0
+                },
+                Position::from_offset(2, "a")
+            );
+        }
+
+        #[test]
+        #[should_panic]
+        fn referencing_two_lines_after_last_line_fails() {
+            assert_eq!(
+                Position {
+                    line: 2,
+                    character: 0
+                }
+                .to_offset("a"),
+                1
+            );
+        }
+
+        #[test]
+        #[should_panic]
+        fn offset_out_of_bounds_from_offset() {
+            Position::from_offset(17, "h🥕llo,\nneue\nwelt");
+        }
+
+        #[ignore] // WIP, see below.
+        #[test]
+        #[should_panic]
+        fn offset_out_of_bounds_to_offset() {
+            // TODO: do we want this to panic?
+            Position {
+                line: 2,
+                character: 5,
+            }
+            .to_offset("h🥕llo,\nneue\nwelt");
+            // even this doesn't panic, that surprises me. Check.
+            Position {
+                line: 3,
+                character: 5,
+            }
+            .to_offset("h🥕llo,\nneue\nwelt");
+        }
     }
 }
