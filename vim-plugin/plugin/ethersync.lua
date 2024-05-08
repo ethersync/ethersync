@@ -1,4 +1,3 @@
-local utils = require("utils")
 local changetracker = require("changetracker")
 
 -- JSON-RPC connection.
@@ -168,7 +167,6 @@ end
 vim.api.nvim_create_autocmd({ "BufRead", "BufNewFile" }, { callback = EthersyncOpenBuffer })
 vim.api.nvim_create_autocmd("BufUnload", { callback = EthersyncCloseBuffer })
 
-vim.api.nvim_create_user_command("EthersyncRunTests", utils.testAllUnits, {})
 vim.api.nvim_create_user_command("EthersyncGoOffline", goOffline, {})
 vim.api.nvim_create_user_command("EthersyncGoOnline", goOnline, {})
 vim.api.nvim_create_user_command("EthersyncReload", resetState, {})
