@@ -18,6 +18,9 @@ struct Cli {
     /// Path to the Unix domain socket to use for communication between daemon and editors.
     #[arg(short, long, global = true, default_value = DEFAULT_SOCKET_PATH)]
     socket_path: Option<PathBuf>,
+    /// Enable verbose debug output.
+    #[arg(short, long, global = true, action)]
+    debug: bool,
 }
 
 #[derive(Subcommand)]
@@ -45,9 +48,9 @@ async fn main() -> io::Result<()> {
         std::process::exit(1);
     }));
 
-    logging::initialize();
-
     let cli = Cli::parse();
+
+    logging::initialize(cli.debug);
 
     let socket_path = cli.socket_path.unwrap_or(DEFAULT_SOCKET_PATH.into());
 
