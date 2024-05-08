@@ -3,19 +3,17 @@ local changetracker = require("changetracker")
 -- JSON-RPC connection.
 local client
 
--- Toggle to simulate the editor going offline.
-local online = false
 -- Currently we're only supporting editing *one* file. This string identifies, which one that is.
 local theFile
-
--- Queues filled during simulated "offline" mode, and consumed when we go online again.
-local opQueueForDaemon = {}
-local opQueueForEditor = {}
 
 -- Number of operations the daemon has made.
 local daemonRevision = 0
 -- Number of operations we have made.
 local editorRevision = 0
+
+local function sendNotification(method, params)
+    client.notify(method, params)
+end
 
 -- Take an operation from the daemon and apply it to the editor.
 local function processOperationForEditor(method, parameters)
@@ -40,17 +38,23 @@ local function processOperationForEditor(method, parameters)
     end
 end
 
--- Reset the state on editor side.
-local function resetState()
-    daemonRevision = 0
-    editorRevision = 0
-    opQueueForDaemon = {}
-    opQueueForEditor = {}
+-- Send "open" message to daemon for this buffer.
+local function openCurrentBuffer()
+    local uri = "file://" .. theFile
+    sendNotification("open", { uri = uri })
+end
+
+local function disconnect()
+    if client then
+        client.terminate()
+        local buffer = vim.uri_to_bufnr("file://" .. theFile)
+        vim.api.nvim_buf_set_option(buffer, "modifiable", false)
+    end
 end
 
 -- Connect to the daemon.
 local function connect(socket_path)
-    resetState()
+    disconnect()
 
     local params = { "client" }
     if socket_path then
@@ -58,53 +62,31 @@ local function connect(socket_path)
     end
     client = vim.lsp.rpc.start("ethersync", params, {
         notification = function(method, notification_params)
-            if online then
-                processOperationForEditor(method, notification_params)
-            else
-                table.insert(opQueueForEditor, { method, notification_params })
-            end
+            processOperationForEditor(method, notification_params)
+        end,
+        on_error = function(code, ...)
+            print("Ethersync client connection error: ", code, vim.inspect({ ... }))
+        end,
+        on_exit = function(...)
+            -- TODO: Is it a problem to do this in a schedule?
+            vim.schedule(function()
+                local bufnr = vim.uri_to_bufnr("file://" .. theFile)
+                vim.api.nvim_buf_set_option(bufnr, "modifiable", false)
+            end)
+
+            print("Ethersync client connection exited: ", vim.inspect({ ... }))
+            vim.defer_fn(connect, 1000)
         end,
     })
-    online = true
-end
-
--- Send "open" message to daemon for this buffer.
-local function openCurrentBuffer()
-    local uri = "file://" .. theFile
-    client.notify("open", { uri = uri })
-end
-
-local function connect2()
     if client then
-        client.terminate()
+        print("Connected to Ethersync daemon!")
+        openCurrentBuffer()
+        vim.bo.modifiable = true
+        editorRevision = 0
+        daemonRevision = 0
+    else
+        vim.defer_fn(connect, 1000)
     end
-    connect("/tmp/etherbonk")
-    openCurrentBuffer()
-end
-
--- Simulate disconnecting from the daemon.
-local function goOffline()
-    online = false
-end
-
--- Simulate connecting to the daemon again.
--- Apply both queues, then reset them.
-local function goOnline()
-    for _, op in ipairs(opQueueForDaemon) do
-        local method = op[1]
-        local params = op[2]
-        client.notify(method, params)
-    end
-
-    for _, op in ipairs(opQueueForEditor) do
-        local method = op[1]
-        local params = op[2]
-        processOperationForEditor(method, params)
-    end
-
-    opQueueForDaemon = {}
-    opQueueForEditor = {}
-    online = true
 end
 
 -- Forward buffer edits to daemon as well as subscribe to daemon events ("open").
@@ -116,6 +98,7 @@ function EthersyncOpenBuffer()
     if not theFile then
         -- Only sync the *first* file loaded and nothing else.
         theFile = vim.fn.expand("%:p")
+        vim.bo.modifiable = false
         connect()
         print("Ethersync activated for file " .. theFile)
     end
@@ -124,13 +107,15 @@ function EthersyncOpenBuffer()
         return
     end
 
+    if not client then
+        vim.bo.modifiable = false
+    end
+
     -- Vim enables eol for an empty file, but we do use this option values
     -- assuming there's a trailing newline iff eol is true.
     if vim.fn.getfsize(vim.api.nvim_buf_get_name(0)) == 0 then
         vim.bo.eol = false
     end
-
-    openCurrentBuffer()
 
     changetracker.trackChanges(0, function(delta)
         editorRevision = editorRevision + 1
@@ -143,11 +128,7 @@ function EthersyncOpenBuffer()
         local uri = "file://" .. vim.api.nvim_buf_get_name(0)
         local params = { uri = uri, delta = rev_delta }
 
-        if online then
-            client.notify("edit", params)
-        else
-            table.insert(opQueueForDaemon, { "edit", params })
-        end
+        sendNotification("edit", params)
     end)
 end
 
@@ -161,13 +142,11 @@ function EthersyncCloseBuffer()
     -- vim.api.nvim_buf_detach(0) isn't a thing. https://github.com/neovim/neovim/issues/17874
     -- It's not a high priority, as we can only generate edits when the buffer exists anyways.
     local uri = "file://" .. closedFile
-    client.notify("close", { uri = uri })
+    sendNotification("close", { uri = uri })
 end
 
 vim.api.nvim_create_autocmd({ "BufRead", "BufNewFile" }, { callback = EthersyncOpenBuffer })
 vim.api.nvim_create_autocmd("BufUnload", { callback = EthersyncCloseBuffer })
-
-vim.api.nvim_create_user_command("EthersyncGoOffline", goOffline, {})
-vim.api.nvim_create_user_command("EthersyncGoOnline", goOnline, {})
-vim.api.nvim_create_user_command("EthersyncReload", resetState, {})
-vim.api.nvim_create_user_command("Etherbonk", connect2, {})
+vim.api.nvim_create_user_command("Etherbonk", function()
+    connect("/tmp/etherbonk")
+end, {})

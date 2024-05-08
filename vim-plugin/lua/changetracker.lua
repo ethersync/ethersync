@@ -10,7 +10,7 @@ local prev_lines
 -- Used to note that changes to the buffer should be ignored, and not be sent out as deltas.
 local ignore_edits = false
 
-local function debug(tbl)
+local function debug(_tbl) --[[ @diagnostic disable-line ]]
     -- TODO: re-implement this somehow, using print?
 end
 
