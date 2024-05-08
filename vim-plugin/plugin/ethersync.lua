@@ -53,13 +53,16 @@ local function disconnect()
 end
 
 -- Connect to the daemon.
-local function connect(socket_path)
+local function connect()
     disconnect()
 
     local params = { "client" }
+
+    local socket_path = os.getenv("ETHERSYNC_SOCKET")
     if socket_path then
         table.insert(params, "--socket-path=" .. socket_path)
     end
+
     client = vim.lsp.rpc.start("ethersync", params, {
         notification = function(method, notification_params)
             processOperationForEditor(method, notification_params)
@@ -147,6 +150,3 @@ end
 
 vim.api.nvim_create_autocmd({ "BufRead", "BufNewFile" }, { callback = EthersyncOpenBuffer })
 vim.api.nvim_create_autocmd("BufUnload", { callback = EthersyncCloseBuffer })
-vim.api.nvim_create_user_command("Etherbonk", function()
-    connect("/tmp/etherbonk")
-end, {})

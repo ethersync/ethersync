@@ -49,14 +49,6 @@ impl Neovim {
             .expect("Failed to send input to Neovim");
     }
 
-    // TODO: The "Etherbonk" approach is not a very good way of picking different sockets...
-    pub async fn etherbonk(&mut self) {
-        self.nvim
-            .command("Etherbonk")
-            .await
-            .expect("Running Etherbonk failed");
-    }
-
     #[allow(dead_code)]
     async fn new_ethersync_enabled(initial_content: &str) -> (Self, PathBuf) {
         let dir = TempDir::new().unwrap();
