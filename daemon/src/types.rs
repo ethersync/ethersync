@@ -579,7 +579,7 @@ mod tests {
         expected.insert("ong");
         assert_eq!(delta, expected);
     }
-    #[cfg(test)]
+
     mod position {
         use super::Position;
 
