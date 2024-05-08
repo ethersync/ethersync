@@ -1,5 +1,11 @@
 local M = {}
 
+function M.debug(tbl)
+    if true then
+        --client.notify("debug", tbl)
+    end
+end
+
 function M.appendNewline()
     print("Appending newline...")
     vim.cmd("normal! Go")
