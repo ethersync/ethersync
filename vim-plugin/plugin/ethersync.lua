@@ -3,7 +3,7 @@ local changetracker = require("changetracker")
 -- JSON-RPC connection.
 local client
 
--- Currently we're only supporting editing *one* file. This string identifies, which one that is.
+-- Currently we're only supporting editing *one* file. This string identifies which one that is.
 local theFile
 
 -- Number of operations the daemon has made.
@@ -11,6 +11,7 @@ local daemonRevision = 0
 -- Number of operations we have made.
 local editorRevision = 0
 
+-- Pulled out as a method in case we want to add a new "offline simulation" later.
 local function sendNotification(method, params)
     client.notify(method, params)
 end
@@ -38,23 +39,13 @@ local function processOperationForEditor(method, parameters)
     end
 end
 
--- Send "open" message to daemon for this buffer.
-local function openCurrentBuffer()
-    local uri = "file://" .. theFile
-    sendNotification("open", { uri = uri })
-end
-
-local function disconnect()
+-- Connect to the daemon.
+local function connect()
     if client then
         client.terminate()
         local buffer = vim.uri_to_bufnr("file://" .. theFile)
         vim.api.nvim_buf_set_option(buffer, "modifiable", false)
     end
-end
-
--- Connect to the daemon.
-local function connect()
-    disconnect()
 
     local params = { "client" }
 
@@ -83,7 +74,8 @@ local function connect()
     })
     if client then
         print("Connected to Ethersync daemon!")
-        openCurrentBuffer()
+        local uri = "file://" .. theFile
+        sendNotification("open", { uri = uri })
         vim.bo.modifiable = true
         editorRevision = 0
         daemonRevision = 0
