@@ -84,7 +84,7 @@ impl Actor for Neovim {
             "🥕".to_string(),
             "\n".to_string(),
         ];
-        let s = random_string(rand_usize_inclusive(1, 3), string_components);
+        let s = random_string(rand_usize_inclusive(1, 5), string_components);
 
         let components = vec![
             "h".to_string(),
@@ -97,10 +97,12 @@ impl Actor for Neovim {
             "^".to_string(),
             "x".to_string(),
             "vllld".to_string(),
-            //"rü".to_string(),
-            //"dd".to_string(),
-            //"J".to_string(),
+            "Vjjjd".to_string(),
+            "rü".to_string(),
+            "dd".to_string(),
+            "J".to_string(),
             format!("i{}", s),
+            //format!("jjI{}", s),
             //format!("o{}", s),
             //format!("O{}", s),
             format!("A{}", s),

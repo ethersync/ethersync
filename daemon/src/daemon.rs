@@ -323,8 +323,8 @@ impl DaemonActor {
         let text = self
             .current_content()
             .expect("Should have initialized text before performing random edit");
-        let options = ["d"]; //"ü", "🥕", "💚", "\n"];
-        let random_text: String = (1..3)
+        let options = ["d", "ü", "🥕", "💚", "\n"];
+        let random_text: String = (1..5)
             .map(|_| {
                 let random_option = rand::thread_rng().gen_range(0..options.len());
                 options[random_option]
@@ -332,11 +332,22 @@ impl DaemonActor {
             .collect();
         let text_length = text.chars().count();
         let random_position = rand::thread_rng().gen_range(0..=text_length);
-        // TODO: Also delete!
 
         let mut delta = TextDelta::default();
         delta.retain(random_position);
         delta.insert(&random_text);
+
+        /*
+        TODO: Also delete. Something like this?
+        // TODO: Delete the end/beginning of the content on purpose sometimes!
+        let mut deletion_length = 0;
+        if (text_length - random_position) > 0 {
+            deletion_length = rand::thread_rng().gen_range(0..(text_length - random_position));
+            deletion_length = deletion_length.min(3);
+        }
+        delta.delete(deletion_length);
+        */
+
         delta
     }
 
