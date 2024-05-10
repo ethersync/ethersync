@@ -526,7 +526,7 @@ impl Daemon {
                 doc_message_tx_clone_2,
                 socket_message_rx,
                 &socket_path_clone,
-                &file_path_clone,
+                file_path_clone,
             )
             .await
             .expect("Failed to listen on UNIX socket");
@@ -690,7 +690,7 @@ async fn listen_socket(
     tx: DocMessageSender,
     mut editor_message_rx: EditorMessageReceiver,
     socket_path: &Path,
-    file_path: &Path,
+    file_path: PathBuf,
 ) -> Result<()> {
     if Path::new(&socket_path).exists() {
         fs::remove_file(socket_path)?;
@@ -698,67 +698,69 @@ async fn listen_socket(
     let listener = UnixListener::bind(socket_path)?;
     info!("Listening on UNIX socket: {}", socket_path.display());
 
+    let file_path_clone = file_path.clone();
+
     loop {
         // TODO: Accept multiple connections.
+        // TODO: How do we know/what do we do when a client disconnects?
         match listener.accept().await {
             Ok((stream, _addr)) => {
                 info!("Client connection established.");
 
-                let (mut tcp_read, mut tcp_write) = tokio::io::split(stream);
-                let buf_reader = BufReader::new(&mut tcp_read);
-                //for line in buf_reader.lines() {
-                let mut lines = buf_reader.lines();
+                let (mut stream_read, mut stream_write) = tokio::io::split(stream);
 
-                loop {
-                    // either we're parsing a line from the reader (if we have one)
-                    // which means we got a Delta from the ethersync client
-                    //
-                    // or we're sending an editor message to the client
-                    tokio::select! {
-                        line_maybe = lines.next_line() => {
-                            match line_maybe {
-                                Ok(Some(line)) => {
-                                    debug!("Got a line from the client: {:#?}", line);
-                                    let jsonrpc = EditorProtocolMessage::from_jsonrpc(&line).expect("Failed to parse JSON-RPC message");
-                                    tx.send(jsonrpc.into()).await?;
-                                }
-                                Ok(None) => {
-                                    break;
-                                }
-                                Err(e) => {
-                                    error!("Error reading line: {:#?}", e);
-                                }
+                // We're parsing a line from the reader (if we have one)
+                // which means we got a Delta from the ethersync client.
+                //
+                let tx_clone = tx.clone();
+                tokio::spawn(async move {
+                    let buf_reader = BufReader::new(&mut stream_read);
+                    let mut lines = buf_reader.lines();
+
+                    loop {
+                        match lines.next_line().await {
+                            Ok(Some(line)) => {
+                                debug!("Got a line from the client: {:#?}", line);
+                                let jsonrpc = EditorProtocolMessage::from_jsonrpc(&line)
+                                    .expect("Failed to parse JSON-RPC message");
+                                tx_clone
+                                    .send(jsonrpc.into())
+                                    .await
+                                    .expect("Failed to send message to document");
                             }
-                        }
-
-                        rev_delta_maybe = editor_message_rx.recv() => {
-                            match rev_delta_maybe {
-                                Some(rev_delta) => {
-                                    debug!("Received editor message to send to it.");
-                                    let message = EditorProtocolMessage::Edit {
-                                        uri: format!("file://{}", file_path.display()),
-                                        delta: rev_delta
-                                    };
-                                    let payload = message.to_jsonrpc().expect("Failed to serialize JSON-RPC message");
-                                    debug!("Sending message to editor: {:#?}", payload);
-                                    tcp_write.write_all(format!("{payload}\n").as_bytes()).await.expect("Failed to write to TCP stream");
-                                }
-                                None => {
-                                    panic!("TODO: why?");
-                                }
-                                /*
-                                Err(broadcast::error::RecvError::Closed) => {
-                                    panic!("Editor message channel has been closed");
-                                }
-                                Err(broadcast::error::RecvError::Lagged(n)) => {
-                                    panic!("Editor message channel has lagged ({})", n);
-                                }
-                                */
+                            Ok(None) => {
+                                break;
+                            }
+                            Err(e) => {
+                                error!("Error reading line: {:#?}", e);
                             }
                         }
                     }
+                });
+
+                // We're sending an editor message to the client.
+                loop {
+                    match editor_message_rx.recv().await {
+                        Some(rev_delta) => {
+                            debug!("Received editor message to send to it.");
+                            let message = EditorProtocolMessage::Edit {
+                                uri: format!("file://{}", file_path_clone.display()),
+                                delta: rev_delta,
+                            };
+                            let payload = message
+                                .to_jsonrpc()
+                                .expect("Failed to serialize JSON-RPC message");
+                            debug!("Sending message to editor: {:#?}", payload);
+                            stream_write
+                                .write_all(format!("{payload}\n").as_bytes())
+                                .await
+                                .expect("Failed to write to TCP stream");
+                        }
+                        None => {
+                            panic!("TODO: why?");
+                        }
+                    }
                 }
-                info!("Client connection closed.");
             }
             Err(e) => {
                 error!("Error: {:#?}", e);
