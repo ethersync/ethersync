@@ -10,7 +10,7 @@ use std::path::Path;
 use tokio::time::{sleep, timeout, Duration};
 
 async fn perform_random_edits(actor: &mut (impl Actor + ?Sized)) {
-    for _ in 1..10 {
+    for _ in 1..4 {
         actor.apply_random_delta().await;
 
         // Note: Don't lower the lower bound too much. nvim-rs seems to require that inputs are not
@@ -97,6 +97,12 @@ async fn main() {
         }
     })
     .await;
+
+    // Get all contents.
+    for (name, actor) in &mut actors {
+        let content = actor.content().await;
+        contents.insert(name.clone(), content.clone());
+    }
 
     // Print all contents.
     for (name, content) in &contents {

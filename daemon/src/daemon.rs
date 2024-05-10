@@ -81,7 +81,10 @@ enum SyncerMessage {
 
 type DocMessageSender = mpsc::Sender<DocMessage>;
 type DocChangedSender = broadcast::Sender<()>;
-type EditorMessageSender = broadcast::Sender<RevisionedEditorTextDelta>;
+
+type EditorMessageSender = mpsc::Sender<RevisionedEditorTextDelta>;
+type EditorMessageReceiver = mpsc::Receiver<RevisionedEditorTextDelta>;
+
 type SyncerMessageSender = mpsc::Sender<SyncerMessage>;
 
 /// Encapsulates the Automerge `AutoCommit` and provides a generic interface,
@@ -199,7 +202,7 @@ impl DaemonActor {
             crdt_doc: Document::default(),
         }
     }
-    fn handle_message(&mut self, message: DocMessage) {
+    async fn handle_message(&mut self, message: DocMessage) {
         // TODO: Show the type in the debug message, or implement Debug for DocMessage.
         debug!("Handling doc message: {message:?}");
         match message {
@@ -227,7 +230,7 @@ impl DaemonActor {
                     .expect("Should have initialized text before performing random edit");
                 let ed_delta = EditorTextDelta::from_delta(delta.clone(), &text);
                 self.apply_delta_to_doc(&ed_delta);
-                self.process_crdt_delta_in_ot(delta);
+                self.process_crdt_delta_in_ot(delta).await;
             }
             DocMessage::Delta(delta) => {
                 let text = self
@@ -235,7 +238,7 @@ impl DaemonActor {
                     .expect("Should have initialized text before performing random edit");
                 let editor_delta = EditorTextDelta::from_delta(delta.clone(), &text);
                 self.apply_delta_to_doc(&editor_delta);
-                self.process_crdt_delta_in_ot(delta);
+                self.process_crdt_delta_in_ot(delta).await;
             }
             DocMessage::RevDelta(rev_delta) => {
                 debug!("Handling RevDelta from editor: {:#?}", rev_delta);
@@ -243,7 +246,7 @@ impl DaemonActor {
                     self.apply_delta_to_ot(rev_delta);
 
                 self.apply_delta_to_doc(&editor_delta_for_crdt);
-                self.send_deltas_to_editor(rev_deltas_for_editor);
+                self.send_deltas_to_editor(rev_deltas_for_editor).await;
             }
             DocMessage::ReceiveSyncMessage {
                 message,
@@ -251,7 +254,7 @@ impl DaemonActor {
                 response_tx,
             } => {
                 if let Some(patches) = self.apply_sync_message_to_doc(message, &mut peer_state) {
-                    self.process_crdt_patches_in_ot(patches);
+                    self.process_crdt_patches_in_ot(patches).await;
                 }
                 response_tx
                     .send(peer_state)
@@ -287,12 +290,13 @@ impl DaemonActor {
         result
     }
 
-    fn send_deltas_to_editor(&self, rev_deltas: Vec<RevisionedEditorTextDelta>) {
+    async fn send_deltas_to_editor(&self, rev_deltas: Vec<RevisionedEditorTextDelta>) {
         for rev_delta in rev_deltas {
             debug!("Sending RevDelta to socket: {:#?}", rev_delta);
 
             self.socket_message_tx
                 .send(rev_delta)
+                .await
                 .expect("Failed to send message to socket channel.");
         }
     }
@@ -340,12 +344,12 @@ impl DaemonActor {
         delta
     }
 
-    fn process_crdt_patches_in_ot(&mut self, patches: Vec<Patch>) {
+    async fn process_crdt_patches_in_ot(&mut self, patches: Vec<Patch>) {
         debug!(?patches);
         for patch in patches {
             match patch.action.try_into() {
                 Ok(delta) => {
-                    self.process_crdt_delta_in_ot(delta);
+                    self.process_crdt_delta_in_ot(delta).await;
                 }
                 Err(e) => {
                     warn!("Failed to convert patch to delta: {:#?}", e);
@@ -354,11 +358,12 @@ impl DaemonActor {
         }
     }
 
-    fn process_crdt_delta_in_ot(&mut self, delta: TextDelta) {
+    async fn process_crdt_delta_in_ot(&mut self, delta: TextDelta) {
         if let Some(ot_server) = &mut self.ot_server {
             let rev_text_delta_for_editor = ot_server.apply_crdt_change(delta);
             self.socket_message_tx
                 .send(rev_text_delta_for_editor)
+                .await
                 .expect("Failed to send message to socket channel.");
         }
     }
@@ -406,7 +411,7 @@ impl DaemonActor {
                 // No need to do anything.
                 continue;
             } else {
-                self.handle_message(message);
+                self.handle_message(message).await;
                 self.write_current_content_to_file();
             }
         }
@@ -435,8 +440,7 @@ impl Daemon {
         let (doc_changed_ping_tx, _doc_changed_ping_rx) = broadcast::channel::<()>(1);
 
         // The document task will send messages intended for the socket connection on this channel.
-        let (socket_message_tx, _socket_message_rx) =
-            broadcast::channel::<RevisionedEditorTextDelta>(1);
+        let (socket_message_tx, socket_message_rx) = mpsc::channel::<RevisionedEditorTextDelta>(1);
 
         let mut daemon_actor = DaemonActor::new(
             doc_message_rx,
@@ -515,13 +519,12 @@ impl Daemon {
             });
         }
 
-        let socket_message_tx_clone = socket_message_tx.clone();
         let socket_path_clone = socket_path.to_path_buf();
         let file_path_clone = file_path.to_path_buf();
         tokio::spawn(async move {
             listen_socket(
                 doc_message_tx_clone_2,
-                socket_message_tx_clone,
+                socket_message_rx,
                 &socket_path_clone,
                 &file_path_clone,
             )
@@ -685,7 +688,7 @@ async fn start_sync(
 
 async fn listen_socket(
     tx: DocMessageSender,
-    editor_message_tx: EditorMessageSender,
+    mut editor_message_rx: EditorMessageReceiver,
     socket_path: &Path,
     file_path: &Path,
 ) -> Result<()> {
@@ -700,8 +703,6 @@ async fn listen_socket(
         match listener.accept().await {
             Ok((stream, _addr)) => {
                 info!("Client connection established.");
-
-                let mut editor_message_rx = editor_message_tx.subscribe();
 
                 let (mut tcp_read, mut tcp_write) = tokio::io::split(stream);
                 let buf_reader = BufReader::new(&mut tcp_read);
@@ -732,7 +733,7 @@ async fn listen_socket(
 
                         rev_delta_maybe = editor_message_rx.recv() => {
                             match rev_delta_maybe {
-                                Ok(rev_delta) => {
+                                Some(rev_delta) => {
                                     debug!("Received editor message to send to it.");
                                     let message = EditorProtocolMessage::Edit {
                                         uri: format!("file://{}", file_path.display()),
@@ -742,12 +743,17 @@ async fn listen_socket(
                                     debug!("Sending message to editor: {:#?}", payload);
                                     tcp_write.write_all(format!("{payload}\n").as_bytes()).await.expect("Failed to write to TCP stream");
                                 }
+                                None => {
+                                    panic!("TODO: why?");
+                                }
+                                /*
                                 Err(broadcast::error::RecvError::Closed) => {
                                     panic!("Editor message channel has been closed");
                                 }
-                                Err(broadcast::error::RecvError::Lagged(_)) => {
-                                    panic!("Editor message channel has lagged");
+                                Err(broadcast::error::RecvError::Lagged(n)) => {
+                                    panic!("Editor message channel has lagged ({})", n);
                                 }
+                                */
                             }
                         }
                     }
