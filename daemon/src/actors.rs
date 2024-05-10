@@ -79,37 +79,38 @@ impl Actor for Neovim {
 
         let string_components = vec![
             "e".to_string(),
-            "💚".to_string(),
-            "🥕".to_string(),
-            "\n".to_string(),
+            //"ä".to_string(),
+            //"💚".to_string(),
+            //"🥕".to_string(),
+            //"\n".to_string(),
         ];
-        let s = random_string(rand_usize_inclusive(1, 4), string_components);
+        let s = random_string(rand_usize_inclusive(1, 1), string_components);
 
         let components = vec![
-            "h".to_string(),
-            "j".to_string(),
-            "k".to_string(),
-            "l".to_string(),
-            "gg".to_string(),
-            "G".to_string(),
-            "$".to_string(),
-            "^".to_string(),
-            "x".to_string(),
-            "vllld".to_string(),
-            "rü".to_string(),
-            "dd".to_string(),
-            "J".to_string(),
+            //"h".to_string(),
+            //"j".to_string(),
+            //"k".to_string(),
+            //"l".to_string(),
+            //"gg".to_string(),
+            //"G".to_string(),
+            //"$".to_string(),
+            //"^".to_string(),
+            //"x".to_string(),
+            //"vllld".to_string(),
+            //"rü".to_string(),
+            //"dd".to_string(),
+            //"J".to_string(),
             format!("i{}", s),
-            format!("o{}", s),
-            format!("O{}", s),
-            format!("A{}", s),
-            format!("I{}", s),
+            //format!("o{}", s),
+            //format!("O{}", s),
+            //format!("A{}", s),
+            //format!("I{}", s),
         ];
 
-        vim_normal_command.push_str(&random_string(rand_usize_inclusive(1, 10), components));
+        vim_normal_command.push_str(&random_string(rand_usize_inclusive(1, 1), components));
 
         self.nvim
-            .command(&format!(r#"silent! execute "normal {vim_normal_command}""#))
+            .command_output(&format!(r#"silent! execute "normal {vim_normal_command}""#))
             //.input(&vim_normal_command)
             .await
             .expect("Failed to send input to Neovim");

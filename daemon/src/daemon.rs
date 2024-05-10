@@ -289,6 +289,8 @@ impl DaemonActor {
 
     fn send_deltas_to_editor(&self, rev_deltas: Vec<RevisionedEditorTextDelta>) {
         for rev_delta in rev_deltas {
+            debug!("Sending RevDelta to socket: {:#?}", rev_delta);
+
             self.socket_message_tx
                 .send(rev_delta)
                 .expect("Failed to send message to socket channel.");
@@ -317,15 +319,20 @@ impl DaemonActor {
         let text = self
             .current_content()
             .expect("Should have initialized text before performing random edit");
-        let options = ["d", "_", "🥕", "💚", "\n"];
-        let random_text: String = (0..5)
+        let options = [
+            "d",
+            //"🥕",
+            //"💚",
+            //"\n"
+        ];
+        let random_text: String = (0..1)
             .map(|_| {
                 let random_option = rand::thread_rng().gen_range(0..options.len());
                 options[random_option]
             })
             .collect();
         let text_length = text.chars().count();
-        let random_position = rand::thread_rng().gen_range(0..=text_length);
+        let random_position = 0; //rand::thread_rng().gen_range(0..=text_length);
 
         let mut delta = TextDelta::default();
         delta.retain(random_position);
@@ -361,7 +368,9 @@ impl DaemonActor {
         if let Ok(text) = content {
             debug!(current_text__ = text);
             if let Some(ot_server) = &mut self.ot_server {
-                debug!(current_ot_doc = ot_server.apply_to_initial_content());
+                std::thread::sleep(Duration::from_millis(10));
+                //debug!(current_ot_doc = ot_server.apply_to_initial_content());
+                //println!("{:#?}", ot_server);
             } else {
                 std::fs::write(&self.file_path, &text).expect("Could not write to file");
             }
@@ -423,11 +432,11 @@ impl Daemon {
 
         // The document task will send a ping on this channel whenever it changes.
         // The sync tasks will subscribe to it, and react to it by syncing with the peers.
-        let (doc_changed_ping_tx, _doc_changed_ping_rx) = broadcast::channel::<()>(16);
+        let (doc_changed_ping_tx, _doc_changed_ping_rx) = broadcast::channel::<()>(1);
 
         // The document task will send messages intended for the socket connection on this channel.
         let (socket_message_tx, _socket_message_rx) =
-            broadcast::channel::<RevisionedEditorTextDelta>(16);
+            broadcast::channel::<RevisionedEditorTextDelta>(1);
 
         let mut daemon_actor = DaemonActor::new(
             doc_message_rx,
@@ -621,10 +630,18 @@ async fn start_sync(
                 .send(SyncerMessage::GenerateSyncMessage {})
                 .await
                 .expect("Failed to send GenerateSyncMessage to document task");
-            doc_changed_ping_rx
-                .recv()
-                .await
-                .expect("Doc changed channel has been closed");
+            match doc_changed_ping_rx.recv().await {
+                Ok(()) => {
+                    debug!("Doc changed.");
+                }
+                Err(broadcast::error::RecvError::Closed) => {
+                    panic!("Doc changed channel has been closed");
+                }
+                Err(broadcast::error::RecvError::Lagged(_)) => {
+                    // This is fine, the messages in this channel are just pings.
+                    // It's okay if we miss some.
+                }
+            }
         }
     });
 
@@ -700,6 +717,7 @@ async fn listen_socket(
                         line_maybe = lines.next_line() => {
                             match line_maybe {
                                 Ok(Some(line)) => {
+                                    debug!("Got a line from the client: {:#?}", line);
                                     let jsonrpc = EditorProtocolMessage::from_jsonrpc(&line).expect("Failed to parse JSON-RPC message");
                                     tx.send(jsonrpc.into()).await?;
                                 }
@@ -711,15 +729,26 @@ async fn listen_socket(
                                 }
                             }
                         }
-                        Ok(rev_delta) = editor_message_rx.recv() => {
-                            debug!("Received editor message to send to it.");
-                            let message = EditorProtocolMessage::Edit {
-                                uri: format!("file://{}", file_path.display()),
-                                delta: rev_delta
-                            };
-                            let payload = message.to_jsonrpc().expect("Failed to serialize JSON-RPC message");
-                            debug!("Sending message to editor: {:#?}", payload);
-                            tcp_write.write_all(format!("{payload}\n").as_bytes()).await.expect("Failed to write to TCP stream");
+
+                        rev_delta_maybe = editor_message_rx.recv() => {
+                            match rev_delta_maybe {
+                                Ok(rev_delta) => {
+                                    debug!("Received editor message to send to it.");
+                                    let message = EditorProtocolMessage::Edit {
+                                        uri: format!("file://{}", file_path.display()),
+                                        delta: rev_delta
+                                    };
+                                    let payload = message.to_jsonrpc().expect("Failed to serialize JSON-RPC message");
+                                    debug!("Sending message to editor: {:#?}", payload);
+                                    tcp_write.write_all(format!("{payload}\n").as_bytes()).await.expect("Failed to write to TCP stream");
+                                }
+                                Err(broadcast::error::RecvError::Closed) => {
+                                    panic!("Editor message channel has been closed");
+                                }
+                                Err(broadcast::error::RecvError::Lagged(_)) => {
+                                    panic!("Editor message channel has lagged");
+                                }
+                            }
                         }
                     }
                 }
