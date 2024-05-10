@@ -323,20 +323,16 @@ impl DaemonActor {
         let text = self
             .current_content()
             .expect("Should have initialized text before performing random edit");
-        let options = [
-            "d",
-            //"🥕",
-            //"💚",
-            //"\n"
-        ];
-        let random_text: String = (0..1)
+        let options = ["d"]; //"ü", "🥕", "💚", "\n"];
+        let random_text: String = (1..3)
             .map(|_| {
                 let random_option = rand::thread_rng().gen_range(0..options.len());
                 options[random_option]
             })
             .collect();
         let text_length = text.chars().count();
-        let random_position = 0; //rand::thread_rng().gen_range(0..=text_length);
+        let random_position = rand::thread_rng().gen_range(0..=text_length);
+        // TODO: Also delete!
 
         let mut delta = TextDelta::default();
         delta.retain(random_position);
@@ -373,9 +369,7 @@ impl DaemonActor {
         if let Ok(text) = content {
             debug!(current_text__ = text);
             if let Some(ot_server) = &mut self.ot_server {
-                std::thread::sleep(Duration::from_millis(10));
-                //debug!(current_ot_doc = ot_server.apply_to_initial_content());
-                //println!("{:#?}", ot_server);
+                debug!(current_ot_doc = ot_server.apply_to_initial_content());
             } else {
                 std::fs::write(&self.file_path, &text).expect("Could not write to file");
             }

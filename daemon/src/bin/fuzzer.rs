@@ -8,14 +8,13 @@ use rand::Rng;
 use std::collections::HashMap;
 use std::path::Path;
 use tokio::time::{sleep, timeout, Duration};
+use tracing::{info, warn};
 
 async fn perform_random_edits(actor: &mut (impl Actor + ?Sized)) {
-    for _ in 1..50 {
+    for _ in 1..200 {
         actor.apply_random_delta().await;
 
-        // Note: Don't lower the lower bound too much. nvim-rs seems to require that inputs are not
-        // being sent too quickly?
-        let random_millis = rand::thread_rng().gen_range(0..1);
+        let random_millis = rand::thread_rng().gen_range(0..5);
         sleep(Duration::from_millis(random_millis)).await;
     }
 }
@@ -34,7 +33,7 @@ async fn main() {
         std::process::exit(1);
     }));
 
-    logging::initialize(true);
+    logging::initialize(false);
 
     // Set up the project directory.
     let dir = temp_dir::TempDir::new().expect("Failed to create temp directory");
@@ -74,7 +73,9 @@ async fn main() {
 
     let mut contents: HashMap<String, String> = HashMap::new();
 
-    let _ = timeout(Duration::from_secs(1), async {
+    info!("Waiting for all contents to be equal");
+
+    timeout(Duration::from_secs(10), async {
         loop {
             // Get all contents.
             for (name, actor) in &mut actors {
@@ -96,7 +97,10 @@ async fn main() {
             sleep(Duration::from_millis(100)).await;
         }
     })
-    .await;
+    .await
+    .unwrap_or_else(|_| {
+        warn!("Timeout while waiting for all contents to be equal");
+    });
 
     // Get all contents.
     for (name, actor) in &mut actors {
