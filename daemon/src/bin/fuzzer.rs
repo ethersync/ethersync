@@ -33,7 +33,7 @@ async fn main() {
         std::process::exit(1);
     }));
 
-    logging::initialize(false);
+    logging::initialize(true);
 
     // Set up the project directory.
     let dir = temp_dir::TempDir::new().expect("Failed to create temp directory");
