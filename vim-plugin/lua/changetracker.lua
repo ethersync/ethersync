@@ -14,6 +14,9 @@ local function debug(_tbl) --[[ @diagnostic disable-line ]]
     -- TODO: re-implement this somehow, using print?
 end
 
+-- Subscribes the callback to changes for a given buffer id and reports with a delta.
+--
+-- The delta can be expected to be in the format as specified in the daemon-editor protocol.
 function M.trackChanges(buffer, callback)
     prev_lines = vim.api.nvim_buf_get_lines(buffer, 0, -1, true)
 
