@@ -337,8 +337,6 @@ impl DaemonActor {
         delta.retain(random_position);
         delta.insert(&random_text);
 
-        /*
-        TODO: Also delete. Something like this?
         // TODO: Delete the end/beginning of the content on purpose sometimes!
         let mut deletion_length = 0;
         if (text_length - random_position) > 0 {
@@ -346,7 +344,6 @@ impl DaemonActor {
             deletion_length = deletion_length.min(3);
         }
         delta.delete(deletion_length);
-        */
 
         delta
     }

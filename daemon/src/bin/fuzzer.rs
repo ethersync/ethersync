@@ -11,7 +11,7 @@ use tokio::time::{sleep, timeout, Duration};
 use tracing::{info, warn};
 
 async fn perform_random_edits(actor: &mut (impl Actor + ?Sized)) {
-    for _ in 1..200 {
+    for _ in 1..50 {
         actor.apply_random_delta().await;
 
         let random_millis = rand::thread_rng().gen_range(0..5);
@@ -33,12 +33,12 @@ async fn main() {
         std::process::exit(1);
     }));
 
-    logging::initialize(true);
+    logging::initialize(false);
 
     // Set up the project directory.
     let dir = temp_dir::TempDir::new().expect("Failed to create temp directory");
     let file = dir.child("file");
-    //let file2 = dir.child("file2");
+    let file2 = dir.child("file2");
     create_ethersync_dir(dir.path());
 
     // Set up the actors.
@@ -46,26 +46,29 @@ async fn main() {
 
     let nvim = Neovim::new(file).await;
 
-    /*let peer = Daemon::new(
+    let peer = Daemon::new(
         None,
         Some("127.0.0.1:4242".to_string()),
         Path::new("/tmp/etherbonk"),
         file2.as_path(),
     );
+    // Make sure peer has synced with the other daemon before connecting Vim!
+    // Otherwise, peer might not have a document yet.
+    sleep(std::time::Duration::from_millis(500)).await;
 
     std::env::set_var("ETHERSYNC_SOCKET", "/tmp/etherbonk");
     let nvim2 = Neovim::new(file2).await;
-    */
 
     let mut actors: HashMap<String, Box<dyn Actor>> = HashMap::new();
     actors.insert("daemon".to_string(), Box::new(daemon));
     actors.insert("nvim".to_string(), Box::new(nvim));
-    //actors.insert("peer".to_string(), Box::new(peer));
-    //actors.insert("nvim2".to_string(), Box::new(nvim2));
+    actors.insert("peer".to_string(), Box::new(peer));
+    actors.insert("nvim2".to_string(), Box::new(nvim2));
 
     sleep(std::time::Duration::from_millis(100)).await;
 
-    // Perform random edits in parallel.
+    info!("Performing edits");
+
     let handles = actors
         .iter_mut()
         .map(|(_, actor)| perform_random_edits(actor.as_mut()));
@@ -75,7 +78,7 @@ async fn main() {
 
     info!("Waiting for all contents to be equal");
 
-    timeout(Duration::from_secs(10), async {
+    timeout(Duration::from_secs(20), async {
         loop {
             // Get all contents.
             for (name, actor) in &mut actors {

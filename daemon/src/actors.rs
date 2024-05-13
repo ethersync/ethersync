@@ -102,7 +102,7 @@ impl Actor for Neovim {
             "dd".to_string(),
             "J".to_string(),
             format!("i{}", s),
-            //format!("jjI{}", s),
+            format!("jjI{}", s),
             format!("o{}", s),
             format!("O{}", s),
             format!("A{}", s),
