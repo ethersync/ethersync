@@ -23,6 +23,8 @@ pub fn connection(socket_path: &Path) {
             print!("Content-Length: {length}\r\n\r\n{line}");
             std::io::stdout().flush().expect("Failed to flush stdout");
         }
+        // Socket has been closed, so exit the process.
+        std::process::exit(1);
     });
 
     let mut data = vec![];
@@ -54,4 +56,5 @@ pub fn connection(socket_path: &Path) {
             reading_header = true;
         }
     }
+    // Stdin has been closed, so exit the process.
 }

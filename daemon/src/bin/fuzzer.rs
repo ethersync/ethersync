@@ -52,8 +52,8 @@ async fn main() {
         file2.as_path(),
     );
 
-    let mut nvim2 = Neovim::new(file2).await;
-    nvim2.etherbonk().await;
+    std::env::set_var("ETHERSYNC_SOCKET", "/tmp/etherbonk");
+    let nvim2 = Neovim::new(file2).await;
 
     let mut actors: HashMap<String, Box<dyn Actor>> = HashMap::new();
     actors.insert("daemon".to_string(), Box::new(daemon));

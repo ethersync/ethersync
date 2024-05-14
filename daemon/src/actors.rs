@@ -49,14 +49,6 @@ impl Neovim {
             .expect("Failed to send input to Neovim");
     }
 
-    // TODO: The "Etherbonk" approach is not a very good way of picking different sockets...
-    pub async fn etherbonk(&mut self) {
-        self.nvim
-            .command("Etherbonk")
-            .await
-            .expect("Running Etherbonk failed");
-    }
-
     #[allow(dead_code)]
     async fn new_ethersync_enabled(initial_content: &str) -> (Self, PathBuf) {
         let dir = TempDir::new().unwrap();
@@ -269,7 +261,7 @@ pub mod tests {
             let mut cmd = tokio::process::Command::new("nvim");
             cmd.arg("--headless").arg("--embed");
             let (nvim, _, _) = new_child_cmd(&mut cmd, handler).await.unwrap();
-            nvim.command("Ethersync")
+            nvim.command("EthersyncInfo")
                 .await
                 .expect("Failed to run Ethersync");
         });
