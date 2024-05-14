@@ -28,6 +28,7 @@ time = { version = "0.3.36", features = ["formatting"] }
 time-macros = { version = "0.2.0-alpha.1" }
 local-ip-address = "0.6.1"
 public-ip = "0.2.2"
+tokio-util = "0.7.11"
 
 [features]
 
