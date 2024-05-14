@@ -20,6 +20,7 @@ use tokio::{
     sync::{broadcast, mpsc, oneshot},
     time::{sleep, Duration},
 };
+use tokio_util::sync::CancellationToken;
 use tracing::{debug, error, info, warn};
 
 // These messages are sent to the task that owns the document.
@@ -624,28 +625,25 @@ async fn start_sync(
 
     // TCP reader.
     let receiver = SyncReceiver::new(tcp_read, syncer_message_tx.clone());
-    let (shutdown_tx, mut shutdown_rx) = broadcast::channel::<()>(1);
-    let shutdown_tx_clone = shutdown_tx.clone();
+    let shutdown_token = CancellationToken::new();
+    let shutdown_token_clone = shutdown_token.clone();
     tokio::spawn(async move {
         sync_receive(receiver).await;
-        shutdown_tx_clone
-            .send(())
-            .expect("Couldn't send shutdown signal.");
+        shutdown_token_clone.cancel()
     });
 
     // Generate sync message when doc changes.
     let syncer_message_tx_clone = syncer_message_tx.clone();
-    let shutdown_tx_clone = shutdown_tx.clone();
+    let shutdown_token_clone = shutdown_token.clone();
     tokio::spawn(async move {
         let mut doc_changed_ping_rx = doc_changed_ping_tx.subscribe();
-        let mut shutdown_rx = shutdown_tx_clone.subscribe();
         loop {
             syncer_message_tx_clone
                 .send(SyncerMessage::GenerateSyncMessage {})
                 .await
                 .expect("Failed to send GenerateSyncMessage to document task");
             tokio::select! {
-                _ = shutdown_rx.recv() => {
+                _ = shutdown_token_clone.cancelled() => {
                     debug!("Stopping GenerateSyncMessage ping forwarding.");
                     break;
                 }
@@ -667,7 +665,7 @@ async fn start_sync(
 
     loop {
         tokio::select! {
-            _ = shutdown_rx.recv() => {
+            _ = shutdown_token.cancelled() => {
                 debug!("Shutting down main start_sync loop");
                 break;
             }
