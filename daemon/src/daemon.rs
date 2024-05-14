@@ -590,10 +590,10 @@ async fn listen_tcp(
             info!("Peer dialed us.");
             match start_sync(tx, doc_changed_ping_tx, stream).await {
                 Ok(()) => {
-                    debug!("Sync OK?!");
+                    info!("Peer disconnected.");
                 }
                 Err(e) => {
-                    error!("Error: {:#?}", e);
+                    error!("listen_tcp Error: {:#?}", e);
                 }
             }
         });
@@ -624,68 +624,96 @@ async fn start_sync(
 
     // TCP reader.
     let receiver = SyncReceiver::new(tcp_read, syncer_message_tx.clone());
-    tokio::spawn(sync_receive(receiver));
+    let (shutdown_tx, mut shutdown_rx) = broadcast::channel::<()>(1);
+    let shutdown_tx_clone = shutdown_tx.clone();
+    tokio::spawn(async move {
+        sync_receive(receiver).await;
+        shutdown_tx_clone
+            .send(())
+            .expect("Couldn't send shutdown signal.");
+    });
 
     // Generate sync message when doc changes.
     let syncer_message_tx_clone = syncer_message_tx.clone();
+    let shutdown_tx_clone = shutdown_tx.clone();
     tokio::spawn(async move {
         let mut doc_changed_ping_rx = doc_changed_ping_tx.subscribe();
+        let mut shutdown_rx = shutdown_tx_clone.subscribe();
         loop {
             syncer_message_tx_clone
                 .send(SyncerMessage::GenerateSyncMessage {})
                 .await
                 .expect("Failed to send GenerateSyncMessage to document task");
-            match doc_changed_ping_rx.recv().await {
-                Ok(()) => {
-                    debug!("Doc changed.");
+            tokio::select! {
+                _ = shutdown_rx.recv() => {
+                    debug!("Stopping GenerateSyncMessage ping forwarding.");
+                    break;
                 }
-                Err(broadcast::error::RecvError::Closed) => {
-                    panic!("Doc changed channel has been closed");
-                }
-                Err(broadcast::error::RecvError::Lagged(_)) => {
-                    // This is fine, the messages in this channel are just pings.
-                    // It's okay if we miss some.
+                doc_ping = doc_changed_ping_rx.recv() => match doc_ping {
+                    Ok(()) => {
+                        debug!("Doc changed.");
+                    }
+                    Err(broadcast::error::RecvError::Closed) => {
+                        panic!("Doc changed channel has been closed");
+                    }
+                    Err(broadcast::error::RecvError::Lagged(_)) => {
+                        // This is fine, the messages in this channel are just pings.
+                        // It's okay if we miss some.
+                    }
                 }
             }
         }
     });
 
     loop {
-        match syncer_message_rx.recv().await {
-            None => {
-                panic!("Channel towards sync task has been closed");
+        tokio::select! {
+            _ = shutdown_rx.recv() => {
+                debug!("Shutting down main start_sync loop");
+                break;
             }
-            Some(message) => match message {
-                SyncerMessage::ReceiveSyncMessage { message } => {
-                    let (reponse_tx, response_rx) = oneshot::channel();
-                    let message = Message::decode(&message)?;
-                    tx.send(DocMessage::ReceiveSyncMessage {
-                        message,
-                        state: peer_state,
-                        response_tx: reponse_tx,
-                    })
-                    .await?;
-                    peer_state = response_rx.await?;
+            syncer_message_maybe = syncer_message_rx.recv() => match syncer_message_maybe {
+                None => {
+                    panic!("Channel towards sync task has been closed");
                 }
-                SyncerMessage::GenerateSyncMessage {} => {
-                    let (reponse_tx, response_rx) = oneshot::channel();
-                    tx.send(DocMessage::GenerateSyncMessage {
-                        state: peer_state,
-                        response_tx: reponse_tx,
-                    })
-                    .await?;
-                    let (ps, message) = response_rx.await?;
-                    peer_state = ps;
-                    if let Some(message) = message {
-                        let message = message.encode();
-                        let message_len = message.len() as i32;
-                        tcp_write.write_all(&message_len.to_be_bytes()).await?;
-                        tcp_write.write_all(&message).await?;
+                Some(message) => match message {
+                    SyncerMessage::ReceiveSyncMessage { message } => {
+                        let (reponse_tx, response_rx) = oneshot::channel();
+                        let message = Message::decode(&message)?;
+                        tx.send(DocMessage::ReceiveSyncMessage {
+                            message,
+                            state: peer_state,
+                            response_tx: reponse_tx,
+                        })
+                        .await?;
+                        peer_state = response_rx.await?;
                     }
-                }
-            },
+                    SyncerMessage::GenerateSyncMessage {} => {
+                        let (reponse_tx, response_rx) = oneshot::channel();
+                        tx.send(DocMessage::GenerateSyncMessage {
+                            state: peer_state,
+                            response_tx: reponse_tx,
+                        })
+                        .await?;
+                        let (ps, message) = response_rx.await?;
+                        peer_state = ps;
+                        if let Some(message) = message {
+                            let message = message.encode();
+                            let message_len = message.len() as i32;
+                            tcp_write
+                                .write_all(&message_len.to_be_bytes())
+                                .await
+                                .expect("GenerateSyncMessage: write message len failed");
+                            tcp_write
+                                .write_all(&message)
+                                .await
+                                .expect("GenerateSyncMessage: write message failed");
+                        }
+                    }
+                },
+            }
         }
     }
+    Ok(())
 }
 
 async fn listen_socket(
@@ -765,7 +793,7 @@ async fn listen_socket(
                 }
             }
             Err(e) => {
-                error!("Error: {:#?}", e);
+                error!("listen_socket Error: {:#?}", e);
             }
         }
     }
