@@ -10,8 +10,9 @@ local prev_lines
 -- Used to note that changes to the buffer should be ignored, and not be sent out as deltas.
 local ignore_edits = false
 
-local function debug(_tbl) --[[ @diagnostic disable-line ]]
-    -- TODO: re-implement this somehow, using print?
+local function debug(tbl)
+    -- silent print
+    --vim.api.nvim_out_write(vim.inspect(tbl) .. "\n")
 end
 
 -- Subscribes the callback to changes for a given buffer id and reports with a delta.
@@ -47,6 +48,9 @@ function M.trackChanges(buffer, callback)
             -- line/character indices in diff are zero-based.
             debug({ diff = diff })
 
+            -- TODO: Simplify the solution?
+            -- TODO: Update the following comment to describe the problem and the solution more clearly.
+
             -- Sometimes, Vim deletes full lines by deleting the last line, plus an imaginary newline at the end. For example, to delete the second line, Vim would delete from (line: 1, column: 0) to (line: 2, column 0).
             -- But, in the case of deleting the last line, what we expect in the rest of Ethersync is to delete the newline *before* the line.
             -- So let's change the deleted range to (line: 0, column: [last character of the first line]) to (line: 1, column: [last character of the second line]).
@@ -65,13 +69,31 @@ function M.trackChanges(buffer, callback)
                     end
                 else
                     -- The range doesn't start on the first line.
-                    if diff.range["start"].character == 0 then
-                        -- Operation applies to beginning of line, that means it's possible to shift it back.
-                        -- Modify edit, s.t. not the last \n, but the one before is replaced.
-                        diff.range["start"].line = diff.range["start"].line - 1
-                        diff.range["end"].line = diff.range["end"].line - 1
-                        diff.range["start"].character = vim.fn.strchars(prev_lines[diff.range["start"].line + 1], false)
-                        diff.range["end"].character = vim.fn.strchars(prev_lines[diff.range["end"].line + 1], false)
+                    if diff.range["end"].character == 0 then
+                        -- The range ends at the beginning of the line after the visible lines.
+                        if diff.range["start"].character == 0 then
+                            -- Operation applies to beginning of lines, that means it's possible to shift it back.
+                            -- Modify edit, s.t. not the last \n, but the one before is replaced.
+                            diff.range["start"].line = diff.range["start"].line - 1
+                            diff.range["end"].line = diff.range["end"].line - 1
+                            diff.range["start"].character =
+                                vim.fn.strchars(prev_lines[diff.range["start"].line + 1], false)
+                            diff.range["end"].character = vim.fn.strchars(prev_lines[diff.range["end"].line + 1], false)
+                        elseif string.sub(diff.text, vim.fn.strchars(diff.text)) == "\n" then
+                            -- The replacement ends with a newline.
+                            -- Drop it, and shorten the range by one character.
+                            diff.text = string.sub(diff.text, 1, -2)
+                            diff.range["end"].line = diff.range["end"].line - 1
+                            diff.range["end"].character = vim.fn.strchars(prev_lines[diff.range["end"].line + 1], false)
+                        else
+                            vim.fn.echoerr(
+                                "We don't know how to handle this case for a deletion after the last visible line. Please file a bug."
+                            )
+                        end
+                    else
+                        vim.fn.echoerr(
+                            "We think a delta ending inside the line after the visible ones cannot happen. Please file a bug."
+                        )
                     end
                 end
             end
@@ -87,6 +109,9 @@ function M.trackChanges(buffer, callback)
                     replacement = diff.text,
                 },
             }
+
+            debug({ final_delta = delta })
+
             callback(delta)
         end,
     })

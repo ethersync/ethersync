@@ -81,7 +81,10 @@ enum SyncerMessage {
 
 type DocMessageSender = mpsc::Sender<DocMessage>;
 type DocChangedSender = broadcast::Sender<()>;
-type EditorMessageSender = broadcast::Sender<RevisionedEditorTextDelta>;
+
+type EditorMessageSender = mpsc::Sender<RevisionedEditorTextDelta>;
+type EditorMessageReceiver = mpsc::Receiver<RevisionedEditorTextDelta>;
+
 type SyncerMessageSender = mpsc::Sender<SyncerMessage>;
 
 /// Encapsulates the Automerge `AutoCommit` and provides a generic interface,
@@ -199,7 +202,7 @@ impl DaemonActor {
             crdt_doc: Document::default(),
         }
     }
-    fn handle_message(&mut self, message: DocMessage) {
+    async fn handle_message(&mut self, message: DocMessage) {
         // TODO: Show the type in the debug message, or implement Debug for DocMessage.
         debug!("Handling doc message: {message:?}");
         match message {
@@ -227,7 +230,7 @@ impl DaemonActor {
                     .expect("Should have initialized text before performing random edit");
                 let ed_delta = EditorTextDelta::from_delta(delta.clone(), &text);
                 self.apply_delta_to_doc(&ed_delta);
-                self.process_crdt_delta_in_ot(delta);
+                self.process_crdt_delta_in_ot(delta).await;
             }
             DocMessage::Delta(delta) => {
                 let text = self
@@ -235,7 +238,7 @@ impl DaemonActor {
                     .expect("Should have initialized text before performing random edit");
                 let editor_delta = EditorTextDelta::from_delta(delta.clone(), &text);
                 self.apply_delta_to_doc(&editor_delta);
-                self.process_crdt_delta_in_ot(delta);
+                self.process_crdt_delta_in_ot(delta).await;
             }
             DocMessage::RevDelta(rev_delta) => {
                 debug!("Handling RevDelta from editor: {:#?}", rev_delta);
@@ -243,7 +246,7 @@ impl DaemonActor {
                     self.apply_delta_to_ot(rev_delta);
 
                 self.apply_delta_to_doc(&editor_delta_for_crdt);
-                self.send_deltas_to_editor(rev_deltas_for_editor);
+                self.send_deltas_to_editor(rev_deltas_for_editor).await;
             }
             DocMessage::ReceiveSyncMessage {
                 message,
@@ -251,7 +254,7 @@ impl DaemonActor {
                 response_tx,
             } => {
                 if let Some(patches) = self.apply_sync_message_to_doc(message, &mut peer_state) {
-                    self.process_crdt_patches_in_ot(patches);
+                    self.process_crdt_patches_in_ot(patches).await;
                 }
                 response_tx
                     .send(peer_state)
@@ -287,10 +290,13 @@ impl DaemonActor {
         result
     }
 
-    fn send_deltas_to_editor(&self, rev_deltas: Vec<RevisionedEditorTextDelta>) {
+    async fn send_deltas_to_editor(&self, rev_deltas: Vec<RevisionedEditorTextDelta>) {
         for rev_delta in rev_deltas {
+            debug!("Sending RevDelta to socket: {:#?}", rev_delta);
+
             self.socket_message_tx
                 .send(rev_delta)
+                .await
                 .expect("Failed to send message to socket channel.");
         }
     }
@@ -317,8 +323,8 @@ impl DaemonActor {
         let text = self
             .current_content()
             .expect("Should have initialized text before performing random edit");
-        let options = ["d", "_", "🥕", "💚", "\n"];
-        let random_text: String = (0..5)
+        let options = ["d", "ü", "🥕", "💚", "\n"];
+        let random_text: String = (1..5)
             .map(|_| {
                 let random_option = rand::thread_rng().gen_range(0..options.len());
                 options[random_option]
@@ -330,15 +336,24 @@ impl DaemonActor {
         let mut delta = TextDelta::default();
         delta.retain(random_position);
         delta.insert(&random_text);
+
+        // TODO: Delete the end/beginning of the content on purpose sometimes!
+        let mut deletion_length = 0;
+        if (text_length - random_position) > 0 {
+            deletion_length = rand::thread_rng().gen_range(0..(text_length - random_position));
+            deletion_length = deletion_length.min(3);
+        }
+        delta.delete(deletion_length);
+
         delta
     }
 
-    fn process_crdt_patches_in_ot(&mut self, patches: Vec<Patch>) {
+    async fn process_crdt_patches_in_ot(&mut self, patches: Vec<Patch>) {
         debug!(?patches);
         for patch in patches {
             match patch.action.try_into() {
                 Ok(delta) => {
-                    self.process_crdt_delta_in_ot(delta);
+                    self.process_crdt_delta_in_ot(delta).await;
                 }
                 Err(e) => {
                     warn!("Failed to convert patch to delta: {:#?}", e);
@@ -347,11 +362,12 @@ impl DaemonActor {
         }
     }
 
-    fn process_crdt_delta_in_ot(&mut self, delta: TextDelta) {
+    async fn process_crdt_delta_in_ot(&mut self, delta: TextDelta) {
         if let Some(ot_server) = &mut self.ot_server {
             let rev_text_delta_for_editor = ot_server.apply_crdt_change(delta);
             self.socket_message_tx
                 .send(rev_text_delta_for_editor)
+                .await
                 .expect("Failed to send message to socket channel.");
         }
     }
@@ -397,7 +413,7 @@ impl DaemonActor {
                 // No need to do anything.
                 continue;
             } else {
-                self.handle_message(message);
+                self.handle_message(message).await;
                 self.write_current_content_to_file();
             }
         }
@@ -423,11 +439,10 @@ impl Daemon {
 
         // The document task will send a ping on this channel whenever it changes.
         // The sync tasks will subscribe to it, and react to it by syncing with the peers.
-        let (doc_changed_ping_tx, _doc_changed_ping_rx) = broadcast::channel::<()>(16);
+        let (doc_changed_ping_tx, _doc_changed_ping_rx) = broadcast::channel::<()>(1);
 
         // The document task will send messages intended for the socket connection on this channel.
-        let (socket_message_tx, _socket_message_rx) =
-            broadcast::channel::<RevisionedEditorTextDelta>(16);
+        let (socket_message_tx, socket_message_rx) = mpsc::channel::<RevisionedEditorTextDelta>(1);
 
         let mut daemon_actor = DaemonActor::new(
             doc_message_rx,
@@ -506,15 +521,14 @@ impl Daemon {
             });
         }
 
-        let socket_message_tx_clone = socket_message_tx.clone();
         let socket_path_clone = socket_path.to_path_buf();
         let file_path_clone = file_path.to_path_buf();
         tokio::spawn(async move {
             listen_socket(
                 doc_message_tx_clone_2,
-                socket_message_tx_clone,
+                socket_message_rx,
                 &socket_path_clone,
-                &file_path_clone,
+                file_path_clone,
             )
             .await
             .expect("Failed to listen on UNIX socket");
@@ -621,10 +635,18 @@ async fn start_sync(
                 .send(SyncerMessage::GenerateSyncMessage {})
                 .await
                 .expect("Failed to send GenerateSyncMessage to document task");
-            doc_changed_ping_rx
-                .recv()
-                .await
-                .expect("Doc changed channel has been closed");
+            match doc_changed_ping_rx.recv().await {
+                Ok(()) => {
+                    debug!("Doc changed.");
+                }
+                Err(broadcast::error::RecvError::Closed) => {
+                    panic!("Doc changed channel has been closed");
+                }
+                Err(broadcast::error::RecvError::Lagged(_)) => {
+                    // This is fine, the messages in this channel are just pings.
+                    // It's okay if we miss some.
+                }
+            }
         }
     });
 
@@ -668,9 +690,9 @@ async fn start_sync(
 
 async fn listen_socket(
     tx: DocMessageSender,
-    editor_message_tx: EditorMessageSender,
+    mut editor_message_rx: EditorMessageReceiver,
     socket_path: &Path,
-    file_path: &Path,
+    file_path: PathBuf,
 ) -> Result<()> {
     if Path::new(&socket_path).exists() {
         fs::remove_file(socket_path)?;
@@ -678,52 +700,69 @@ async fn listen_socket(
     let listener = UnixListener::bind(socket_path)?;
     info!("Listening on UNIX socket: {}", socket_path.display());
 
+    let file_path_clone = file_path.clone();
+
     loop {
         // TODO: Accept multiple connections.
+        // TODO: How do we know/what do we do when a client disconnects?
         match listener.accept().await {
             Ok((stream, _addr)) => {
                 info!("Client connection established.");
 
-                let mut editor_message_rx = editor_message_tx.subscribe();
+                let (mut stream_read, mut stream_write) = tokio::io::split(stream);
 
-                let (mut tcp_read, mut tcp_write) = tokio::io::split(stream);
-                let buf_reader = BufReader::new(&mut tcp_read);
-                //for line in buf_reader.lines() {
-                let mut lines = buf_reader.lines();
+                // We're parsing a line from the reader (if we have one)
+                // which means we got a Delta from the ethersync client.
+                //
+                let tx_clone = tx.clone();
+                tokio::spawn(async move {
+                    let buf_reader = BufReader::new(&mut stream_read);
+                    let mut lines = buf_reader.lines();
 
-                loop {
-                    // either we're parsing a line from the reader (if we have one)
-                    // which means we got a Delta from the ethersync client
-                    //
-                    // or we're sending an editor message to the client
-                    tokio::select! {
-                        line_maybe = lines.next_line() => {
-                            match line_maybe {
-                                Ok(Some(line)) => {
-                                    let jsonrpc = EditorProtocolMessage::from_jsonrpc(&line).expect("Failed to parse JSON-RPC message");
-                                    tx.send(jsonrpc.into()).await?;
-                                }
-                                Ok(None) => {
-                                    break;
-                                }
-                                Err(e) => {
-                                    error!("Error reading line: {:#?}", e);
-                                }
+                    loop {
+                        match lines.next_line().await {
+                            Ok(Some(line)) => {
+                                debug!("Got a line from the client: {:#?}", line);
+                                let jsonrpc = EditorProtocolMessage::from_jsonrpc(&line)
+                                    .expect("Failed to parse JSON-RPC message");
+                                tx_clone
+                                    .send(jsonrpc.into())
+                                    .await
+                                    .expect("Failed to send message to document");
+                            }
+                            Ok(None) => {
+                                break;
+                            }
+                            Err(e) => {
+                                error!("Error reading line: {:#?}", e);
                             }
                         }
-                        Ok(rev_delta) = editor_message_rx.recv() => {
+                    }
+                });
+
+                // We're sending an editor message to the client.
+                loop {
+                    match editor_message_rx.recv().await {
+                        Some(rev_delta) => {
                             debug!("Received editor message to send to it.");
                             let message = EditorProtocolMessage::Edit {
-                                uri: format!("file://{}", file_path.display()),
-                                delta: rev_delta
+                                uri: format!("file://{}", file_path_clone.display()),
+                                delta: rev_delta,
                             };
-                            let payload = message.to_jsonrpc().expect("Failed to serialize JSON-RPC message");
+                            let payload = message
+                                .to_jsonrpc()
+                                .expect("Failed to serialize JSON-RPC message");
                             debug!("Sending message to editor: {:#?}", payload);
-                            tcp_write.write_all(format!("{payload}\n").as_bytes()).await.expect("Failed to write to TCP stream");
+                            stream_write
+                                .write_all(format!("{payload}\n").as_bytes())
+                                .await
+                                .expect("Failed to write to TCP stream");
+                        }
+                        None => {
+                            panic!("TODO: why?");
                         }
                     }
                 }
-                info!("Client connection closed.");
             }
             Err(e) => {
                 error!("Error: {:#?}", e);

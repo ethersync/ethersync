@@ -79,11 +79,12 @@ impl Actor for Neovim {
 
         let string_components = vec![
             "e".to_string(),
+            "ä".to_string(),
             "💚".to_string(),
             "🥕".to_string(),
             "\n".to_string(),
         ];
-        let s = random_string(rand_usize_inclusive(1, 4), string_components);
+        let s = random_string(rand_usize_inclusive(1, 5), string_components);
 
         let components = vec![
             "h".to_string(),
@@ -96,17 +97,19 @@ impl Actor for Neovim {
             "^".to_string(),
             "x".to_string(),
             "vllld".to_string(),
+            "Vjjjd".to_string(),
             "rü".to_string(),
             "dd".to_string(),
             "J".to_string(),
             format!("i{}", s),
+            format!("jjI{}", s),
             format!("o{}", s),
             format!("O{}", s),
             format!("A{}", s),
             format!("I{}", s),
         ];
 
-        vim_normal_command.push_str(&random_string(rand_usize_inclusive(1, 10), components));
+        vim_normal_command.push_str(&random_string(rand_usize_inclusive(1, 2), components));
 
         self.nvim
             .command(&format!(r#"silent! execute "normal {vim_normal_command}""#))
@@ -344,10 +347,14 @@ pub mod tests {
             timeout(Duration::from_millis(5000), async {
                 let mut socket = MockSocket::new("/tmp/ethersync", false).await;
                 let (mut nvim, _file_path) = Neovim::new_ethersync_enabled(initial_content).await;
-                nvim.input(input).await;
 
                 let msg = socket.recv().await;
                 assert_eq!(msg["method"], "open");
+
+                let input_clone = input.to_string();
+                tokio::spawn(async move {
+                    nvim.input(&input_clone).await;
+                });
 
                 // TODO: This doesn't check whether there are more replacements pending than the
                 // expected ones.
@@ -504,13 +511,19 @@ pub mod tests {
 
         assert_vim_input_yields_replacements("a", "o", vec![replace_ed((0, 1), (0, 1), "\n")]);
 
-        // Tests where Vim behaves a bit weirdly.
+        assert_vim_input_yields_replacements(
+            "eins\ntwo",
+            "jo",
+            vec![replace_ed((1, 3), (1, 3), "\n")],
+        );
 
         assert_vim_input_yields_replacements(
             "eins\ntwo\n",
             "jo",
-            vec![replace_ed((1, 3), (2, 0), "\n\n")],
+            vec![replace_ed((1, 3), (1, 3), "\n")],
         );
+
+        // Tests where Vim behaves a bit weirdly.
 
         // A direct replace_ed((0, 1), (1, 0), " ") would be nicer.
         assert_vim_input_yields_replacements(

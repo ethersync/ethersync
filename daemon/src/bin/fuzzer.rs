@@ -7,14 +7,15 @@ use pretty_assertions::assert_eq;
 use rand::Rng;
 use std::collections::HashMap;
 use std::path::Path;
-use tokio::time::sleep;
-use tracing::info;
+use tokio::time::{sleep, timeout, Duration};
+use tracing::{info, warn};
 
 async fn perform_random_edits(actor: &mut (impl Actor + ?Sized)) {
-    for _ in 1..10 {
+    for _ in 1..50 {
         actor.apply_random_delta().await;
-        let random_millis = rand::thread_rng().gen_range(0..100);
-        sleep(std::time::Duration::from_millis(random_millis)).await;
+
+        let random_millis = rand::thread_rng().gen_range(0..5);
+        sleep(Duration::from_millis(random_millis)).await;
     }
 }
 
@@ -51,6 +52,9 @@ async fn main() {
         Path::new("/tmp/etherbonk"),
         file2.as_path(),
     );
+    // Make sure peer has synced with the other daemon before connecting Vim!
+    // Otherwise, peer might not have a document yet.
+    sleep(std::time::Duration::from_millis(500)).await;
 
     std::env::set_var("ETHERSYNC_SOCKET", "/tmp/etherbonk");
     let nvim2 = Neovim::new(file2).await;
@@ -63,24 +67,52 @@ async fn main() {
 
     sleep(std::time::Duration::from_millis(100)).await;
 
-    // Perform random edits in parallel.
-    // timeout(std::time::Duration::from_secs(100), async {
+    info!("Performing edits");
+
     let handles = actors
         .iter_mut()
         .map(|(_, actor)| perform_random_edits(actor.as_mut()));
     join_all(handles).await;
-    // })
-    // .await
-    // .expect("Random edits went too long unexpectedly");
-
-    info!("Sleep a bit, so that the actors can sync");
-    sleep(std::time::Duration::from_millis(1000)).await;
-    // TODO: Maybe broadcast "ready" message? Wait for roundtrip?
 
     let mut contents: HashMap<String, String> = HashMap::new();
+
+    info!("Waiting for all contents to be equal");
+
+    timeout(Duration::from_secs(20), async {
+        loop {
+            // Get all contents.
+            for (name, actor) in &mut actors {
+                let content = actor.content().await;
+                contents.insert(name.clone(), content.clone());
+            }
+
+            // If all contents are equal already, we have succeeded!
+            let first = contents.values().next().expect("No contents found");
+            let mut all_equal = true;
+            for content in contents.values() {
+                if first != content {
+                    all_equal = false;
+                }
+            }
+            if all_equal {
+                break;
+            }
+            sleep(Duration::from_millis(100)).await;
+        }
+    })
+    .await
+    .unwrap_or_else(|_| {
+        warn!("Timeout while waiting for all contents to be equal");
+    });
+
+    // Get all contents.
     for (name, actor) in &mut actors {
         let content = actor.content().await;
         contents.insert(name.clone(), content.clone());
+    }
+
+    // Print all contents.
+    for (name, content) in &contents {
         println!(
             r#"
 {name} content:

@@ -1,7 +1,7 @@
 #![allow(dead_code)]
 use crate::types::{EditorTextDelta, RevisionedEditorTextDelta, RevisionedTextDelta, TextDelta};
 use operational_transform::OperationSeq;
-use tracing::debug;
+use tracing::{debug, trace};
 
 ///    `OTServer` receives operations from both the CRDT world, and one editor and makes sure that
 ///    the editor operations (which might be based on an older document) are applicable to the
@@ -128,14 +128,15 @@ impl OTServer {
         );
         let seen_operations = self.editor_queue.len() - daemon_operations_to_transform;
         debug!(
-            "We have now {} confirmed operations, there are {} unconfirmed operations",
+            "Editor is confirming {} operations, there are still {} unconfirmed operations",
             seen_operations, daemon_operations_to_transform,
         );
         let confirmed_queue = self.editor_queue.drain(..seen_operations);
         for confirmed_editor_op in confirmed_queue {
-            debug!(
+            trace!(
                 "Applying confirmed operation {:#?} to last confirmed editor content {:?}",
-                &confirmed_editor_op, &self.last_confirmed_editor_content
+                &confirmed_editor_op,
+                &self.last_confirmed_editor_content
             );
             self.last_confirmed_editor_content = Self::force_apply(
                 &self.last_confirmed_editor_content,
@@ -148,16 +149,20 @@ impl OTServer {
         );
         op_seq = rev_delta.delta.into();
 
-        debug!(
+        trace!(
             "Applying incoming editor operation {:#?} to last confirmed editor content {:?}",
-            &op_seq, &self.last_confirmed_editor_content
+            &op_seq,
+            &self.last_confirmed_editor_content
         );
         self.last_confirmed_editor_content =
             Self::force_apply(&self.last_confirmed_editor_content, op_seq.clone());
         (op_seq, self.editor_queue) = transform_through_operations(op_seq, &self.editor_queue);
         self.operations.push(op_seq.clone());
 
-        (op_seq.into(), self.deltas_for_editor())
+        let deltas_for_editor = self.deltas_for_editor();
+        debug!(for_editor = ?deltas_for_editor);
+
+        (op_seq.into(), deltas_for_editor)
     }
 
     fn deltas_for_editor(&self) -> Vec<RevisionedEditorTextDelta> {
@@ -171,7 +176,7 @@ impl OTServer {
                 ed_delta,
             ));
 
-            debug!("Applying unconfirmed operation from editor queue {:#?} to last confirmed editor content {:?}", &editor_op, &document);
+            //debug!("Applying unconfirmed operation from editor queue {:#?} to last confirmed editor content {:?}", &editor_op, &document);
             document = Self::force_apply(&document, editor_op.clone());
         }
         to_editor
