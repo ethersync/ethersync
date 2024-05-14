@@ -66,23 +66,31 @@ function M.trackChanges(buffer, callback)
                     end
                 else
                     -- The range doesn't start on the first line.
-                    if diff.range["start"].character == 0 and diff.range["end"].character == 0 then
-                        -- Operation applies to beginning of lines, that means it's possible to shift it back.
-                        -- Modify edit, s.t. not the last \n, but the one before is replaced.
-                        diff.range["start"].line = diff.range["start"].line - 1
-                        diff.range["end"].line = diff.range["end"].line - 1
-                        diff.range["start"].character = vim.fn.strchars(prev_lines[diff.range["start"].line + 1], false)
-                        diff.range["end"].character = vim.fn.strchars(prev_lines[diff.range["end"].line + 1], false)
-                    elseif
-                        diff.range["end"].character == 0
-                        and string.sub(diff.text, vim.fn.strchars(diff.text)) == "\n"
-                    then
-                        -- The replacement ends with a newline.
-                        -- Drop it, and shorten the range by one character.
-                        debug("here")
-                        diff.text = string.sub(diff.text, 1, -2)
-                        diff.range["end"].line = diff.range["end"].line - 1
-                        diff.range["end"].character = vim.fn.strchars(prev_lines[diff.range["end"].line + 1], false)
+                    if diff.range["end"].character == 0 then
+                        -- The range ends at the beginning of the line after the visible lines.
+                        if diff.range["start"].character == 0 then
+                            -- Operation applies to beginning of lines, that means it's possible to shift it back.
+                            -- Modify edit, s.t. not the last \n, but the one before is replaced.
+                            diff.range["start"].line = diff.range["start"].line - 1
+                            diff.range["end"].line = diff.range["end"].line - 1
+                            diff.range["start"].character =
+                                vim.fn.strchars(prev_lines[diff.range["start"].line + 1], false)
+                            diff.range["end"].character = vim.fn.strchars(prev_lines[diff.range["end"].line + 1], false)
+                        elseif string.sub(diff.text, vim.fn.strchars(diff.text)) == "\n" then
+                            -- The replacement ends with a newline.
+                            -- Drop it, and shorten the range by one character.
+                            diff.text = string.sub(diff.text, 1, -2)
+                            diff.range["end"].line = diff.range["end"].line - 1
+                            diff.range["end"].character = vim.fn.strchars(prev_lines[diff.range["end"].line + 1], false)
+                        else
+                            vim.fn.echoerr(
+                                "We don't know how to handle this case for a deletion after the last visible line. Please file a bug."
+                            )
+                        end
+                    else
+                        vim.fn.echoerr(
+                            "We think a delta ending inside the line after the visible ones cannot happen. Please file a bug."
+                        )
                     end
                 end
             end
