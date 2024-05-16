@@ -1,15 +1,28 @@
 local M = {}
 
-M.log_file_handle = io.open("/tmp/ethersync-nvim.log", "a")
+local logfile = os.getenv("ETHERSYNC_NVIM_LOGFILE")
+if logfile then
+    M._log_file_handle = io.open(logfile, "a")
+end
 
-function M.debug(...)
-    local objects = {}
-    for i = 1, select("#", ...) do
-        local v = select(i, ...)
-        table.insert(objects, vim.inspect(v))
+function M.debug(value)
+    if not M._log_file_handle then
+        return
     end
-    M.log_file_handle:write(table.concat(objects, "\n") .. "\n")
-    M.log_file_handle:flush()
+
+    if type(value) ~= "string" then
+        value = vim.inspect(value)
+    end
+
+    local date = os.date("%Y-%m-%d %H:%M:%S")
+    local debug_info = debug.getinfo(2)
+
+    local name = debug_info.name or "?"
+    local line = debug_info.currentline or "?"
+    local context = " " .. name .. ":" .. line
+
+    M._log_file_handle:write(date .. context .. ": " .. value .. "\n")
+    M._log_file_handle:flush()
 end
 
 return M

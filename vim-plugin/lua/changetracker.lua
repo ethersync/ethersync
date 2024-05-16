@@ -1,5 +1,6 @@
 local sync = require("vim.lsp.sync")
 local utils = require("utils")
+local debug = require("logging").debug
 
 local M = {}
 
@@ -9,11 +10,6 @@ local prev_lines
 
 -- Used to note that changes to the buffer should be ignored, and not be sent out as deltas.
 local ignore_edits = false
-
-local function debug(tbl)
-    -- silent print
-    --vim.api.nvim_out_write(vim.inspect(tbl) .. "\n")
-end
 
 -- Subscribes the callback to changes for a given buffer id and reports with a delta.
 --
