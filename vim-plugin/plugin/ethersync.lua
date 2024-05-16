@@ -44,7 +44,6 @@ local function connect()
     if client then
         client.terminate()
         local buffer = vim.uri_to_bufnr("file://" .. theFile)
-        vim.api.nvim_buf_set_option(buffer, "modifiable", false)
     end
 
     local params = { "client" }
@@ -65,7 +64,6 @@ local function connect()
             -- TODO: Is it a problem to do this in a schedule?
             vim.schedule(function()
                 local bufnr = vim.uri_to_bufnr("file://" .. theFile)
-                vim.api.nvim_buf_set_option(bufnr, "modifiable", false)
             end)
 
             print("Ethersync client connection exited: ", vim.inspect({ ... }))
@@ -76,7 +74,6 @@ local function connect()
         print("Connected to Ethersync daemon!")
         local uri = "file://" .. theFile
         sendNotification("open", { uri = uri })
-        vim.bo.modifiable = true
         editorRevision = 0
         daemonRevision = 0
     else
@@ -93,16 +90,11 @@ function EthersyncOpenBuffer()
     if not theFile then
         -- Only sync the *first* file loaded and nothing else.
         theFile = vim.fn.expand("%:p")
-        vim.bo.modifiable = false
         connect()
     end
 
     if theFile ~= vim.fn.expand("%:p") then
         return
-    end
-
-    if not client then
-        vim.bo.modifiable = false
     end
 
     -- Vim enables eol for an empty file, but we do use this option values
