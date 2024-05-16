@@ -12,9 +12,10 @@ use local_ip_address::local_ip;
 use rand::Rng;
 use std::fmt;
 use std::fs;
+use std::mem;
 use std::path::{Path, PathBuf};
 use tokio::{
-    io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader, ReadHalf},
+    io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader, ReadHalf, WriteHalf},
     net::UnixListener,
     net::{TcpListener, TcpStream},
     sync::{broadcast, mpsc, oneshot},
@@ -84,6 +85,7 @@ type EditorMessageSender = mpsc::Sender<RevisionedEditorTextDelta>;
 type EditorMessageReceiver = mpsc::Receiver<RevisionedEditorTextDelta>;
 
 type SyncerMessageSender = mpsc::Sender<SyncerMessage>;
+type SyncerMessageReceiver = mpsc::Receiver<SyncerMessage>;
 
 /// Encapsulates the Automerge `AutoCommit` and provides a generic interface,
 /// s.t. we don't need to worry about automerge internals elsewhere.
@@ -602,32 +604,172 @@ async fn dial_tcp(
     Ok(())
 }
 
+struct TCPReadActor {
+    sender: SyncerMessageSender,
+    reader: ReadHalf<TcpStream>,
+    shutdown_token: CancellationToken,
+}
+
+impl TCPReadActor {
+    fn new(
+        reader: ReadHalf<TcpStream>,
+        sender: SyncerMessageSender,
+        shutdown_token: CancellationToken,
+    ) -> Self {
+        Self {
+            sender,
+            reader,
+            shutdown_token,
+        }
+    }
+
+    async fn forward_sync_message(&self, message: Vec<u8>) {
+        self.sender
+            .send(SyncerMessage::ReceiveSyncMessage { message })
+            .await
+            .expect("Channel for sending Sync Task has been closed");
+    }
+
+    async fn read_message(&mut self) -> Result<Vec<u8>> {
+        let mut message_len_buf = [0; 4];
+        self.reader.read_exact(&mut message_len_buf).await?;
+        let message_len = i32::from_be_bytes(message_len_buf);
+        let mut message_buf = vec![0; message_len as usize];
+        self.reader.read_exact(&mut message_buf).await?;
+        Ok(message_buf)
+    }
+
+    async fn run(&mut self) {
+        while let Ok(message) = self.read_message().await {
+            self.forward_sync_message(message).await;
+        }
+        info!("Sync Receive loop stopped (peer disconnected)");
+        self.shutdown_token.cancel()
+    }
+}
+
+struct TCPWriteActor {
+    syncer_receiver: SyncerMessageReceiver,
+    doc_sender: DocMessageSender,
+    writer: WriteHalf<TcpStream>,
+    shutdown_token: CancellationToken,
+    peer_state: SyncState,
+}
+
+impl TCPWriteActor {
+    fn new(
+        syncer_receiver: SyncerMessageReceiver,
+        doc_sender: DocMessageSender,
+        writer: WriteHalf<TcpStream>,
+        shutdown_token: CancellationToken,
+    ) -> Self {
+        Self {
+            syncer_receiver,
+            doc_sender,
+            writer,
+            shutdown_token,
+            peer_state: SyncState::new(),
+        }
+    }
+
+    async fn handle_message(&mut self, message: SyncerMessage) {
+        match message {
+            SyncerMessage::ReceiveSyncMessage { message } => {
+                let (reponse_tx, response_rx) = oneshot::channel();
+                let message =
+                    Message::decode(&message).expect("Failed to decode automerge message");
+                self.doc_sender
+                    .send(DocMessage::ReceiveSyncMessage {
+                        message,
+                        state: mem::take(&mut self.peer_state),
+                        response_tx: reponse_tx,
+                    })
+                    .await
+                    .expect(
+                        "Failed to send receive message to document channel from TCPWriteActor",
+                    );
+                self.peer_state = response_rx
+                    .await
+                    .expect("Couldn't read response from Document channel");
+            }
+            SyncerMessage::GenerateSyncMessage {} => {
+                let (reponse_tx, response_rx) = oneshot::channel();
+                self.doc_sender
+                    .send(DocMessage::GenerateSyncMessage {
+                        state: mem::take(&mut self.peer_state),
+                        response_tx: reponse_tx,
+                    })
+                    .await
+                    .expect(
+                        "Failed to send generate message to document channel from TCPWriteActor",
+                    );
+                let (ps, message) = response_rx
+                    .await
+                    .expect("Could not read response from Document channel");
+                self.peer_state = ps;
+                if let Some(message) = message {
+                    let message = message.encode();
+                    let message_len = message.len() as i32;
+                    self.writer
+                        .write_all(&message_len.to_be_bytes())
+                        .await
+                        .expect("GenerateSyncMessage: write message len failed");
+                    self.writer
+                        .write_all(&message)
+                        .await
+                        .expect("GenerateSyncMessage: write message failed");
+                }
+            }
+        }
+    }
+    async fn run(mut self) {
+        loop {
+            tokio::select! {
+                _ = self.shutdown_token.cancelled() => {
+                    debug!("Shutting down main start_sync loop");
+                    break;
+                }
+                message_maybe = self.syncer_receiver.recv() => match message_maybe {
+                    None => {
+                        panic!("Channel towards sync task has been closed");
+                    }
+                    Some(message) => self.handle_message(message).await,
+                }
+            }
+        }
+    }
+}
+
 async fn start_sync(
-    tx: DocMessageSender,
+    doc_message_tx: DocMessageSender,
     doc_changed_ping_tx: DocChangedSender,
     stream: TcpStream,
 ) -> Result<()> {
-    let mut peer_state = SyncState::new();
-
-    let (syncer_message_tx, mut syncer_message_rx) = mpsc::channel(16);
-    let (tcp_read, mut tcp_write) = tokio::io::split(stream);
+    let (syncer_message_tx, syncer_message_rx) = mpsc::channel(16);
+    let (tcp_read, tcp_write) = tokio::io::split(stream);
 
     // TCP reader.
-    let receiver = SyncReceiver::new(tcp_read, syncer_message_tx.clone());
     let shutdown_token = CancellationToken::new();
-    let shutdown_token_clone = shutdown_token.clone();
+    let mut receiver =
+        TCPReadActor::new(tcp_read, syncer_message_tx.clone(), shutdown_token.clone());
     tokio::spawn(async move {
-        sync_receive(receiver).await;
-        shutdown_token_clone.cancel()
+        receiver.run().await;
     });
 
+    let writer = TCPWriteActor::new(
+        syncer_message_rx,
+        doc_message_tx,
+        tcp_write,
+        shutdown_token.clone(),
+    );
+    tokio::spawn(writer.run());
+
     // Generate sync message when doc changes.
-    let syncer_message_tx_clone = syncer_message_tx.clone();
     let shutdown_token_clone = shutdown_token.clone();
     tokio::spawn(async move {
         let mut doc_changed_ping_rx = doc_changed_ping_tx.subscribe();
         loop {
-            syncer_message_tx_clone
+            syncer_message_tx
                 .send(SyncerMessage::GenerateSyncMessage {})
                 .await
                 .expect("Failed to send GenerateSyncMessage to document task");
@@ -652,54 +794,6 @@ async fn start_sync(
         }
     });
 
-    loop {
-        tokio::select! {
-            _ = shutdown_token.cancelled() => {
-                debug!("Shutting down main start_sync loop");
-                break;
-            }
-            syncer_message_maybe = syncer_message_rx.recv() => match syncer_message_maybe {
-                None => {
-                    panic!("Channel towards sync task has been closed");
-                }
-                Some(message) => match message {
-                    SyncerMessage::ReceiveSyncMessage { message } => {
-                        let (reponse_tx, response_rx) = oneshot::channel();
-                        let message = Message::decode(&message)?;
-                        tx.send(DocMessage::ReceiveSyncMessage {
-                            message,
-                            state: peer_state,
-                            response_tx: reponse_tx,
-                        })
-                        .await?;
-                        peer_state = response_rx.await?;
-                    }
-                    SyncerMessage::GenerateSyncMessage {} => {
-                        let (reponse_tx, response_rx) = oneshot::channel();
-                        tx.send(DocMessage::GenerateSyncMessage {
-                            state: peer_state,
-                            response_tx: reponse_tx,
-                        })
-                        .await?;
-                        let (ps, message) = response_rx.await?;
-                        peer_state = ps;
-                        if let Some(message) = message {
-                            let message = message.encode();
-                            let message_len = message.len() as i32;
-                            tcp_write
-                                .write_all(&message_len.to_be_bytes())
-                                .await
-                                .expect("GenerateSyncMessage: write message len failed");
-                            tcp_write
-                                .write_all(&message)
-                                .await
-                                .expect("GenerateSyncMessage: write message failed");
-                        }
-                    }
-                },
-            }
-        }
-    }
     Ok(())
 }
 
@@ -794,40 +888,6 @@ async fn listen_socket(
             }
         }
     }
-}
-
-struct SyncReceiver {
-    sender: SyncerMessageSender,
-    reader: ReadHalf<TcpStream>,
-}
-
-impl SyncReceiver {
-    fn new(reader: ReadHalf<TcpStream>, sender: SyncerMessageSender) -> Self {
-        Self { sender, reader }
-    }
-
-    async fn forward_sync_message(&self, message: Vec<u8>) {
-        self.sender
-            .send(SyncerMessage::ReceiveSyncMessage { message })
-            .await
-            .expect("Channel for sending Sync Task has been closed");
-    }
-
-    async fn read_message(&mut self) -> Result<Vec<u8>> {
-        let mut message_len_buf = [0; 4];
-        self.reader.read_exact(&mut message_len_buf).await?;
-        let message_len = i32::from_be_bytes(message_len_buf);
-        let mut message_buf = vec![0; message_len as usize];
-        self.reader.read_exact(&mut message_buf).await?;
-        Ok(message_buf)
-    }
-}
-
-async fn sync_receive(mut sync_receiver: SyncReceiver) {
-    while let Ok(message) = sync_receiver.read_message().await {
-        sync_receiver.forward_sync_message(message).await;
-    }
-    info!("Sync Receive loop stopped (peer disconnected)");
 }
 
 #[cfg(test)]
