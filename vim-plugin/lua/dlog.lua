@@ -22,6 +22,11 @@ local function noop(_) end
 ---@return fun(msg: string, ...): any logger function
 function M.logger(logger_name)
     if has_debuglog then
+        debuglog.enable("*")
+        debuglog.set_config({
+            log_to_file = true,
+            log_to_console = false,
+        })
         return debuglog.logger_for_shim_only(logger_name)
     end
     return noop

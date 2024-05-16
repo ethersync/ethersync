@@ -1,5 +1,7 @@
 local changetracker = require("changetracker")
 local logging = require("logging")
+local dlog = require("dlog")
+local logger = dlog.logger("some_logger")
 
 -- JSON-RPC connection.
 local client
@@ -43,6 +45,8 @@ end
 -- Connect to the daemon.
 local function connect()
     logging.debug("Connect called, testing logging. Please check /tmp/ethersync-nvim.log :)")
+    logger("This is another way to log stuff, but introduces the debuglog dependency.")
+    logger("Seems a bit more nice out of the box")
     if client then
         client.terminate()
         local buffer = vim.uri_to_bufnr("file://" .. theFile)
