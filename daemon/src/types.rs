@@ -3,7 +3,6 @@ use automerge::PatchAction;
 use operational_transform::{Operation as OTOperation, OperationSeq};
 use ropey::Rope;
 use serde::{Deserialize, Serialize};
-use serde_json::Value as JSONValue;
 
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct TextDelta(pub Vec<TextOp>);
@@ -85,7 +84,6 @@ pub enum EditorProtocolMessage {
         uri: DocumentUri,
         delta: RevisionedEditorTextDelta,
     },
-    Debug(JSONValue),
     // TODO coming later:
     // Cursor{uri: DocumentUri, ranges: RevisionedRanges}
 }

@@ -30,7 +30,6 @@ pub enum DocMessage {
     },
     Open,
     Close,
-    Debug, // TODO: Find a better way to drop debug messages from the editor.
     RandomEdit,
     RevDelta(RevisionedEditorTextDelta),
     #[allow(dead_code)]
@@ -52,7 +51,6 @@ impl fmt::Debug for DocMessage {
             DocMessage::GetContent { .. } => "get content",
             DocMessage::Open => "open",
             DocMessage::Close => "close",
-            DocMessage::Debug => "debug",
             DocMessage::RandomEdit => "random edit",
             DocMessage::RevDelta(_) => "delta from editor",
             DocMessage::Delta(_) => "delta from peer",
@@ -66,7 +64,6 @@ impl fmt::Debug for DocMessage {
 impl From<EditorProtocolMessage> for DocMessage {
     fn from(rpc_message: EditorProtocolMessage) -> Self {
         match rpc_message {
-            EditorProtocolMessage::Debug(_) => DocMessage::Debug,
             EditorProtocolMessage::Open { uri: _ } => DocMessage::Open,
             EditorProtocolMessage::Close { uri: _ } => DocMessage::Close,
             EditorProtocolMessage::Edit { uri: _, delta } => DocMessage::RevDelta(delta),
@@ -220,9 +217,6 @@ impl DaemonActor {
             }
             DocMessage::Close => {
                 self.ot_server = None;
-            }
-            DocMessage::Debug => {
-                // Ignore.
             }
             DocMessage::RandomEdit => {
                 let delta = self.random_delta();
@@ -410,13 +404,8 @@ impl DaemonActor {
 
     async fn run(&mut self) {
         while let Some(message) = self.doc_message_rx.recv().await {
-            if let DocMessage::Debug = &message {
-                // No need to do anything.
-                continue;
-            } else {
-                self.handle_message(message).await;
-                self.write_current_content_to_file();
-            }
+            self.handle_message(message).await;
+            self.write_current_content_to_file();
         }
         panic!("Channel towards document task has been closed");
     }
