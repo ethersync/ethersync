@@ -374,7 +374,7 @@ impl DaemonActor {
         if let Ok(text) = content {
             debug!(current_text__ = text);
             if let Some(ot_server) = &mut self.ot_server {
-                debug!(current_ot_doc = ot_server.apply_to_initial_content());
+                debug!(current_ot_doc = ot_server.current_content());
             } else {
                 std::fs::write(&self.file_path, &text).expect("Could not write to file");
             }

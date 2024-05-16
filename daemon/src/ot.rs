@@ -185,7 +185,7 @@ impl OTServer {
         to_editor
     }
 
-    pub fn apply_to_initial_content(&mut self) -> String {
+    pub fn current_content(&mut self) -> String {
         self.current_content.clone()
     }
 
@@ -286,13 +286,13 @@ mod tests {
                 ot_server.operations,
                 vec![insert(1, "x").into(), insert(3, "y").into()]
             );
-            assert_eq!(ot_server.apply_to_initial_content(), "hxeyllo");
+            assert_eq!(ot_server.current_content(), "hxeyllo");
 
             let to_editor = ot_server.apply_crdt_change(insert(3, "z"));
             let expected = EditorTextDelta::from_delta(insert(3, "z"), "TODO");
             assert_eq!(to_editor, rev_ed_delta(1, expected));
 
-            assert_eq!(ot_server.apply_to_initial_content(), "hxezyllo");
+            assert_eq!(ot_server.current_content(), "hxezyllo");
 
             // editor thinks: hxeyllo -> hlo
             let (to_crdt, to_editor) =
@@ -301,7 +301,7 @@ mod tests {
             let expected = EditorTextDelta::from_delta(insert(1, "z"), "hlo");
             assert_eq!(to_editor, vec![rev_ed_delta(2, expected)]);
 
-            assert_eq!(ot_server.apply_to_initial_content(), "hzlo");
+            assert_eq!(ot_server.current_content(), "hzlo");
             assert_eq!(
                 ot_server.operations,
                 vec![
@@ -329,7 +329,7 @@ mod tests {
 
             assert_eq!(ot_server.editor_queue.len(), 2);
             assert_eq!(ot_server.last_confirmed_editor_content, "hzlo!\nblubb");
-            assert_eq!(ot_server.apply_to_initial_content(), "ho\nzlo!\nblubb");
+            assert_eq!(ot_server.current_content(), "ho\nzlo!\nblubb");
         }
 
         #[test]
@@ -344,7 +344,7 @@ mod tests {
             ));
 
             assert_eq!(
-                ot_server.apply_to_initial_content(),
+                ot_server.current_content(),
                 "THE POEM\nLet's say\nthis could be\na poem."
             );
 
@@ -365,7 +365,7 @@ mod tests {
             ));
 
             assert_eq!(
-                ot_server.apply_to_initial_content(),
+                ot_server.current_content(),
                 "THE POEM\nLet's say\nI want to be\nthe boss."
             );
         }
@@ -395,10 +395,7 @@ mod tests {
             // would not correctly "drop" the implicit newline.
             // For details, check out ../../docs/decisions/02-working-with-vims-eol-behavior.md.
             assert_eq!(to_2nd_editor_2, rev_ed_delta_single(0, (1, 0), (2, 0), ""));
-            assert_eq!(
-                ot_server.apply_to_initial_content(),
-                ot_server2.apply_to_initial_content()
-            );
+            assert_eq!(ot_server.current_content(), ot_server2.current_content());
         }
     }
 
@@ -461,7 +458,7 @@ mod tests {
             assert_eq!(expected, to_crdt);
             //assert_eq!(Vec::, to_editor);
 
-            assert_eq!(ot_server.apply_to_initial_content(), "hullo");
+            assert_eq!(ot_server.current_content(), "hullo");
             assert_eq!(ot_server.last_confirmed_editor_content, "hullo");
         }
     }
