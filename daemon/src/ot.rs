@@ -69,7 +69,7 @@ pub struct OTServer {
     /// the overhead of implementing the tranformation per editor plugin. In our case
     /// there's a small number of editors, so transforming it in the daemon is feasible.
     editor_queue: Vec<OperationSeq>,
-    initial_content: String,
+    current_content: String,
     /// That's the content we assume the editor has, where the operations it sends us apply.
     /// (which is the content "in front" of the editor_queue)
     last_confirmed_editor_content: String,
@@ -79,24 +79,26 @@ impl OTServer {
     pub fn new(initial_content: String) -> Self {
         Self {
             last_confirmed_editor_content: initial_content.clone(),
-            initial_content,
+            current_content: initial_content,
             ..Default::default()
         }
     }
 
     /// Called when the CRDT world makes a change to the document.
     pub fn apply_crdt_change(&mut self, delta: TextDelta) -> RevisionedEditorTextDelta {
-        let document = self.apply_to_initial_content();
         // We can apply the change immediately.
         self.operations.push(delta.clone().into());
         self.editor_queue.push(delta.clone().into());
         self.daemon_revision += 1;
+        // Use "previous" content to transform into editor text delta.
+        let editor_delta = EditorTextDelta::from_delta(delta.clone(), &self.current_content);
+        self.current_content = Self::force_apply(&self.current_content, delta.into());
 
         // We assume that the editor is up-to-date, and send the operation to it.
         // If it can't accept it, we will transform and send it later.
         RevisionedEditorTextDelta {
             revision: self.editor_revision,
-            delta: EditorTextDelta::from_delta(delta, &document),
+            delta: editor_delta,
         }
     }
 
@@ -158,6 +160,7 @@ impl OTServer {
             Self::force_apply(&self.last_confirmed_editor_content, op_seq.clone());
         (op_seq, self.editor_queue) = transform_through_operations(op_seq, &self.editor_queue);
         self.operations.push(op_seq.clone());
+        self.current_content = Self::force_apply(&self.current_content, op_seq.clone());
 
         let deltas_for_editor = self.deltas_for_editor();
         debug!(for_editor = ?deltas_for_editor);
@@ -183,12 +186,7 @@ impl OTServer {
     }
 
     pub fn apply_to_initial_content(&mut self) -> String {
-        let mut document = self.initial_content.clone();
-        // TODO: fold?
-        for op_seq in &self.operations {
-            document = Self::force_apply(&document, op_seq.clone());
-        }
-        document
+        self.current_content.clone()
     }
 
     #[must_use]
