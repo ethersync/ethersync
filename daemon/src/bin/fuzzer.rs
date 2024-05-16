@@ -11,7 +11,7 @@ use tokio::time::{sleep, timeout, Duration};
 use tracing::{info, warn};
 
 async fn perform_random_edits(actor: &mut (impl Actor + ?Sized)) {
-    for _ in 1..50 {
+    for _ in 1..500 {
         actor.apply_random_delta().await;
 
         let random_millis = rand::thread_rng().gen_range(0..5);
@@ -42,13 +42,18 @@ async fn main() {
     create_ethersync_dir(dir.path());
 
     // Set up the actors.
-    let daemon = Daemon::new(None, None, Path::new("/tmp/ethersync"), file.as_path());
+    let daemon = Daemon::new(
+        Some(2424),
+        None,
+        Path::new("/tmp/ethersync"),
+        file.as_path(),
+    );
 
     let nvim = Neovim::new(file).await;
 
     let peer = Daemon::new(
         None,
-        Some("127.0.0.1:4242".to_string()),
+        Some("127.0.0.1:2424".to_string()),
         Path::new("/tmp/etherbonk"),
         file2.as_path(),
     );
@@ -78,7 +83,7 @@ async fn main() {
 
     info!("Waiting for all contents to be equal");
 
-    timeout(Duration::from_secs(20), async {
+    timeout(Duration::from_secs(60), async {
         loop {
             // Get all contents.
             for (name, actor) in &mut actors {

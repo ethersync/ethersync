@@ -31,6 +31,8 @@ public-ip = "0.2.2"
 tokio-util = "0.7.11"
 
 [features]
-
 simulate_edits_from_editor = []
 simulate_edits_on_crdt = []
+
+[profile.release]
+debug = true
