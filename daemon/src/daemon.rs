@@ -729,8 +729,10 @@ async fn listen_socket(
     let file_path_clone = file_path.clone();
 
     loop {
+        let shutdown_token = CancellationToken::new();
+        let shutdown_token_clone = shutdown_token.clone();
+
         // TODO: Accept multiple connections.
-        // TODO: How do we know/what do we do when a client disconnects?
         match listener.accept().await {
             Ok((stream, _addr)) => {
                 info!("Client connection established.");
@@ -764,28 +766,36 @@ async fn listen_socket(
                             }
                         }
                     }
+                    shutdown_token_clone.cancel();
+                    info!("Client disconnect.");
                 });
 
                 // We're sending an editor message to the client.
                 loop {
-                    match editor_message_rx.recv().await {
-                        Some(rev_delta) => {
-                            debug!("Received editor message to send to it.");
-                            let message = EditorProtocolMessage::Edit {
-                                uri: format!("file://{}", file_path_clone.display()),
-                                delta: rev_delta,
-                            };
-                            let payload = message
-                                .to_jsonrpc()
-                                .expect("Failed to serialize JSON-RPC message");
-                            debug!("Sending message to editor: {:#?}", payload);
-                            stream_write
-                                .write_all(format!("{payload}\n").as_bytes())
-                                .await
-                                .expect("Failed to write to TCP stream");
+                    tokio::select! {
+                        _ = shutdown_token.cancelled() => {
+                            debug!("Shutting down JSON-RPC sender (due to socket disconnet)");
+                            break;
                         }
-                        None => {
-                            panic!("TODO: why?");
+                        editor_message = editor_message_rx.recv() => match editor_message {
+                            Some(rev_delta) => {
+                                debug!("Received editor message to send to it.");
+                                let message = EditorProtocolMessage::Edit {
+                                    uri: format!("file://{}", file_path_clone.display()),
+                                    delta: rev_delta,
+                                };
+                                let payload = message
+                                    .to_jsonrpc()
+                                    .expect("Failed to serialize JSON-RPC message");
+                                debug!("Sending message to editor: {:#?}", payload);
+                                stream_write
+                                    .write_all(format!("{payload}\n").as_bytes())
+                                    .await
+                                    .expect("Failed to write to TCP stream");
+                            }
+                            None => {
+                                panic!("TODO: why?");
+                            }
                         }
                     }
                 }
