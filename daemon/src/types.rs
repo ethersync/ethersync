@@ -96,7 +96,7 @@ impl EditorProtocolMessage {
             map.insert("jsonrpc".to_string(), "2.0".into());
             let payload =
                 serde_json::to_string(&map).expect("Failed to serialize modified editor message");
-            return Ok(payload);
+            Ok(payload)
         } else {
             panic!("EditorProtocolMessage was not serialized to a map");
         }
