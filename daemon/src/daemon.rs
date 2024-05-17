@@ -77,6 +77,7 @@ enum SyncerMessage {
 
 type DocMessageSender = mpsc::Sender<DocMessage>;
 type DocChangedSender = broadcast::Sender<()>;
+type DocChangedReceiver = broadcast::Receiver<()>;
 
 type EditorMessageSender = mpsc::Sender<RevisionedEditorTextDelta>;
 type EditorMessageReceiver = mpsc::Receiver<RevisionedEditorTextDelta>;
@@ -172,12 +173,16 @@ impl Document {
     }
 }
 
+/// This Actor is responsible for applying changes to the document asynchronously.
+///
+/// Any DocMessage that is emitted via DocumentActorHandle should have an effect eventually.
 pub struct DocumentActor {
     doc_message_rx: mpsc::Receiver<DocMessage>,
     doc_changed_ping_tx: DocChangedSender,
     socket_message_tx: EditorMessageSender,
-    /// if we have an ot_server, it means that an editor is connected
+    /// If we have an ot_server, it means that an editor is connected.
     ot_server: Option<OTServer>,
+    /// The Document is the main I/O managed resource of this actor.
     crdt_doc: Document,
     file_path: PathBuf,
 }
@@ -378,6 +383,7 @@ impl DocumentActor {
         }
     }
 
+    /// Reading in the file is a preparatory step, before kicking off the actor.
     fn read_current_content_from_file(&mut self) {
         // Create the file if it doesn't exist.
         if !self.file_path.exists() {
@@ -410,74 +416,61 @@ impl DocumentActor {
     }
 }
 
-pub struct Daemon {
+/// This handle knows how to talk to the DocumentActor and provides an interface for doing so.
+///
+/// The main iterfaces for doing so is through through sending `DocMessage`s with `send_message`.
+/// An alternative pathway is to subscribe to documents changes through `subscribe_document_changes`.
+///
+/// The rest of the methods are used for instrumentation (e.g. by the fuzzer).
+#[derive(Clone)]
+pub struct DocumentActorHandle {
     doc_message_tx: DocMessageSender,
+    doc_changed_ping_tx: DocChangedSender,
 }
 
-impl Daemon {
-    // Launch the daemon. Optionally, connect to given peer.
+impl DocumentActorHandle {
     pub fn new(
-        port: Option<u16>,
-        peer: Option<String>,
-        socket_path: &Path,
+        socket_message_tx: mpsc::Sender<RevisionedEditorTextDelta>,
         file_path: &Path,
+        host: bool,
     ) -> Self {
         // The document task will receive messages on this channel.
-        // The TCP and socket connections will send messages to it when they receive something.
         let (doc_message_tx, doc_message_rx) = mpsc::channel(1);
 
         // The document task will send a ping on this channel whenever it changes.
         // The sync tasks will subscribe to it, and react to it by syncing with the peers.
         let (doc_changed_ping_tx, _doc_changed_ping_rx) = broadcast::channel::<()>(1);
 
-        // The document task will send messages intended for the socket connection on this channel.
-        let (socket_message_tx, socket_message_rx) = mpsc::channel::<RevisionedEditorTextDelta>(1);
-
-        let mut daemon_actor = DocumentActor::new(
+        let mut actor = DocumentActor::new(
             doc_message_rx,
             doc_changed_ping_tx.clone(),
             socket_message_tx.clone(),
             file_path.into(),
         );
 
-        // If we are the host, read file content.
-        if peer.is_none() {
-            daemon_actor.read_current_content_from_file();
+        // Initialize the text from the file_path, if this is the document owned by the host.
+        if host {
+            actor.read_current_content_from_file();
         }
 
-        // Dial peer, or listen for incoming connections.
-        let doc_message_tx_clone = doc_message_tx.clone();
-        let doc_changed_ping_tx_clone = doc_changed_ping_tx.clone();
-        let doc_message_tx_clone_2 = doc_message_tx_clone.clone();
+        tokio::spawn(async move { actor.run().await });
 
-        if let Some(peer) = peer {
-            tokio::spawn(async move {
-                dial_tcp(doc_message_tx_clone, doc_changed_ping_tx_clone, peer).await;
-            });
-        } else {
-            let port = port.unwrap_or(4242);
-            tokio::spawn(async move {
-                listen_tcp(doc_message_tx_clone, doc_changed_ping_tx_clone, port)
-                    .await
-                    .expect("Failed to listen on TCP port");
-            });
+        Self {
+            doc_message_tx,
+            doc_changed_ping_tx,
         }
+    }
 
-        let socket_path_clone = socket_path.to_path_buf();
-        let file_path_clone = file_path.to_path_buf();
-        tokio::spawn(async move {
-            listen_socket(
-                doc_message_tx_clone_2,
-                socket_message_rx,
-                &socket_path_clone,
-                file_path_clone,
-            )
+    /// The TCP and socket connections will send messages through this when they receive something.
+    pub async fn send_message(&self, message: DocMessage) {
+        self.doc_message_tx
+            .send(message)
             .await
-            .expect("Failed to listen on UNIX socket");
-        });
+            .expect("DocumentActor task has been killed")
+    }
 
-        tokio::spawn(async move { daemon_actor.run().await });
-        Self { doc_message_tx }
+    pub fn subscribe_document_changes(&self) -> DocChangedReceiver {
+        self.doc_changed_ping_tx.subscribe()
     }
 
     pub async fn content(&self) -> Result<String> {
@@ -485,7 +478,7 @@ impl Daemon {
         let message = DocMessage::GetContent { response_tx: send };
         // Ignore send errors, because recv.await will fail anyway.
         let _ = self.doc_message_tx.send(message).await;
-        recv.await.expect("DaemonActor task has been killed")
+        recv.await.expect("DocumentActor task has been killed")
     }
 
     pub async fn apply_random_delta(&mut self) {
@@ -505,11 +498,61 @@ impl Daemon {
     }
 }
 
-async fn listen_tcp(
-    tx: DocMessageSender,
-    doc_changed_ping_tx: DocChangedSender,
-    port: u16,
-) -> Result<()> {
+pub struct Daemon {
+    pub document_handle: DocumentActorHandle,
+}
+
+impl Daemon {
+    // Launch the daemon. Optionally, connect to given peer.
+    pub fn new(
+        port: Option<u16>,
+        peer: Option<String>,
+        socket_path: &Path,
+        file_path: &Path,
+    ) -> Self {
+        // The document task will send messages intended for the socket connection on this channel.
+        let (socket_message_tx, socket_message_rx) = mpsc::channel::<RevisionedEditorTextDelta>(1);
+
+        // If the peer address is empty, we're the host.
+        let is_host = peer.is_none();
+
+        let document_handle =
+            DocumentActorHandle::new(socket_message_tx.clone(), file_path, is_host);
+
+        if let Some(peer) = peer {
+            let peer_document_handle = document_handle.clone();
+            tokio::spawn(async move {
+                dial_tcp(peer_document_handle, peer).await;
+            });
+        } else {
+            let port = port.unwrap_or(4242);
+            let host_document_handle = document_handle.clone();
+            tokio::spawn(async move {
+                listen_tcp(host_document_handle, port)
+                    .await
+                    .expect("Failed to listen on TCP port");
+            });
+        }
+
+        let socket_path_clone = socket_path.to_path_buf();
+        let file_path_clone = file_path.to_path_buf();
+        let client_document_handle = document_handle.clone();
+        tokio::spawn(async move {
+            listen_socket(
+                client_document_handle,
+                socket_message_rx,
+                &socket_path_clone,
+                file_path_clone,
+            )
+            .await
+            .expect("Failed to listen on UNIX socket");
+        });
+
+        Self { document_handle }
+    }
+}
+
+async fn listen_tcp(document_handle: DocumentActorHandle, port: u16) -> Result<()> {
     let listener = TcpListener::bind(format!("0.0.0.0:{}", port)).await?;
 
     if let Ok(ip) = local_ip() {
@@ -526,18 +569,15 @@ async fn listen_tcp(
             continue;
         };
 
-        let tx = tx.clone();
-        let doc_changed_ping_tx = doc_changed_ping_tx.clone();
-
         info!("Peer dialed us.");
-        start_sync(tx, doc_changed_ping_tx, stream).await;
+        start_sync(document_handle.clone(), stream).await;
     }
 }
 
-async fn dial_tcp(tx: DocMessageSender, doc_changed_ping_tx: DocChangedSender, addr: String) {
+async fn dial_tcp(document_handle: DocumentActorHandle, addr: String) {
     let stream = TcpStream::connect(addr).await.expect("Failed to dial peer");
 
-    start_sync(tx, doc_changed_ping_tx, stream).await;
+    start_sync(document_handle, stream).await;
 }
 
 struct TCPReadActor {
@@ -620,7 +660,7 @@ impl TCPWriteActor {
 
 struct SyncActor {
     syncer_receiver: SyncerMessageReceiver,
-    doc_sender: DocMessageSender,
+    document_handle: DocumentActorHandle,
     automerge_message_sender: mpsc::Sender<Message>,
     shutdown_token: CancellationToken,
     peer_state: SyncState,
@@ -629,13 +669,13 @@ struct SyncActor {
 impl SyncActor {
     fn new(
         syncer_receiver: SyncerMessageReceiver,
-        doc_sender: DocMessageSender,
+        document_handle: DocumentActorHandle,
         automerge_message_sender: mpsc::Sender<Message>,
         shutdown_token: CancellationToken,
     ) -> Self {
         Self {
             syncer_receiver,
-            doc_sender,
+            document_handle,
             automerge_message_sender,
             shutdown_token,
             peer_state: SyncState::new(),
@@ -648,27 +688,25 @@ impl SyncActor {
                 let (reponse_tx, response_rx) = oneshot::channel();
                 let message =
                     Message::decode(&message).expect("Failed to decode automerge message");
-                self.doc_sender
-                    .send(DocMessage::ReceiveSyncMessage {
+                self.document_handle
+                    .send_message(DocMessage::ReceiveSyncMessage {
                         message,
                         state: mem::take(&mut self.peer_state),
                         response_tx: reponse_tx,
                     })
-                    .await
-                    .expect("Failed to send receive message to document channel from syncer");
+                    .await;
                 self.peer_state = response_rx
                     .await
                     .expect("Couldn't read response from Document channel");
             }
             SyncerMessage::GenerateSyncMessage {} => {
                 let (reponse_tx, response_rx) = oneshot::channel();
-                self.doc_sender
-                    .send(DocMessage::GenerateSyncMessage {
+                self.document_handle
+                    .send_message(DocMessage::GenerateSyncMessage {
                         state: mem::take(&mut self.peer_state),
                         response_tx: reponse_tx,
                     })
-                    .await
-                    .expect("Failed to send generate message to document channel from syncer");
+                    .await;
                 let (ps, message) = response_rx
                     .await
                     .expect("Could not read response from Document channel");
@@ -698,11 +736,7 @@ impl SyncActor {
     }
 }
 
-async fn start_sync(
-    doc_message_tx: DocMessageSender,
-    doc_changed_ping_tx: DocChangedSender,
-    stream: TcpStream,
-) {
+async fn start_sync(document_handle: DocumentActorHandle, stream: TcpStream) {
     let (syncer_message_tx, syncer_message_rx) = mpsc::channel(16);
     let (automerge_message_tx, automerge_message_rx) = mpsc::channel(16);
     let (tcp_read, tcp_write) = tokio::io::split(stream);
@@ -721,10 +755,12 @@ async fn start_sync(
         writer.run().await;
     });
 
+    let mut doc_changed_ping_rx = document_handle.subscribe_document_changes();
+
     // Sync actor.
     let syncer = SyncActor::new(
         syncer_message_rx,
-        doc_message_tx,
+        document_handle,
         automerge_message_tx,
         shutdown_token.clone(),
     );
@@ -733,7 +769,6 @@ async fn start_sync(
     // Generate sync message when doc changes.
     let shutdown_token_clone = shutdown_token.clone();
     tokio::spawn(async move {
-        let mut doc_changed_ping_rx = doc_changed_ping_tx.subscribe();
         loop {
             syncer_message_tx
                 .send(SyncerMessage::GenerateSyncMessage {})
@@ -764,19 +799,19 @@ async fn start_sync(
 struct SocketReadActor {
     reader: ReadHalf<UnixStream>,
     shutdown_token: CancellationToken,
-    doc_message_sender: DocMessageSender,
+    document_handle: DocumentActorHandle,
 }
 
 impl SocketReadActor {
     fn new(
         reader: ReadHalf<UnixStream>,
         shutdown_token: CancellationToken,
-        doc_message_sender: DocMessageSender,
+        document_handle: DocumentActorHandle,
     ) -> Self {
         Self {
             reader,
             shutdown_token,
-            doc_message_sender,
+            document_handle,
         }
     }
 
@@ -790,10 +825,7 @@ impl SocketReadActor {
                     debug!("Got a line from the client: {:#?}", line);
                     let jsonrpc = EditorProtocolMessage::from_jsonrpc(&line)
                         .expect("Failed to parse JSON-RPC message");
-                    self.doc_message_sender
-                        .send(jsonrpc.into())
-                        .await
-                        .expect("Failed to send message to document");
+                    self.document_handle.send_message(jsonrpc.into()).await;
                 }
                 Ok(None) => {
                     break;
@@ -868,7 +900,7 @@ impl<'a> SocketWriteActor<'a> {
 }
 
 async fn listen_socket(
-    tx: DocMessageSender,
+    document_handle: DocumentActorHandle,
     mut editor_message_rx: EditorMessageReceiver,
     socket_path: &Path,
     file_path: PathBuf,
@@ -892,8 +924,11 @@ async fn listen_socket(
                 // We're parsing a line from the reader (if we have one)
                 // which means we got a Delta from the ethersync client.
 
-                let mut reader =
-                    SocketReadActor::new(stream_read, shutdown_token.clone(), tx.clone());
+                let mut reader = SocketReadActor::new(
+                    stream_read,
+                    shutdown_token.clone(),
+                    document_handle.clone(),
+                );
                 tokio::spawn(async move { reader.run().await });
 
                 let mut writer = SocketWriteActor::new(

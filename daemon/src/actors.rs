@@ -64,11 +64,11 @@ impl Neovim {
 #[async_trait]
 impl Actor for Daemon {
     async fn apply_random_delta(&mut self) {
-        self.apply_random_delta().await;
+        self.document_handle.apply_random_delta().await;
     }
 
     async fn content(&self) -> String {
-        self.content().await.unwrap()
+        self.document_handle.content().await.unwrap()
     }
 }
 
