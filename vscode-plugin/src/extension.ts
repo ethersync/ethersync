@@ -1,22 +1,63 @@
-// The module 'vscode' contains the VS Code extensibility API
-// Import the module and reference it with the alias vscode in your code below
 import * as vscode from "vscode"
+import * as cp from "child_process"
+import * as rpc from "vscode-jsonrpc/node"
 
-// This method is called when your extension is activated
-// Your extension is activated the very first time the command is executed
+interface Position {
+    line: number
+    character: number
+}
+
+interface Range {
+    anchor: Position
+    head: Position
+}
+
+interface Delta {
+    range: Range
+    replacement: string
+}
+
+interface RevisionedDelta {
+    delta: Delta[]
+    revision: number
+}
+
+interface Edit {
+    uri: string
+    delta: RevisionedDelta
+}
+
 export function activate(context: vscode.ExtensionContext) {
-    // Use the console to output diagnostic information (console.log) and errors (console.error)
-    // This line of code will only be executed once when your extension is activated
     console.log('Congratulations, your extension "ethersync" is now active!')
+
+    // Launch ethersync client binary
+    const ethersyncClient = cp.spawn("ethersync", ["client"])
+
+    ethersyncClient.on("error", (err) => {
+        console.error(`Failed to start ethersync client: ${err.message}`)
+    })
+
+    // Create a JSON-RPC connection
+    const connection = rpc.createMessageConnection(
+        new rpc.StreamMessageReader(ethersyncClient.stdout),
+        new rpc.StreamMessageWriter(ethersyncClient.stdin),
+    )
+
+    const open = new rpc.NotificationType<{uri: string}>("open")
+    const close = new rpc.NotificationType<{uri: string}>("close")
+    const edit = new rpc.NotificationType<Edit>("edit")
+
+    // Listen for pong messages
+    connection.onNotification("edit", (edit: Edit) => {
+        console.log(edit)
+    })
+
+    // Start the connection
+    connection.listen()
 
     let revision = 0
 
-    // The command has been defined in the package.json file
-    // Now provide the implementation of the command with registerCommand
-    // The commandId parameter must match the command field in package.json
     let disposable = vscode.commands.registerCommand("ethersync.helloWorld", () => {
-        // The code you place here will be executed every time your command is executed
-        // Display a message box to the user
         vscode.window.showInformationMessage("Goodbye World from Ethersync!")
     })
 
@@ -24,9 +65,8 @@ export function activate(context: vscode.ExtensionContext) {
 
     disposable = vscode.workspace.onDidChangeTextDocument((event) => {
         const filename = event.document.fileName
+        console.log(event.document.version)
         for (const change of event.contentChanges) {
-            //console.log(change.range)
-            //console.log(change.range.start, change.range.end, change.text)
             let delta = {
                 range: {
                     anchor: {line: change.range.start.line, character: change.range.start.character},
@@ -34,14 +74,29 @@ export function activate(context: vscode.ExtensionContext) {
                 },
                 replacement: change.text,
             }
-            let revDelta = {delta, revision}
-            let edit = {uri: "file://" + filename, delta: revDelta}
+            let revDelta: RevisionedDelta = {delta: [delta], revision}
+            let uri = "file://" + filename
+            let theEdit: Edit = {uri, delta: revDelta}
             console.log(edit)
+            connection.sendNotification(edit, theEdit)
         }
     })
 
     context.subscriptions.push(disposable)
+
+    let openDisposable = vscode.workspace.onDidOpenTextDocument((document) => {
+        const fileUri = document.uri.toString()
+        connection.sendNotification(open, {uri: fileUri})
+    })
+
+    context.subscriptions.push(openDisposable)
+
+    let closeDisposable = vscode.workspace.onDidCloseTextDocument((document) => {
+        const fileUri = document.uri.toString()
+        connection.sendNotification(close, {uri: fileUri})
+    })
+
+    context.subscriptions.push(closeDisposable)
 }
 
-// This method is called when your extension is deactivated
 export function deactivate() {}
