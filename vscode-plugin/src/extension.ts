@@ -27,6 +27,8 @@ interface Edit {
     delta: RevisionedDelta
 }
 
+let ignoreEdits = false
+
 export function activate(context: vscode.ExtensionContext) {
     console.log('Congratulations, your extension "ethersync" is now active!')
 
@@ -48,8 +50,33 @@ export function activate(context: vscode.ExtensionContext) {
     const edit = new rpc.NotificationType<Edit>("edit")
 
     // Listen for pong messages
-    connection.onNotification("edit", (edit: Edit) => {
+    connection.onNotification("edit", async (edit: Edit) => {
         console.log(edit)
+        const uri = edit.uri
+
+        const openEditor = vscode.window.visibleTextEditors.find(
+            (editor) => editor.document.uri.toString() === uri.toString(),
+        )
+
+        if (openEditor) {
+            ignoreEdits = true
+            for (const delta of edit.delta.delta) {
+                const range = new vscode.Range(
+                    new vscode.Position(delta.range.anchor.line, delta.range.anchor.character),
+                    new vscode.Position(delta.range.head.line, delta.range.head.character),
+                )
+                if (openEditor) {
+                    // Apply the edit if the document is open
+                    await openEditor.edit((editBuilder) => {
+                        editBuilder.replace(range, delta.replacement)
+                    })
+                    console.log(`Edit applied to open document: ${uri.toString()}`)
+                } else {
+                    console.log(`Document not open: ${uri.toString()}`)
+                }
+            }
+            ignoreEdits = false
+        }
     })
 
     // Start the connection
@@ -64,6 +91,9 @@ export function activate(context: vscode.ExtensionContext) {
     context.subscriptions.push(disposable)
 
     disposable = vscode.workspace.onDidChangeTextDocument((event) => {
+        if (ignoreEdits) {
+            return
+        }
         const filename = event.document.fileName
         console.log(event.document.version)
         for (const change of event.contentChanges) {
