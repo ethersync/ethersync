@@ -175,7 +175,7 @@ impl Document {
     }
 }
 
-pub struct DaemonActor {
+pub struct DocumentActor {
     doc_message_rx: mpsc::Receiver<DocMessage>,
     doc_changed_ping_tx: DocChangedSender,
     socket_message_tx: EditorMessageSender,
@@ -185,7 +185,7 @@ pub struct DaemonActor {
     file_path: PathBuf,
 }
 
-impl DaemonActor {
+impl DocumentActor {
     #[must_use]
     fn new(
         doc_message_rx: mpsc::Receiver<DocMessage>,
@@ -436,7 +436,7 @@ impl Daemon {
         // The document task will send messages intended for the socket connection on this channel.
         let (socket_message_tx, socket_message_rx) = mpsc::channel::<RevisionedEditorTextDelta>(1);
 
-        let mut daemon_actor = DaemonActor::new(
+        let mut daemon_actor = DocumentActor::new(
             doc_message_rx,
             doc_changed_ping_tx.clone(),
             socket_message_tx.clone(),
