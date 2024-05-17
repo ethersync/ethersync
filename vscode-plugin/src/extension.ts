@@ -28,18 +28,18 @@ interface Edit {
 }
 
 let ignoreEdits = false
+let daemonRevision = 0
+let editorRevision = 0
 
 export function activate(context: vscode.ExtensionContext) {
     console.log('Congratulations, your extension "ethersync" is now active!')
 
-    // Launch ethersync client binary
     const ethersyncClient = cp.spawn("ethersync", ["client"])
 
     ethersyncClient.on("error", (err) => {
         console.error(`Failed to start ethersync client: ${err.message}`)
     })
 
-    // Create a JSON-RPC connection
     const connection = rpc.createMessageConnection(
         new rpc.StreamMessageReader(ethersyncClient.stdout),
         new rpc.StreamMessageWriter(ethersyncClient.stdin),
@@ -49,8 +49,13 @@ export function activate(context: vscode.ExtensionContext) {
     const close = new rpc.NotificationType<{uri: string}>("close")
     const edit = new rpc.NotificationType<Edit>("edit")
 
-    // Listen for pong messages
     connection.onNotification("edit", async (edit: Edit) => {
+        if (edit.delta.revision !== editorRevision) {
+            console.log(`Received edit for revision ${edit.delta.revision} (!= ${editorRevision}), ignoring`)
+        }
+
+        daemonRevision += 1
+
         console.log(edit)
         const uri = edit.uri
 
@@ -82,10 +87,8 @@ export function activate(context: vscode.ExtensionContext) {
     // Start the connection
     connection.listen()
 
-    let revision = 0
-
     let disposable = vscode.commands.registerCommand("ethersync.helloWorld", () => {
-        vscode.window.showInformationMessage("Goodbye World from Ethersync!")
+        vscode.window.showInformationMessage("Ethersync activated!")
     })
 
     context.subscriptions.push(disposable)
@@ -94,6 +97,7 @@ export function activate(context: vscode.ExtensionContext) {
         if (ignoreEdits) {
             return
         }
+
         const filename = event.document.fileName
         console.log(event.document.version)
         for (const change of event.contentChanges) {
@@ -104,11 +108,12 @@ export function activate(context: vscode.ExtensionContext) {
                 },
                 replacement: change.text,
             }
-            let revDelta: RevisionedDelta = {delta: [delta], revision}
+            let revDelta: RevisionedDelta = {delta: [delta], revision: daemonRevision}
             let uri = "file://" + filename
             let theEdit: Edit = {uri, delta: revDelta}
             console.log(edit)
             connection.sendNotification(edit, theEdit)
+            editorRevision += 1
         }
     })
 
