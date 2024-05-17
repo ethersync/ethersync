@@ -3,7 +3,7 @@ use crate::types::{EditorProtocolMessage, EditorTextDelta, RevisionedEditorTextD
 use anyhow::Result;
 use automerge::{
     patches::TextRepresentation,
-    sync::{Message, State as SyncState, SyncDoc},
+    sync::{Message as AutomergeSyncMessage, State as SyncState, SyncDoc},
     transaction::Transactable,
     AutoCommit, ObjType, Patch, PatchLog, ReadDoc,
 };
@@ -33,13 +33,13 @@ pub enum DocMessage {
     RevDelta(RevisionedEditorTextDelta),
     Delta(TextDelta),
     ReceiveSyncMessage {
-        message: Message,
+        message: AutomergeSyncMessage,
         state: SyncState,
         response_tx: oneshot::Sender<SyncState>,
     },
     GenerateSyncMessage {
         state: SyncState,
-        response_tx: oneshot::Sender<(SyncState, Option<Message>)>,
+        response_tx: oneshot::Sender<(SyncState, Option<AutomergeSyncMessage>)>,
     },
 }
 
@@ -95,7 +95,7 @@ pub struct Document {
 impl Document {
     fn receive_sync_message_log_patches(
         &mut self,
-        message: Message,
+        message: AutomergeSyncMessage,
         peer_state: &mut SyncState,
     ) -> Vec<Patch> {
         let mut patch_log = PatchLog::active(TextRepresentation::String);
@@ -106,14 +106,17 @@ impl Document {
         self.doc.make_patches(&mut patch_log)
     }
 
-    fn receive_sync_message(&mut self, message: Message, peer_state: &mut SyncState) {
+    fn receive_sync_message(&mut self, message: AutomergeSyncMessage, peer_state: &mut SyncState) {
         self.doc
             .sync()
             .receive_sync_message(peer_state, message)
             .expect("Failed to apply sync message to Automerge document");
     }
 
-    fn generate_sync_message(&mut self, peer_state: &mut SyncState) -> Option<Message> {
+    fn generate_sync_message(
+        &mut self,
+        peer_state: &mut SyncState,
+    ) -> Option<AutomergeSyncMessage> {
         self.doc.sync().generate_sync_message(peer_state)
     }
 
@@ -273,7 +276,7 @@ impl DocumentActor {
 
     fn apply_sync_message_to_doc(
         &mut self,
-        message: Message,
+        message: AutomergeSyncMessage,
         peer_state: &mut SyncState,
     ) -> Option<Vec<Patch>> {
         let result = if self.ot_server.is_some() {
@@ -626,13 +629,13 @@ impl TCPReadActor {
 
 struct TCPWriteActor {
     writer: WriteHalf<TcpStream>,
-    automerge_message_receiver: mpsc::Receiver<Message>,
+    automerge_message_receiver: mpsc::Receiver<AutomergeSyncMessage>,
 }
 
 impl TCPWriteActor {
     fn new(
         writer: WriteHalf<TcpStream>,
-        automerge_message_receiver: mpsc::Receiver<Message>,
+        automerge_message_receiver: mpsc::Receiver<AutomergeSyncMessage>,
     ) -> Self {
         Self {
             writer,
@@ -661,7 +664,7 @@ impl TCPWriteActor {
 struct SyncActor {
     syncer_receiver: SyncerMessageReceiver,
     document_handle: DocumentActorHandle,
-    automerge_message_sender: mpsc::Sender<Message>,
+    automerge_message_sender: mpsc::Sender<AutomergeSyncMessage>,
     shutdown_token: CancellationToken,
     peer_state: SyncState,
 }
@@ -670,7 +673,7 @@ impl SyncActor {
     fn new(
         syncer_receiver: SyncerMessageReceiver,
         document_handle: DocumentActorHandle,
-        automerge_message_sender: mpsc::Sender<Message>,
+        automerge_message_sender: mpsc::Sender<AutomergeSyncMessage>,
         shutdown_token: CancellationToken,
     ) -> Self {
         Self {
@@ -686,8 +689,8 @@ impl SyncActor {
         match message {
             SyncerMessage::ReceiveSyncMessage { message } => {
                 let (reponse_tx, response_rx) = oneshot::channel();
-                let message =
-                    Message::decode(&message).expect("Failed to decode automerge message");
+                let message = AutomergeSyncMessage::decode(&message)
+                    .expect("Failed to decode automerge message");
                 self.document_handle
                     .send_message(DocMessage::ReceiveSyncMessage {
                         message,
