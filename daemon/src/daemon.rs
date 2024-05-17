@@ -1,4 +1,3 @@
-#![allow(dead_code)]
 use crate::ot::OTServer;
 use crate::types::{EditorProtocolMessage, EditorTextDelta, RevisionedEditorTextDelta, TextDelta};
 use anyhow::Result;
@@ -19,7 +18,6 @@ use tokio::{
     net::{TcpListener, TcpStream},
     net::{UnixListener, UnixStream},
     sync::{broadcast, mpsc, oneshot},
-    time::{sleep, Duration},
 };
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, error, info, warn};
@@ -33,7 +31,6 @@ pub enum DocMessage {
     Close,
     RandomEdit,
     RevDelta(RevisionedEditorTextDelta),
-    #[allow(dead_code)]
     Delta(TextDelta),
     ReceiveSyncMessage {
         message: Message,
@@ -447,51 +444,6 @@ impl Daemon {
         if peer.is_none() {
             daemon_actor.read_current_content_from_file();
         }
-
-        // Make edits to the document occasionally.
-        // To activate, build with --features simulate_edits_on_crdt
-        if cfg!(feature = "simulate_edits_on_crdt") {
-            let tx = doc_message_tx.clone();
-            tokio::spawn(async move {
-                sleep(Duration::from_secs(2)).await;
-                loop {
-                    tx.send(DocMessage::RandomEdit)
-                        .await
-                        .expect("Failed to send random edit");
-                    sleep(Duration::from_secs(2)).await;
-                }
-            });
-        }
-
-        // Send random edits to editors occasionally.
-        // To activate, build with --features simulate_edits_from_editor
-        // TODO: this feature is currently be broken, so it's even commented out.
-        // (mostly because it doesn't send a proper revision? also not the correct type.)
-        /*
-        if cfg!(feature="simulate_edits_from_editor") {
-            let tx = socket_message_tx.clone();
-            tokio::spawn(async move {
-                let editor_revision = 0;
-                loop {
-                    let random_string: String = rand::thread_rng()
-                        .sample_iter(&Alphanumeric)
-                        .take(1)
-                        .map(char::from)
-                        .collect();
-                    let random_position = 0; //rand::thread_rng().gen_range(0..(editor_revision + 1));
-                    let message = EditorMessage::Insert {
-                        editor_revision,
-                        position: random_position,
-                        text: random_string,
-                    };
-                    debug!(new_message = ?message);
-                    tx.send(message).expect("Failed to send random insert");
-
-                    sleep(Duration::from_secs(2)).await;
-                }
-            });
-        }
-        */
 
         // Dial peer, or listen for incoming connections.
         let doc_message_tx_clone = doc_message_tx.clone();
