@@ -522,10 +522,56 @@ impl Daemon {
         let document_handle =
             DocumentActorHandle::new(socket_message_tx.clone(), file_path, is_host);
 
+        // if is_host {
+        // ...
+        // } else {
+        // peer.unwrap()
+        // }
+
         if let Some(peer) = peer {
             let peer_document_handle = document_handle.clone();
+            let (syncer_message_tx, syncer_message_rx) = mpsc::channel(16);
+            let (automerge_message_tx, automerge_message_rx) = mpsc::channel(16);
+            let handle =
+                TCPActorHandle::new_peer(peer, syncer_message_tx.clone(), automerge_message_rx);
+            let mut doc_changed_ping_rx = document_handle.subscribe_document_changes();
+
+            // Sync actor.
+            let syncer = SyncActor::new(
+                syncer_message_rx,
+                peer_document_handle,
+                automerge_message_tx,
+                handle.shutdown_token.clone(),
+            );
+            tokio::spawn(syncer.run());
+
+            // Generate sync message when doc changes.
+            let shutdown_token_clone = handle.shutdown_token.clone();
             tokio::spawn(async move {
-                dial_tcp(peer_document_handle, peer).await;
+                loop {
+                    syncer_message_tx
+                        .send(SyncerMessage::GenerateSyncMessage {})
+                        .await
+                        .expect("Failed to send GenerateSyncMessage to document task");
+                    tokio::select! {
+                        _ = shutdown_token_clone.cancelled() => {
+                            debug!("Stopping GenerateSyncMessage ping forwarding.");
+                            break;
+                        }
+                        doc_ping = doc_changed_ping_rx.recv() => match doc_ping {
+                            Ok(()) => {
+                                debug!("Doc changed.");
+                            }
+                            Err(broadcast::error::RecvError::Closed) => {
+                                panic!("Doc changed channel has been closed");
+                            }
+                            Err(broadcast::error::RecvError::Lagged(_)) => {
+                                // This is fine, the messages in this channel are just pings.
+                                // It's okay if we miss some.
+                            }
+                        }
+                    }
+                }
             });
         } else {
             let port = port.unwrap_or(4242);
@@ -577,12 +623,7 @@ async fn listen_tcp(document_handle: DocumentActorHandle, port: u16) -> Result<(
     }
 }
 
-async fn dial_tcp(document_handle: DocumentActorHandle, addr: String) {
-    let stream = TcpStream::connect(addr).await.expect("Failed to dial peer");
-
-    start_sync(document_handle, stream).await;
-}
-
+/// Reads from a TCP stream and forwards it to the Syncer
 struct TCPReadActor {
     sender: SyncerMessageSender,
     reader: ReadHalf<TcpStream>,
@@ -736,6 +777,57 @@ impl SyncActor {
                 }
             }
         }
+    }
+}
+
+struct TCPActorHandle {
+    shutdown_token: CancellationToken,
+}
+
+/// The TCP statemachine works as follows:
+/// - if we're the host,
+/// - if we're a peer, we
+///
+/// How do other parts of the code communicate with TCP? Through this handle.
+/// What can be communicated?
+impl TCPActorHandle {
+    fn new_peer(
+        address: String,
+        syncer_message_tx: SyncerMessageSender,
+        automerge_message_rx: mpsc::Receiver<AutomergeSyncMessage>,
+    ) -> Self {
+        let shutdown_token = CancellationToken::new();
+
+        let read_shutdown_token = shutdown_token.clone();
+        tokio::spawn(async move {
+            let stream = TcpStream::connect(address)
+                .await
+                .expect("Failed to dial peer");
+            TCPActorHandle::start_sync(
+                stream,
+                syncer_message_tx,
+                automerge_message_rx,
+                read_shutdown_token,
+            );
+        });
+        Self { shutdown_token }
+    }
+
+    fn start_sync(
+        stream: TcpStream,
+        syncer_message_tx: SyncerMessageSender,
+        automerge_message_rx: mpsc::Receiver<AutomergeSyncMessage>,
+        read_shutdown_token: CancellationToken,
+    ) {
+        let (tcp_read, tcp_write) = tokio::io::split(stream);
+        let mut receiver = TCPReadActor::new(tcp_read, syncer_message_tx, read_shutdown_token);
+        tokio::spawn(async move {
+            receiver.run().await;
+        });
+        let mut writer = TCPWriteActor::new(tcp_write, automerge_message_rx);
+        tokio::spawn(async move {
+            writer.run().await;
+        });
     }
 }
 
