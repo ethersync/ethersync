@@ -5,7 +5,7 @@ use std::io;
 use std::path::PathBuf;
 use tokio::signal;
 
-mod client;
+mod lsp_client;
 
 const DEFAULT_SOCKET_PATH: &str = "/tmp/ethersync";
 
@@ -66,7 +66,7 @@ async fn main() -> io::Result<()> {
             }
         }
         Commands::Client => {
-            client::connection(&socket_path);
+            lsp_client::connection(&socket_path);
         }
     }
     Ok(())
