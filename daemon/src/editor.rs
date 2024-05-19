@@ -58,17 +58,17 @@ impl SocketReadActor {
     }
 }
 
-pub struct SocketWriteActor<'a> {
+pub struct SocketWriteActor {
     writer: WriteHalf<UnixStream>,
     shutdown_token: CancellationToken,
-    editor_message_receiver: &'a mut EditorMessageReceiver,
+    editor_message_receiver: EditorMessageReceiver,
     file_path: PathBuf,
 }
 
-impl<'a> SocketWriteActor<'a> {
+impl SocketWriteActor {
     pub fn new(
         writer: WriteHalf<UnixStream>,
-        editor_message_receiver: &'a mut EditorMessageReceiver,
+        editor_message_receiver: EditorMessageReceiver,
         shutdown_token: CancellationToken,
         file_path: PathBuf,
     ) -> Self {

@@ -1,7 +1,5 @@
 use crate::connect;
-use crate::editor::{
-    EditorMessageReceiver, EditorMessageSender, SocketReadActor, SocketWriteActor,
-};
+use crate::editor::{EditorMessageSender, SocketReadActor, SocketWriteActor};
 use crate::ot::OTServer;
 use crate::types::{EditorProtocolMessage, EditorTextDelta, RevisionedEditorTextDelta, TextDelta};
 use anyhow::Result;
@@ -12,11 +10,12 @@ use automerge::{
     AutoCommit, ObjType, Patch, PatchLog, ReadDoc,
 };
 use rand::Rng;
+use std::collections::HashMap;
 use std::fmt;
 use std::fs;
 use std::path::{Path, PathBuf};
 use tokio::{
-    net::UnixListener,
+    net::{UnixListener, UnixStream},
     sync::{broadcast, mpsc, oneshot},
 };
 use tokio_util::sync::CancellationToken;
@@ -41,6 +40,7 @@ pub enum DocMessage {
         state: SyncState,
         response_tx: oneshot::Sender<(SyncState, Option<AutomergeSyncMessage>)>,
     },
+    NewEditorConnection(EditorHandle),
 }
 
 impl fmt::Debug for DocMessage {
@@ -54,6 +54,7 @@ impl fmt::Debug for DocMessage {
             DocMessage::Delta(_) => "delta from peer",
             DocMessage::ReceiveSyncMessage { .. } => "<automerge internal sync rcv>",
             DocMessage::GenerateSyncMessage { .. } => "<automerge internal sync gen>",
+            DocMessage::NewEditorConnection(_) => "editor connected",
         };
         write!(f, "{repr}")
     }
@@ -164,13 +165,16 @@ impl Document {
     }
 }
 
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
+pub struct EditorId(usize);
+
 /// This Actor is responsible for applying changes to the document asynchronously.
 ///
 /// Any DocMessage that is emitted via DocumentActorHandle should have an effect eventually.
 pub struct DocumentActor {
     doc_message_rx: mpsc::Receiver<DocMessage>,
     doc_changed_ping_tx: DocChangedSender,
-    socket_message_tx: EditorMessageSender,
+    editor_clients: HashMap<EditorId, EditorHandle>,
     /// If we have an ot_server, it means that an editor is connected.
     ot_server: Option<OTServer>,
     /// The Document is the main I/O managed resource of this actor.
@@ -183,13 +187,12 @@ impl DocumentActor {
     fn new(
         doc_message_rx: mpsc::Receiver<DocMessage>,
         doc_changed_ping_tx: DocChangedSender,
-        socket_message_tx: EditorMessageSender,
         file_path: PathBuf,
     ) -> Self {
         Self {
             doc_message_rx,
             doc_changed_ping_tx,
-            socket_message_tx,
+            editor_clients: HashMap::default(),
             file_path,
             ot_server: None,
             crdt_doc: Document::default(),
@@ -259,6 +262,11 @@ impl DocumentActor {
                     "Failed to send peer state and sync message in response to GenerateSyncMessage",
                 );
             }
+            DocMessage::NewEditorConnection(editor_handle) => {
+                // TODO: if we use more than one ID, we should now easily have multiple editors.
+                // Modulo managing the OT server for each of them per file...
+                self.editor_clients.insert(EditorId(0), editor_handle);
+            }
         }
     }
 
@@ -280,14 +288,11 @@ impl DocumentActor {
         result
     }
 
-    async fn send_deltas_to_editor(&self, rev_deltas: Vec<RevisionedEditorTextDelta>) {
+    async fn send_deltas_to_editor(&mut self, rev_deltas: Vec<RevisionedEditorTextDelta>) {
         for rev_delta in rev_deltas {
             debug!("Sending RevDelta to socket: {:#?}", rev_delta);
 
-            self.socket_message_tx
-                .send(rev_delta)
-                .await
-                .expect("Failed to send message to socket channel.");
+            self.send_to_editors(rev_delta).await;
         }
     }
 
@@ -355,10 +360,13 @@ impl DocumentActor {
     async fn process_crdt_delta_in_ot(&mut self, delta: TextDelta) {
         if let Some(ot_server) = &mut self.ot_server {
             let rev_text_delta_for_editor = ot_server.apply_crdt_change(delta);
-            self.socket_message_tx
-                .send(rev_text_delta_for_editor)
-                .await
-                .expect("Failed to send message to socket channel.");
+            self.send_to_editors(rev_text_delta_for_editor).await;
+        }
+    }
+
+    async fn send_to_editors(&mut self, delta: RevisionedEditorTextDelta) {
+        for (_id, handle) in self.editor_clients.iter_mut() {
+            handle.send(delta.clone()).await;
         }
     }
 
@@ -420,11 +428,7 @@ pub struct DocumentActorHandle {
 }
 
 impl DocumentActorHandle {
-    pub fn new(
-        socket_message_tx: mpsc::Sender<RevisionedEditorTextDelta>,
-        file_path: &Path,
-        host: bool,
-    ) -> Self {
+    pub fn new(file_path: &Path, host: bool) -> Self {
         // The document task will receive messages on this channel.
         let (doc_message_tx, doc_message_rx) = mpsc::channel(1);
 
@@ -435,7 +439,6 @@ impl DocumentActorHandle {
         let mut actor = DocumentActor::new(
             doc_message_rx,
             doc_changed_ping_tx.clone(),
-            socket_message_tx.clone(),
             file_path.into(),
         );
 
@@ -501,14 +504,10 @@ impl Daemon {
         socket_path: &Path,
         file_path: &Path,
     ) -> Self {
-        // The document task will send messages intended for the socket connection on this channel.
-        let (socket_message_tx, socket_message_rx) = mpsc::channel::<RevisionedEditorTextDelta>(1);
-
         // If the peer address is empty, we're the host.
         let is_host = peer.is_none();
 
-        let document_handle =
-            DocumentActorHandle::new(socket_message_tx.clone(), file_path, is_host);
+        let document_handle = DocumentActorHandle::new(file_path, is_host);
 
         let connection_document_handle = document_handle.clone();
         tokio::spawn(async move {
@@ -519,23 +518,47 @@ impl Daemon {
         let file_path_clone = file_path.to_path_buf();
         let client_document_handle = document_handle.clone();
         tokio::spawn(async move {
-            listen_socket(
-                client_document_handle,
-                socket_message_rx,
-                &socket_path_clone,
-                file_path_clone,
-            )
-            .await
-            .expect("Failed to listen on UNIX socket");
+            listen_socket(client_document_handle, &socket_path_clone, file_path_clone)
+                .await
+                .expect("Failed to listen on UNIX socket");
         });
 
         Self { document_handle }
     }
 }
 
+pub struct EditorHandle {
+    editor_message_tx: EditorMessageSender,
+}
+
+impl EditorHandle {
+    fn new(stream: UnixStream, document_handle: DocumentActorHandle, file_path: PathBuf) -> Self {
+        // The document task will send messages intended for the socket connection on this channel.
+        let (socket_message_tx, socket_message_rx) = mpsc::channel::<RevisionedEditorTextDelta>(1);
+        let (stream_read, stream_write) = tokio::io::split(stream);
+        let shutdown_token = CancellationToken::new();
+
+        let mut reader = SocketReadActor::new(stream_read, shutdown_token.clone(), document_handle);
+        tokio::spawn(async move { reader.run().await });
+
+        let mut writer =
+            SocketWriteActor::new(stream_write, socket_message_rx, shutdown_token, file_path);
+        tokio::spawn(async move { writer.run().await });
+        Self {
+            editor_message_tx: socket_message_tx,
+        }
+    }
+
+    async fn send(&self, message: RevisionedEditorTextDelta) {
+        self.editor_message_tx
+            .send(message)
+            .await
+            .expect("Failed to send to editor.");
+    }
+}
+
 async fn listen_socket(
     document_handle: DocumentActorHandle,
-    mut editor_message_rx: EditorMessageReceiver,
     socket_path: &Path,
     file_path: PathBuf,
 ) -> Result<()> {
@@ -546,32 +569,16 @@ async fn listen_socket(
     info!("Listening on UNIX socket: {}", socket_path.display());
 
     loop {
-        let shutdown_token = CancellationToken::new();
-
         // TODO: Accept multiple connections.
         match listener.accept().await {
             Ok((stream, _addr)) => {
                 info!("Client connection established.");
 
-                let (stream_read, stream_write) = tokio::io::split(stream);
-
-                // We're parsing a line from the reader (if we have one)
-                // which means we got a Delta from the ethersync client.
-
-                let mut reader = SocketReadActor::new(
-                    stream_read,
-                    shutdown_token.clone(),
-                    document_handle.clone(),
-                );
-                tokio::spawn(async move { reader.run().await });
-
-                let mut writer = SocketWriteActor::new(
-                    stream_write,
-                    &mut editor_message_rx,
-                    shutdown_token,
-                    file_path.clone(),
-                );
-                writer.run().await;
+                let editor_handle =
+                    EditorHandle::new(stream, document_handle.clone(), file_path.clone());
+                document_handle
+                    .send_message(DocMessage::NewEditorConnection(editor_handle))
+                    .await;
             }
             Err(e) => {
                 error!("listen_socket Error: {:#?}", e);
