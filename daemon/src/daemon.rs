@@ -1,3 +1,4 @@
+use crate::connect;
 use crate::ot::OTServer;
 use crate::types::{EditorProtocolMessage, EditorTextDelta, RevisionedEditorTextDelta, TextDelta};
 use anyhow::Result;
@@ -7,7 +8,6 @@ use automerge::{
     transaction::Transactable,
     AutoCommit, ObjType, Patch, PatchLog, ReadDoc,
 };
-use local_ip_address::local_ip;
 use rand::Rng;
 use std::fmt;
 use std::fs;
@@ -15,7 +15,7 @@ use std::mem;
 use std::path::{Path, PathBuf};
 use tokio::{
     io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader, ReadHalf, WriteHalf},
-    net::{TcpListener, TcpStream},
+    net::TcpStream,
     net::{UnixListener, UnixStream},
     sync::{broadcast, mpsc, oneshot},
 };
@@ -522,18 +522,10 @@ impl Daemon {
         let document_handle =
             DocumentActorHandle::new(socket_message_tx.clone(), file_path, is_host);
 
-        // if is_host {
-        // ...
-        // } else {
-        // peer.unwrap()
-        // }
-
-        if let Some(peer) = peer {
-            TCPActorHandle::new_peer(peer, document_handle.clone());
-        } else {
-            let port = port.unwrap_or(4242);
-            TCPActorHandle::new_host(port, document_handle.clone());
-        }
+        let connection_document_handle = document_handle.clone();
+        tokio::spawn(async move {
+            connect::make_connection(port, peer, connection_document_handle).await;
+        });
 
         let socket_path_clone = socket_path.to_path_buf();
         let file_path_clone = file_path.to_path_buf();
@@ -704,12 +696,13 @@ impl SyncActor {
     }
 }
 
-struct SyncActorHandle {
+#[derive(Clone)]
+pub struct SyncActorHandle {
     syncer_message_tx: SyncerMessageSender,
 }
 
 impl SyncActorHandle {
-    fn new(document_handle: DocumentActorHandle, tcp_handle: TCPActorHandle) -> Self {
+    pub fn new(document_handle: DocumentActorHandle, tcp_handle: TCPActorHandle) -> Self {
         let (syncer_message_tx, syncer_message_rx) = mpsc::channel(16);
 
         // Sync actor.
@@ -724,6 +717,8 @@ impl SyncActorHandle {
         let shutdown_token_clone = tcp_handle.shutdown_token.clone();
         let mut doc_changed_ping_rx = document_handle.subscribe_document_changes();
         let syncer_message_tx_clone = syncer_message_tx.clone();
+
+        // TODO: can we explain here, why this forwarding is necessary?
         tokio::spawn(async move {
             loop {
                 syncer_message_tx_clone
@@ -763,7 +758,7 @@ impl SyncActorHandle {
 }
 
 #[derive(Clone)]
-struct TCPActorHandle {
+pub struct TCPActorHandle {
     automerge_message_tx: mpsc::Sender<AutomergeSyncMessage>,
     shutdown_token: CancellationToken,
 }
@@ -775,44 +770,6 @@ struct TCPActorHandle {
 /// How do other parts of the code communicate with TCP? Through this handle.
 /// What can be communicated?
 impl TCPActorHandle {
-    fn new_peer(address: String, document_handle: DocumentActorHandle) {
-        tokio::spawn(async move {
-            let stream = TcpStream::connect(address)
-                .await
-                .expect("Failed to dial peer");
-            let (my_send, my_recv) = oneshot::channel();
-            let tcp_handle = TCPActorHandle::start_sync(stream, my_recv);
-            let sync_handle = SyncActorHandle::new(document_handle, tcp_handle);
-            let _ = my_send.send(sync_handle);
-        });
-    }
-
-    fn new_host(port: u16, document_handle: DocumentActorHandle) {
-        tokio::spawn(async move {
-            let listener = TcpListener::bind(format!("0.0.0.0:{}", port))
-                .await
-                .expect("Could not listen on tcp port");
-
-            if let Ok(ip) = local_ip() {
-                info!("Listening on local TCP: {}:{}", ip, port);
-            }
-
-            if let Some(ip) = public_ip::addr().await {
-                info!("Listening on public TCP: {}:{}", ip, port);
-            }
-
-            loop {
-                let (stream, _addr) = listener.accept().await.expect("Err acc conn.");
-
-                info!("Peer dialed us.");
-                let (my_send, my_recv) = oneshot::channel();
-                let tcp_handle = TCPActorHandle::start_sync(stream, my_recv);
-                let sync_handle = SyncActorHandle::new(document_handle.clone(), tcp_handle);
-                let _ = my_send.send(sync_handle);
-            }
-        });
-    }
-
     async fn send(&mut self, message: AutomergeSyncMessage) {
         self.automerge_message_tx
             .send(message)
@@ -820,7 +777,7 @@ impl TCPActorHandle {
             .expect("Channel to TCPActor(s) closed.");
     }
 
-    fn start_sync(stream: TcpStream, sync_handle: oneshot::Receiver<SyncActorHandle>) -> Self {
+    pub fn start_sync(stream: TcpStream, sync_handle: oneshot::Receiver<SyncActorHandle>) -> Self {
         let shutdown_token = CancellationToken::new();
 
         let read_shutdown_token = shutdown_token.clone();
