@@ -1,11 +1,10 @@
-use crate::daemon::{DocumentActorHandle, SyncActorHandle, TCPActorHandle};
 use local_ip_address::local_ip;
 use std::io;
-use tokio::{
-    net::{TcpListener, TcpStream},
-    sync::oneshot,
-};
+use tokio::net::{TcpListener, TcpStream};
 use tracing::info;
+
+use crate::daemon::DocumentActorHandle;
+use crate::peer::spawn_peer_sync;
 
 pub async fn make_connection(
     port: Option<u16>,
@@ -31,10 +30,8 @@ async fn connect_with_peer(
     document_handle: DocumentActorHandle,
 ) -> Result<(), io::Error> {
     let stream = TcpStream::connect(address).await?;
-    let (my_send, my_recv) = oneshot::channel();
-    let tcp_handle = TCPActorHandle::start_sync(stream, my_recv);
-    let sync_handle = SyncActorHandle::new(document_handle, tcp_handle);
-    let _ = my_send.send(sync_handle);
+    info!("Connected to Peer.");
+    spawn_peer_sync(stream, document_handle);
     Ok(())
 }
 
@@ -54,11 +51,7 @@ async fn accept_peer_loop(
 
     loop {
         let (stream, _addr) = listener.accept().await?;
-
         info!("Peer dialed us.");
-        let (my_send, my_recv) = oneshot::channel();
-        let tcp_handle = TCPActorHandle::start_sync(stream, my_recv);
-        let sync_handle = SyncActorHandle::new(document_handle.clone(), tcp_handle);
-        let _ = my_send.send(sync_handle);
+        spawn_peer_sync(stream, document_handle.clone());
     }
 }
