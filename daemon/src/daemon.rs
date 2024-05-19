@@ -1,4 +1,7 @@
 use crate::connect;
+use crate::editor::{
+    EditorMessageReceiver, EditorMessageSender, SocketReadActor, SocketWriteActor,
+};
 use crate::ot::OTServer;
 use crate::types::{EditorProtocolMessage, EditorTextDelta, RevisionedEditorTextDelta, TextDelta};
 use anyhow::Result;
@@ -13,8 +16,7 @@ use std::fmt;
 use std::fs;
 use std::path::{Path, PathBuf};
 use tokio::{
-    io::{AsyncBufReadExt, AsyncWriteExt, BufReader, ReadHalf, WriteHalf},
-    net::{UnixListener, UnixStream},
+    net::UnixListener,
     sync::{broadcast, mpsc, oneshot},
 };
 use tokio_util::sync::CancellationToken;
@@ -70,9 +72,6 @@ impl From<EditorProtocolMessage> for DocMessage {
 type DocMessageSender = mpsc::Sender<DocMessage>;
 type DocChangedSender = broadcast::Sender<()>;
 type DocChangedReceiver = broadcast::Receiver<()>;
-
-type EditorMessageSender = mpsc::Sender<RevisionedEditorTextDelta>;
-type EditorMessageReceiver = mpsc::Receiver<RevisionedEditorTextDelta>;
 
 /// Encapsulates the Automerge `AutoCommit` and provides a generic interface,
 /// s.t. we don't need to worry about automerge internals elsewhere.
@@ -531,109 +530,6 @@ impl Daemon {
         });
 
         Self { document_handle }
-    }
-}
-
-struct SocketReadActor {
-    reader: ReadHalf<UnixStream>,
-    shutdown_token: CancellationToken,
-    document_handle: DocumentActorHandle,
-}
-
-impl SocketReadActor {
-    fn new(
-        reader: ReadHalf<UnixStream>,
-        shutdown_token: CancellationToken,
-        document_handle: DocumentActorHandle,
-    ) -> Self {
-        Self {
-            reader,
-            shutdown_token,
-            document_handle,
-        }
-    }
-
-    async fn run(&mut self) {
-        let buf_reader = BufReader::new(&mut self.reader);
-        let mut lines = buf_reader.lines();
-
-        loop {
-            match lines.next_line().await {
-                Ok(Some(line)) => {
-                    debug!("Got a line from the client: {:#?}", line);
-                    let jsonrpc = EditorProtocolMessage::from_jsonrpc(&line)
-                        .expect("Failed to parse JSON-RPC message");
-                    self.document_handle.send_message(jsonrpc.into()).await;
-                }
-                Ok(None) => {
-                    break;
-                }
-                Err(e) => {
-                    error!("Error reading line: {:#?}", e);
-                }
-            }
-        }
-        self.shutdown_token.cancel();
-        info!("Client disconnect.");
-    }
-}
-
-struct SocketWriteActor<'a> {
-    writer: WriteHalf<UnixStream>,
-    shutdown_token: CancellationToken,
-    editor_message_receiver: &'a mut EditorMessageReceiver,
-    file_path: PathBuf,
-}
-
-impl<'a> SocketWriteActor<'a> {
-    fn new(
-        writer: WriteHalf<UnixStream>,
-        editor_message_receiver: &'a mut EditorMessageReceiver,
-        shutdown_token: CancellationToken,
-        file_path: PathBuf,
-    ) -> Self {
-        Self {
-            writer,
-            editor_message_receiver,
-            shutdown_token,
-            file_path,
-        }
-    }
-
-    async fn write_to_socket(&mut self, rev_delta: RevisionedEditorTextDelta) {
-        debug!("Received editor message to send to it.");
-        let message = EditorProtocolMessage::Edit {
-            uri: format!("file://{}", self.file_path.display()),
-            delta: rev_delta,
-        };
-        let payload = message
-            .to_jsonrpc()
-            .expect("Failed to serialize JSON-RPC message");
-        debug!("Sending message to editor: {:#?}", payload);
-        self.writer
-            .write_all(format!("{payload}\n").as_bytes())
-            .await
-            .expect("Failed to write to socket");
-    }
-
-    async fn run(&mut self) {
-        // We're sending an editor message to the client.
-        loop {
-            tokio::select! {
-                _ = self.shutdown_token.cancelled() => {
-                    debug!("Shutting down JSON-RPC sender (due to socket disconnet)");
-                    break;
-                }
-                editor_message_maybe = self.editor_message_receiver.recv() => match editor_message_maybe {
-                    None => {
-                        panic!("Editor message channel has been closed. How did this happen?");
-                    }
-                    Some(editor_message) => {
-                        self.write_to_socket(editor_message).await;
-                    }
-                }
-            }
-        }
     }
 }
 
