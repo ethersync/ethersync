@@ -1,9 +1,11 @@
 use local_ip_address::local_ip;
+use std::fs;
 use std::io;
-use tokio::net::{TcpListener, TcpStream};
-use tracing::info;
+use std::path::{Path, PathBuf};
+use tokio::net::{TcpListener, TcpStream, UnixListener};
+use tracing::{error, info};
 
-use crate::daemon::DocumentActorHandle;
+use crate::daemon::{DocMessage, DocumentActorHandle, EditorHandle};
 use crate::peer::spawn_peer_sync;
 
 pub async fn make_peer_connection(
@@ -12,16 +14,52 @@ pub async fn make_peer_connection(
     document_handle: DocumentActorHandle,
 ) {
     let result = if let Some(peer) = peer {
-        connect_with_peer(peer, document_handle.clone()).await
+        connect_with_peer(peer, document_handle).await
     } else {
         let port = port.unwrap_or(4242);
-        accept_peer_loop(port, document_handle.clone()).await
+        accept_peer_loop(port, document_handle).await
     };
     match result {
         Ok(()) => { /* successfully connected/started accept loop */ }
         Err(err) => {
             panic!("Failed to make connection: {err}");
         }
+    }
+}
+
+pub async fn make_editor_connection(
+    socket_path: PathBuf,
+    file_path: PathBuf,
+    document_handle: DocumentActorHandle,
+) {
+    if Path::new(&socket_path).exists() {
+        fs::remove_file(&socket_path).expect("Could not remove/re-initialize socket");
+    }
+    let result = accept_editor_loop(&socket_path, &file_path, document_handle).await;
+    match result {
+        Ok(()) => {}
+        Err(err) => {
+            error!("Failed to make editor connection: {err}");
+        }
+    }
+}
+
+async fn accept_editor_loop(
+    socket_path: &Path,
+    file_path: &Path,
+    document_handle: DocumentActorHandle,
+) -> Result<(), io::Error> {
+    let listener = UnixListener::bind(socket_path)?;
+    info!("Listening on UNIX socket: {}", socket_path.display());
+
+    loop {
+        let (stream, _addr) = listener.accept().await?;
+        info!("Client connection established.");
+
+        let editor_handle = EditorHandle::new(stream, document_handle.clone(), file_path);
+        document_handle
+            .send_message(DocMessage::NewEditorConnection(editor_handle))
+            .await;
     }
 }
 

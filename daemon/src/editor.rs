@@ -1,5 +1,5 @@
 /// This module is all about daemon to editor communication.
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use tokio::{
     io::{AsyncBufReadExt, AsyncWriteExt, BufReader, ReadHalf, WriteHalf},
     net::UnixStream,
@@ -70,13 +70,13 @@ impl SocketWriteActor {
         writer: WriteHalf<UnixStream>,
         editor_message_receiver: EditorMessageReceiver,
         shutdown_token: CancellationToken,
-        file_path: PathBuf,
+        file_path: &Path,
     ) -> Self {
         Self {
             writer,
             editor_message_receiver,
             shutdown_token,
-            file_path,
+            file_path: file_path.to_path_buf(),
         }
     }
 

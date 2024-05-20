@@ -12,14 +12,13 @@ use automerge::{
 use rand::Rng;
 use std::collections::HashMap;
 use std::fmt;
-use std::fs;
 use std::path::{Path, PathBuf};
 use tokio::{
-    net::{UnixListener, UnixStream},
+    net::UnixStream,
     sync::{broadcast, mpsc, oneshot},
 };
 use tokio_util::sync::CancellationToken;
-use tracing::{debug, error, info, warn};
+use tracing::{debug, warn};
 
 // These messages are sent to the task that owns the document.
 pub enum DocMessage {
@@ -514,13 +513,16 @@ impl Daemon {
             connect::make_peer_connection(port, peer, connection_document_handle).await;
         });
 
-        let socket_path_clone = socket_path.to_path_buf();
-        let file_path_clone = file_path.to_path_buf();
-        let client_document_handle = document_handle.clone();
+        let editor_socket_path = socket_path.to_path_buf();
+        let editor_file_path = file_path.to_path_buf();
+        let editor_document_handle = document_handle.clone();
         tokio::spawn(async move {
-            listen_socket(client_document_handle, &socket_path_clone, file_path_clone)
-                .await
-                .expect("Failed to listen on UNIX socket");
+            connect::make_editor_connection(
+                editor_socket_path,
+                editor_file_path,
+                editor_document_handle,
+            )
+            .await
         });
 
         Self { document_handle }
@@ -532,7 +534,7 @@ pub struct EditorHandle {
 }
 
 impl EditorHandle {
-    fn new(stream: UnixStream, document_handle: DocumentActorHandle, file_path: PathBuf) -> Self {
+    pub fn new(stream: UnixStream, document_handle: DocumentActorHandle, file_path: &Path) -> Self {
         // The document task will send messages intended for the socket connection on this channel.
         let (socket_message_tx, socket_message_rx) = mpsc::channel::<RevisionedEditorTextDelta>(1);
         let (stream_read, stream_write) = tokio::io::split(stream);
@@ -554,36 +556,6 @@ impl EditorHandle {
             .send(message)
             .await
             .expect("Failed to send to editor.");
-    }
-}
-
-async fn listen_socket(
-    document_handle: DocumentActorHandle,
-    socket_path: &Path,
-    file_path: PathBuf,
-) -> Result<()> {
-    if Path::new(&socket_path).exists() {
-        fs::remove_file(socket_path)?;
-    }
-    let listener = UnixListener::bind(socket_path)?;
-    info!("Listening on UNIX socket: {}", socket_path.display());
-
-    loop {
-        // TODO: Accept multiple connections.
-        match listener.accept().await {
-            Ok((stream, _addr)) => {
-                info!("Client connection established.");
-
-                let editor_handle =
-                    EditorHandle::new(stream, document_handle.clone(), file_path.clone());
-                document_handle
-                    .send_message(DocMessage::NewEditorConnection(editor_handle))
-                    .await;
-            }
-            Err(e) => {
-                error!("listen_socket Error: {:#?}", e);
-            }
-        }
     }
 }
 
