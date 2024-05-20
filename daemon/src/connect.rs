@@ -6,7 +6,7 @@ use tracing::info;
 use crate::daemon::DocumentActorHandle;
 use crate::peer::spawn_peer_sync;
 
-pub async fn make_connection(
+pub async fn make_peer_connection(
     port: Option<u16>,
     peer: Option<String>,
     document_handle: DocumentActorHandle,

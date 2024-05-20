@@ -511,7 +511,7 @@ impl Daemon {
 
         let connection_document_handle = document_handle.clone();
         tokio::spawn(async move {
-            connect::make_connection(port, peer, connection_document_handle).await;
+            connect::make_peer_connection(port, peer, connection_document_handle).await;
         });
 
         let socket_path_clone = socket_path.to_path_buf();
