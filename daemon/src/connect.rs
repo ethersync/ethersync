@@ -8,15 +8,24 @@ use tracing::{error, info};
 use crate::daemon::{DocMessage, DocumentActorHandle, EditorHandle};
 use crate::peer::spawn_peer_sync;
 
-pub async fn make_peer_connection(
+pub struct PeerConnectionInfo {
     port: Option<u16>,
     peer: Option<String>,
+}
+impl PeerConnectionInfo {
+    pub fn new(port: Option<u16>, peer: Option<String>) -> Self {
+        Self { port, peer }
+    }
+}
+
+pub async fn make_peer_connection(
+    connection_info: PeerConnectionInfo,
     document_handle: DocumentActorHandle,
 ) {
-    let result = if let Some(peer) = peer {
+    let result = if let Some(peer) = connection_info.peer {
         connect_with_peer(peer, document_handle).await
     } else {
-        let port = port.unwrap_or(4242);
+        let port = connection_info.port.unwrap_or(4242);
         accept_peer_loop(port, document_handle).await
     };
     match result {
@@ -27,11 +36,25 @@ pub async fn make_peer_connection(
     }
 }
 
-pub async fn make_editor_connection(
+pub struct EditorConnectionInfo {
     socket_path: PathBuf,
     file_path: PathBuf,
+}
+
+impl EditorConnectionInfo {
+    pub fn new(socket_path: PathBuf, file_path: PathBuf) -> Self {
+        Self {
+            socket_path,
+            file_path,
+        }
+    }
+}
+
+pub async fn make_editor_connection(
+    connection_info: EditorConnectionInfo,
     document_handle: DocumentActorHandle,
 ) {
+    let (socket_path, file_path) = (connection_info.socket_path, connection_info.file_path);
     if Path::new(&socket_path).exists() {
         fs::remove_file(&socket_path).expect("Could not remove/re-initialize socket");
     }
