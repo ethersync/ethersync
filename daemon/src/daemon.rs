@@ -1,5 +1,5 @@
 use crate::connect;
-use crate::editor::{EditorMessageSender, SocketReadActor, SocketWriteActor};
+use crate::editor::EditorHandle;
 use crate::ot::OTServer;
 use crate::types::{EditorProtocolMessage, EditorTextDelta, RevisionedEditorTextDelta, TextDelta};
 use anyhow::Result;
@@ -13,11 +13,7 @@ use rand::Rng;
 use std::collections::HashMap;
 use std::fmt;
 use std::path::{Path, PathBuf};
-use tokio::{
-    net::UnixStream,
-    sync::{broadcast, mpsc, oneshot},
-};
-use tokio_util::sync::CancellationToken;
+use tokio::sync::{broadcast, mpsc, oneshot};
 use tracing::{debug, warn};
 
 // These messages are sent to the task that owns the document.
@@ -522,36 +518,6 @@ impl Daemon {
         });
 
         Self { document_handle }
-    }
-}
-
-pub struct EditorHandle {
-    editor_message_tx: EditorMessageSender,
-}
-
-impl EditorHandle {
-    pub fn new(stream: UnixStream, document_handle: DocumentActorHandle, file_path: &Path) -> Self {
-        // The document task will send messages intended for the socket connection on this channel.
-        let (socket_message_tx, socket_message_rx) = mpsc::channel::<RevisionedEditorTextDelta>(1);
-        let (stream_read, stream_write) = tokio::io::split(stream);
-        let shutdown_token = CancellationToken::new();
-
-        let mut reader = SocketReadActor::new(stream_read, shutdown_token.clone(), document_handle);
-        tokio::spawn(async move { reader.run().await });
-
-        let mut writer =
-            SocketWriteActor::new(stream_write, socket_message_rx, shutdown_token, file_path);
-        tokio::spawn(async move { writer.run().await });
-        Self {
-            editor_message_tx: socket_message_tx,
-        }
-    }
-
-    async fn send(&self, message: RevisionedEditorTextDelta) {
-        self.editor_message_tx
-            .send(message)
-            .await
-            .expect("Failed to send to editor.");
     }
 }
 

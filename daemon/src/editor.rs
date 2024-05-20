@@ -8,11 +8,52 @@ use tokio::{
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, error, info};
 
-use crate::daemon::DocumentActorHandle;
+use crate::daemon::{DocMessage, DocumentActorHandle};
 use crate::types::{EditorProtocolMessage, RevisionedEditorTextDelta};
 
 pub type EditorMessageSender = mpsc::Sender<RevisionedEditorTextDelta>;
 pub type EditorMessageReceiver = mpsc::Receiver<RevisionedEditorTextDelta>;
+
+pub async fn spawn_editor_connection(
+    stream: UnixStream,
+    file_path: &Path,
+    document_handle: DocumentActorHandle,
+) {
+    let editor_handle = EditorHandle::new(stream, document_handle.clone(), file_path);
+    document_handle
+        .send_message(DocMessage::NewEditorConnection(editor_handle))
+        .await;
+}
+
+pub struct EditorHandle {
+    editor_message_tx: EditorMessageSender,
+}
+
+impl EditorHandle {
+    pub fn new(stream: UnixStream, document_handle: DocumentActorHandle, file_path: &Path) -> Self {
+        // The document task will send messages intended for the socket connection on this channel.
+        let (socket_message_tx, socket_message_rx) = mpsc::channel::<RevisionedEditorTextDelta>(1);
+        let (stream_read, stream_write) = tokio::io::split(stream);
+        let shutdown_token = CancellationToken::new();
+
+        let mut reader = SocketReadActor::new(stream_read, shutdown_token.clone(), document_handle);
+        tokio::spawn(async move { reader.run().await });
+
+        let mut writer =
+            SocketWriteActor::new(stream_write, socket_message_rx, shutdown_token, file_path);
+        tokio::spawn(async move { writer.run().await });
+        Self {
+            editor_message_tx: socket_message_tx,
+        }
+    }
+
+    pub async fn send(&self, message: RevisionedEditorTextDelta) {
+        self.editor_message_tx
+            .send(message)
+            .await
+            .expect("Failed to send to editor.");
+    }
+}
 
 pub struct SocketReadActor {
     reader: ReadHalf<UnixStream>,

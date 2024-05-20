@@ -5,7 +5,8 @@ use std::path::{Path, PathBuf};
 use tokio::net::{TcpListener, TcpStream, UnixListener};
 use tracing::{error, info};
 
-use crate::daemon::{DocMessage, DocumentActorHandle, EditorHandle};
+use crate::daemon::DocumentActorHandle;
+use crate::editor::spawn_editor_connection;
 use crate::peer::spawn_peer_sync;
 
 pub struct PeerConnectionInfo {
@@ -79,10 +80,8 @@ async fn accept_editor_loop(
         let (stream, _addr) = listener.accept().await?;
         info!("Client connection established.");
 
-        let editor_handle = EditorHandle::new(stream, document_handle.clone(), file_path);
-        document_handle
-            .send_message(DocMessage::NewEditorConnection(editor_handle))
-            .await;
+        // TODO: we need to get rid of this await to accept multiple editors.
+        spawn_editor_connection(stream, file_path, document_handle.clone()).await;
     }
 }
 
