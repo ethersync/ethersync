@@ -53,7 +53,7 @@ local function connect()
         table.insert(params, "--socket-path=" .. socket_path)
     end
 
-    client = vim.lsp.rpc.start("ethersync", params, {
+    local dispatchers = {
         notification = function(method, notification_params)
             processOperationForEditor(method, notification_params)
         end,
@@ -69,7 +69,18 @@ local function connect()
             print("Ethersync client connection exited: ", vim.inspect({ ... }))
             vim.defer_fn(connect, 1000)
         end,
-    })
+    }
+
+    if vim.version().api_level < 12 then
+        -- In Vim 0.9, the API was to pass the command and its parameters as two arguments.
+        client = vim.lsp.rpc.start("ethersync", params, dispatchers)
+    else
+        -- While in Vim 0.10, it is combined into one table.
+        local cmd = params
+        table.insert(cmd, 1, "ethersync")
+        client = vim.lsp.rpc.start(cmd, dispatchers)
+    end
+
     if client then
         print("Connected to Ethersync daemon!")
         local uri = "file://" .. theFile
