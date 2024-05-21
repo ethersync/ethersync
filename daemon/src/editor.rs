@@ -121,6 +121,7 @@ impl SocketWriteActor {
         }
     }
 
+    // TODO: Send EditorProtocolMessages to this method, and remove the file_path field.
     async fn write_to_socket(&mut self, rev_delta: RevisionedEditorTextDelta) {
         debug!("Received editor message to send to it.");
         let message = EditorProtocolMessage::Edit {

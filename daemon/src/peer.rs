@@ -171,6 +171,8 @@ impl SyncActor {
                     debug!("Shutting down main start_sync loop");
                     break;
                 }
+                // TODO: Also listen to document changed pings here, and react directly, instead of
+                // having the loop in SyncActorHandle::new forward it to us.
                 Some(message) = self.syncer_receiver.recv() => {
                     self.handle_message(message).await;
                 }
