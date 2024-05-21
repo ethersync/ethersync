@@ -179,6 +179,7 @@ impl DocumentActor {
             crdt_doc: Document::default(),
         }
     }
+
     async fn handle_message(&mut self, message: DocMessage) {
         // TODO: Show the type in the debug message, or implement Debug for DocMessage.
         debug!("Handling doc message: {message:?}");
@@ -205,27 +206,7 @@ impl DocumentActor {
                 self.apply_delta_to_doc(&editor_delta);
                 self.process_crdt_delta_in_ot(delta).await;
             }
-            DocMessage::FromEditor(message) => match message {
-                EditorProtocolMessage::Open { .. } => {
-                    self.ot_server =
-                        Some(OTServer::new(self.current_content().expect(
-                            "Should have initialized text before initializing the document",
-                        )));
-                }
-                EditorProtocolMessage::Close { .. } => {
-                    self.ot_server = None;
-                }
-                EditorProtocolMessage::Edit {
-                    delta: rev_delta, ..
-                } => {
-                    debug!("Handling RevDelta from editor: {:#?}", rev_delta);
-                    let (editor_delta_for_crdt, rev_deltas_for_editor) =
-                        self.apply_delta_to_ot(rev_delta);
-
-                    self.apply_delta_to_doc(&editor_delta_for_crdt);
-                    self.send_deltas_to_editor(rev_deltas_for_editor).await;
-                }
-            },
+            DocMessage::FromEditor(message) => self.handle_message_from_editor(message).await,
             DocMessage::ReceiveSyncMessage {
                 message,
                 state: mut peer_state,
@@ -251,6 +232,30 @@ impl DocumentActor {
                 // TODO: if we use more than one ID, we should now easily have multiple editors.
                 // Modulo managing the OT server for each of them per file...
                 self.editor_clients.insert(EditorId(0), editor_handle);
+            }
+        }
+    }
+
+    async fn handle_message_from_editor(&mut self, message: EditorProtocolMessage) {
+        match message {
+            EditorProtocolMessage::Open { .. } => {
+                self.ot_server = Some(OTServer::new(
+                    self.current_content()
+                        .expect("Should have initialized text before initializing the document"),
+                ));
+            }
+            EditorProtocolMessage::Close { .. } => {
+                self.ot_server = None;
+            }
+            EditorProtocolMessage::Edit {
+                delta: rev_delta, ..
+            } => {
+                debug!("Handling RevDelta from editor: {:#?}", rev_delta);
+                let (editor_delta_for_crdt, rev_deltas_for_editor) =
+                    self.apply_delta_to_ot(rev_delta);
+
+                self.apply_delta_to_doc(&editor_delta_for_crdt);
+                self.send_deltas_to_editor(rev_deltas_for_editor).await;
             }
         }
     }
