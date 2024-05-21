@@ -5,7 +5,7 @@ use std::io;
 use std::path::PathBuf;
 use tokio::signal;
 
-mod lsp_client;
+mod jsonrpc_forwarder;
 
 const DEFAULT_SOCKET_PATH: &str = "/tmp/ethersync";
 
@@ -66,7 +66,7 @@ async fn main() -> io::Result<()> {
             }
         }
         Commands::Client => {
-            lsp_client::connection(&socket_path);
+            jsonrpc_forwarder::connection(&socket_path);
         }
     }
     Ok(())
