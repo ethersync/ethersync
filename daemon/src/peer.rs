@@ -12,15 +12,6 @@ use tracing::{debug, info};
 
 use crate::daemon::{DocMessage, DocumentActorHandle};
 
-// These messages are sent to tasks that own peer sync states.
-enum SyncerMessage {
-    ReceiveSyncMessage { message: Vec<u8> },
-    GenerateSyncMessage,
-}
-
-type SyncerMessageSender = mpsc::Sender<SyncerMessage>;
-type SyncerMessageReceiver = mpsc::Receiver<SyncerMessage>;
-
 pub fn spawn_peer_sync(stream: TcpStream, document_handle: DocumentActorHandle) {
     let (my_send, my_recv) = oneshot::channel();
     let tcp_handle = TCPActorHandle::new(stream, my_recv);
@@ -49,9 +40,9 @@ impl TCPReadActor {
     }
 
     async fn forward_sync_message(&self, message: Vec<u8>) {
-        self.sync_handle
-            .send(SyncerMessage::ReceiveSyncMessage { message })
-            .await
+        let message =
+            AutomergeSyncMessage::decode(&message).expect("Failed to decode automerge message");
+        self.sync_handle.send(message).await
     }
 
     async fn read_message(&mut self) -> Result<Vec<u8>> {
@@ -108,7 +99,7 @@ impl TCPWriteActor {
 }
 
 struct SyncActor {
-    syncer_receiver: SyncerMessageReceiver,
+    syncer_receiver: mpsc::Receiver<AutomergeSyncMessage>,
     document_handle: DocumentActorHandle,
     tcp_handle: TCPActorHandle,
     peer_state: SyncState,
@@ -116,7 +107,7 @@ struct SyncActor {
 
 impl SyncActor {
     fn new(
-        syncer_receiver: SyncerMessageReceiver,
+        syncer_receiver: mpsc::Receiver<AutomergeSyncMessage>,
         document_handle: DocumentActorHandle,
         tcp_handle: TCPActorHandle,
     ) -> Self {
@@ -128,39 +119,34 @@ impl SyncActor {
         }
     }
 
-    async fn handle_message(&mut self, message: SyncerMessage) {
-        match message {
-            SyncerMessage::ReceiveSyncMessage { message } => {
-                let (reponse_tx, response_rx) = oneshot::channel();
-                let message = AutomergeSyncMessage::decode(&message)
-                    .expect("Failed to decode automerge message");
-                self.document_handle
-                    .send_message(DocMessage::ReceiveSyncMessage {
-                        message,
-                        state: mem::take(&mut self.peer_state),
-                        response_tx: reponse_tx,
-                    })
-                    .await;
-                self.peer_state = response_rx
-                    .await
-                    .expect("Couldn't read response from Document channel");
-            }
-            SyncerMessage::GenerateSyncMessage {} => {
-                let (reponse_tx, response_rx) = oneshot::channel();
-                self.document_handle
-                    .send_message(DocMessage::GenerateSyncMessage {
-                        state: mem::take(&mut self.peer_state),
-                        response_tx: reponse_tx,
-                    })
-                    .await;
-                let (ps, message) = response_rx
-                    .await
-                    .expect("Could not read response from Document channel");
-                self.peer_state = ps;
-                if let Some(message) = message {
-                    self.tcp_handle.send(message).await;
-                }
-            }
+    async fn receive_sync_message(&mut self, message: AutomergeSyncMessage) {
+        let (reponse_tx, response_rx) = oneshot::channel();
+        self.document_handle
+            .send_message(DocMessage::ReceiveSyncMessage {
+                message,
+                state: mem::take(&mut self.peer_state),
+                response_tx: reponse_tx,
+            })
+            .await;
+        self.peer_state = response_rx
+            .await
+            .expect("Couldn't read response from Document channel");
+    }
+
+    async fn generate_sync_message(&mut self) {
+        let (reponse_tx, response_rx) = oneshot::channel();
+        self.document_handle
+            .send_message(DocMessage::GenerateSyncMessage {
+                state: mem::take(&mut self.peer_state),
+                response_tx: reponse_tx,
+            })
+            .await;
+        let (ps, message) = response_rx
+            .await
+            .expect("Could not read response from Document channel");
+        self.peer_state = ps;
+        if let Some(message) = message {
+            self.tcp_handle.send(message).await;
         }
     }
 
@@ -168,8 +154,7 @@ impl SyncActor {
         let mut doc_changed_ping_rx = self.document_handle.subscribe_document_changes();
 
         // Kick off initial synchronization with peer.
-        self.handle_message(SyncerMessage::GenerateSyncMessage)
-            .await;
+        self.generate_sync_message().await;
 
         loop {
             tokio::select! {
@@ -179,7 +164,7 @@ impl SyncActor {
                 }
                 doc_ping = doc_changed_ping_rx.recv() => {
                     match doc_ping {
-                        Ok(()) => {self.handle_message(SyncerMessage::GenerateSyncMessage).await}
+                        Ok(()) => { self.generate_sync_message().await; }
                         Err(broadcast::error::RecvError::Closed) => {
                             panic!("Doc changed channel has been closed");
                         }
@@ -190,9 +175,8 @@ impl SyncActor {
                         }
                     }
                 }
-                // having the loop in SyncActorHandle::new forward it to us.
                 Some(message) = self.syncer_receiver.recv() => {
-                    self.handle_message(message).await;
+                    self.receive_sync_message(message).await;
                 }
             }
         }
@@ -201,7 +185,7 @@ impl SyncActor {
 
 #[derive(Clone)]
 pub struct SyncActorHandle {
-    syncer_message_tx: SyncerMessageSender,
+    syncer_message_tx: mpsc::Sender<AutomergeSyncMessage>,
 }
 
 impl SyncActorHandle {
@@ -219,7 +203,7 @@ impl SyncActorHandle {
         Self { syncer_message_tx }
     }
 
-    async fn send(&self, message: SyncerMessage) {
+    async fn send(&self, message: AutomergeSyncMessage) {
         self.syncer_message_tx
             .send(message)
             .await
