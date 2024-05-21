@@ -21,10 +21,8 @@ pub enum DocMessage {
     GetContent {
         response_tx: oneshot::Sender<Result<String>>,
     },
-    Open,
-    Close,
+    FromEditor(EditorProtocolMessage),
     RandomEdit,
-    RevDelta(RevisionedEditorTextDelta),
     Delta(TextDelta),
     ReceiveSyncMessage {
         message: AutomergeSyncMessage,
@@ -42,26 +40,14 @@ impl fmt::Debug for DocMessage {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let repr = match self {
             DocMessage::GetContent { .. } => "get content",
-            DocMessage::Open => "open",
-            DocMessage::Close => "close",
+            DocMessage::FromEditor(_) => "open/close/edit/... message from editor",
             DocMessage::RandomEdit => "random edit",
-            DocMessage::RevDelta(_) => "delta from editor",
             DocMessage::Delta(_) => "delta from peer",
             DocMessage::ReceiveSyncMessage { .. } => "<automerge internal sync rcv>",
             DocMessage::GenerateSyncMessage { .. } => "<automerge internal sync gen>",
             DocMessage::NewEditorConnection(_) => "editor connected",
         };
         write!(f, "{repr}")
-    }
-}
-
-impl From<EditorProtocolMessage> for DocMessage {
-    fn from(rpc_message: EditorProtocolMessage) -> Self {
-        match rpc_message {
-            EditorProtocolMessage::Open { uri: _ } => DocMessage::Open,
-            EditorProtocolMessage::Close { uri: _ } => DocMessage::Close,
-            EditorProtocolMessage::Edit { uri: _, delta } => DocMessage::RevDelta(delta),
-        }
     }
 }
 
@@ -202,15 +188,6 @@ impl DocumentActor {
                     .send(self.current_content())
                     .expect("Failed to send content to response channel");
             }
-            DocMessage::Open => {
-                self.ot_server = Some(OTServer::new(
-                    self.current_content()
-                        .expect("Should have initialized text before initializing the document"),
-                ));
-            }
-            DocMessage::Close => {
-                self.ot_server = None;
-            }
             DocMessage::RandomEdit => {
                 let delta = self.random_delta();
                 let text = self
@@ -228,14 +205,27 @@ impl DocumentActor {
                 self.apply_delta_to_doc(&editor_delta);
                 self.process_crdt_delta_in_ot(delta).await;
             }
-            DocMessage::RevDelta(rev_delta) => {
-                debug!("Handling RevDelta from editor: {:#?}", rev_delta);
-                let (editor_delta_for_crdt, rev_deltas_for_editor) =
-                    self.apply_delta_to_ot(rev_delta);
+            DocMessage::FromEditor(message) => match message {
+                EditorProtocolMessage::Open { .. } => {
+                    self.ot_server =
+                        Some(OTServer::new(self.current_content().expect(
+                            "Should have initialized text before initializing the document",
+                        )));
+                }
+                EditorProtocolMessage::Close { .. } => {
+                    self.ot_server = None;
+                }
+                EditorProtocolMessage::Edit {
+                    delta: rev_delta, ..
+                } => {
+                    debug!("Handling RevDelta from editor: {:#?}", rev_delta);
+                    let (editor_delta_for_crdt, rev_deltas_for_editor) =
+                        self.apply_delta_to_ot(rev_delta);
 
-                self.apply_delta_to_doc(&editor_delta_for_crdt);
-                self.send_deltas_to_editor(rev_deltas_for_editor).await;
-            }
+                    self.apply_delta_to_doc(&editor_delta_for_crdt);
+                    self.send_deltas_to_editor(rev_deltas_for_editor).await;
+                }
+            },
             DocMessage::ReceiveSyncMessage {
                 message,
                 state: mut peer_state,

@@ -78,7 +78,9 @@ impl SocketReadActor {
                     debug!("Got a line from the client: {:#?}", line);
                     let jsonrpc = EditorProtocolMessage::from_jsonrpc(&line)
                         .expect("Failed to parse JSON-RPC message");
-                    self.document_handle.send_message(jsonrpc.into()).await;
+                    self.document_handle
+                        .send_message(DocMessage::FromEditor(jsonrpc))
+                        .await;
                 }
                 Ok(None) => {
                     break;
