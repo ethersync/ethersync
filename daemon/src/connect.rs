@@ -37,29 +37,11 @@ pub async fn make_peer_connection(
     }
 }
 
-pub struct EditorConnectionInfo {
-    socket_path: PathBuf,
-    file_path: PathBuf,
-}
-
-impl EditorConnectionInfo {
-    pub fn new(socket_path: PathBuf, file_path: PathBuf) -> Self {
-        Self {
-            socket_path,
-            file_path,
-        }
-    }
-}
-
-pub async fn make_editor_connection(
-    connection_info: EditorConnectionInfo,
-    document_handle: DocumentActorHandle,
-) {
-    let (socket_path, file_path) = (connection_info.socket_path, connection_info.file_path);
+pub async fn make_editor_connection(socket_path: PathBuf, document_handle: DocumentActorHandle) {
     if Path::new(&socket_path).exists() {
         fs::remove_file(&socket_path).expect("Could not remove/re-initialize socket");
     }
-    let result = accept_editor_loop(&socket_path, &file_path, document_handle).await;
+    let result = accept_editor_loop(&socket_path, document_handle).await;
     match result {
         Ok(()) => {}
         Err(err) => {
@@ -70,7 +52,6 @@ pub async fn make_editor_connection(
 
 async fn accept_editor_loop(
     socket_path: &Path,
-    file_path: &Path,
     document_handle: DocumentActorHandle,
 ) -> Result<(), io::Error> {
     let listener = UnixListener::bind(socket_path)?;
@@ -81,7 +62,7 @@ async fn accept_editor_loop(
         info!("Client connection established.");
 
         // TODO: we need to get rid of this await to accept multiple editors.
-        spawn_editor_connection(stream, file_path, document_handle.clone()).await;
+        spawn_editor_connection(stream, document_handle.clone()).await;
     }
 }
 

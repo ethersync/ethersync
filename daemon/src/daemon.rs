@@ -359,9 +359,14 @@ impl DocumentActor {
         }
     }
 
-    async fn send_to_editors(&mut self, delta: RevisionedEditorTextDelta) {
+    async fn send_to_editors(&mut self, rev_delta: RevisionedEditorTextDelta) {
+        let message = EditorProtocolMessage::Edit {
+            uri: format!("file://{}", self.file_path.display()),
+            delta: rev_delta,
+        };
+
         for (_id, handle) in self.editor_clients.iter_mut() {
-            handle.send(delta.clone()).await;
+            handle.send(message.clone()).await;
         }
     }
 
@@ -510,11 +515,10 @@ impl Daemon {
             connect::make_peer_connection(peer_info, connection_document_handle).await;
         });
 
-        let editor_info =
-            connect::EditorConnectionInfo::new(socket_path.to_path_buf(), file_path.to_path_buf());
+        let editor_socket_path = socket_path.to_path_buf();
         let editor_document_handle = document_handle.clone();
         tokio::spawn(async move {
-            connect::make_editor_connection(editor_info, editor_document_handle).await
+            connect::make_editor_connection(editor_socket_path, editor_document_handle).await
         });
 
         Self { document_handle }
