@@ -23,7 +23,6 @@ pub enum DocMessage {
     },
     FromEditor(EditorProtocolMessage),
     RandomEdit,
-    Delta(TextDelta),
     ReceiveSyncMessage {
         message: AutomergeSyncMessage,
         state: SyncState,
@@ -42,7 +41,6 @@ impl fmt::Debug for DocMessage {
             DocMessage::GetContent { .. } => "get content",
             DocMessage::FromEditor(_) => "open/close/edit/... message from editor",
             DocMessage::RandomEdit => "random edit",
-            DocMessage::Delta(_) => "delta from peer",
             DocMessage::ReceiveSyncMessage { .. } => "<automerge internal sync rcv>",
             DocMessage::GenerateSyncMessage { .. } => "<automerge internal sync gen>",
             DocMessage::NewEditorConnection(_) => "editor connected",
@@ -104,6 +102,26 @@ impl Document {
         }
     }
 
+    fn file_text_obj(&self, file_path: &Path) -> Result<automerge::ObjId> {
+        let text_obj = self
+            .doc
+            .get(
+                automerge::ROOT,
+                file_path
+                    .to_path_buf()
+                    .to_str()
+                    .expect("Could not convert pathbuf to str"),
+            )
+            .expect("Failed to get text key from Automerge document");
+        if let Some((automerge::Value::Object(ObjType::Text), text_obj)) = text_obj {
+            Ok(text_obj)
+        } else {
+            Err(anyhow::anyhow!(
+                "Automerge document doesn't have a text object, so I can't provide it"
+            ))
+        }
+    }
+
     fn apply_delta_to_doc(&mut self, delta: &EditorTextDelta) {
         let text_obj = self
             .text_obj()
@@ -129,6 +147,14 @@ impl Document {
 
     fn current_content(&self) -> Result<String> {
         self.text_obj().map(|to| {
+            self.doc
+                .text(to)
+                .expect("Failed to get string from Automerge text object")
+        })
+    }
+
+    fn current_file_content(&self, file_path: &Path) -> Result<String> {
+        self.file_text_obj(file_path).map(|to| {
             self.doc
                 .text(to)
                 .expect("Failed to get string from Automerge text object")
@@ -196,14 +222,6 @@ impl DocumentActor {
                     .expect("Should have initialized text before performing random edit");
                 let ed_delta = EditorTextDelta::from_delta(delta.clone(), &text);
                 self.apply_delta_to_doc(&ed_delta);
-                self.process_crdt_delta_in_ot(delta).await;
-            }
-            DocMessage::Delta(delta) => {
-                let text = self
-                    .current_content()
-                    .expect("Should have initialized text before performing random edit");
-                let editor_delta = EditorTextDelta::from_delta(delta.clone(), &text);
-                self.apply_delta_to_doc(&editor_delta);
                 self.process_crdt_delta_in_ot(delta).await;
             }
             DocMessage::FromEditor(message) => self.handle_message_from_editor(message).await,
@@ -396,6 +414,11 @@ impl DocumentActor {
         self.crdt_doc.current_content()
     }
 
+    #[allow(unused)]
+    fn current_file_content(&self, file_path: &Path) -> Result<String> {
+        self.crdt_doc.current_file_content(file_path)
+    }
+
     fn apply_delta_to_doc(&mut self, delta: &EditorTextDelta) {
         self.crdt_doc.apply_delta_to_doc(delta);
         let _ = self.doc_changed_ping_tx.send(());
@@ -476,14 +499,6 @@ impl DocumentActorHandle {
             .send(message)
             .await
             .expect("Failed to send random edit to document task");
-    }
-
-    pub async fn apply_delta(&mut self, delta: TextDelta) {
-        let message = DocMessage::Delta(delta);
-        self.doc_message_tx
-            .send(message)
-            .await
-            .expect("Failed to send delta to document task");
     }
 }
 
