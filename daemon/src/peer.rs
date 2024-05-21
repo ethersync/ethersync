@@ -23,7 +23,7 @@ type SyncerMessageReceiver = mpsc::Receiver<SyncerMessage>;
 
 pub fn spawn_peer_sync(stream: TcpStream, document_handle: DocumentActorHandle) {
     let (my_send, my_recv) = oneshot::channel();
-    let tcp_handle = TCPActorHandle::start_sync(stream, my_recv);
+    let tcp_handle = TCPActorHandle::new(stream, my_recv);
     let sync_handle = SyncActorHandle::new(document_handle.clone(), tcp_handle);
     let _ = my_send.send(sync_handle);
 }
@@ -165,13 +165,31 @@ impl SyncActor {
     }
 
     async fn run(mut self) {
+        let mut doc_changed_ping_rx = self.document_handle.subscribe_document_changes();
+
+        // Kick off initial synchronization with peer.
+        self.handle_message(SyncerMessage::GenerateSyncMessage)
+            .await;
+
         loop {
             tokio::select! {
                 _ = self.tcp_handle.shutdown_token.cancelled() => {
-                    debug!("Shutting down main start_sync loop");
+                    debug!("Shutting down main SyncActor loop");
                     break;
                 }
-                // TODO: Also listen to document changed pings here, and react directly, instead of
+                doc_ping = doc_changed_ping_rx.recv() => {
+                    match doc_ping {
+                        Ok(()) => {self.handle_message(SyncerMessage::GenerateSyncMessage).await}
+                        Err(broadcast::error::RecvError::Closed) => {
+                            panic!("Doc changed channel has been closed");
+                        }
+                        Err(broadcast::error::RecvError::Lagged(_)) => {
+                            // This is fine, the messages in this channel are just pings.
+                            // It's fine if we miss some.
+                            debug!("Doc changed ping channel lagged (this is probably fine)");
+                        }
+                    }
+                }
                 // having the loop in SyncActorHandle::new forward it to us.
                 Some(message) = self.syncer_receiver.recv() => {
                     self.handle_message(message).await;
@@ -197,39 +215,6 @@ impl SyncActorHandle {
             tcp_handle.clone(),
         );
         tokio::spawn(syncer.run());
-
-        // Generate sync message when doc changes.
-        let shutdown_token_clone = tcp_handle.shutdown_token.clone();
-        let mut doc_changed_ping_rx = document_handle.subscribe_document_changes();
-        let syncer_message_tx_clone = syncer_message_tx.clone();
-
-        // TODO: can we explain here, why this forwarding is necessary?
-        tokio::spawn(async move {
-            loop {
-                syncer_message_tx_clone
-                    .send(SyncerMessage::GenerateSyncMessage {})
-                    .await
-                    .expect("Failed to send GenerateSyncMessage to document task");
-                tokio::select! {
-                    _ = shutdown_token_clone.cancelled() => {
-                        debug!("Stopping GenerateSyncMessage ping forwarding.");
-                        break;
-                    }
-                    doc_ping = doc_changed_ping_rx.recv() => match doc_ping {
-                        Ok(()) => {
-                            debug!("Doc changed.");
-                        }
-                        Err(broadcast::error::RecvError::Closed) => {
-                            panic!("Doc changed channel has been closed");
-                        }
-                        Err(broadcast::error::RecvError::Lagged(_)) => {
-                            // This is fine, the messages in this channel are just pings.
-                            // It's okay if we miss some.
-                        }
-                    }
-                }
-            }
-        });
 
         Self { syncer_message_tx }
     }
@@ -262,7 +247,7 @@ impl TCPActorHandle {
             .expect("Channel to TCPActor(s) closed.");
     }
 
-    pub fn start_sync(stream: TcpStream, sync_handle: oneshot::Receiver<SyncActorHandle>) -> Self {
+    pub fn new(stream: TcpStream, sync_handle: oneshot::Receiver<SyncActorHandle>) -> Self {
         let shutdown_token = CancellationToken::new();
 
         let read_shutdown_token = shutdown_token.clone();
