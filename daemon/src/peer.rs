@@ -162,6 +162,9 @@ impl SyncActor {
                     debug!("Shutting down main SyncActor loop");
                     break;
                 }
+                // As doc_changed_ping_rx is a broadcast channel our understanding is,
+                // that this breaks a potential cyclic deadlock between SyncerActor
+                // and TCPActor (e.g. when TCPWriteActor.send blocks).
                 doc_ping = doc_changed_ping_rx.recv() => {
                     match doc_ping {
                         Ok(()) => { self.generate_sync_message().await; }
