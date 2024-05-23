@@ -88,47 +88,27 @@ impl Document {
         self.doc.sync().generate_sync_message(peer_state)
     }
 
-    fn text_obj(&self) -> Result<automerge::ObjId> {
+    fn text_obj(&self, file_path: &str) -> Result<automerge::ObjId> {
         let text_obj = self
             .doc
-            .get(automerge::ROOT, "text")
-            .expect("Failed to get text key from Automerge document");
+            .get(automerge::ROOT, file_path)
+            .unwrap_or_else(|_| panic!("Failed to get {file_path} key from Automerge document"));
         if let Some((automerge::Value::Object(ObjType::Text), text_obj)) = text_obj {
             Ok(text_obj)
         } else {
             Err(anyhow::anyhow!(
-                "Automerge document doesn't have a text object, so I can't provide it"
+                "Automerge document doesn't have a {file_path} Text object, so I can't provide it"
             ))
         }
     }
 
-    fn file_text_obj(&self, file_path: &Path) -> Result<automerge::ObjId> {
+    fn apply_delta_to_doc(&mut self, delta: &EditorTextDelta, file_path: &str) {
         let text_obj = self
-            .doc
-            .get(
-                automerge::ROOT,
-                file_path
-                    .to_path_buf()
-                    .to_str()
-                    .expect("Could not convert pathbuf to str"),
-            )
-            .expect("Failed to get text key from Automerge document");
-        if let Some((automerge::Value::Object(ObjType::Text), text_obj)) = text_obj {
-            Ok(text_obj)
-        } else {
-            Err(anyhow::anyhow!(
-                "Automerge document doesn't have a text object, so I can't provide it"
-            ))
-        }
-    }
-
-    fn apply_delta_to_doc(&mut self, delta: &EditorTextDelta) {
-        let text_obj = self
-            .text_obj()
+            .text_obj(file_path)
             .expect("Couldn't get automerge text object, so not able to modify it");
         let mut offset = 0i32;
         let text = self
-            .current_content()
+            .current_file_content(file_path)
             .expect("Should have initialized text before performing random edit");
         for op in &delta.0 {
             let (start, length) = op.range.as_relative(&text);
@@ -146,15 +126,16 @@ impl Document {
     }
 
     fn current_content(&self) -> Result<String> {
-        self.text_obj().map(|to| {
+        // TODO: use file_path parameter once we're ready to replace all current_content() calls.
+        self.text_obj("text").map(|to| {
             self.doc
                 .text(to)
                 .expect("Failed to get string from Automerge text object")
         })
     }
 
-    fn current_file_content(&self, file_path: &Path) -> Result<String> {
-        self.file_text_obj(file_path).map(|to| {
+    fn current_file_content(&self, file_path: &str) -> Result<String> {
+        self.text_obj(file_path).map(|to| {
             self.doc
                 .text(to)
                 .expect("Failed to get string from Automerge text object")
@@ -164,7 +145,7 @@ impl Document {
     fn initialize_text(&mut self, text: &str) {
         let text_obj = self
             .doc
-            .put_object(automerge::ROOT, "text", ObjType::Text)
+            .put_object(automerge::ROOT, "file", ObjType::Text)
             .expect("Failed to initialize text object in Automerge document");
         self.doc
             .splice_text(text_obj, 0, 0, text)
@@ -221,7 +202,7 @@ impl DocumentActor {
                     .current_content()
                     .expect("Should have initialized text before performing random edit");
                 let ed_delta = EditorTextDelta::from_delta(delta.clone(), &text);
-                self.apply_delta_to_doc(&ed_delta);
+                self.apply_delta_to_doc(&ed_delta, "text");
                 // TODO: Pull out default file path into a constant, or refactor to be multi-file.
                 self.process_crdt_delta_in_ot(delta, "text").await;
             }
@@ -267,7 +248,7 @@ impl DocumentActor {
             EditorProtocolMessage::Open { uri } => {
                 let file_path = Self::file_path_for(uri);
                 let ot_server = OTServer::new(
-                    self.current_file_content(Path::new(&file_path))
+                    self.current_file_content(&file_path)
                         .unwrap_or_else(
                             |_| panic!("Should have initialized key: {file_path} before initializing the document")
                         )
@@ -283,11 +264,12 @@ impl DocumentActor {
             } => {
                 debug!("Handling RevDelta from editor: {:#?}", rev_delta);
                 // TODO: Refactor apply_delta_to_ot, move it to OTServer.
+                let file_path = Self::file_path_for(uri);
                 let (editor_delta_for_crdt, rev_deltas_for_editor) =
-                    self.apply_delta_to_ot(rev_delta, &Self::file_path_for(uri));
+                    self.apply_delta_to_ot(rev_delta, &file_path);
 
+                self.apply_delta_to_doc(&editor_delta_for_crdt, &file_path);
                 // TODO: make file-dependent!
-                self.apply_delta_to_doc(&editor_delta_for_crdt);
                 self.send_deltas_to_editor(rev_deltas_for_editor).await;
             }
         }
@@ -332,7 +314,7 @@ impl DocumentActor {
         file_path: &str,
     ) -> (EditorTextDelta, Vec<RevisionedEditorTextDelta>) {
         let text = self
-            .current_file_content(Path::new(file_path))
+            .current_file_content(file_path)
             .expect("Should have initialized text before performing random edit");
         let ot_server = self.get_ot_server(file_path);
         let (delta_for_crdt, rev_deltas_for_editor) =
@@ -420,7 +402,7 @@ impl DocumentActor {
         // so we'll write those.
         for key in self.crdt_doc.doc.keys(automerge::ROOT) {
             if !self.ot_servers.contains_key(&key) {
-                let text = self.current_file_content(Path::new(&key)).expect(
+                let text = self.current_file_content(&key).expect(
                     "Failed to get file content when writing to disk. Key should have existed",
                 );
                 // TODO: fix file path!
@@ -458,12 +440,12 @@ impl DocumentActor {
         self.crdt_doc.current_content()
     }
 
-    fn current_file_content(&self, file_path: &Path) -> Result<String> {
+    fn current_file_content(&self, file_path: &str) -> Result<String> {
         self.crdt_doc.current_file_content(file_path)
     }
 
-    fn apply_delta_to_doc(&mut self, delta: &EditorTextDelta) {
-        self.crdt_doc.apply_delta_to_doc(delta);
+    fn apply_delta_to_doc(&mut self, delta: &EditorTextDelta, file_path: &str) {
+        self.crdt_doc.apply_delta_to_doc(delta, file_path);
         let _ = self.doc_changed_ping_tx.send(());
     }
 
@@ -560,6 +542,7 @@ impl Daemon {
         // If the peer address is empty, we're the host.
         let is_host = peer.is_none();
 
+        // TODO: get absolute path for file_path and split into base_dir and file_path(?)
         let document_handle = DocumentActorHandle::new(file_path, is_host);
 
         let connection_document_handle = document_handle.clone();
@@ -600,7 +583,7 @@ mod tests {
         fn apply_delta_to_doc_works(initial: &str, ed_delta: &EditorTextDelta, expected: &str) {
             let mut document = Document::default();
             document.initialize_text(initial);
-            document.apply_delta_to_doc(ed_delta);
+            document.apply_delta_to_doc(ed_delta, "text");
 
             // unfortunately anyhow::Error doesn't implement PartialEq, so we'll rather unwrap.
             assert_eq!(document.current_content().unwrap(), expected);
