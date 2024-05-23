@@ -247,12 +247,12 @@ impl DocumentActor {
         match message {
             EditorProtocolMessage::Open { uri } => {
                 let file_path = Self::file_path_for(&uri);
-                let ot_server = OTServer::new(
-                    self.current_file_content(&file_path)
-                        .unwrap_or_else(
-                            |_| panic!("Should have initialized key: {file_path} before initializing the document")
+                let ot_server =
+                    OTServer::new(self.current_file_content(&file_path).unwrap_or_else(|_| {
+                        panic!(
+                            "Could not open file {file_path}, because it doesn't exist in the CRDT"
                         )
-                );
+                    }));
                 self.ot_servers.insert(file_path, ot_server);
             }
             EditorProtocolMessage::Close { uri } => {
