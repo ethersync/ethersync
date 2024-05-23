@@ -4,6 +4,7 @@ use ethersync::logging;
 use std::io;
 use std::path::PathBuf;
 use tokio::signal;
+use tracing::info;
 
 mod jsonrpc_forwarder;
 
@@ -61,9 +62,11 @@ async fn main() -> io::Result<()> {
             directory,
             peer,
         } => {
-            // TODO: directory should exist
             let directory = directory
-                .unwrap_or(std::env::current_dir().expect("Could not access current directory"));
+                .unwrap_or(std::env::current_dir().expect("Could not access current directory"))
+                .canonicalize()
+                .expect("Could not access given directory");
+            info!("Starting Ethersync on {}", directory.display());
             Daemon::new(port, peer, &socket_path, &directory);
             match signal::ctrl_c().await {
                 Ok(()) => {}
