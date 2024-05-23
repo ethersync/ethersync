@@ -16,7 +16,7 @@ use std::path::{Path, PathBuf};
 use tokio::sync::{broadcast, mpsc, oneshot};
 use tracing::{debug, warn};
 
-const TEST_FILE_PATH: &str = "text";
+pub const TEST_FILE_PATH: &str = "text";
 
 // These messages are sent to the task that owns the document.
 pub enum DocMessage {

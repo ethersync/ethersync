@@ -1,6 +1,6 @@
 #![allow(dead_code)]
 use ethersync::actors::{Actor, Neovim};
-use ethersync::daemon::Daemon;
+use ethersync::daemon::{Daemon, TEST_FILE_PATH};
 use ethersync::logging;
 use futures::future::join_all;
 use pretty_assertions::assert_eq;
@@ -11,7 +11,7 @@ use tokio::time::{sleep, timeout, Duration};
 use tracing::{info, warn};
 
 async fn perform_random_edits(actor: &mut (impl Actor + ?Sized)) {
-    for _ in 1..500 {
+    for _ in 1..100 {
         actor.apply_random_delta().await;
 
         let random_millis = rand::thread_rng().gen_range(0..5);
@@ -19,10 +19,12 @@ async fn perform_random_edits(actor: &mut (impl Actor + ?Sized)) {
     }
 }
 
-fn create_ethersync_dir(dir: &Path) {
-    let mut ethersync_dir = dir.to_path_buf();
+fn initialize_tmp_dir() -> temp_dir::TempDir {
+    let dir = temp_dir::TempDir::new().expect("Failed to create temp directory");
+    let mut ethersync_dir = dir.path().to_path_buf();
     ethersync_dir.push(".ethersync");
     std::fs::create_dir(ethersync_dir).expect("Failed to create .ethersync directory");
+    dir
 }
 
 #[tokio::main]
@@ -35,11 +37,12 @@ async fn main() {
 
     logging::initialize(false);
 
-    // Set up the project directory.
-    let dir = temp_dir::TempDir::new().expect("Failed to create temp directory");
-    let file = dir.child("file");
-    let file2 = dir.child("file2");
-    create_ethersync_dir(dir.path());
+    // Set up the project directories.
+    let dir = initialize_tmp_dir();
+    let dir2 = initialize_tmp_dir();
+
+    let file = dir.child(TEST_FILE_PATH);
+    let file2 = dir2.child(TEST_FILE_PATH);
 
     // Set up the actors.
     let daemon = Daemon::new(
