@@ -182,8 +182,8 @@ pub struct DocumentActor {
     doc_message_rx: mpsc::Receiver<DocMessage>,
     doc_changed_ping_tx: DocChangedSender,
     editor_clients: HashMap<EditorId, EditorHandle>,
-    /// If we have an ot_server, it means that an editor is connected.
-    ot_server: Option<OTServer>,
+    /// If we have an ot_server for a given file, it means that editor has ownership.
+    ot_servers: HashMap<String, OTServer>,
     /// The Document is the main I/O managed resource of this actor.
     crdt_doc: Document,
     file_path: PathBuf,
@@ -201,7 +201,7 @@ impl DocumentActor {
             doc_changed_ping_tx,
             editor_clients: HashMap::default(),
             file_path,
-            ot_server: None,
+            ot_servers: HashMap::default(),
             crdt_doc: Document::default(),
         }
     }
@@ -222,7 +222,8 @@ impl DocumentActor {
                     .expect("Should have initialized text before performing random edit");
                 let ed_delta = EditorTextDelta::from_delta(delta.clone(), &text);
                 self.apply_delta_to_doc(&ed_delta);
-                self.process_crdt_delta_in_ot(delta).await;
+                // TODO: Pull out default file path into a constant, or refactor to be multi-file.
+                self.process_crdt_delta_in_ot(delta, "text").await;
             }
             DocMessage::FromEditor(message) => self.handle_message_from_editor(message).await,
             DocMessage::ReceiveSyncMessage {
@@ -254,24 +255,38 @@ impl DocumentActor {
         }
     }
 
+    fn file_path_for(uri: String) -> String {
+        uri.rsplit('/')
+            .next()
+            .expect("Expected at least one segment.")
+            .into()
+    }
+
     async fn handle_message_from_editor(&mut self, message: EditorProtocolMessage) {
         match message {
-            EditorProtocolMessage::Open { .. } => {
-                self.ot_server = Some(OTServer::new(
-                    self.current_content()
-                        .expect("Should have initialized text before initializing the document"),
-                ));
+            EditorProtocolMessage::Open { uri } => {
+                let file_path = Self::file_path_for(uri);
+                let ot_server = OTServer::new(
+                    self.current_file_content(Path::new(&file_path))
+                        .unwrap_or_else(
+                            |_| panic!("Should have initialized key: {file_path} before initializing the document")
+                        )
+                );
+                self.ot_servers.insert(file_path, ot_server);
             }
-            EditorProtocolMessage::Close { .. } => {
-                self.ot_server = None;
+            EditorProtocolMessage::Close { uri } => {
+                self.ot_servers.remove(&Self::file_path_for(uri));
             }
             EditorProtocolMessage::Edit {
-                delta: rev_delta, ..
+                delta: rev_delta,
+                uri,
             } => {
                 debug!("Handling RevDelta from editor: {:#?}", rev_delta);
+                // TODO: Refactor apply_delta_to_ot, move it to OTServer.
                 let (editor_delta_for_crdt, rev_deltas_for_editor) =
-                    self.apply_delta_to_ot(rev_delta);
+                    self.apply_delta_to_ot(rev_delta, &Self::file_path_for(uri));
 
+                // TODO: make file-dependent!
                 self.apply_delta_to_doc(&editor_delta_for_crdt);
                 self.send_deltas_to_editor(rev_deltas_for_editor).await;
             }
@@ -283,7 +298,8 @@ impl DocumentActor {
         message: AutomergeSyncMessage,
         peer_state: &mut SyncState,
     ) -> Option<Vec<Patch>> {
-        let result = if self.ot_server.is_some() {
+        // Only generate patches, if an editor has a file open.
+        let result = if !self.ot_servers.is_empty() {
             let patches = self
                 .crdt_doc
                 .receive_sync_message_log_patches(message, peer_state);
@@ -304,17 +320,21 @@ impl DocumentActor {
         }
     }
 
+    fn get_ot_server(&mut self, file_path: &str) -> &mut OTServer {
+        // TODO: Fail in a nicer way, if Edit for unknown OTServer (client messed up).
+        let error_message = format!("Could not get OTServer for {file_path}.");
+        self.ot_servers.get_mut(file_path).expect(&error_message)
+    }
+
     fn apply_delta_to_ot(
         &mut self,
         rev_editor_delta: RevisionedEditorTextDelta,
+        file_path: &str,
     ) -> (EditorTextDelta, Vec<RevisionedEditorTextDelta>) {
         let text = self
-            .current_content()
+            .current_file_content(Path::new(file_path))
             .expect("Should have initialized text before performing random edit");
-        let ot_server = self
-            .ot_server
-            .as_mut()
-            .expect("No editor connected, where does this delta come from?");
+        let ot_server = self.get_ot_server(file_path);
         let (delta_for_crdt, rev_deltas_for_editor) =
             ot_server.apply_editor_operation(rev_editor_delta);
 
@@ -356,7 +376,16 @@ impl DocumentActor {
         for patch in patches {
             match patch.action.try_into() {
                 Ok(delta) => {
-                    self.process_crdt_delta_in_ot(delta).await;
+                    if patch.path.len() != 1 {
+                        panic!("Unexpected path in Automerge patch, length is not 1");
+                    }
+                    let (_obj_id, prop) = &patch.path[0];
+                    if let automerge::Prop::Map(file_path) = prop {
+                        debug!("Applying incoming CRDT patch for {file_path}");
+                        self.process_crdt_delta_in_ot(delta, file_path).await;
+                    } else {
+                        panic!("Unexpected path in Automerge patch: Prop is not a map");
+                    }
                 }
                 Err(e) => {
                     warn!("Failed to convert patch to delta: {:#?}", e);
@@ -365,9 +394,11 @@ impl DocumentActor {
         }
     }
 
-    async fn process_crdt_delta_in_ot(&mut self, delta: TextDelta) {
-        if let Some(ot_server) = &mut self.ot_server {
+    async fn process_crdt_delta_in_ot(&mut self, delta: TextDelta, file_path: &str) {
+        // Only process the CRDT delta, if editor has the file open.
+        if let Some(ot_server) = self.ot_servers.get_mut(file_path) {
             let rev_text_delta_for_editor = ot_server.apply_crdt_change(delta);
+            // TODO: add file_path
             self.send_to_editors(rev_text_delta_for_editor).await;
         }
     }
@@ -383,16 +414,29 @@ impl DocumentActor {
         }
     }
 
-    fn write_current_content_to_file(&mut self) {
-        let content = self.current_content();
-        if let Ok(text) = content {
-            debug!(current_text__ = text);
-            if let Some(ot_server) = &mut self.ot_server {
-                debug!(current_ot_doc = ot_server.current_content());
-            } else {
+    fn write_current_content_to_files(&mut self) {
+        // iterate over automerge keys
+        // for those, that don't have an ot server we have ownership,
+        // so we'll write those.
+        for key in self.crdt_doc.doc.keys(automerge::ROOT) {
+            if !self.ot_servers.contains_key(&key) {
+                let text = self.current_file_content(Path::new(&key)).expect(
+                    "Failed to get file content when writing to disk. Key should have existed",
+                );
+                // TODO: fix file path!
                 std::fs::write(&self.file_path, &text).expect("Could not write to file");
             }
         }
+
+        // let content = self.current_content();
+        // if let Ok(text) = content {
+        //     debug!(current_text__ = text);
+        //     if let Some(ot_server) = &mut self.ot_server {
+        //         debug!(current_ot_doc = ot_server.current_content());
+        //     } else {
+        //         std::fs::write(&self.file_path, &text).expect("Could not write to file");
+        //     }
+        // }
     }
 
     /// Reading in the file is a preparatory step, before kicking off the actor.
@@ -414,7 +458,6 @@ impl DocumentActor {
         self.crdt_doc.current_content()
     }
 
-    #[allow(unused)]
     fn current_file_content(&self, file_path: &Path) -> Result<String> {
         self.crdt_doc.current_file_content(file_path)
     }
@@ -427,7 +470,7 @@ impl DocumentActor {
     async fn run(&mut self) {
         while let Some(message) = self.doc_message_rx.recv().await {
             self.handle_message(message).await;
-            self.write_current_content_to_file();
+            self.write_current_content_to_files();
         }
         panic!("Channel towards document task has been closed");
     }
