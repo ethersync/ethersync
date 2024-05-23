@@ -3,13 +3,8 @@ local changetracker = require("changetracker")
 -- JSON-RPC connection.
 local client
 
--- Currently we're only supporting editing *one* file. This string identifies which one that is.
-local theFile
-
--- Number of operations the daemon has made.
-local daemonRevision = 0
--- Number of operations we have made.
-local editorRevision = 0
+-- Registry of the files that are synced.
+local files = {}
 
 -- Pulled out as a method in case we want to add a new "offline simulation" later.
 local function sendNotification(method, params)
@@ -19,17 +14,18 @@ end
 -- Take an operation from the daemon and apply it to the editor.
 local function processOperationForEditor(method, parameters)
     if method == "edit" then
-        local _uri = parameters.uri --[[@diagnostic disable-line]]
+        local uri = parameters.uri
+        local filepath = vim.uri_to_fname(uri)
         local delta = parameters.delta.delta
         local theEditorRevision = parameters.delta.revision
 
-        if theEditorRevision == editorRevision then
+        if theEditorRevision == files[filepath].editorRevision then
             -- Find correct buffer to apply edits to.
-            local bufnr = vim.uri_to_bufnr("file://" .. theFile)
+            local bufnr = vim.uri_to_bufnr(uri)
 
             changetracker.applyDelta(bufnr, delta)
 
-            daemonRevision = daemonRevision + 1
+            files[filepath].daemonRevision = files[filepath].daemonRevision + 1
         else
             -- Operation is not up-to-date to our content, skip it!
             -- The daemon will send a transformed one later.
@@ -43,7 +39,6 @@ end
 local function connect()
     if client then
         client.terminate()
-        local buffer = vim.uri_to_bufnr("file://" .. theFile)
     end
 
     local params = { "client" }
@@ -63,7 +58,8 @@ local function connect()
         on_exit = function(...)
             -- TODO: Is it a problem to do this in a schedule?
             vim.schedule(function()
-                local bufnr = vim.uri_to_bufnr("file://" .. theFile)
+                -- TODO: why did we have this?
+                --local bufnr = vim.uri_to_bufnr("file://" .. theFile)
             end)
 
             print("Ethersync client connection exited: ", vim.inspect({ ... }))
@@ -83,10 +79,6 @@ local function connect()
 
     if client then
         print("Connected to Ethersync daemon!")
-        local uri = "file://" .. theFile
-        sendNotification("open", { uri = uri })
-        editorRevision = 0
-        daemonRevision = 0
     else
         vim.defer_fn(connect, 1000)
     end
@@ -98,15 +90,23 @@ function EthersyncOpenBuffer()
         return
     end
 
-    if not theFile then
-        -- Only sync the *first* file loaded and nothing else.
-        theFile = vim.fn.expand("%:p")
+    -- TODO: connected?
+    if not client then
         connect()
     end
 
-    if theFile ~= vim.fn.expand("%:p") then
-        return
-    end
+    local filename = vim.fn.expand("%:p")
+    local uri = "file://" .. filename
+    local filepath = vim.uri_to_fname(uri)
+
+    files[filepath] = {
+        -- Number of operations the daemon has made.
+        daemonRevision = 0,
+        -- Number of operations we have made.
+        editorRevision = 0,
+    }
+
+    sendNotification("open", { uri = uri })
 
     -- Vim enables eol for an empty file, but we do use this option values
     -- assuming there's a trailing newline iff eol is true.
@@ -115,14 +115,13 @@ function EthersyncOpenBuffer()
     end
 
     changetracker.trackChanges(0, function(delta)
-        editorRevision = editorRevision + 1
+        files[filepath].editorRevision = files[filepath].editorRevision + 1
 
         local rev_delta = {
             delta = delta,
-            revision = daemonRevision,
+            revision = files[filepath].daemonRevision,
         }
 
-        local uri = "file://" .. vim.api.nvim_buf_get_name(0)
         local params = { uri = uri, delta = rev_delta }
 
         sendNotification("edit", params)
@@ -131,9 +130,14 @@ end
 
 function EthersyncCloseBuffer()
     local closedFile = vim.fn.expand("<afile>:p")
-    if theFile ~= closedFile then
+    local filepath = vim.uri_to_fname("file://" .. closedFile)
+
+    if not files[filepath] then
         return
     end
+
+    files[filepath] = nil
+
     -- TODO: Is the on_lines callback un-registered automatically when the buffer closes,
     -- or should we detach it ourselves?
     -- vim.api.nvim_buf_detach(0) isn't a thing. https://github.com/neovim/neovim/issues/17874
@@ -145,9 +149,6 @@ end
 function EthersyncInfo()
     if client then
         print("Connected to Ethersync daemon!")
-        print("File: " .. theFile)
-        print("Editor revision: " .. editorRevision)
-        print("Daemon revision: " .. daemonRevision)
     else
         print("Not connected to Ethersync daemon.")
     end
