@@ -16,6 +16,8 @@ use std::path::{Path, PathBuf};
 use tokio::sync::{broadcast, mpsc, oneshot};
 use tracing::{debug, warn};
 
+const TEST_FILE_PATH: &str = "text";
+
 // These messages are sent to the task that owns the document.
 pub enum DocMessage {
     GetContent {
@@ -125,15 +127,6 @@ impl Document {
         }
     }
 
-    fn current_content(&self) -> Result<String> {
-        // TODO: use file_path parameter once we're ready to replace all current_content() calls.
-        self.text_obj("text").map(|to| {
-            self.doc
-                .text(to)
-                .expect("Failed to get string from Automerge text object")
-        })
-    }
-
     fn current_file_content(&self, file_path: &str) -> Result<String> {
         self.text_obj(file_path).map(|to| {
             self.doc
@@ -188,23 +181,21 @@ impl DocumentActor {
     }
 
     async fn handle_message(&mut self, message: DocMessage) {
-        // TODO: Show the type in the debug message, or implement Debug for DocMessage.
         debug!("Handling doc message: {message:?}");
         match message {
             DocMessage::GetContent { response_tx } => {
                 response_tx
-                    .send(self.current_content())
+                    .send(self.current_file_content(TEST_FILE_PATH))
                     .expect("Failed to send content to response channel");
             }
             DocMessage::RandomEdit => {
                 let delta = self.random_delta();
                 let text = self
-                    .current_content()
+                    .current_file_content(TEST_FILE_PATH)
                     .expect("Should have initialized text before performing random edit");
                 let ed_delta = EditorTextDelta::from_delta(delta.clone(), &text);
-                self.apply_delta_to_doc(&ed_delta, "text");
-                // TODO: Pull out default file path into a constant, or refactor to be multi-file.
-                self.process_crdt_delta_in_ot(delta, "text").await;
+                self.apply_delta_to_doc(&ed_delta, TEST_FILE_PATH);
+                self.process_crdt_delta_in_ot(delta, TEST_FILE_PATH).await;
             }
             DocMessage::FromEditor(message) => self.handle_message_from_editor(message).await,
             DocMessage::ReceiveSyncMessage {
@@ -326,7 +317,7 @@ impl DocumentActor {
 
     fn random_delta(&self) -> TextDelta {
         let text = self
-            .current_content()
+            .current_file_content(TEST_FILE_PATH)
             .expect("Should have initialized text before performing random edit");
         let options = ["d", "ü", "🥕", "💚", "\n"];
         let random_text: String = (1..5)
@@ -409,16 +400,6 @@ impl DocumentActor {
                 std::fs::write(&self.file_path, &text).expect("Could not write to file");
             }
         }
-
-        // let content = self.current_content();
-        // if let Ok(text) = content {
-        //     debug!(current_text__ = text);
-        //     if let Some(ot_server) = &mut self.ot_server {
-        //         debug!(current_ot_doc = ot_server.current_content());
-        //     } else {
-        //         std::fs::write(&self.file_path, &text).expect("Could not write to file");
-        //     }
-        // }
     }
 
     /// Reading in the file is a preparatory step, before kicking off the actor.
@@ -439,10 +420,6 @@ impl DocumentActor {
             // TODO: Look at *why* we couldn't read the file.
             panic!("Could not read file {}", self.file_path.display());
         }
-    }
-
-    fn current_content(&self) -> Result<String> {
-        self.crdt_doc.current_content()
     }
 
     fn current_file_content(&self, file_path: &str) -> Result<String> {
@@ -579,19 +556,22 @@ mod tests {
             let mut document = Document::default();
             let text = "To be or not to be, that is the question".to_string();
 
-            document.initialize_text(&text, "text");
+            document.initialize_text(&text, TEST_FILE_PATH);
 
             // unfortunately anyhow::Error doesn't implement PartialEq, so we'll rather unwrap.
-            assert_eq!(document.current_content().unwrap(), text);
+            assert_eq!(document.current_file_content(TEST_FILE_PATH).unwrap(), text);
         }
 
         fn apply_delta_to_doc_works(initial: &str, ed_delta: &EditorTextDelta, expected: &str) {
             let mut document = Document::default();
-            document.initialize_text(initial, "text");
-            document.apply_delta_to_doc(ed_delta, "text");
+            document.initialize_text(initial, TEST_FILE_PATH);
+            document.apply_delta_to_doc(ed_delta, TEST_FILE_PATH);
 
             // unfortunately anyhow::Error doesn't implement PartialEq, so we'll rather unwrap.
-            assert_eq!(document.current_content().unwrap(), expected);
+            assert_eq!(
+                document.current_file_content(TEST_FILE_PATH).unwrap(),
+                expected
+            );
         }
 
         #[test]
