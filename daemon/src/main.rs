@@ -31,10 +31,11 @@ enum Commands {
         /// Port to listen on as a hosting peer.
         #[arg(short, long, default_value = "4242")]
         port: Option<u16>,
+        /// The directory to sync.
+        directory: Option<PathBuf>,
         /// IP + port of a peer to connect to. Example: 192.168.1.42:1234
+        #[arg(long)]
         peer: Option<String>,
-        #[arg(short, long)]
-        file: PathBuf,
     },
     /// Open a JSON-RPC connection to the Ethersync daemon on stdin/stdout.
     Client,
@@ -55,8 +56,15 @@ async fn main() -> io::Result<()> {
     let socket_path = cli.socket_path.unwrap_or(DEFAULT_SOCKET_PATH.into());
 
     match cli.command {
-        Commands::Daemon { port, peer, file } => {
-            Daemon::new(port, peer, &socket_path, &file);
+        Commands::Daemon {
+            port,
+            directory,
+            peer,
+        } => {
+            // TODO: directory should exist
+            let directory = directory
+                .unwrap_or(std::env::current_dir().expect("Could not access current directory"));
+            Daemon::new(port, peer, &socket_path, &directory);
             match signal::ctrl_c().await {
                 Ok(()) => {}
                 Err(err) => {

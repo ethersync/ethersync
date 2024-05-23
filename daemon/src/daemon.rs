@@ -15,6 +15,7 @@ use std::fmt;
 use std::path::{Path, PathBuf};
 use tokio::sync::{broadcast, mpsc, oneshot};
 use tracing::{debug, warn};
+use walkdir::{DirEntry, WalkDir};
 
 pub const TEST_FILE_PATH: &str = "text";
 
@@ -136,6 +137,7 @@ impl Document {
     }
 
     fn initialize_text(&mut self, text: &str, file_path: &str) {
+        debug!("Initializing {file_path} in CRDT");
         let text_obj = self
             .doc
             .put_object(automerge::ROOT, file_path, ObjType::Text)
@@ -160,7 +162,7 @@ pub struct DocumentActor {
     ot_servers: HashMap<String, OTServer>,
     /// The Document is the main I/O managed resource of this actor.
     crdt_doc: Document,
-    file_path: PathBuf,
+    base_dir: PathBuf,
 }
 
 impl DocumentActor {
@@ -168,13 +170,13 @@ impl DocumentActor {
     fn new(
         doc_message_rx: mpsc::Receiver<DocMessage>,
         doc_changed_ping_tx: DocChangedSender,
-        file_path: PathBuf,
+        base_dir: PathBuf,
     ) -> Self {
         Self {
             doc_message_rx,
             doc_changed_ping_tx,
             editor_clients: HashMap::default(),
-            file_path,
+            base_dir,
             ot_servers: HashMap::default(),
             crdt_doc: Document::default(),
         }
@@ -236,12 +238,7 @@ impl DocumentActor {
     }
 
     fn absolute_path_for_file_path(&self, file_path: &str) -> String {
-        // TODO: Let user provide base dir directly instead of taking it from --file.
-        let base_dir = self
-            .file_path
-            .parent()
-            .expect("Could not get base dir of --file value");
-        format!("{}/{}", base_dir.display(), file_path)
+        format!("{}/{}", self.base_dir.display(), file_path)
     }
 
     async fn handle_message_from_editor(&mut self, message: EditorProtocolMessage) {
@@ -419,23 +416,34 @@ impl DocumentActor {
     }
 
     /// Reading in the file is a preparatory step, before kicking off the actor.
-    fn read_current_content_from_file(&mut self) {
-        // Create the file if it doesn't exist.
-        if !self.file_path.exists() {
-            std::fs::write(&self.file_path, "").expect("Could not create file");
+    fn read_current_content_from_dir(&mut self) {
+        fn is_not_hidden(entry: &DirEntry) -> bool {
+            entry
+                .file_name()
+                .to_str()
+                .map(|s| entry.depth() == 0 || !s.starts_with('.'))
+                .unwrap_or(false)
         }
 
-        if let Ok(text) = std::fs::read_to_string(&self.file_path) {
-            let relative_file_path = Self::file_path_for_uri(
-                self.file_path
-                    .to_str()
-                    .expect("Could not convert PathBuf to str"),
-            );
-            self.crdt_doc.initialize_text(&text, &relative_file_path);
-        } else {
-            // TODO: Look at *why* we couldn't read the file.
-            panic!("Could not read file {}", self.file_path.display());
-        }
+        WalkDir::new(self.base_dir.clone())
+            .into_iter()
+            .filter_entry(is_not_hidden)
+            .filter_map(|v| v.ok())
+            .filter(|metadata| metadata.file_type().is_file())
+            .for_each(|file_path| {
+                let file_path = file_path.path();
+                if let Ok(text) = std::fs::read_to_string(file_path) {
+                    let relative_file_path = Self::file_path_for_uri(
+                        file_path
+                            .to_str()
+                            .expect("Could not convert PathBuf to str"),
+                    );
+                    self.crdt_doc.initialize_text(&text, &relative_file_path);
+                } else {
+                    // TODO: Look at *why* we couldn't read the file.
+                    panic!("Could not read file {}", file_path.display());
+                }
+            });
     }
 
     fn current_file_content(&self, file_path: &str) -> Result<String> {
@@ -469,7 +477,7 @@ pub struct DocumentActorHandle {
 }
 
 impl DocumentActorHandle {
-    pub fn new(file_path: &Path, host: bool) -> Self {
+    pub fn new(base_dir: &Path, host: bool) -> Self {
         // The document task will receive messages on this channel.
         let (doc_message_tx, doc_message_rx) = mpsc::channel(1);
 
@@ -477,15 +485,12 @@ impl DocumentActorHandle {
         // The sync tasks will subscribe to it, and react to it by syncing with the peers.
         let (doc_changed_ping_tx, _doc_changed_ping_rx) = broadcast::channel::<()>(1);
 
-        let mut actor = DocumentActor::new(
-            doc_message_rx,
-            doc_changed_ping_tx.clone(),
-            file_path.into(),
-        );
+        let mut actor =
+            DocumentActor::new(doc_message_rx, doc_changed_ping_tx.clone(), base_dir.into());
 
         // Initialize the text from the file_path, if this is the document owned by the host.
         if host {
-            actor.read_current_content_from_file();
+            actor.read_current_content_from_dir();
         }
 
         tokio::spawn(async move { actor.run().await });
@@ -535,13 +540,12 @@ impl Daemon {
         port: Option<u16>,
         peer: Option<String>,
         socket_path: &Path,
-        file_path: &Path,
+        base_dir: &Path,
     ) -> Self {
         // If the peer address is empty, we're the host.
         let is_host = peer.is_none();
 
-        // TODO: get absolute path for file_path and split into base_dir and file_path(?)
-        let document_handle = DocumentActorHandle::new(file_path, is_host);
+        let document_handle = DocumentActorHandle::new(base_dir, is_host);
 
         let connection_document_handle = document_handle.clone();
         let peer_info = connect::PeerConnectionInfo::new(port, peer);
