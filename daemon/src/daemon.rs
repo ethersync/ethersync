@@ -142,10 +142,10 @@ impl Document {
         })
     }
 
-    fn initialize_text(&mut self, text: &str) {
+    fn initialize_text(&mut self, text: &str, file_path: &str) {
         let text_obj = self
             .doc
-            .put_object(automerge::ROOT, "file", ObjType::Text)
+            .put_object(automerge::ROOT, file_path, ObjType::Text)
             .expect("Failed to initialize text object in Automerge document");
         self.doc
             .splice_text(text_obj, 0, 0, text)
@@ -236,7 +236,7 @@ impl DocumentActor {
         }
     }
 
-    fn file_path_for(uri: String) -> String {
+    fn file_path_for(uri: &str) -> String {
         uri.rsplit('/')
             .next()
             .expect("Expected at least one segment.")
@@ -246,7 +246,7 @@ impl DocumentActor {
     async fn handle_message_from_editor(&mut self, message: EditorProtocolMessage) {
         match message {
             EditorProtocolMessage::Open { uri } => {
-                let file_path = Self::file_path_for(uri);
+                let file_path = Self::file_path_for(&uri);
                 let ot_server = OTServer::new(
                     self.current_file_content(&file_path)
                         .unwrap_or_else(
@@ -256,7 +256,7 @@ impl DocumentActor {
                 self.ot_servers.insert(file_path, ot_server);
             }
             EditorProtocolMessage::Close { uri } => {
-                self.ot_servers.remove(&Self::file_path_for(uri));
+                self.ot_servers.remove(&Self::file_path_for(&uri));
             }
             EditorProtocolMessage::Edit {
                 delta: rev_delta,
@@ -264,7 +264,7 @@ impl DocumentActor {
             } => {
                 debug!("Handling RevDelta from editor: {:#?}", rev_delta);
                 // TODO: Refactor apply_delta_to_ot, move it to OTServer.
-                let file_path = Self::file_path_for(uri);
+                let file_path = Self::file_path_for(&uri);
                 let (editor_delta_for_crdt, rev_deltas_for_editor) =
                     self.apply_delta_to_ot(rev_delta, &file_path);
 
@@ -429,7 +429,12 @@ impl DocumentActor {
         }
 
         if let Ok(text) = std::fs::read_to_string(&self.file_path) {
-            self.crdt_doc.initialize_text(&text);
+            let relative_file_path = Self::file_path_for(
+                self.file_path
+                    .to_str()
+                    .expect("Could not convert PathBuf to str"),
+            );
+            self.crdt_doc.initialize_text(&text, &relative_file_path);
         } else {
             // TODO: Look at *why* we couldn't read the file.
             panic!("Could not read file {}", self.file_path.display());
@@ -574,7 +579,7 @@ mod tests {
             let mut document = Document::default();
             let text = "To be or not to be, that is the question".to_string();
 
-            document.initialize_text(&text);
+            document.initialize_text(&text, "text");
 
             // unfortunately anyhow::Error doesn't implement PartialEq, so we'll rather unwrap.
             assert_eq!(document.current_content().unwrap(), text);
@@ -582,7 +587,7 @@ mod tests {
 
         fn apply_delta_to_doc_works(initial: &str, ed_delta: &EditorTextDelta, expected: &str) {
             let mut document = Document::default();
-            document.initialize_text(initial);
+            document.initialize_text(initial, "text");
             document.apply_delta_to_doc(ed_delta, "text");
 
             // unfortunately anyhow::Error doesn't implement PartialEq, so we'll rather unwrap.
