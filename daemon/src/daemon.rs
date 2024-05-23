@@ -254,14 +254,13 @@ impl DocumentActor {
                 uri,
             } => {
                 debug!("Handling RevDelta from editor: {:#?}", rev_delta);
-                // TODO: Refactor apply_delta_to_ot, move it to OTServer.
                 let file_path = Self::file_path_for(&uri);
                 let (editor_delta_for_crdt, rev_deltas_for_editor) =
                     self.apply_delta_to_ot(rev_delta, &file_path);
 
                 self.apply_delta_to_doc(&editor_delta_for_crdt, &file_path);
-                // TODO: make file-dependent!
-                self.send_deltas_to_editor(rev_deltas_for_editor).await;
+                self.send_deltas_to_editor(rev_deltas_for_editor, &file_path)
+                    .await;
             }
         }
     }
@@ -285,11 +284,15 @@ impl DocumentActor {
         result
     }
 
-    async fn send_deltas_to_editor(&mut self, rev_deltas: Vec<RevisionedEditorTextDelta>) {
+    async fn send_deltas_to_editor(
+        &mut self,
+        rev_deltas: Vec<RevisionedEditorTextDelta>,
+        file_path: &str,
+    ) {
         for rev_delta in rev_deltas {
             debug!("Sending RevDelta to socket: {:#?}", rev_delta);
 
-            self.send_to_editors(rev_delta).await;
+            self.send_to_editors(rev_delta, file_path).await;
         }
     }
 
@@ -371,14 +374,19 @@ impl DocumentActor {
         // Only process the CRDT delta, if editor has the file open.
         if let Some(ot_server) = self.ot_servers.get_mut(file_path) {
             let rev_text_delta_for_editor = ot_server.apply_crdt_change(delta);
-            // TODO: add file_path
-            self.send_to_editors(rev_text_delta_for_editor).await;
+            self.send_to_editors(rev_text_delta_for_editor, file_path)
+                .await;
         }
     }
 
-    async fn send_to_editors(&mut self, rev_delta: RevisionedEditorTextDelta) {
+    async fn send_to_editors(&mut self, rev_delta: RevisionedEditorTextDelta, file_path: &str) {
+        // TODO: Let user provide base dir directly instead of taking it from --file.
+        let base_dir = self
+            .file_path
+            .parent()
+            .expect("Could not get base dir of --file value");
         let message = EditorProtocolMessage::Edit {
-            uri: format!("file://{}", self.file_path.display()),
+            uri: format!("file://{}/{}", base_dir.display(), file_path),
             delta: rev_delta,
         };
 
