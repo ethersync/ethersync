@@ -227,17 +227,27 @@ impl DocumentActor {
         }
     }
 
-    fn file_path_for(uri: &str) -> String {
+    fn file_path_for_uri(uri: &str) -> String {
+        // TODO: Use base dir here, once it's there :)
         uri.rsplit('/')
             .next()
             .expect("Expected at least one segment.")
             .into()
     }
 
+    fn absolute_path_for_file_path(&self, file_path: &str) -> String {
+        // TODO: Let user provide base dir directly instead of taking it from --file.
+        let base_dir = self
+            .file_path
+            .parent()
+            .expect("Could not get base dir of --file value");
+        format!("{}/{}", base_dir.display(), file_path)
+    }
+
     async fn handle_message_from_editor(&mut self, message: EditorProtocolMessage) {
         match message {
             EditorProtocolMessage::Open { uri } => {
-                let file_path = Self::file_path_for(&uri);
+                let file_path = Self::file_path_for_uri(&uri);
                 let ot_server =
                     OTServer::new(self.current_file_content(&file_path).unwrap_or_else(|_| {
                         panic!(
@@ -247,14 +257,14 @@ impl DocumentActor {
                 self.ot_servers.insert(file_path, ot_server);
             }
             EditorProtocolMessage::Close { uri } => {
-                self.ot_servers.remove(&Self::file_path_for(&uri));
+                self.ot_servers.remove(&Self::file_path_for_uri(&uri));
             }
             EditorProtocolMessage::Edit {
                 delta: rev_delta,
                 uri,
             } => {
                 debug!("Handling RevDelta from editor: {:#?}", rev_delta);
-                let file_path = Self::file_path_for(&uri);
+                let file_path = Self::file_path_for_uri(&uri);
                 let (editor_delta_for_crdt, rev_deltas_for_editor) =
                     self.apply_delta_to_ot(rev_delta, &file_path);
 
@@ -297,7 +307,8 @@ impl DocumentActor {
     }
 
     fn get_ot_server(&mut self, file_path: &str) -> &mut OTServer {
-        // TODO: Fail in a nicer way, if Edit for unknown OTServer (client messed up).
+        // TODO: Once we are able to send responses to the client,
+        // fail in a nicer way, if Edit for unknown OTServer (client messed up).
         let error_message = format!("Could not get OTServer for {file_path}.");
         self.ot_servers.get_mut(file_path).expect(&error_message)
     }
@@ -337,6 +348,7 @@ impl DocumentActor {
         delta.insert(&random_text);
 
         // TODO: Delete the end/beginning of the content on purpose sometimes!
+        // Goal is to make "more critical" edits more likely. Like an "inverted" gauss curve :D
         let mut deletion_length = 0;
         if (text_length - random_position) > 0 {
             deletion_length = rand::thread_rng().gen_range(0..(text_length - random_position));
@@ -380,13 +392,8 @@ impl DocumentActor {
     }
 
     async fn send_to_editors(&mut self, rev_delta: RevisionedEditorTextDelta, file_path: &str) {
-        // TODO: Let user provide base dir directly instead of taking it from --file.
-        let base_dir = self
-            .file_path
-            .parent()
-            .expect("Could not get base dir of --file value");
         let message = EditorProtocolMessage::Edit {
-            uri: format!("file://{}/{}", base_dir.display(), file_path),
+            uri: format!("file://{}", self.absolute_path_for_file_path(file_path)),
             delta: rev_delta,
         };
 
@@ -404,8 +411,9 @@ impl DocumentActor {
                 let text = self.current_file_content(&key).expect(
                     "Failed to get file content when writing to disk. Key should have existed",
                 );
-                // TODO: fix file path!
-                std::fs::write(&self.file_path, &text).expect("Could not write to file");
+                let abs_path = self.absolute_path_for_file_path(&key);
+                std::fs::write(&abs_path, &text)
+                    .unwrap_or_else(|_| panic!("Could not write to file {abs_path}"));
             }
         }
     }
@@ -418,7 +426,7 @@ impl DocumentActor {
         }
 
         if let Ok(text) = std::fs::read_to_string(&self.file_path) {
-            let relative_file_path = Self::file_path_for(
+            let relative_file_path = Self::file_path_for_uri(
                 self.file_path
                     .to_str()
                     .expect("Could not convert PathBuf to str"),
