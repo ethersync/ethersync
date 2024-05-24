@@ -63,7 +63,6 @@ local function connect()
             end)
 
             print("Ethersync client connection exited: ", vim.inspect({ ... }))
-            vim.defer_fn(connect, 1000)
         end,
     }
 
@@ -77,11 +76,7 @@ local function connect()
         client = vim.lsp.rpc.start(cmd, dispatchers)
     end
 
-    if client then
-        print("Connected to Ethersync daemon!")
-    else
-        vim.defer_fn(connect, 1000)
-    end
+    print("Connected to Ethersync daemon!")
 end
 
 -- Forward buffer edits to daemon as well as subscribe to daemon events ("open").
