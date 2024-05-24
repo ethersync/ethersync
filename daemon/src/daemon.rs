@@ -10,7 +10,7 @@ use automerge::{
     AutoCommit, ObjType, Patch, PatchLog, ReadDoc,
 };
 use rand::Rng;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fmt;
 use std::path::{Path, PathBuf};
 use tokio::sync::{broadcast, mpsc, oneshot};
@@ -77,13 +77,6 @@ impl Document {
         self.doc.make_patches(&mut patch_log)
     }
 
-    fn receive_sync_message(&mut self, message: AutomergeSyncMessage, peer_state: &mut SyncState) {
-        self.doc
-            .sync()
-            .receive_sync_message(peer_state, message)
-            .expect("Failed to apply sync message to Automerge document");
-    }
-
     fn generate_sync_message(
         &mut self,
         peer_state: &mut SyncState,
@@ -112,7 +105,7 @@ impl Document {
         let mut offset = 0i32;
         let text = self
             .current_file_content(file_path)
-            .expect("Should have initialized text before performing random edit");
+            .expect("Should have initialized text before applying delta to it");
         for op in &delta.0 {
             let (start, length) = op.range.as_relative(&text);
             self.doc
@@ -197,7 +190,8 @@ impl DocumentActor {
                     .expect("Should have initialized text before performing random edit");
                 let ed_delta = EditorTextDelta::from_delta(delta.clone(), &text);
                 self.apply_delta_to_doc(&ed_delta, TEST_FILE_PATH);
-                self.process_crdt_delta_in_ot(delta, TEST_FILE_PATH).await;
+                self.process_crdt_file_deltas_in_ot(vec![(TEST_FILE_PATH.to_string(), delta)])
+                    .await;
             }
             DocMessage::FromEditor(message) => self.handle_message_from_editor(message).await,
             DocMessage::ReceiveSyncMessage {
@@ -205,9 +199,12 @@ impl DocumentActor {
                 state: mut peer_state,
                 response_tx,
             } => {
-                if let Some(patches) = self.apply_sync_message_to_doc(message, &mut peer_state) {
-                    self.process_crdt_patches_in_ot(patches).await;
-                }
+                let patches = self.apply_sync_message_to_doc(message, &mut peer_state);
+                let file_deltas = Self::crdt_patches_to_file_deltas(patches);
+
+                self.maybe_write_files_changed_in_file_deltas(&file_deltas);
+                self.process_crdt_file_deltas_in_ot(file_deltas).await;
+
                 response_tx
                     .send(peer_state)
                     .expect("Failed to send peer state in response to ReceiveSyncMessage");
@@ -276,19 +273,12 @@ impl DocumentActor {
         &mut self,
         message: AutomergeSyncMessage,
         peer_state: &mut SyncState,
-    ) -> Option<Vec<Patch>> {
-        // Only generate patches, if an editor has a file open.
-        let result = if !self.ot_servers.is_empty() {
-            let patches = self
-                .crdt_doc
-                .receive_sync_message_log_patches(message, peer_state);
-            Some(patches)
-        } else {
-            self.crdt_doc.receive_sync_message(message, peer_state);
-            None
-        };
+    ) -> Vec<Patch> {
+        let patches = self
+            .crdt_doc
+            .receive_sync_message_log_patches(message, peer_state);
         let _ = self.doc_changed_ping_tx.send(());
-        result
+        patches
     }
 
     async fn send_deltas_to_editor(
@@ -356,8 +346,9 @@ impl DocumentActor {
         delta
     }
 
-    async fn process_crdt_patches_in_ot(&mut self, patches: Vec<Patch>) {
-        debug!(?patches);
+    fn crdt_patches_to_file_deltas(patches: Vec<Patch>) -> Vec<(String, TextDelta)> {
+        let mut file_deltas: Vec<(String, TextDelta)> = vec![];
+
         for patch in patches {
             match patch.action.try_into() {
                 Ok(delta) => {
@@ -366,8 +357,7 @@ impl DocumentActor {
                     }
                     let (_obj_id, prop) = &patch.path[0];
                     if let automerge::Prop::Map(file_path) = prop {
-                        debug!("Applying incoming CRDT patch for {file_path}");
-                        self.process_crdt_delta_in_ot(delta, file_path).await;
+                        file_deltas.push((file_path.into(), delta));
                     } else {
                         panic!("Unexpected path in Automerge patch: Prop is not a map");
                     }
@@ -377,14 +367,19 @@ impl DocumentActor {
                 }
             }
         }
+
+        file_deltas
     }
 
-    async fn process_crdt_delta_in_ot(&mut self, delta: TextDelta, file_path: &str) {
-        // Only process the CRDT delta, if editor has the file open.
-        if let Some(ot_server) = self.ot_servers.get_mut(file_path) {
-            let rev_text_delta_for_editor = ot_server.apply_crdt_change(delta);
-            self.send_to_editors(rev_text_delta_for_editor, file_path)
-                .await;
+    async fn process_crdt_file_deltas_in_ot(&mut self, file_deltas: Vec<(String, TextDelta)>) {
+        for (file_path, delta) in file_deltas {
+            // Only process the CRDT delta, if editor has the file open.
+            if let Some(ot_server) = self.ot_servers.get_mut(&file_path) {
+                debug!("Applying incoming CRDT patch for {file_path}");
+                let rev_text_delta_for_editor = ot_server.apply_crdt_change(delta);
+                self.send_to_editors(rev_text_delta_for_editor, &file_path)
+                    .await;
+            }
         }
     }
 
@@ -399,19 +394,29 @@ impl DocumentActor {
         }
     }
 
-    fn write_current_content_to_files(&mut self) {
-        // iterate over automerge keys
-        // for those, that don't have an ot server we have ownership,
-        // so we'll write those.
-        for key in self.crdt_doc.doc.keys(automerge::ROOT) {
-            if !self.ot_servers.contains_key(&key) {
-                let text = self.current_file_content(&key).expect(
-                    "Failed to get file content when writing to disk. Key should have existed",
-                );
-                let abs_path = self.absolute_path_for_file_path(&key);
-                std::fs::write(&abs_path, &text)
-                    .unwrap_or_else(|_| panic!("Could not write to file {abs_path}"));
-            }
+    fn maybe_write_files_changed_in_file_deltas(&mut self, file_deltas: &Vec<(String, TextDelta)>) {
+        // Collect file paths into a set, so we don't write files multiple times on complex
+        // patches.
+        let mut file_paths = HashSet::new();
+        for (file_path, _delta) in file_deltas {
+            file_paths.insert(file_path);
+        }
+
+        for file_path in file_paths {
+            self.maybe_write_file(file_path);
+        }
+    }
+
+    fn maybe_write_file(&mut self, file_path: &str) {
+        // Only write to the file if editor *doesn't* have the file open.
+        if !self.ot_servers.contains_key(file_path) {
+            let text = self
+                .current_file_content(file_path)
+                .expect("Failed to get file content when writing to disk. Key should have existed");
+            let abs_path = self.absolute_path_for_file_path(file_path);
+            debug!("Writing to {abs_path}.");
+            std::fs::write(&abs_path, text)
+                .unwrap_or_else(|_| panic!("Could not write to file {abs_path}"));
         }
     }
 
@@ -453,12 +458,12 @@ impl DocumentActor {
     fn apply_delta_to_doc(&mut self, delta: &EditorTextDelta, file_path: &str) {
         self.crdt_doc.apply_delta_to_doc(delta, file_path);
         let _ = self.doc_changed_ping_tx.send(());
+        self.maybe_write_file(file_path);
     }
 
     async fn run(&mut self) {
         while let Some(message) = self.doc_message_rx.recv().await {
             self.handle_message(message).await;
-            self.write_current_content_to_files();
         }
         panic!("Channel towards document task has been closed");
     }
