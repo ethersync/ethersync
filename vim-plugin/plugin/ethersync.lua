@@ -27,7 +27,7 @@ local function processOperationForEditor(method, parameters)
 
             files[filepath].daemonRevision = files[filepath].daemonRevision + 1
         else
-            -- Operation is not up-to-date to our content, skip it!
+            -- Operation is not up-to-date to our content, ignore it!
             -- The daemon will send a transformed one later.
         end
     else
@@ -124,6 +124,10 @@ function EthersyncOpenBuffer()
 end
 
 function EthersyncCloseBuffer()
+    if vim.fn.isdirectory(vim.fn.expand("<afile>:p:h") .. "/.ethersync") ~= 1 then
+        return
+    end
+
     local closedFile = vim.fn.expand("<afile>:p")
     local filepath = vim.uri_to_fname("file://" .. closedFile)
 
