@@ -97,8 +97,8 @@ impl SocketReadActor {
 
 pub struct SocketWriteActor {
     writer: WriteHalf<UnixStream>,
-    shutdown_token: CancellationToken,
     editor_message_receiver: EditorMessageReceiver,
+    shutdown_token: CancellationToken,
 }
 
 impl SocketWriteActor {
@@ -130,7 +130,7 @@ impl SocketWriteActor {
         // We're sending an editor message to the client.
         loop {
             tokio::select! {
-                _ = self.shutdown_token.cancelled() => {
+                () = self.shutdown_token.cancelled() => {
                     debug!("Shutting down JSON-RPC sender (due to socket disconnet)");
                     break;
                 }

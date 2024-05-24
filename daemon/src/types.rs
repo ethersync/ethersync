@@ -89,6 +89,9 @@ pub enum EditorProtocolMessage {
 }
 
 impl EditorProtocolMessage {
+    /// # Errors
+    ///
+    /// Will return an error if the conversion to JSONRPC fails.
     pub fn to_jsonrpc(&self) -> Result<String, anyhow::Error> {
         let json_value =
             serde_json::to_value(self).expect("Failed to convert editor message to a JSON value");
@@ -185,6 +188,9 @@ impl TextDelta {
         }
     }
 
+    /// # Errors
+    ///
+    /// Will return an error if the composition of the deltas fails.
     #[must_use]
     pub fn compose(self, other: Self) -> Self {
         let mut my_op_seq: OperationSeq = self.into();
@@ -204,39 +210,43 @@ impl TextDelta {
     // +transform_position?
 }
 
+/// # Errors
+///
+/// Will return an error if the patch action is not supported.
 pub fn patch_to_file_delta(patch: Patch) -> anyhow::Result<(String, TextDelta)> {
-    let mut delta = TextDelta::default();
-
-    fn file_path_from_path_default(path: Vec<(automerge::ObjId, automerge::Prop)>) -> String {
-        if path.len() != 1 {
-            panic!("Unexpected path in Automerge patch, length is not 1");
-        }
+    fn file_path_from_path_default(path: &[(automerge::ObjId, automerge::Prop)]) -> String {
+        assert!(
+            path.len() == 1,
+            "Unexpected path in Automerge patch, length is not 1"
+        );
         let (_obj_id, prop) = &path[0];
         if let automerge::Prop::Map(file_path) = prop {
             return file_path.into();
-        } else {
-            panic!("Unexpected path in Automerge patch: Prop is not a map");
         }
+        panic!("Unexpected path in Automerge patch: Prop is not a map");
     }
+
+    let mut delta = TextDelta::default();
 
     match patch.action {
         PatchAction::SpliceText { index, value, .. } => {
             delta.retain(index);
             delta.insert(&value.make_string());
-            Ok((file_path_from_path_default(patch.path), delta))
+            Ok((file_path_from_path_default(&patch.path), delta))
         }
         PatchAction::DeleteSeq { index, length } => {
             delta.retain(index);
             delta.delete(length);
-            Ok((file_path_from_path_default(patch.path), delta))
+            Ok((file_path_from_path_default(&patch.path), delta))
         }
         PatchAction::PutMap { key, .. } => {
             // This action happens when a new file is created.
             // We return an empty delta on the new file, so that the file is created on disk when
             // synced over to another peer. TODO: Is this the best way to solve this?
-            if !patch.path.is_empty() {
-                panic!("Unexpected PutMap on non-ROOT in Automerge patch");
-            }
+            assert!(
+                patch.path.is_empty(),
+                "Unexpected PutMap on non-ROOT in Automerge patch",
+            );
             Ok((key, delta))
         }
         other_action => Err(anyhow::anyhow!(
@@ -317,6 +327,9 @@ impl From<TextDelta> for OperationSeq {
 }
 
 impl TextDelta {
+    /// # Panics
+    ///
+    /// Will panic if the delta contains multiple operations.
     pub fn from_ed_delta(ed_delta: EditorTextDelta, content: &str) -> Self {
         let mut delta = TextDelta::default();
         // TODO: add support, when needed
@@ -385,21 +398,21 @@ pub mod factories {
     use super::*;
 
     pub fn insert(at: usize, s: &str) -> TextDelta {
-        let mut delta: TextDelta = Default::default();
+        let mut delta: TextDelta = TextDelta::default();
         delta.retain(at);
         delta.insert(s);
         delta
     }
 
     pub fn delete(from: usize, length: usize) -> TextDelta {
-        let mut delta: TextDelta = Default::default();
+        let mut delta: TextDelta = TextDelta::default();
         delta.retain(from);
         delta.delete(length);
         delta
     }
 
     pub fn replace(from: usize, length: usize, s: &str) -> TextDelta {
-        let mut delta: TextDelta = Default::default();
+        let mut delta: TextDelta = TextDelta::default();
         delta.retain(from);
         delta.delete(length);
         delta.insert(s);

@@ -4,7 +4,7 @@ use std::io;
 use std::path::{Path, PathBuf};
 use tokio::net::{TcpListener, TcpStream, UnixListener};
 use tokio::time::{timeout, Duration};
-use tracing::{error, info, warn};
+use tracing::{info, warn};
 
 use crate::daemon::DocumentActorHandle;
 use crate::editor::spawn_editor_connection;
@@ -15,11 +15,15 @@ pub struct PeerConnectionInfo {
     peer: Option<String>,
 }
 impl PeerConnectionInfo {
+    #[must_use]
     pub fn new(port: Option<u16>, peer: Option<String>) -> Self {
         Self { port, peer }
     }
 }
 
+/// # Panics
+///
+/// Will panic if we fail to dial the peer, of if we fail to accept incoming connections.
 pub async fn make_peer_connection(
     connection_info: PeerConnectionInfo,
     document_handle: DocumentActorHandle,
@@ -38,6 +42,9 @@ pub async fn make_peer_connection(
     }
 }
 
+/// # Panics
+///
+/// Will panic if we fail to listen on the socket, or if we fail to accept an incoming connection.
 pub async fn make_editor_connection(socket_path: PathBuf, document_handle: DocumentActorHandle) {
     if Path::new(&socket_path).exists() {
         fs::remove_file(&socket_path).expect("Could not remove/re-initialize socket");
@@ -46,7 +53,7 @@ pub async fn make_editor_connection(socket_path: PathBuf, document_handle: Docum
     match result {
         Ok(()) => {}
         Err(err) => {
-            error!("Failed to make editor connection: {err}");
+            panic!("Failed to make editor connection: {err}");
         }
     }
 }
@@ -73,7 +80,7 @@ async fn connect_with_peer(
 ) -> Result<(), io::Error> {
     let stream = TcpStream::connect(address).await?;
     info!("Connected to Peer.");
-    spawn_peer_sync(stream, document_handle);
+    spawn_peer_sync(stream, &document_handle);
     Ok(())
 }
 
@@ -81,7 +88,7 @@ async fn accept_peer_loop(
     port: u16,
     document_handle: DocumentActorHandle,
 ) -> Result<(), io::Error> {
-    let listener = TcpListener::bind(format!("0.0.0.0:{}", port)).await?;
+    let listener = TcpListener::bind(format!("0.0.0.0:{port}")).await?;
 
     if let Ok(ip) = local_ip() {
         info!("Listening on local TCP: {}:{}", ip, port);
@@ -89,7 +96,7 @@ async fn accept_peer_loop(
 
     timeout(Duration::from_secs(1), async {
         if let Some(ip) = public_ip::addr().await {
-            info!("Listening on public TCP: {}:{}", ip, port);
+            info!("Listening on public TCP: {ip}:{port}");
         }
     })
     .await
@@ -100,6 +107,6 @@ async fn accept_peer_loop(
     loop {
         let (stream, _addr) = listener.accept().await?;
         info!("Peer dialed us.");
-        spawn_peer_sync(stream, document_handle.clone());
+        spawn_peer_sync(stream, &document_handle);
     }
 }

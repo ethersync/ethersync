@@ -149,7 +149,7 @@ pub struct EditorId(usize);
 
 /// This Actor is responsible for applying changes to the document asynchronously.
 ///
-/// Any DocMessage that is emitted via DocumentActorHandle should have an effect eventually.
+/// Any `DocMessage` that is emitted via `DocumentActorHandle` should have an effect eventually.
 pub struct DocumentActor {
     doc_message_rx: mpsc::Receiver<DocMessage>,
     doc_changed_ping_tx: DocChangedSender,
@@ -384,7 +384,7 @@ impl DocumentActor {
             delta: rev_delta,
         };
 
-        for (_id, handle) in self.editor_clients.iter_mut() {
+        for handle in &mut self.editor_clients.values_mut() {
             handle.send(message.clone()).await;
         }
     }
@@ -421,14 +421,13 @@ impl DocumentActor {
             entry
                 .file_name()
                 .to_str()
-                .map(|s| entry.depth() == 0 || !s.starts_with('.'))
-                .unwrap_or(false)
+                .is_some_and(|s| entry.depth() == 0 || !s.starts_with('.'))
         }
 
         WalkDir::new(self.base_dir.clone())
             .into_iter()
             .filter_entry(is_not_hidden)
-            .filter_map(|v| v.ok())
+            .filter_map(Result::ok)
             .filter(|metadata| metadata.file_type().is_file())
             .for_each(|file_path| {
                 let file_path = file_path.path();
@@ -464,7 +463,7 @@ impl DocumentActor {
     }
 }
 
-/// This handle knows how to talk to the DocumentActor and provides an interface for doing so.
+/// This handle knows how to talk to the `DocumentActor` and provides an interface for doing so.
 ///
 /// The main iterfaces for doing so is through through sending `DocMessage`s with `send_message`.
 /// An alternative pathway is to subscribe to documents changes through `subscribe_document_changes`.
@@ -506,7 +505,7 @@ impl DocumentActorHandle {
         self.doc_message_tx
             .send(message)
             .await
-            .expect("DocumentActor task has been killed")
+            .expect("DocumentActor task has been killed");
     }
 
     pub fn subscribe_document_changes(&self) -> DocChangedReceiver {
@@ -556,7 +555,7 @@ impl Daemon {
         let editor_socket_path = socket_path.to_path_buf();
         let editor_document_handle = document_handle.clone();
         tokio::spawn(async move {
-            connect::make_editor_connection(editor_socket_path, editor_document_handle).await
+            connect::make_editor_connection(editor_socket_path, editor_document_handle).await;
         });
 
         Self { document_handle }

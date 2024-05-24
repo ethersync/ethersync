@@ -196,16 +196,13 @@ impl OTServer {
             op_seq.retain((doc_chars - op_seq.base_len()) as u64);
         }
         op_seq.apply(document).unwrap_or_else(|_| {
-            panic!(
-                "Could not apply operation {:?} to string with length {} ('{:?}')",
-                op_seq, doc_chars, document
-            )
+            panic!("Could not apply operation {op_seq:?} to string with length {doc_chars} ('{document:?}')")
         })
     }
 }
 
-/// This function takes operations t1 and m1 ... m_n,
-/// and returns operations t1' and m1' ... m_n'.
+/// This function takes operations t1 and m1 ... `m_n`,
+/// and returns operations t1' and m1' ... `m_n`'.
 /// .
 ///        t1
 ///     * ----> *
