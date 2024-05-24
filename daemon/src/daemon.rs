@@ -1,7 +1,10 @@
 use crate::connect;
 use crate::editor::EditorHandle;
 use crate::ot::OTServer;
-use crate::types::{EditorProtocolMessage, EditorTextDelta, RevisionedEditorTextDelta, TextDelta};
+use crate::types::{
+    patch_to_file_delta, EditorProtocolMessage, EditorTextDelta, RevisionedEditorTextDelta,
+    TextDelta,
+};
 use anyhow::Result;
 use automerge::{
     patches::TextRepresentation,
@@ -350,17 +353,9 @@ impl DocumentActor {
         let mut file_deltas: Vec<(String, TextDelta)> = vec![];
 
         for patch in patches {
-            match patch.action.try_into() {
-                Ok(delta) => {
-                    if patch.path.len() != 1 {
-                        panic!("Unexpected path in Automerge patch, length is not 1");
-                    }
-                    let (_obj_id, prop) = &patch.path[0];
-                    if let automerge::Prop::Map(file_path) = prop {
-                        file_deltas.push((file_path.into(), delta));
-                    } else {
-                        panic!("Unexpected path in Automerge patch: Prop is not a map");
-                    }
+            match patch_to_file_delta(patch) {
+                Ok(result) => {
+                    file_deltas.push(result);
                 }
                 Err(e) => {
                     warn!("Failed to convert patch to delta: {:#?}", e);

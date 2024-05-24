@@ -3,7 +3,8 @@ use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
 use tokio::net::{TcpListener, TcpStream, UnixListener};
-use tracing::{error, info};
+use tokio::time::{timeout, Duration};
+use tracing::{error, info, warn};
 
 use crate::daemon::DocumentActorHandle;
 use crate::editor::spawn_editor_connection;
@@ -86,9 +87,15 @@ async fn accept_peer_loop(
         info!("Listening on local TCP: {}:{}", ip, port);
     }
 
-    if let Some(ip) = public_ip::addr().await {
-        info!("Listening on public TCP: {}:{}", ip, port);
-    }
+    timeout(Duration::from_secs(1), async {
+        if let Some(ip) = public_ip::addr().await {
+            info!("Listening on public TCP: {}:{}", ip, port);
+        }
+    })
+    .await
+    .unwrap_or_else(|_| {
+        warn!("Getting public IP address timed out");
+    });
 
     loop {
         let (stream, _addr) = listener.accept().await?;

@@ -6,7 +6,7 @@ use futures::future::join_all;
 use pretty_assertions::assert_eq;
 use rand::Rng;
 use std::collections::HashMap;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use tokio::time::{sleep, timeout, Duration};
 use tracing::{info, warn};
 
@@ -19,12 +19,16 @@ async fn perform_random_edits(actor: &mut (impl Actor + ?Sized)) {
     }
 }
 
-fn initialize_tmp_dir() -> temp_dir::TempDir {
+fn initialize_project() -> (temp_dir::TempDir, PathBuf) {
     let dir = temp_dir::TempDir::new().expect("Failed to create temp directory");
     let mut ethersync_dir = dir.path().to_path_buf();
     ethersync_dir.push(".ethersync");
     std::fs::create_dir(ethersync_dir).expect("Failed to create .ethersync directory");
-    dir
+
+    let file = dir.child(TEST_FILE_PATH);
+    std::fs::write(&file, "").expect("Failed to create file in temp directory");
+
+    (dir, file)
 }
 
 #[tokio::main]
@@ -35,22 +39,15 @@ async fn main() {
         std::process::exit(1);
     }));
 
-    logging::initialize(false);
+    let debug_logging = std::env::args().any(|arg| arg == "-v");
+    logging::initialize(debug_logging);
 
-    // Set up the project directories.
-    let dir = initialize_tmp_dir();
-    let dir2 = initialize_tmp_dir();
-
-    let file = dir.child(TEST_FILE_PATH);
-    let file2 = dir2.child(TEST_FILE_PATH);
+    // Set up files in project directories.
+    let (dir, file) = initialize_project();
+    let (dir2, file2) = initialize_project();
 
     // Set up the actors.
-    let daemon = Daemon::new(
-        Some(2424),
-        None,
-        Path::new("/tmp/ethersync"),
-        file.as_path(),
-    );
+    let daemon = Daemon::new(Some(2424), None, Path::new("/tmp/ethersync"), dir.path());
 
     let nvim = Neovim::new(file).await;
 
@@ -58,11 +55,11 @@ async fn main() {
         None,
         Some("127.0.0.1:2424".to_string()),
         Path::new("/tmp/etherbonk"),
-        file2.as_path(),
+        dir2.path(),
     );
     // Make sure peer has synced with the other daemon before connecting Vim!
     // Otherwise, peer might not have a document yet.
-    sleep(std::time::Duration::from_millis(500)).await;
+    sleep(std::time::Duration::from_millis(2000)).await;
 
     std::env::set_var("ETHERSYNC_SOCKET", "/tmp/etherbonk");
     let nvim2 = Neovim::new(file2).await;

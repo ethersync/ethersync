@@ -1,5 +1,5 @@
 #![allow(dead_code)]
-use automerge::PatchAction;
+use automerge::{Patch, PatchAction};
 use operational_transform::{Operation as OTOperation, OperationSeq};
 use ropey::Rope;
 use serde::{Deserialize, Serialize};
@@ -204,30 +204,45 @@ impl TextDelta {
     // +transform_position?
 }
 
-impl TryFrom<PatchAction> for TextDelta {
-    type Error = anyhow::Error;
+pub fn patch_to_file_delta(patch: Patch) -> anyhow::Result<(String, TextDelta)> {
+    let mut delta = TextDelta::default();
 
-    fn try_from(patch_action: PatchAction) -> Result<Self, Self::Error> {
-        let mut delta = TextDelta::default();
-
-        match patch_action {
-            PatchAction::SpliceText { index, value, .. } => {
-                delta.retain(index);
-                delta.insert(&value.make_string());
-            }
-            PatchAction::DeleteSeq { index, length } => {
-                delta.retain(index);
-                delta.delete(length);
-            }
-            _ => {
-                return Err(anyhow::anyhow!(
-                    "Unsupported patch action: {}",
-                    patch_action
-                ));
-            }
+    fn file_path_from_path_default(path: Vec<(automerge::ObjId, automerge::Prop)>) -> String {
+        if path.len() != 1 {
+            panic!("Unexpected path in Automerge patch, length is not 1");
         }
+        let (_obj_id, prop) = &path[0];
+        if let automerge::Prop::Map(file_path) = prop {
+            return file_path.into();
+        } else {
+            panic!("Unexpected path in Automerge patch: Prop is not a map");
+        }
+    }
 
-        Ok(delta)
+    match patch.action {
+        PatchAction::SpliceText { index, value, .. } => {
+            delta.retain(index);
+            delta.insert(&value.make_string());
+            Ok((file_path_from_path_default(patch.path), delta))
+        }
+        PatchAction::DeleteSeq { index, length } => {
+            delta.retain(index);
+            delta.delete(length);
+            Ok((file_path_from_path_default(patch.path), delta))
+        }
+        PatchAction::PutMap { key, .. } => {
+            // This action happens when a new file is created.
+            // We return an empty delta on the new file, so that the file is created on disk when
+            // synced over to another peer. TODO: Is this the best way to solve this?
+            if !patch.path.is_empty() {
+                panic!("Unexpected PutMap on non-ROOT in Automerge patch");
+            }
+            Ok((key, delta))
+        }
+        other_action => Err(anyhow::anyhow!(
+            "Unsupported patch action: {}",
+            other_action
+        )),
     }
 }
 
