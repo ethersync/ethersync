@@ -18,7 +18,7 @@ use std::fmt;
 use std::path::{Path, PathBuf};
 use tokio::sync::{broadcast, mpsc, oneshot};
 use tracing::{debug, info, warn};
-use walkdir::{DirEntry, WalkDir};
+use walkdir::WalkDir;
 
 pub const TEST_FILE_PATH: &str = "text";
 
@@ -429,17 +429,9 @@ impl DocumentActor {
 
     /// Reading in the file is a preparatory step, before kicking off the actor.
     fn read_current_content_from_dir(&mut self) {
-        fn is_not_hidden(entry: &DirEntry) -> bool {
-            entry
-                .file_name()
-                .to_str()
-                .is_some_and(|s| entry.depth() == 0 || !s.starts_with('.'))
-        }
-
-        // TODO: Also filter out files ignored by .gitignore and such.
+        // TODO: Filter out files ignored by .gitignore and such.
         WalkDir::new(self.base_dir.clone())
             .into_iter()
-            .filter_entry(is_not_hidden)
             .filter_map(Result::ok)
             .filter(|metadata| metadata.file_type().is_file())
             .for_each(|file_path| {

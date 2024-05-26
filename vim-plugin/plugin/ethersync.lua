@@ -79,28 +79,31 @@ local function connect()
     print("Connected to Ethersync daemon!")
 end
 
+local function IsEthersyncEnabled(filename)
+    -- Recusively scan up directories. If we find an .ethersync directory on any level, return true.
+    return vim.fs.root(filename, ".ethersync") ~= nil
+end
+
 -- Forward buffer edits to daemon as well as subscribe to daemon events ("open").
 function EthersyncOpenBuffer()
-    if vim.fn.isdirectory(vim.fn.expand("%:p:h") .. "/.ethersync") ~= 1 then
+    local filename = vim.fn.expand("%:p")
+
+    if not IsEthersyncEnabled(filename) then
         return
     end
 
-    -- TODO: connected?
     if not client then
         connect()
     end
 
-    local filename = vim.fn.expand("%:p")
-    local uri = "file://" .. filename
-    local filepath = vim.uri_to_fname(uri)
-
-    files[filepath] = {
+    files[filename] = {
         -- Number of operations the daemon has made.
         daemonRevision = 0,
         -- Number of operations we have made.
         editorRevision = 0,
     }
 
+    local uri = "file://" .. filename
     sendNotification("open", { uri = uri })
 
     -- Vim enables eol for an empty file, but we do use this option values
@@ -110,11 +113,11 @@ function EthersyncOpenBuffer()
     end
 
     changetracker.trackChanges(0, function(delta)
-        files[filepath].editorRevision = files[filepath].editorRevision + 1
+        files[filename].editorRevision = files[filename].editorRevision + 1
 
         local rev_delta = {
             delta = delta,
-            revision = files[filepath].daemonRevision,
+            revision = files[filename].daemonRevision,
         }
 
         local params = { uri = uri, delta = rev_delta }
@@ -124,23 +127,23 @@ function EthersyncOpenBuffer()
 end
 
 function EthersyncCloseBuffer()
-    if vim.fn.isdirectory(vim.fn.expand("<afile>:p:h") .. "/.ethersync") ~= 1 then
-        return
-    end
-
     local closedFile = vim.fn.expand("<afile>:p")
-    local filepath = vim.uri_to_fname("file://" .. closedFile)
 
-    if not files[filepath] then
+    if not IsEthersyncEnabled(closedFile) then
         return
     end
 
-    files[filepath] = nil
+    if not files[closedFile] then
+        return
+    end
+
+    files[closedFile] = nil
 
     -- TODO: Is the on_lines callback un-registered automatically when the buffer closes,
     -- or should we detach it ourselves?
     -- vim.api.nvim_buf_detach(0) isn't a thing. https://github.com/neovim/neovim/issues/17874
     -- It's not a high priority, as we can only generate edits when the buffer exists anyways.
+
     local uri = "file://" .. closedFile
     sendNotification("close", { uri = uri })
 end
