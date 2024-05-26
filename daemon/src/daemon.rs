@@ -17,7 +17,7 @@ use std::collections::{HashMap, HashSet};
 use std::fmt;
 use std::path::{Path, PathBuf};
 use tokio::sync::{broadcast, mpsc, oneshot};
-use tracing::{debug, warn};
+use tracing::{debug, info, warn};
 use walkdir::{DirEntry, WalkDir};
 
 pub const TEST_FILE_PATH: &str = "text";
@@ -133,7 +133,7 @@ impl Document {
     }
 
     fn initialize_text(&mut self, text: &str, file_path: &str) {
-        debug!("Initializing {file_path} in CRDT");
+        info!("Initializing {file_path} in CRDT");
         let text_obj = self
             .doc
             .put_object(automerge::ROOT, file_path, ObjType::Text)
@@ -229,12 +229,21 @@ impl DocumentActor {
         }
     }
 
-    fn file_path_for_uri(uri: &str) -> String {
-        // TODO: Use base dir here, once it's there :)
-        uri.rsplit('/')
-            .next()
-            .expect("Expected at least one segment.")
-            .into()
+    fn file_path_for_uri(&self, uri: &str) -> String {
+        // If uri starts with "file://", we remove it.
+        let absolute_path = uri.strip_prefix("file://").unwrap_or(uri);
+
+        // Check that it's an absolute path.
+        assert!(absolute_path.starts_with('/'), "Path is not absolute");
+
+        // TODO: Instead of panicking, we should handle this in a way so we don't crash.
+        // Once the editor protocol is based on requests, we can send back an error?
+        absolute_path
+            .strip_prefix(&self.base_dir.display().to_string())
+            .unwrap_or_else(|| panic!("Path {absolute_path} is not within base dir"))
+            .strip_prefix('/')
+            .expect("Could not remove a '/' while computing file path")
+            .to_string()
     }
 
     fn absolute_path_for_file_path(&self, file_path: &str) -> String {
@@ -244,7 +253,8 @@ impl DocumentActor {
     async fn handle_message_from_editor(&mut self, message: EditorProtocolMessage) {
         match message {
             EditorProtocolMessage::Open { uri } => {
-                let file_path = Self::file_path_for_uri(&uri);
+                let file_path = self.file_path_for_uri(&uri);
+                debug!("Got an 'open' message for {file_path}");
                 let ot_server =
                     OTServer::new(self.current_file_content(&file_path).unwrap_or_else(|_| {
                         panic!(
@@ -254,14 +264,16 @@ impl DocumentActor {
                 self.ot_servers.insert(file_path, ot_server);
             }
             EditorProtocolMessage::Close { uri } => {
-                self.ot_servers.remove(&Self::file_path_for_uri(&uri));
+                let file_path = self.file_path_for_uri(&uri);
+                debug!("Got a 'close' message for {file_path}");
+                self.ot_servers.remove(&file_path);
             }
             EditorProtocolMessage::Edit {
                 delta: rev_delta,
                 uri,
             } => {
                 debug!("Handling RevDelta from editor: {:#?}", rev_delta);
-                let file_path = Self::file_path_for_uri(&uri);
+                let file_path = self.file_path_for_uri(&uri);
                 let (editor_delta_for_crdt, rev_deltas_for_editor) =
                     self.apply_delta_to_ot(rev_delta, &file_path);
 
@@ -424,6 +436,7 @@ impl DocumentActor {
                 .is_some_and(|s| entry.depth() == 0 || !s.starts_with('.'))
         }
 
+        // TODO: Also filter out files ignored by .gitignore and such.
         WalkDir::new(self.base_dir.clone())
             .into_iter()
             .filter_entry(is_not_hidden)
@@ -431,16 +444,18 @@ impl DocumentActor {
             .filter(|metadata| metadata.file_type().is_file())
             .for_each(|file_path| {
                 let file_path = file_path.path();
-                if let Ok(text) = std::fs::read_to_string(file_path) {
-                    let relative_file_path = Self::file_path_for_uri(
-                        file_path
-                            .to_str()
-                            .expect("Could not convert PathBuf to str"),
-                    );
-                    self.crdt_doc.initialize_text(&text, &relative_file_path);
-                } else {
-                    // TODO: Look at *why* we couldn't read the file.
-                    panic!("Could not read file {}", file_path.display());
+                match std::fs::read_to_string(file_path) {
+                    Ok(text) => {
+                        let relative_file_path = self.file_path_for_uri(
+                            file_path
+                                .to_str()
+                                .expect("Could not convert PathBuf to str"),
+                        );
+                        self.crdt_doc.initialize_text(&text, &relative_file_path);
+                    }
+                    Err(e) => {
+                        warn!("Failed to read file {}: {e}", file_path.display());
+                    }
                 }
             });
     }
