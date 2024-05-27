@@ -398,21 +398,21 @@ pub mod factories {
     use super::*;
 
     pub fn insert(at: usize, s: &str) -> TextDelta {
-        let mut delta: TextDelta = TextDelta::default();
+        let mut delta = TextDelta::default();
         delta.retain(at);
         delta.insert(s);
         delta
     }
 
     pub fn delete(from: usize, length: usize) -> TextDelta {
-        let mut delta: TextDelta = TextDelta::default();
+        let mut delta = TextDelta::default();
         delta.retain(from);
         delta.delete(length);
         delta
     }
 
     pub fn replace(from: usize, length: usize, s: &str) -> TextDelta {
-        let mut delta: TextDelta = TextDelta::default();
+        let mut delta = TextDelta::default();
         delta.retain(from);
         delta.delete(length);
         delta.insert(s);
@@ -505,21 +505,21 @@ mod tests {
     #[test]
     fn conversion_editor_to_text_delta_insert() {
         let ed_delta = ed_delta_single((0, 1), (0, 1), "a");
-        let delta: TextDelta = TextDelta::from_ed_delta(ed_delta, "foo");
+        let delta = TextDelta::from_ed_delta(ed_delta, "foo");
         assert_eq!(delta, insert(1, "a"));
     }
 
     #[test]
     fn conversion_editor_to_text_delta_delete() {
         let ed_delta = ed_delta_single((0, 0), (0, 1), "");
-        let delta: TextDelta = TextDelta::from_ed_delta(ed_delta, "foo");
+        let delta = TextDelta::from_ed_delta(ed_delta, "foo");
         assert_eq!(delta, delete(0, 1));
     }
 
     #[test]
     fn conversion_editor_to_text_delta_replacement() {
         let ed_delta = ed_delta_single((0, 5), (1, 0), "\nhello\n");
-        let delta: TextDelta = TextDelta::from_ed_delta(ed_delta, "hello\n");
+        let delta = TextDelta::from_ed_delta(ed_delta, "hello\n");
         let mut expected_delta = TextDelta::default();
         expected_delta.retain(5);
         expected_delta.insert("\nhello\n");
@@ -530,13 +530,13 @@ mod tests {
     #[test]
     fn conversion_editor_to_text_delta_full_line_deletion() {
         let ed_delta = ed_delta_single((0, 0), (1, 0), "");
-        let delta: TextDelta = TextDelta::from_ed_delta(ed_delta, "a");
+        let delta = TextDelta::from_ed_delta(ed_delta, "a");
         let mut expected_delta = TextDelta::default();
         expected_delta.delete(1);
         assert_eq!(expected_delta, delta);
 
         let ed_delta = ed_delta_single((0, 0), (1, 0), "");
-        let delta: TextDelta = TextDelta::from_ed_delta(ed_delta, "a\n");
+        let delta = TextDelta::from_ed_delta(ed_delta, "a\n");
         let mut expected_delta = TextDelta::default();
         expected_delta.delete(2);
         assert_eq!(expected_delta, delta);
@@ -545,7 +545,7 @@ mod tests {
     #[test]
     fn conversion_editor_to_text_delta_multiline_replacement() {
         let ed_delta = ed_delta_single((1, 0), (2, 0), "xzwei\nx");
-        let delta: TextDelta = TextDelta::from_ed_delta(ed_delta, "xeins\nzwei\ndrei\n");
+        let delta = TextDelta::from_ed_delta(ed_delta, "xeins\nzwei\ndrei\n");
         let mut expected_delta = TextDelta::default();
         expected_delta.retain(6);
         expected_delta.insert("xzwei\nx");
@@ -597,7 +597,7 @@ mod tests {
             replace_ed((0, 1), (0, 1), "long"),
             replace_ed((0, 2), (0, 2), "short"),
         ]);
-        let delta: TextDelta = TextDelta::from_ed_delta(ed_delta, "oneliner");
+        let delta = TextDelta::from_ed_delta(ed_delta, "oneliner");
         let mut expected = TextDelta::default();
         expected.retain(1);
         expected.insert("l");
