@@ -1,40 +1,40 @@
-/// A peer is another daemon. This module is all about daemon to daemon communication.
-use anyhow::Result;
-use automerge::sync::{Message as AutomergeSyncMessage, State as SyncState};
-use std::mem;
-use tokio::{
-    io::{AsyncReadExt, AsyncWriteExt, ReadHalf, WriteHalf},
-    net::TcpStream,
-    sync::{broadcast, mpsc, oneshot},
-};
-use tokio_util::sync::CancellationToken;
-use tracing::{debug, info};
+//! A peer is another daemon. This module is all about daemon to daemon communication.
 
 use crate::daemon::{DocMessage, DocumentActorHandle};
+use automerge::sync::{Message as AutomergeSyncMessage, State as SyncState};
+use futures::{AsyncReadExt, AsyncWriteExt};
+use libp2p::Stream;
+use std::io;
+use std::mem;
+use tokio::sync::{broadcast, mpsc, oneshot};
+use tokio_util::sync::CancellationToken;
+use tracing::debug;
 
-pub fn spawn_peer_sync(stream: TcpStream, document_handle: &DocumentActorHandle) {
+pub fn spawn_peer_sync(mut stream: Stream, document_handle: &DocumentActorHandle) {
+    stream.ignore_for_keep_alive();
     let (my_send, my_recv) = oneshot::channel();
-    let tcp_handle = TCPActorHandle::new(stream, my_recv);
-    let sync_handle = SyncActorHandle::new(document_handle, &tcp_handle);
+    let p2p_handle = P2PActorHandle::new(stream, my_recv);
+    let sync_handle = SyncActorHandle::new(document_handle, &p2p_handle);
     let _ = my_send.send(sync_handle);
 }
 
+/*
 /// Reads from a TCP stream and forwards it to the Syncer
-struct TCPReadActor {
+struct P2PReadActor {
     sync_handle: SyncActorHandle,
-    reader: ReadHalf<TcpStream>,
+    stream: Stream,
     shutdown_token: CancellationToken,
 }
 
-impl TCPReadActor {
+impl P2PReadActor {
     fn new(
-        reader: ReadHalf<TcpStream>,
+        stream: Stream,
         sync_handle: SyncActorHandle,
         shutdown_token: CancellationToken,
     ) -> Self {
         Self {
             sync_handle,
-            reader,
+            stream,
             shutdown_token,
         }
     }
@@ -62,7 +62,9 @@ impl TCPReadActor {
         self.shutdown_token.cancel();
     }
 }
+*/
 
+/*
 struct TCPWriteActor {
     writer: WriteHalf<TcpStream>,
     automerge_message_receiver: mpsc::Receiver<AutomergeSyncMessage>,
@@ -97,11 +99,12 @@ impl TCPWriteActor {
         debug!("TCPWriteActor stopped (channel closed)");
     }
 }
+*/
 
 struct SyncActor {
     syncer_receiver: mpsc::Receiver<AutomergeSyncMessage>,
     document_handle: DocumentActorHandle,
-    tcp_handle: TCPActorHandle,
+    p2p_handle: P2PActorHandle,
     peer_state: SyncState,
 }
 
@@ -109,12 +112,12 @@ impl SyncActor {
     fn new(
         syncer_receiver: mpsc::Receiver<AutomergeSyncMessage>,
         document_handle: DocumentActorHandle,
-        tcp_handle: TCPActorHandle,
+        p2p_handle: P2PActorHandle,
     ) -> Self {
         Self {
             syncer_receiver,
             document_handle,
-            tcp_handle,
+            p2p_handle,
             peer_state: SyncState::new(),
         }
     }
@@ -146,7 +149,7 @@ impl SyncActor {
             .expect("Could not read response from Document channel");
         self.peer_state = ps;
         if let Some(message) = message {
-            self.tcp_handle.send(message).await;
+            self.p2p_handle.send(message).await;
         }
     }
 
@@ -158,7 +161,7 @@ impl SyncActor {
 
         loop {
             tokio::select! {
-                () = self.tcp_handle.shutdown_token.cancelled() => {
+                () = self.p2p_handle.shutdown_token.cancelled() => {
                     debug!("Shutting down main SyncActor loop");
                     break;
                 }
@@ -192,14 +195,14 @@ pub struct SyncActorHandle {
 }
 
 impl SyncActorHandle {
-    pub fn new(document_handle: &DocumentActorHandle, tcp_handle: &TCPActorHandle) -> Self {
+    pub fn new(document_handle: &DocumentActorHandle, p2p_handle: &P2PActorHandle) -> Self {
         let (syncer_message_tx, syncer_message_rx) = mpsc::channel(16);
 
         // Sync actor.
         let syncer = SyncActor::new(
             syncer_message_rx,
             document_handle.clone(),
-            tcp_handle.clone(),
+            p2p_handle.clone(),
         );
         tokio::spawn(syncer.run());
 
@@ -215,47 +218,73 @@ impl SyncActorHandle {
 }
 
 #[derive(Clone)]
-pub struct TCPActorHandle {
+pub struct P2PActorHandle {
     automerge_message_tx: mpsc::Sender<AutomergeSyncMessage>,
     shutdown_token: CancellationToken,
 }
 
-/// The TCP statemachine works as follows:
-/// - if we're the host,
-/// - if we're a peer, we
-///
-/// How do other parts of the code communicate with TCP? Through this handle.
-/// What can be communicated?
-impl TCPActorHandle {
-    async fn send(&mut self, message: AutomergeSyncMessage) {
-        self.automerge_message_tx
-            .send(message)
-            .await
-            .expect("Channel to TCPActor(s) closed.");
-    }
-
-    pub fn new(stream: TcpStream, sync_handle: oneshot::Receiver<SyncActorHandle>) -> Self {
+impl P2PActorHandle {
+    pub fn new(mut stream: Stream, sync_handle: oneshot::Receiver<SyncActorHandle>) -> Self {
         let shutdown_token = CancellationToken::new();
 
-        let read_shutdown_token = shutdown_token.clone();
-        let (tcp_read, tcp_write) = tokio::io::split(stream);
-        let (automerge_message_tx, automerge_message_rx) = mpsc::channel(16);
+        let _read_shutdown_token = shutdown_token.clone();
+
+        let (automerge_message_tx, mut automerge_message_rx) =
+            mpsc::channel::<AutomergeSyncMessage>(16);
+
         tokio::spawn(async move {
-            let Ok(sync_handle) = sync_handle.await else {
-                return;
-            };
-            let mut receiver = TCPReadActor::new(tcp_read, sync_handle, read_shutdown_token);
-            tokio::spawn(async move {
-                receiver.run().await;
-            });
-            let mut writer = TCPWriteActor::new(tcp_write, automerge_message_rx);
-            tokio::spawn(async move {
-                writer.run().await;
-            });
+            let sync_handle = sync_handle
+                .await
+                .expect("Failed to receive SyncActorHandle");
+
+            // kick off protocl!
+            // if we receive on automerge_message_rx, write it to the stream
+            // if we receive a size and a message, send it to the sync_handle
+            loop {
+                let mut message_len_buf = [0; 4];
+
+                tokio::select! {
+                    message_maybe = automerge_message_rx.recv() => {
+                        match message_maybe {
+                            Some(message) => {
+                                let message = message.encode();
+                                let message_len = message.len() as i32;
+                                stream
+                                    .write_all(&message_len.to_be_bytes())
+                                    .await
+                                    .expect("GenerateSyncMessage: write message len failed");
+                                stream
+                                    .write_all(&message)
+                                    .await
+                                    .expect("GenerateSyncMessage: write message failed");
+                                }
+                            None => {
+                                // TODO: ?
+                            }
+                        }
+                    }
+                    _ = stream.read_exact(&mut message_len_buf) => {
+                        let message_len = i32::from_be_bytes(message_len_buf);
+                        let mut message_buf = vec![0; message_len as usize];
+                        stream.read_exact(&mut message_buf).await.expect("Failed to read Automerge message");
+
+                        let message =
+                            AutomergeSyncMessage::decode(&message_buf).expect("Failed to decode automerge message");
+                        sync_handle.send(message).await;
+                    }
+                }
+            }
         });
         Self {
             automerge_message_tx,
             shutdown_token,
         }
+    }
+
+    async fn send(&mut self, message: AutomergeSyncMessage) {
+        self.automerge_message_tx
+            .send(message)
+            .await
+            .expect("Channel to P2PActor(s) closed.");
     }
 }

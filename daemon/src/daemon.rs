@@ -552,7 +552,7 @@ pub struct Daemon {
 impl Daemon {
     // Launch the daemon. Optionally, connect to given peer.
     pub fn new(
-        port: Option<u16>,
+        _port: Option<u16>,
         peer: Option<String>,
         socket_path: &Path,
         base_dir: &Path,
@@ -563,9 +563,9 @@ impl Daemon {
         let document_handle = DocumentActorHandle::new(base_dir, is_host);
 
         let connection_document_handle = document_handle.clone();
-        let peer_info = connect::PeerConnectionInfo::new(port, peer);
+        let peer_info = connect::PeerConnectionInfo::new(peer);
         tokio::spawn(async move {
-            connect::make_peer_connection(peer_info, connection_document_handle).await;
+            let _ = connect::make_peer_connection(peer_info, connection_document_handle).await;
         });
 
         let editor_socket_path = socket_path.to_path_buf();
