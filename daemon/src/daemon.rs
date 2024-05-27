@@ -422,6 +422,13 @@ impl DocumentActor {
                 .expect("Failed to get file content when writing to disk. Key should have existed");
             let abs_path = self.absolute_path_for_file_path(file_path);
             debug!("Writing to {abs_path}.");
+
+            // Create the parent directorie(s), if neccessary.
+            let parent_dir = Path::new(&abs_path).parent().unwrap();
+            std::fs::create_dir_all(parent_dir).unwrap_or_else(|_| {
+                panic!("Could not create parent directory {}", parent_dir.display())
+            });
+
             std::fs::write(&abs_path, text)
                 .unwrap_or_else(|_| panic!("Could not write to file {abs_path}"));
         }
