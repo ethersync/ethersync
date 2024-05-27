@@ -1,5 +1,5 @@
 use clap::{Parser, Subcommand};
-use ethersync::connect::PeerConnectionInfo;
+use ethersync::peer::PeerConnectionInfo;
 use ethersync::{daemon::Daemon, logging, sandbox};
 use std::io;
 use std::path::{Path, PathBuf};
@@ -9,7 +9,8 @@ use tracing::{error, info};
 mod jsonrpc_forwarder;
 
 const DEFAULT_SOCKET_PATH: &str = "/tmp/ethersync";
-const DEFAULT_PORT: &str = "4242";
+// libp2p will assign a random user-space port.
+const DEFAULT_PORT: &str = "0";
 const ETHERSYNC_CONFIG_DIR: &str = ".ethersync";
 
 #[derive(Parser)]
@@ -30,14 +31,14 @@ struct Cli {
 enum Commands {
     /// Launch Ethersync's background process that connects with clients and other nodes.
     Daemon {
-        /// Port to listen on as a hosting peer.
-        #[arg(short, long, default_value = DEFAULT_PORT)]
-        port: u16,
         /// The directory to sync. Defaults to current directory.
         directory: Option<PathBuf>,
-        /// IP + port of a peer to connect to. Example: 192.168.1.42:1234
+        /// Multiaddr of a peer to connect to.
         #[arg(long)]
         peer: Option<String>,
+        /// Port to listen on as a hosting peer.
+        #[arg(long, default_value = DEFAULT_PORT)]
+        port: u16,
         /// Initialize the current contents of the directory as a new Ethersync directory.
         #[arg(long)]
         init: bool,
@@ -69,9 +70,9 @@ async fn main() -> io::Result<()> {
 
     match cli.command {
         Commands::Daemon {
-            port,
             directory,
             peer,
+            port,
             init,
         } => {
             let directory = directory
@@ -89,9 +90,9 @@ async fn main() -> io::Result<()> {
                 return Ok(());
             }
             let peer_connection_info = if let Some(peer) = peer {
-                PeerConnectionInfo::Connect(peer)
+                PeerConnectionInfo::Dial(peer, port)
             } else {
-                PeerConnectionInfo::Accept(port)
+                PeerConnectionInfo::Listen(port)
             };
             info!("Starting Ethersync on {}", directory.display());
             Daemon::new(peer_connection_info, &socket_path, &directory, init);

@@ -1,8 +1,8 @@
 #![allow(dead_code)]
 use ethersync::actors::{Actor, Neovim};
-use ethersync::connect::PeerConnectionInfo;
 use ethersync::daemon::{Daemon, TEST_FILE_PATH};
 use ethersync::logging;
+use ethersync::peer::PeerConnectionInfo;
 use ethersync::sandbox;
 use futures::future::join_all;
 use pretty_assertions::assert_eq;
@@ -50,7 +50,7 @@ async fn main() {
 
     // Set up the actors.
     let daemon = Daemon::new(
-        PeerConnectionInfo::Accept(2424),
+        PeerConnectionInfo::Listen(0),
         Path::new("/tmp/ethersync"),
         dir.path(),
         true,
@@ -59,7 +59,10 @@ async fn main() {
     let nvim = Neovim::new(file).await;
 
     let peer = Daemon::new(
-        PeerConnectionInfo::Connect("127.0.0.1:2424".to_string()),
+        PeerConnectionInfo::Dial(
+            "TODO: How to get the other peer's multiaddr here?".to_string(),
+            0,
+        ),
         Path::new("/tmp/etherbonk"),
         dir2.path(),
         false,
