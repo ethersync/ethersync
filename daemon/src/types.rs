@@ -71,6 +71,19 @@ impl RevisionedTextDelta {
     }
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct FileTextDelta {
+    pub file_path: String,
+    pub delta: TextDelta,
+}
+
+impl FileTextDelta {
+    #[must_use]
+    pub fn new(file_path: String, delta: TextDelta) -> Self {
+        Self { file_path, delta }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "method", content = "params", rename_all = "camelCase")]
 pub enum EditorProtocolMessage {
@@ -210,49 +223,56 @@ impl TextDelta {
     // +transform_position?
 }
 
-/// # Errors
-///
-/// Will return an error if the patch action is not supported.
-pub fn patch_to_file_delta(patch: Patch) -> anyhow::Result<(String, TextDelta)> {
-    fn file_path_from_path_default(path: &[(automerge::ObjId, automerge::Prop)]) -> String {
-        assert!(
-            path.len() == 1,
-            "Unexpected path in Automerge patch, length is not 1"
-        );
-        let (_obj_id, prop) = &path[0];
-        if let automerge::Prop::Map(file_path) = prop {
-            return file_path.into();
-        }
-        panic!("Unexpected path in Automerge patch: Prop is not a map");
-    }
+impl TryFrom<Patch> for FileTextDelta {
+    type Error = anyhow::Error;
 
-    let mut delta = TextDelta::default();
-
-    match patch.action {
-        PatchAction::SpliceText { index, value, .. } => {
-            delta.retain(index);
-            delta.insert(&value.make_string());
-            Ok((file_path_from_path_default(&patch.path), delta))
-        }
-        PatchAction::DeleteSeq { index, length } => {
-            delta.retain(index);
-            delta.delete(length);
-            Ok((file_path_from_path_default(&patch.path), delta))
-        }
-        PatchAction::PutMap { key, .. } => {
-            // This action happens when a new file is created.
-            // We return an empty delta on the new file, so that the file is created on disk when
-            // synced over to another peer. TODO: Is this the best way to solve this?
+    fn try_from(patch: Patch) -> Result<Self, Self::Error> {
+        fn file_path_from_path_default(path: &[(automerge::ObjId, automerge::Prop)]) -> String {
             assert!(
-                patch.path.is_empty(),
-                "Unexpected PutMap on non-ROOT in Automerge patch",
+                path.len() == 1,
+                "Unexpected path in Automerge patch, length is not 1"
             );
-            Ok((key, delta))
+            let (_obj_id, prop) = &path[0];
+            if let automerge::Prop::Map(file_path) = prop {
+                return file_path.into();
+            }
+            panic!("Unexpected path in Automerge patch: Prop is not a map");
         }
-        other_action => Err(anyhow::anyhow!(
-            "Unsupported patch action: {}",
-            other_action
-        )),
+
+        let mut delta = TextDelta::default();
+
+        match patch.action {
+            PatchAction::SpliceText { index, value, .. } => {
+                delta.retain(index);
+                delta.insert(&value.make_string());
+                Ok(FileTextDelta::new(
+                    file_path_from_path_default(&patch.path),
+                    delta,
+                ))
+            }
+            PatchAction::DeleteSeq { index, length } => {
+                delta.retain(index);
+                delta.delete(length);
+                Ok(FileTextDelta::new(
+                    file_path_from_path_default(&patch.path),
+                    delta,
+                ))
+            }
+            PatchAction::PutMap { key, .. } => {
+                // This action happens when a new file is created.
+                // We return an empty delta on the new file, so that the file is created on disk when
+                // synced over to another peer. TODO: Is this the best way to solve this?
+                assert!(
+                    patch.path.is_empty(),
+                    "Unexpected PutMap on non-ROOT in Automerge patch",
+                );
+                Ok(FileTextDelta::new(key, delta))
+            }
+            other_action => Err(anyhow::anyhow!(
+                "Unsupported patch action: {}",
+                other_action
+            )),
+        }
     }
 }
 

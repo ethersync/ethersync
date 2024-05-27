@@ -2,8 +2,7 @@ use crate::connect;
 use crate::editor::EditorHandle;
 use crate::ot::OTServer;
 use crate::types::{
-    patch_to_file_delta, EditorProtocolMessage, EditorTextDelta, RevisionedEditorTextDelta,
-    TextDelta,
+    EditorProtocolMessage, EditorTextDelta, FileTextDelta, RevisionedEditorTextDelta, TextDelta,
 };
 use anyhow::Result;
 use automerge::{
@@ -193,8 +192,11 @@ impl DocumentActor {
                     .expect("Should have initialized text before performing random edit");
                 let ed_delta = EditorTextDelta::from_delta(delta.clone(), &text);
                 self.apply_delta_to_doc(&ed_delta, TEST_FILE_PATH);
-                self.process_crdt_file_deltas_in_ot(vec![(TEST_FILE_PATH.to_string(), delta)])
-                    .await;
+                self.process_crdt_file_deltas_in_ot(vec![FileTextDelta::new(
+                    TEST_FILE_PATH.to_string(),
+                    delta,
+                )])
+                .await;
             }
             DocMessage::FromEditor(message) => self.handle_message_from_editor(message).await,
             DocMessage::ReceiveSyncMessage {
@@ -361,11 +363,11 @@ impl DocumentActor {
         delta
     }
 
-    fn crdt_patches_to_file_deltas(patches: Vec<Patch>) -> Vec<(String, TextDelta)> {
-        let mut file_deltas: Vec<(String, TextDelta)> = vec![];
+    fn crdt_patches_to_file_deltas(patches: Vec<Patch>) -> Vec<FileTextDelta> {
+        let mut file_deltas: Vec<FileTextDelta> = vec![];
 
         for patch in patches {
-            match patch_to_file_delta(patch) {
+            match patch.try_into() {
                 Ok(result) => {
                     file_deltas.push(result);
                 }
@@ -378,8 +380,8 @@ impl DocumentActor {
         file_deltas
     }
 
-    async fn process_crdt_file_deltas_in_ot(&mut self, file_deltas: Vec<(String, TextDelta)>) {
-        for (file_path, delta) in file_deltas {
+    async fn process_crdt_file_deltas_in_ot(&mut self, file_deltas: Vec<FileTextDelta>) {
+        for FileTextDelta { file_path, delta } in file_deltas {
             // Only process the CRDT delta, if editor has the file open.
             if let Some(ot_server) = self.ot_servers.get_mut(&file_path) {
                 debug!("Applying incoming CRDT patch for {file_path}");
@@ -401,11 +403,11 @@ impl DocumentActor {
         }
     }
 
-    fn maybe_write_files_changed_in_file_deltas(&mut self, file_deltas: &Vec<(String, TextDelta)>) {
+    fn maybe_write_files_changed_in_file_deltas(&mut self, file_deltas: &Vec<FileTextDelta>) {
         // Collect file paths into a set, so we don't write files multiple times on complex
         // patches.
         let mut file_paths = HashSet::new();
-        for (file_path, _delta) in file_deltas {
+        for FileTextDelta { file_path, .. } in file_deltas {
             file_paths.insert(file_path);
         }
 
