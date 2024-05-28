@@ -60,6 +60,12 @@ type DocChangedReceiver = broadcast::Receiver<()>;
 
 /// Encapsulates the Automerge `AutoCommit` and provides a generic interface,
 /// s.t. we don't need to worry about automerge internals elsewhere.
+///
+/// The interface allows us to apply changes to the CRDT in two ways:
+/// - synchronization with other CRDTs through sync messages
+/// - applying a delta (coming from an editor) directly
+///
+/// Furthermore there's a way to retrieve and initialize the content.
 #[derive(Debug, Default)]
 pub struct Document {
     doc: AutoCommit,
@@ -84,20 +90,6 @@ impl Document {
         peer_state: &mut SyncState,
     ) -> Option<AutomergeSyncMessage> {
         self.doc.sync().generate_sync_message(peer_state)
-    }
-
-    fn text_obj(&self, file_path: &str) -> Result<automerge::ObjId> {
-        let text_obj = self
-            .doc
-            .get(automerge::ROOT, file_path)
-            .unwrap_or_else(|_| panic!("Failed to get {file_path} key from Automerge document"));
-        if let Some((automerge::Value::Object(ObjType::Text), text_obj)) = text_obj {
-            Ok(text_obj)
-        } else {
-            Err(anyhow::anyhow!(
-                "Automerge document doesn't have a {file_path} Text object, so I can't provide it"
-            ))
-        }
     }
 
     fn apply_delta_to_doc(&mut self, delta: &EditorTextDelta, file_path: &str) {
@@ -140,6 +132,20 @@ impl Document {
         self.doc
             .splice_text(text_obj, 0, 0, text)
             .expect("Failed to splice text into Automerge text object");
+    }
+
+    fn text_obj(&self, file_path: &str) -> Result<automerge::ObjId> {
+        let text_obj = self
+            .doc
+            .get(automerge::ROOT, file_path)
+            .unwrap_or_else(|_| panic!("Failed to get {file_path} key from Automerge document"));
+        if let Some((automerge::Value::Object(ObjType::Text), text_obj)) = text_obj {
+            Ok(text_obj)
+        } else {
+            Err(anyhow::anyhow!(
+                "Automerge document doesn't have a {file_path} Text object, so I can't provide it"
+            ))
+        }
     }
 }
 
