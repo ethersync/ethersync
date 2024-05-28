@@ -578,10 +578,10 @@ impl Daemon {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::types::factories::*;
 
     mod document {
         use super::*;
-        use crate::types::factories::*;
 
         impl Document {
             fn assert_file_content(&self, file_path: &str, content: &str) {
@@ -780,6 +780,80 @@ mod tests {
                     assert_eq!(value.make_string(), "foobar");
                 });
             }
+        }
+    }
+
+    mod document_actor {
+        use super::*;
+        use assert_fs::prelude::*;
+        use assert_fs::TempDir;
+        use tracing_test::traced_test;
+
+        impl DocumentActor {
+            fn setup_for_testing(directory: PathBuf) -> Self {
+                // The document task will receive messages on this channel.
+                let (_doc_message_tx, doc_message_rx) = mpsc::channel(1);
+
+                // The document task will send a ping on this channel whenever it changes.
+                // The sync tasks will subscribe to it, and react to it by syncing with the peers.
+                let (doc_changed_ping_tx, _doc_changed_ping_rx) = broadcast::channel::<()>(1);
+
+                DocumentActor::new(doc_message_rx, doc_changed_ping_tx.clone(), directory)
+            }
+            fn assert_file_content(&self, file_path: &str, content: &str) {
+                // unfortunately anyhow::Error doesn't implement PartialEq, so we'll rather unwrap.
+                assert_eq!(self.current_file_content(file_path).unwrap(), content);
+            }
+        }
+
+        fn setup_filesystem_for_testing() -> TempDir {
+            let dir = TempDir::new().expect("Failed to create temp directory");
+            let file1 = dir.child("file1");
+            let file2 = dir.child("file2");
+            let file3 = dir.child("sub/file3");
+            file1
+                .write_str("content1")
+                .expect("Failed to write test file");
+            file2
+                .write_str("content2")
+                .expect("Failed to write test file");
+            file3
+                .write_str("content3")
+                .expect("Failed to write test file");
+            dir
+        }
+
+        #[test]
+        fn read_contents_from_dir() {
+            let dir = setup_filesystem_for_testing();
+            let mut actor = DocumentActor::setup_for_testing(dir.path().to_path_buf());
+
+            actor.read_current_content_from_dir();
+
+            actor.assert_file_content("file1", "content1");
+            actor.assert_file_content("file2", "content2");
+            actor.assert_file_content("sub/file3", "content3");
+        }
+
+        #[test]
+        #[traced_test]
+        fn write_changed_files_to_dir() {
+            let dir = setup_filesystem_for_testing();
+            debug!("{}", dir.path().display());
+            let mut actor = DocumentActor::setup_for_testing(dir.path().to_path_buf());
+
+            actor.read_current_content_from_dir();
+
+            // "manually" apply the delta, as we want to test
+            // "maybe_write_files_changed_in_file_deltas" independently.
+            let ed_delta = ed_delta_single((0, 0), (0, 0), "foobar");
+            actor.crdt_doc.apply_delta_to_doc(&ed_delta, "file1");
+            let delta = TextDelta::from_ed_delta(ed_delta, "content1");
+            let file_deltas = vec![FileTextDelta::new("file1".to_string(), delta)];
+
+            actor.maybe_write_files_changed_in_file_deltas(&file_deltas);
+
+            dir.child("file1").assert("foobarcontent1");
         }
     }
 }
