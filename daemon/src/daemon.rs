@@ -600,27 +600,68 @@ mod tests {
         use super::*;
         use crate::types::factories::*;
 
+        impl Document {
+            fn assert_file_content(&self, file_path: &str, content: &str) {
+                // unfortunately anyhow::Error doesn't implement PartialEq, so we'll rather unwrap.
+                assert_eq!(self.current_file_content(file_path).unwrap(), content);
+            }
+        }
+
         #[test]
         fn can_initialize_content() {
             let mut document = Document::default();
-            let text = "To be or not to be, that is the question".to_string();
+            let text = "To be or not to be, that is the question";
 
-            document.initialize_text(&text, TEST_FILE_PATH);
+            document.initialize_text(text, "text");
 
-            // unfortunately anyhow::Error doesn't implement PartialEq, so we'll rather unwrap.
-            assert_eq!(document.current_file_content(TEST_FILE_PATH).unwrap(), text);
+            document.assert_file_content("text", text);
+        }
+
+        #[test]
+        #[should_panic]
+        fn cannot_initialize_content_same_file_twice() {
+            let mut document = Document::default();
+            let text = "To be or not to be, that is the question";
+
+            document.initialize_text(text, "text");
+            // This call should fail.
+            document.initialize_text(text, "text");
+        }
+
+        #[test]
+        fn can_initialize_content_multifile() {
+            let mut document = Document::default();
+            let text = "To be or not to be, that is the question";
+            let text2 = "2b||!2b, that is the question";
+
+            document.initialize_text(text, "text");
+            document.initialize_text(text2, "text2");
+
+            document.assert_file_content("text", text);
+            document.assert_file_content("text2", text2);
+        }
+
+        #[test]
+        fn retrieve_content_file_nonexistent_errs() {
+            let document = Document::default();
+            assert_eq!(
+                format!(
+                    "{}",
+                    document
+                        .current_file_content("text")
+                        .unwrap_err()
+                        .root_cause()
+                ),
+                "Automerge document doesn't have a text Text object, so I can't provide it"
+            );
         }
 
         fn apply_delta_to_doc_works(initial: &str, ed_delta: &EditorTextDelta, expected: &str) {
             let mut document = Document::default();
-            document.initialize_text(initial, TEST_FILE_PATH);
-            document.apply_delta_to_doc(ed_delta, TEST_FILE_PATH);
+            document.initialize_text(initial, "text");
+            document.apply_delta_to_doc(ed_delta, "text");
 
-            // unfortunately anyhow::Error doesn't implement PartialEq, so we'll rather unwrap.
-            assert_eq!(
-                document.current_file_content(TEST_FILE_PATH).unwrap(),
-                expected
-            );
+            document.assert_file_content("text", expected);
         }
 
         #[test]
@@ -670,6 +711,19 @@ mod tests {
             ]);
 
             apply_delta_to_doc_works(content, &ed_delta, "xeins\nxzwei\nxdrei\n");
+        }
+
+        #[test]
+        fn apply_delta_only_changes_specified_file() {
+            let mut document = Document::default();
+            document.initialize_text("", "text");
+            document.initialize_text("", "text2");
+
+            let ed_delta = ed_delta_single((0, 0), (0, 0), "foobar");
+            document.apply_delta_to_doc(&ed_delta, "text");
+
+            document.assert_file_content("text", "foobar");
+            document.assert_file_content("text2", "");
         }
     }
 }
