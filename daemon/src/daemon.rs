@@ -125,6 +125,14 @@ impl Document {
 
     fn initialize_text(&mut self, text: &str, file_path: &str) {
         info!("Initializing {file_path} in CRDT");
+        if self.text_obj(file_path).is_ok() {
+            // While automerge accepts putting an object multiple times, in our current
+            // architecture this should not happen: Only the host should initialize every file
+            // once, while peers just take in whatever already exists.
+            //
+            // This might change in a future more peer to peer world.
+            panic!("It seems {file_path} was already initialized.");
+        }
         let text_obj = self
             .doc
             .put_object(automerge::ROOT, file_path, ObjType::Text)
