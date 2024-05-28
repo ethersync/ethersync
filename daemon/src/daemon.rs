@@ -725,5 +725,78 @@ mod tests {
             document.assert_file_content("text", "foobar");
             document.assert_file_content("text2", "");
         }
+
+        /// This set of tests has some documentation character to show to ourselves,
+        /// what happens under the hood when sync'ing.
+        mod automerge_interna {
+            use super::*;
+            use automerge::PatchAction;
+            use pretty_assertions::assert_eq;
+
+            #[test]
+            fn test_generate_sync_message() {
+                let mut document = Document::default();
+                let mut state = SyncState::new();
+                assert!(document.generate_sync_message(&mut state).is_some());
+                // Stops for now and waits for a response
+                assert!(document.generate_sync_message(&mut state).is_none());
+
+                document.initialize_text("", "text");
+                // We have progressed out state, so update all peers about that.
+                assert!(document.generate_sync_message(&mut state).is_some());
+                // Again, stop, until peers tell us if they want more information.
+                assert!(document.generate_sync_message(&mut state).is_none());
+            }
+
+            fn patches_when_syncing_with_peer(mut host: Document) -> Vec<Patch> {
+                let mut peer = Document::default();
+                let mut peer_state = SyncState::new();
+                let mut host_state = SyncState::new();
+
+                let mut patches = vec![];
+                while let Some(message) = host.generate_sync_message(&mut peer_state) {
+                    // This is assuming the interesting patch to test is the *last* one.
+                    patches = peer.receive_sync_message_log_patches(message, &mut host_state);
+                    if let Some(response) = peer.generate_sync_message(&mut host_state) {
+                        host.receive_sync_message_log_patches(response, &mut peer_state);
+                    }
+                }
+                patches
+            }
+
+            #[test]
+            fn test_receive_sync_message_log_patches_intialize() {
+                let mut document = Document::default();
+                document.initialize_text("", "text");
+
+                let mut patches = patches_when_syncing_with_peer(document);
+
+                assert_eq!(patches.len(), 1);
+                let patch = patches.pop().unwrap();
+                assert_matches!(patch, Patch { path, action: PatchAction::PutMap { key, .. }, .. } => {
+                    assert_eq!(path.len(), 0);
+                    assert_eq!(key, "text");
+                });
+            }
+
+            #[test]
+            fn test_receive_sync_message_log_patches_has_delta() {
+                let mut document = Document::default();
+                document.initialize_text("", "text");
+                let ed_delta = ed_delta_single((0, 0), (0, 0), "foobar");
+                document.apply_delta_to_doc(&ed_delta, "text");
+
+                let mut patches = patches_when_syncing_with_peer(document);
+
+                assert_eq!(patches.len(), 2);
+                // The last element corresponds to the delta
+                let patch = patches.pop().unwrap();
+                assert_matches!(patch, Patch { path, action: PatchAction::SpliceText { index, value, .. }, .. } => {
+                    assert_eq!(path.len(), 1);
+                    assert_eq!(index, 0);
+                    assert_eq!(value.make_string(), "foobar");
+                });
+            }
+        }
     }
 }
