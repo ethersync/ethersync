@@ -219,7 +219,7 @@ impl DocumentActor {
                 response_tx,
             } => {
                 let patches = self.apply_sync_message_to_doc(message, &mut peer_state);
-                let file_deltas = Self::crdt_patches_to_file_deltas(patches);
+                let file_deltas = FileTextDelta::from_crdt_patches(patches);
 
                 self.maybe_write_files_changed_in_file_deltas(&file_deltas);
                 self.process_crdt_file_deltas_in_ot(file_deltas).await;
@@ -375,23 +375,6 @@ impl DocumentActor {
         delta.delete(deletion_length);
 
         delta
-    }
-
-    fn crdt_patches_to_file_deltas(patches: Vec<Patch>) -> Vec<FileTextDelta> {
-        let mut file_deltas: Vec<FileTextDelta> = vec![];
-
-        for patch in patches {
-            match patch.try_into() {
-                Ok(result) => {
-                    file_deltas.push(result);
-                }
-                Err(e) => {
-                    warn!("Failed to convert patch to delta: {:#?}", e);
-                }
-            }
-        }
-
-        file_deltas
     }
 
     async fn process_crdt_file_deltas_in_ot(&mut self, file_deltas: Vec<FileTextDelta>) {

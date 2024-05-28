@@ -3,6 +3,7 @@ use automerge::{Patch, PatchAction};
 use operational_transform::{Operation as OTOperation, OperationSeq};
 use ropey::Rope;
 use serde::{Deserialize, Serialize};
+use tracing::warn;
 
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct TextDelta(pub Vec<TextOp>);
@@ -81,6 +82,23 @@ impl FileTextDelta {
     #[must_use]
     pub fn new(file_path: String, delta: TextDelta) -> Self {
         Self { file_path, delta }
+    }
+
+    pub fn from_crdt_patches(patches: Vec<Patch>) -> Vec<Self> {
+        let mut file_deltas: Vec<Self> = vec![];
+
+        for patch in patches {
+            match patch.try_into() {
+                Ok(result) => {
+                    file_deltas.push(result);
+                }
+                Err(e) => {
+                    warn!("Failed to convert patch to delta: {:#?}", e);
+                }
+            }
+        }
+
+        file_deltas
     }
 }
 
