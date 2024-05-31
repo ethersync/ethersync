@@ -102,6 +102,8 @@ impl FileTextDelta {
     }
 }
 
+type DocumentUri = String;
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "method", content = "params", rename_all = "camelCase")]
 pub enum EditorProtocolMessage {
@@ -141,8 +143,6 @@ impl EditorProtocolMessage {
         Ok(message)
     }
 }
-
-type DocumentUri = String;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct EditorTextOp {
