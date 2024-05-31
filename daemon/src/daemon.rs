@@ -871,5 +871,48 @@ mod tests {
             dir.child("file2").assert("content2");
             dir.child("sub/file3").assert("content3");
         }
+
+        #[test]
+        #[should_panic]
+        fn test_file_path_for_uri_fails_not_absolute() {
+            let dir = setup_filesystem_for_testing();
+            let actor = DocumentActor::setup_for_testing(dir.path().to_path_buf());
+
+            actor.file_path_for_uri("this/is/absolutely/not/absolute");
+        }
+
+        #[test]
+        #[should_panic]
+        fn test_file_path_for_uri_fails_not_within_base_dir() {
+            let dir = setup_filesystem_for_testing();
+            let actor = DocumentActor::setup_for_testing(dir.path().to_path_buf());
+
+            actor.file_path_for_uri("/this/is/not/the/base_dir/file");
+        }
+
+        #[test]
+        #[should_panic]
+        fn test_file_path_for_uri_fails_only_base_dir() {
+            let dir = setup_filesystem_for_testing();
+            let actor = DocumentActor::setup_for_testing(dir.path().to_path_buf());
+
+            actor.file_path_for_uri(&format!("{}", dir.path().display()));
+        }
+
+        #[test]
+        fn test_file_path_for_uri_works() {
+            let dir = setup_filesystem_for_testing();
+            let actor = DocumentActor::setup_for_testing(dir.path().to_path_buf());
+
+            let file_paths = vec!["afile", "adir/with/some/file", "just/adir/"];
+            let prefix_options = vec!["file://", ""];
+            for prefix in prefix_options {
+                for &expected in &file_paths {
+                    let uri = format!("{}{}/{}", prefix, dir.path().display(), expected);
+
+                    assert_eq!(actor.file_path_for_uri(&uri), expected);
+                }
+            }
+        }
     }
 }
