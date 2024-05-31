@@ -206,7 +206,7 @@ impl DocumentActor {
                     .expect("Should have initialized text before performing random edit");
                 let ed_delta = EditorTextDelta::from_delta(delta.clone(), &text);
                 self.apply_delta_to_doc(&ed_delta, TEST_FILE_PATH);
-                self.process_crdt_file_deltas_in_ot(vec![FileTextDelta::new(
+                self.maybe_process_crdt_file_deltas_in_ot(vec![FileTextDelta::new(
                     TEST_FILE_PATH.to_string(),
                     delta,
                 )])
@@ -222,7 +222,7 @@ impl DocumentActor {
                 let file_deltas = FileTextDelta::from_crdt_patches(patches);
 
                 self.maybe_write_files_changed_in_file_deltas(&file_deltas);
-                self.process_crdt_file_deltas_in_ot(file_deltas).await;
+                self.maybe_process_crdt_file_deltas_in_ot(file_deltas).await;
 
                 response_tx
                     .send(peer_state)
@@ -377,7 +377,7 @@ impl DocumentActor {
         delta
     }
 
-    async fn process_crdt_file_deltas_in_ot(&mut self, file_deltas: Vec<FileTextDelta>) {
+    async fn maybe_process_crdt_file_deltas_in_ot(&mut self, file_deltas: Vec<FileTextDelta>) {
         for FileTextDelta { file_path, delta } in file_deltas {
             // Only process the CRDT delta, if editor has the file open.
             if let Some(ot_server) = self.ot_servers.get_mut(&file_path) {
