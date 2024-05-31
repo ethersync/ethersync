@@ -914,5 +914,27 @@ mod tests {
                 }
             }
         }
+
+        #[test]
+        fn test_simulate_editor_edits() {
+            let dir = setup_filesystem_for_testing();
+            let mut actor = DocumentActor::setup_for_testing(dir.path().to_path_buf());
+            actor.read_current_content_from_dir();
+
+            let file_path = "file1".to_string();
+
+            actor.open_file_path(file_path.clone());
+
+            let delta = rev_ed_delta_single(0, (0, 0), (0, 0), "foobar");
+            let (editor_delta_for_crdt, rev_ed_text_deltas) =
+                actor.apply_delta_to_ot(delta, "file1");
+            actor.apply_delta_to_doc(&editor_delta_for_crdt, &file_path);
+
+            // Confirm nothing transformed needs to go to editor.
+            assert_eq!(rev_ed_text_deltas, vec![]);
+
+            // Confirm edit was applied.
+            actor.assert_file_content(&file_path, "foobarcontent1");
+        }
     }
 }
