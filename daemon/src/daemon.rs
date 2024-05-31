@@ -271,13 +271,7 @@ impl DocumentActor {
             EditorProtocolMessage::Open { uri } => {
                 let file_path = self.file_path_for_uri(&uri);
                 debug!("Got an 'open' message for {file_path}");
-                let ot_server =
-                    OTServer::new(self.current_file_content(&file_path).unwrap_or_else(|_| {
-                        panic!(
-                            "Could not open file {file_path}, because it doesn't exist in the CRDT"
-                        )
-                    }));
-                self.ot_servers.insert(file_path, ot_server);
+                self.open_file_path(file_path);
             }
             EditorProtocolMessage::Close { uri } => {
                 let file_path = self.file_path_for_uri(&uri);
@@ -298,6 +292,13 @@ impl DocumentActor {
                     .await;
             }
         }
+    }
+
+    fn open_file_path(&mut self, file_path: String) {
+        let ot_server = OTServer::new(self.current_file_content(&file_path).unwrap_or_else(|_| {
+            panic!("Could not open file {file_path}, because it doesn't exist in the CRDT")
+        }));
+        self.ot_servers.insert(file_path, ot_server);
     }
 
     fn apply_sync_message_to_doc(
