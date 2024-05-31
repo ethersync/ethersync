@@ -838,23 +838,38 @@ mod tests {
 
         #[test]
         #[traced_test]
-        fn write_changed_files_to_dir() {
+        fn test_maybe_write_files_changed_in_file_deltas() {
             let dir = setup_filesystem_for_testing();
             debug!("{}", dir.path().display());
             let mut actor = DocumentActor::setup_for_testing(dir.path().to_path_buf());
 
             actor.read_current_content_from_dir();
 
-            // "manually" apply the delta, as we want to test
-            // "maybe_write_files_changed_in_file_deltas" independently.
+            // One change to rule them all.
             let ed_delta = ed_delta_single((0, 0), (0, 0), "foobar");
-            actor.crdt_doc.apply_delta_to_doc(&ed_delta, "file1");
-            let delta = TextDelta::from_ed_delta(ed_delta, "content1");
-            let file_deltas = vec![FileTextDelta::new("file1".to_string(), delta)];
 
+            // "manually" apply the deltas, as we want to test
+            // "maybe_write_files_changed_in_file_deltas" independently.
+            actor.crdt_doc.apply_delta_to_doc(&ed_delta, "file1");
+            actor.crdt_doc.apply_delta_to_doc(&ed_delta, "file2");
+            actor.crdt_doc.apply_delta_to_doc(&ed_delta, "sub/file3");
+
+            let delta = TextDelta::from_ed_delta(ed_delta, "content1");
+            let file_deltas = vec![
+                FileTextDelta::new("file1".to_string(), delta.clone()),
+                FileTextDelta::new("file2".to_string(), delta.clone()),
+                FileTextDelta::new("sub/file3".to_string(), delta),
+            ];
+
+            // The editor has file2 and sub/file3 open.
+            actor.open_file_path("file2".into());
+            actor.open_file_path("sub/file3".into());
             actor.maybe_write_files_changed_in_file_deltas(&file_deltas);
 
+            // Thus, we only expect file1 to be changed on disk.
             dir.child("file1").assert("foobarcontent1");
+            dir.child("file2").assert("content2");
+            dir.child("sub/file3").assert("content3");
         }
     }
 }
