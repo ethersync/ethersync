@@ -2,123 +2,205 @@
 
 use crate::daemon::{DocMessage, DocumentActorHandle};
 use automerge::sync::{Message as AutomergeSyncMessage, State as SyncState};
+use futures::StreamExt;
 use futures::{AsyncReadExt, AsyncWriteExt};
 use libp2p::Stream;
-use std::io;
+use libp2p::StreamProtocol;
+use libp2p::{multiaddr::Protocol, Multiaddr};
+use libp2p_stream as stream;
 use std::mem;
 use tokio::sync::{broadcast, mpsc, oneshot};
-use tokio_util::sync::CancellationToken;
+use tokio::time::Duration;
+//use tokio_util::sync::CancellationToken;
 use tracing::debug;
+//use tracing::info;
 
-pub fn spawn_peer_sync(mut stream: Stream, document_handle: &DocumentActorHandle) {
-    stream.ignore_for_keep_alive();
-    let (my_send, my_recv) = oneshot::channel();
-    let p2p_handle = P2PActorHandle::new(stream, my_recv);
-    let sync_handle = SyncActorHandle::new(document_handle, &p2p_handle);
-    let _ = my_send.send(sync_handle);
+const ETHERSYNC_PROTOCOL: StreamProtocol = StreamProtocol::new("/ethersync");
+
+#[derive(Clone)]
+pub struct PeerConnectionInfo {
+    peer: Option<String>,
+}
+impl PeerConnectionInfo {
+    #[must_use]
+    pub fn new(peer: Option<String>) -> Self {
+        Self { peer }
+    }
 }
 
-/*
-/// Reads from a TCP stream and forwards it to the Syncer
-struct P2PReadActor {
-    sync_handle: SyncActorHandle,
-    stream: Stream,
-    shutdown_token: CancellationToken,
+pub async fn make_peer_connection(
+    connection_info: PeerConnectionInfo,
+    document_handle: DocumentActorHandle,
+) -> anyhow::Result<()> {
+    let p2p_actor = P2PActor::new(connection_info, document_handle);
+    tokio::spawn(async move {
+        let _ = p2p_actor.run().await;
+    });
+
+    Ok(())
 }
 
-impl P2PReadActor {
-    fn new(
-        stream: Stream,
-        sync_handle: SyncActorHandle,
-        shutdown_token: CancellationToken,
-    ) -> Self {
+#[derive(Clone)]
+pub struct P2PActor {
+    connection_info: PeerConnectionInfo,
+    document_handle: DocumentActorHandle,
+}
+
+impl P2PActor {
+    pub fn new(connection_info: PeerConnectionInfo, document_handle: DocumentActorHandle) -> Self {
         Self {
-            sync_handle,
-            stream,
-            shutdown_token,
+            connection_info,
+            document_handle,
         }
     }
 
-    async fn forward_sync_message(&self, message: Vec<u8>) {
-        let message =
-            AutomergeSyncMessage::decode(&message).expect("Failed to decode automerge message");
-        self.sync_handle.send(message).await;
-    }
+    async fn run(self) -> anyhow::Result<()> {
+        // Initialize the swarm.
+        let mut swarm = libp2p::SwarmBuilder::with_new_identity()
+            .with_tokio()
+            .with_quic()
+            .with_behaviour(|_| stream::Behaviour::new())?
+            .with_swarm_config(|c| c.with_idle_connection_timeout(Duration::from_secs(10)))
+            .build();
 
-    async fn read_message(&mut self) -> Result<Vec<u8>> {
-        let mut message_len_buf = [0; 4];
-        self.reader.read_exact(&mut message_len_buf).await?;
-        let message_len = i32::from_be_bytes(message_len_buf);
-        let mut message_buf = vec![0; message_len as usize];
-        self.reader.read_exact(&mut message_buf).await?;
-        Ok(message_buf)
-    }
+        swarm.listen_on("/ip4/127.0.0.1/udp/0/quic-v1".parse()?)?;
 
-    async fn run(&mut self) {
-        while let Ok(message) = self.read_message().await {
-            self.forward_sync_message(message).await;
+        let mut incoming_streams = swarm
+            .behaviour()
+            .new_control()
+            .accept(ETHERSYNC_PROTOCOL)
+            .unwrap();
+
+        // In this demo application, the dialing peer initiates the protocol.
+        if let Some(ref address) = self.connection_info.peer {
+            let multiaddr = address
+                .parse::<Multiaddr>()
+                .expect("Failed to parse argument as `Multiaddr`");
+
+            let Some(Protocol::P2p(peer_id)) = multiaddr.iter().last() else {
+                anyhow::bail!("Provided address does not end in `/p2p`");
+            };
+
+            tokio::spawn(async move {
+                while let Some((_peer, _stream)) = incoming_streams.next().await {
+                    // No need to do anything.
+                }
+            });
+
+            swarm.dial(multiaddr)?;
+
+            let mut control = swarm.behaviour().new_control();
+
+            tokio::spawn(async move {
+                let stream = match control.open_stream(peer_id, ETHERSYNC_PROTOCOL).await {
+                    Ok(stream) => stream,
+                    Err(error @ stream::OpenStreamError::UnsupportedProtocol(_)) => {
+                        tracing::info!(%peer_id, %error);
+                        panic!("Unsupported protocol");
+                    }
+                    Err(error) => {
+                        // Other errors may be temporary.
+                        // In production, something like an exponential backoff / circuit-breaker may be more appropriate.
+                        tracing::debug!(%peer_id, %error);
+                        panic!("Maybe an temporary error? TODO");
+                    }
+                };
+
+                self.spawn_peer_sync(stream).await;
+            });
+        } else {
+            // Deal with incoming streams.
+            // Spawning a dedicated task is just one way of doing this.
+            // libp2p doesn't care how you handle incoming streams but you _must_ handle them somehow.
+            // To mitigate DoS attacks, libp2p will internally drop incoming streams if your application cannot keep up processing them.
+            tokio::spawn(async move {
+                // This loop handles incoming streams _sequentially_ but that doesn't have to be the case.
+                // You can also spawn a dedicated task per stream if you want to.
+                // Be aware that this breaks backpressure though as spawning new tasks is equivalent to an unbounded buffer.
+                // Each task needs memory meaning an aggressive remote peer may force you OOM this way.
+
+                while let Some((_peer, stream)) = incoming_streams.next().await {
+                    self.spawn_peer_sync(stream).await;
+                }
+            });
         }
-        info!("Sync Receive loop stopped (peer disconnected)");
-        self.shutdown_token.cancel();
+
+        // Poll the swarm to make progress.
+        loop {
+            let event = swarm.next().await.expect("never terminates");
+
+            match event {
+                libp2p::swarm::SwarmEvent::NewListenAddr { address, .. } => {
+                    let listen_address = address.with_p2p(*swarm.local_peer_id()).unwrap();
+                    tracing::info!(%listen_address);
+                }
+                event => tracing::trace!(?event),
+            }
+        }
+    }
+
+    async fn spawn_peer_sync(&self, mut stream: Stream) {
+        let (we_to_peer_tx, we_to_peer_rx) = mpsc::channel(16);
+        let (peer_to_us_tx, mut peer_to_us_rx) = mpsc::channel(16);
+
+        let syncer = SyncActor::new(self.document_handle.clone(), we_to_peer_rx, peer_to_us_tx);
+        tokio::spawn(syncer.run());
+
+        loop {
+            let mut message_len_buf = [0; 4];
+
+            tokio::select! {
+                message_maybe = peer_to_us_rx.recv() => {
+                    match message_maybe {
+                        Some(message) => {
+                            let message = message.encode();
+                            let message_len = message.len() as i32;
+                            stream
+                                .write_all(&message_len.to_be_bytes())
+                                .await
+                                .expect("GenerateSyncMessage: write message len failed");
+                            stream
+                                .write_all(&message)
+                                .await
+                                .expect("GenerateSyncMessage: write message failed");
+                            }
+                        None => {
+                            // TODO: ?
+                        }
+                    }
+                }
+                _ = stream.read_exact(&mut message_len_buf) => {
+                    let message_len = i32::from_be_bytes(message_len_buf);
+                    let mut message_buf = vec![0; message_len as usize];
+                    stream.read_exact(&mut message_buf).await.expect("Failed to read Automerge message");
+
+                    let message =
+                        AutomergeSyncMessage::decode(&message_buf).expect("Failed to decode automerge message");
+                    we_to_peer_tx.send(message).await.expect("Failed to send on we_to_peer channel");
+                }
+            }
+        }
     }
 }
-*/
-
-/*
-struct TCPWriteActor {
-    writer: WriteHalf<TcpStream>,
-    automerge_message_receiver: mpsc::Receiver<AutomergeSyncMessage>,
-}
-
-impl TCPWriteActor {
-    fn new(
-        writer: WriteHalf<TcpStream>,
-        automerge_message_receiver: mpsc::Receiver<AutomergeSyncMessage>,
-    ) -> Self {
-        Self {
-            writer,
-            automerge_message_receiver,
-        }
-    }
-
-    async fn run(&mut self) {
-        while let Some(message) = self.automerge_message_receiver.recv().await {
-            // TODO: move encode to Syncer for symmetry?
-            let message = message.encode();
-            let message_len = message.len() as i32;
-            self.writer
-                .write_all(&message_len.to_be_bytes())
-                .await
-                .expect("GenerateSyncMessage: write message len failed");
-            self.writer
-                .write_all(&message)
-                .await
-                .expect("GenerateSyncMessage: write message failed");
-        }
-        // At this point, our channel has been closed, which is the signal for us to stop.
-        debug!("TCPWriteActor stopped (channel closed)");
-    }
-}
-*/
 
 struct SyncActor {
-    syncer_receiver: mpsc::Receiver<AutomergeSyncMessage>,
-    document_handle: DocumentActorHandle,
-    p2p_handle: P2PActorHandle,
     peer_state: SyncState,
+    document_handle: DocumentActorHandle,
+    syncer_receiver: mpsc::Receiver<AutomergeSyncMessage>,
+    syncer_sender: mpsc::Sender<AutomergeSyncMessage>,
 }
 
 impl SyncActor {
     fn new(
-        syncer_receiver: mpsc::Receiver<AutomergeSyncMessage>,
         document_handle: DocumentActorHandle,
-        p2p_handle: P2PActorHandle,
+        syncer_receiver: mpsc::Receiver<AutomergeSyncMessage>,
+        syncer_sender: mpsc::Sender<AutomergeSyncMessage>,
     ) -> Self {
         Self {
-            syncer_receiver,
-            document_handle,
-            p2p_handle,
             peer_state: SyncState::new(),
+            document_handle,
+            syncer_receiver,
+            syncer_sender,
         }
     }
 
@@ -149,7 +231,10 @@ impl SyncActor {
             .expect("Could not read response from Document channel");
         self.peer_state = ps;
         if let Some(message) = message {
-            self.p2p_handle.send(message).await;
+            self.syncer_sender
+                .send(message)
+                .await
+                .expect("Failed to send on syncer_sender channel");
         }
     }
 
@@ -161,10 +246,6 @@ impl SyncActor {
 
         loop {
             tokio::select! {
-                () = self.p2p_handle.shutdown_token.cancelled() => {
-                    debug!("Shutting down main SyncActor loop");
-                    break;
-                }
                 // As doc_changed_ping_rx is a broadcast channel our understanding is,
                 // that this breaks a potential cyclic deadlock between SyncerActor
                 // and TCPActor (e.g. when TCPWriteActor.send blocks).
@@ -186,105 +267,5 @@ impl SyncActor {
                 }
             }
         }
-    }
-}
-
-#[derive(Clone)]
-pub struct SyncActorHandle {
-    syncer_message_tx: mpsc::Sender<AutomergeSyncMessage>,
-}
-
-impl SyncActorHandle {
-    pub fn new(document_handle: &DocumentActorHandle, p2p_handle: &P2PActorHandle) -> Self {
-        let (syncer_message_tx, syncer_message_rx) = mpsc::channel(16);
-
-        // Sync actor.
-        let syncer = SyncActor::new(
-            syncer_message_rx,
-            document_handle.clone(),
-            p2p_handle.clone(),
-        );
-        tokio::spawn(syncer.run());
-
-        Self { syncer_message_tx }
-    }
-
-    async fn send(&self, message: AutomergeSyncMessage) {
-        self.syncer_message_tx
-            .send(message)
-            .await
-            .expect("Channel closed (TODO)");
-    }
-}
-
-#[derive(Clone)]
-pub struct P2PActorHandle {
-    automerge_message_tx: mpsc::Sender<AutomergeSyncMessage>,
-    shutdown_token: CancellationToken,
-}
-
-impl P2PActorHandle {
-    pub fn new(mut stream: Stream, sync_handle: oneshot::Receiver<SyncActorHandle>) -> Self {
-        let shutdown_token = CancellationToken::new();
-
-        let _read_shutdown_token = shutdown_token.clone();
-
-        let (automerge_message_tx, mut automerge_message_rx) =
-            mpsc::channel::<AutomergeSyncMessage>(16);
-
-        tokio::spawn(async move {
-            let sync_handle = sync_handle
-                .await
-                .expect("Failed to receive SyncActorHandle");
-
-            // kick off protocl!
-            // if we receive on automerge_message_rx, write it to the stream
-            // if we receive a size and a message, send it to the sync_handle
-            loop {
-                let mut message_len_buf = [0; 4];
-
-                tokio::select! {
-                    message_maybe = automerge_message_rx.recv() => {
-                        match message_maybe {
-                            Some(message) => {
-                                let message = message.encode();
-                                let message_len = message.len() as i32;
-                                stream
-                                    .write_all(&message_len.to_be_bytes())
-                                    .await
-                                    .expect("GenerateSyncMessage: write message len failed");
-                                stream
-                                    .write_all(&message)
-                                    .await
-                                    .expect("GenerateSyncMessage: write message failed");
-                                }
-                            None => {
-                                // TODO: ?
-                            }
-                        }
-                    }
-                    _ = stream.read_exact(&mut message_len_buf) => {
-                        let message_len = i32::from_be_bytes(message_len_buf);
-                        let mut message_buf = vec![0; message_len as usize];
-                        stream.read_exact(&mut message_buf).await.expect("Failed to read Automerge message");
-
-                        let message =
-                            AutomergeSyncMessage::decode(&message_buf).expect("Failed to decode automerge message");
-                        sync_handle.send(message).await;
-                    }
-                }
-            }
-        });
-        Self {
-            automerge_message_tx,
-            shutdown_token,
-        }
-    }
-
-    async fn send(&mut self, message: AutomergeSyncMessage) {
-        self.automerge_message_tx
-            .send(message)
-            .await
-            .expect("Channel to P2PActor(s) closed.");
     }
 }

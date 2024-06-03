@@ -1,6 +1,7 @@
 use crate::connect;
 use crate::editor::EditorHandle;
 use crate::ot::OTServer;
+use crate::peer;
 use crate::types::{
     EditorProtocolMessage, EditorTextDelta, FileTextDelta, RevisionedEditorTextDelta, TextDelta,
 };
@@ -563,9 +564,9 @@ impl Daemon {
         let document_handle = DocumentActorHandle::new(base_dir, is_host);
 
         let connection_document_handle = document_handle.clone();
-        let peer_info = connect::PeerConnectionInfo::new(peer);
+        let peer_info = peer::PeerConnectionInfo::new(peer);
         tokio::spawn(async move {
-            let _ = connect::make_peer_connection(peer_info, connection_document_handle).await;
+            let _ = peer::make_peer_connection(peer_info, connection_document_handle).await;
         });
 
         let editor_socket_path = socket_path.to_path_buf();
