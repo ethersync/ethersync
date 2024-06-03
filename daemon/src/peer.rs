@@ -12,8 +12,7 @@ use std::mem;
 use tokio::sync::{broadcast, mpsc, oneshot};
 use tokio::time::Duration;
 //use tokio_util::sync::CancellationToken;
-use tracing::debug;
-//use tracing::info;
+use tracing::{debug, error, info};
 
 const ETHERSYNC_PROTOCOL: StreamProtocol = StreamProtocol::new("/ethersync");
 
@@ -139,13 +138,28 @@ impl P2PActor {
         }
     }
 
-    async fn spawn_peer_sync(&self, mut stream: Stream) {
+    async fn spawn_peer_sync(&self, stream: Stream) {
         let (we_to_peer_tx, we_to_peer_rx) = mpsc::channel(16);
-        let (peer_to_us_tx, mut peer_to_us_rx) = mpsc::channel(16);
+        let (peer_to_us_tx, peer_to_us_rx) = mpsc::channel(16);
 
         let syncer = SyncActor::new(self.document_handle.clone(), we_to_peer_rx, peer_to_us_tx);
         tokio::spawn(syncer.run());
 
+        match Self::protocol_handler(stream, peer_to_us_rx, we_to_peer_tx).await {
+            Ok(()) => {
+                info!("Sync successful! Do we ever get here?");
+            }
+            Err(e) => {
+                error!("Sync failed or interrupted: {e}");
+            }
+        }
+    }
+
+    async fn protocol_handler(
+        mut stream: Stream,
+        mut peer_to_us_rx: mpsc::Receiver<AutomergeSyncMessage>,
+        we_to_peer_tx: mpsc::Sender<AutomergeSyncMessage>,
+    ) -> anyhow::Result<()> {
         loop {
             let mut message_len_buf = [0; 4];
 
@@ -157,12 +171,10 @@ impl P2PActor {
                             let message_len = message.len() as i32;
                             stream
                                 .write_all(&message_len.to_be_bytes())
-                                .await
-                                .expect("GenerateSyncMessage: write message len failed");
+                                .await?;
                             stream
                                 .write_all(&message)
-                                .await
-                                .expect("GenerateSyncMessage: write message failed");
+                                .await?;
                             }
                         None => {
                             // TODO: ?
@@ -172,11 +184,11 @@ impl P2PActor {
                 _ = stream.read_exact(&mut message_len_buf) => {
                     let message_len = i32::from_be_bytes(message_len_buf);
                     let mut message_buf = vec![0; message_len as usize];
-                    stream.read_exact(&mut message_buf).await.expect("Failed to read Automerge message");
+                    stream.read_exact(&mut message_buf).await?;
 
                     let message =
-                        AutomergeSyncMessage::decode(&message_buf).expect("Failed to decode automerge message");
-                    we_to_peer_tx.send(message).await.expect("Failed to send on we_to_peer channel");
+                        AutomergeSyncMessage::decode(&message_buf)?;
+                    we_to_peer_tx.send(message).await?;
                 }
             }
         }
