@@ -786,8 +786,7 @@ mod tests {
 
     mod document_actor {
         use super::*;
-        use assert_fs::prelude::*;
-        use assert_fs::TempDir;
+        use temp_dir::TempDir;
         use tracing_test::traced_test;
 
         impl DocumentActor {
@@ -811,16 +810,12 @@ mod tests {
             let dir = TempDir::new().expect("Failed to create temp directory");
             let file1 = dir.child("file1");
             let file2 = dir.child("file2");
+            let subdir = dir.child("sub");
+            std::fs::create_dir(subdir).unwrap();
             let file3 = dir.child("sub/file3");
-            file1
-                .write_str("content1")
-                .expect("Failed to write test file");
-            file2
-                .write_str("content2")
-                .expect("Failed to write test file");
-            file3
-                .write_str("content3")
-                .expect("Failed to write test file");
+            std::fs::write(&file1, "content1").unwrap();
+            std::fs::write(&file2, "content2").unwrap();
+            std::fs::write(&file3, "content3").unwrap();
             dir
         }
 
@@ -867,9 +862,18 @@ mod tests {
             actor.maybe_write_files_changed_in_file_deltas(&file_deltas);
 
             // Thus, we only expect file1 to be changed on disk.
-            dir.child("file1").assert("foobarcontent1");
-            dir.child("file2").assert("content2");
-            dir.child("sub/file3").assert("content3");
+            assert_eq!(
+                std::fs::read_to_string(dir.child("file1")).unwrap(),
+                "foobarcontent1",
+            );
+            assert_eq!(
+                std::fs::read_to_string(dir.child("file2")).unwrap(),
+                "content2",
+            );
+            assert_eq!(
+                std::fs::read_to_string(dir.child("sub/file3")).unwrap(),
+                "content3",
+            );
         }
 
         #[test]
