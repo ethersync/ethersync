@@ -726,7 +726,7 @@ mod tests {
                 assert!(document.generate_sync_message(&mut state).is_none());
 
                 document.initialize_text("", "text");
-                // We have progressed out state, so update all peers about that.
+                // We have progressed our state, so update all peers about that.
                 assert!(document.generate_sync_message(&mut state).is_some());
                 // Again, stop, until peers tell us if they want more information.
                 assert!(document.generate_sync_message(&mut state).is_none());
