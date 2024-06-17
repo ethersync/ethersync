@@ -1,9 +1,17 @@
 {
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
+    naersk = {
+      url = "github:nix-community/naersk";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
   };
 
-  outputs = {nixpkgs, ...}: let
+  outputs = {
+    nixpkgs,
+    naersk,
+    ...
+  }: let
     forAllSystems = function:
       nixpkgs.lib.genAttrs [
         "x86_64-linux"
@@ -31,12 +39,11 @@
           '';
         };
       };
-    ethersync = pkgs:
-      pkgs.rustPlatform.buildRustPackage {
-        pname = "ethersync";
-        version = "0.2.0";
+    ethersync = pkgs: let
+      naersk' = pkgs.callPackage naersk {};
+    in
+      naersk'.buildPackage {
         src = ./daemon;
-        cargoSha256 = "sha256-9ZRMcVwKzCmumake+s8Cy+lm5eMPFrr9n912/Z1nBAk=";
       };
   in {
     packages = forAllSystems (pkgs: {
