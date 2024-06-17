@@ -111,6 +111,10 @@ To collaborate on a file called `file` in a directory called `playground`, follo
     If that doesn't work, make sure that there's an `.ethersync` directory next to the `file`, and that the `ethersync` command is in the PATH in the terminal where you run Neovim.
     You can now collaboratively edit the file together in real-time!
 
+## Development
+
+If you're interested in building new editor plugins, read the specification for the [daemon-editor protocol](docs/daemon-editor-protocol.md). For more information about Ethersync's design, refer to the list of [decision records](docs/decisions/).
+
 ## Sponsors
 
 Thanks to [NLNet](https://nlnet.nl) for funding this project through the [NGI0 Core Fund](https://nlnet.nl/core/).
