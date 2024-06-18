@@ -506,7 +506,18 @@ pub mod tests {
         assert_vim_input_yields_replacements("ä", "dd", vec![replace_ed((0, 0), (0, 1), "")]);
 
         assert_vim_input_yields_replacements("a\n", "yyp", vec![replace_ed((0, 1), (0, 1), "\na")]);
+        assert_vim_input_yields_replacements(
+            "🥕\n",
+            "yyp",
+            vec![replace_ed((0, 1), (0, 1), "\n🥕")],
+        );
         assert_vim_input_yields_replacements("a", "yyp", vec![replace_ed((0, 1), (0, 1), "\na")]);
+
+        assert_vim_input_yields_replacements(
+            "a\n🥕\n",
+            "jyyp",
+            vec![replace_ed((1, 1), (1, 1), "\n🥕")],
+        );
 
         assert_vim_input_yields_replacements("a", "o", vec![replace_ed((0, 1), (0, 1), "\n")]);
 

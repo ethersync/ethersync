@@ -43,6 +43,7 @@ function M.trackChanges(buffer, callback)
             debug({ diff = diff })
 
             -- TODO: Simplify the solution?
+            -- For example, pull tests into good variable names like "ends_with_newline".
             -- TODO: Update the following comment to describe the problem and the solution more clearly.
 
             -- Sometimes, Vim deletes full lines by deleting the last line, plus an imaginary newline at the end. For example, to delete the second line, Vim would delete from (line: 1, column: 0) to (line: 2, column 0).
@@ -56,7 +57,7 @@ function M.trackChanges(buffer, callback)
                     -- Instead, we just shorten the range by one character.
                     diff.range["end"].line = diff.range["end"].line - 1
                     diff.range["end"].character = vim.fn.strchars(prev_lines[#prev_lines])
-                    if string.sub(diff.text, vim.fn.strchars(diff.text)) == "\n" then
+                    if string.sub(diff.text, -1) == "\n" then
                         -- The replacement ends with a newline.
                         -- Drop it, because we shortened the range not to include the newline.
                         diff.text = string.sub(diff.text, 1, -2)
@@ -70,15 +71,14 @@ function M.trackChanges(buffer, callback)
                             -- Modify edit, s.t. not the last \n, but the one before is replaced.
                             diff.range["start"].line = diff.range["start"].line - 1
                             diff.range["end"].line = diff.range["end"].line - 1
-                            diff.range["start"].character =
-                                vim.fn.strchars(prev_lines[diff.range["start"].line + 1], false)
-                            diff.range["end"].character = vim.fn.strchars(prev_lines[diff.range["end"].line + 1], false)
-                        elseif string.sub(diff.text, vim.fn.strchars(diff.text)) == "\n" then
+                            diff.range["start"].character = vim.fn.strchars(prev_lines[diff.range["start"].line + 1])
+                            diff.range["end"].character = vim.fn.strchars(prev_lines[diff.range["end"].line + 1])
+                        elseif string.sub(diff.text, -1) == "\n" then
                             -- The replacement ends with a newline.
                             -- Drop it, and shorten the range by one character.
                             diff.text = string.sub(diff.text, 1, -2)
                             diff.range["end"].line = diff.range["end"].line - 1
-                            diff.range["end"].character = vim.fn.strchars(prev_lines[diff.range["end"].line + 1], false)
+                            diff.range["end"].character = vim.fn.strchars(prev_lines[diff.range["end"].line + 1])
                         else
                             vim.fn.echoerr(
                                 "We don't know how to handle this case for a deletion after the last visible line. Please file a bug."
