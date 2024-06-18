@@ -39,33 +39,19 @@
           '';
         };
       };
-    ethersync = pkgs: let
-      naersk' = pkgs.callPackage naersk {};
-    in
-      naersk'.buildPackage {
+    ethersync = pkgs:
+      (pkgs.callPackage naersk {}).buildPackage {
         src = ./daemon;
       };
   in {
     packages = forAllSystems (pkgs: {
       default = ethersync pkgs;
+      neovim = neovim-with-ethersync-plugin pkgs;
     });
 
     devShells = forAllSystems (pkgs: {
       default = pkgs.mkShell {
-        nativeBuildInputs = [pkgs.cargo pkgs.rustc (neovim-with-ethersync-plugin pkgs) (ethersync pkgs)];
-      };
-    });
-
-    # TODO: Running these checks seems broken.
-    checks = forAllSystems (pkgs: {
-      fuzzer = pkgs.stdenv.mkDerivation {
-        name = "ethersync-fuzzer";
-        nativeBuildInputs = [(ethersync pkgs) (neovim-with-ethersync-plugin pkgs)];
-        src = ./.;
-        doCheck = true;
-        checkPhase = ''
-          fuzzer
-        '';
+        nativeBuildInputs = [pkgs.cargo pkgs.rustc (ethersync pkgs) (neovim-with-ethersync-plugin pkgs)];
       };
     });
   };
