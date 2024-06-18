@@ -4,10 +4,6 @@ local debug = require("logging").debug
 
 local M = {}
 
--- Used to remember the previous content of the buffer, so that we can
--- calculate the difference between the previous and the current content.
-local prev_lines
-
 -- Used to note that changes to the buffer should be ignored, and not be sent out as deltas.
 local ignore_edits = false
 
@@ -15,7 +11,9 @@ local ignore_edits = false
 --
 -- The delta can be expected to be in the format as specified in the daemon-editor protocol.
 function M.trackChanges(buffer, callback)
-    prev_lines = vim.api.nvim_buf_get_lines(buffer, 0, -1, true)
+    -- Used to remember the previous content of the buffer, so that we can
+    -- calculate the difference between the previous and the current content.
+    local prev_lines = vim.api.nvim_buf_get_lines(buffer, 0, -1, true)
 
     vim.api.nvim_buf_attach(buffer, false, {
         on_lines = function(
