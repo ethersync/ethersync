@@ -5,7 +5,7 @@ use tokio::{
     sync::mpsc,
 };
 use tokio_util::sync::CancellationToken;
-use tracing::{debug, error, info};
+use tracing::{debug, error, info, trace};
 
 use crate::daemon::{DocMessage, DocumentActorHandle};
 use crate::types::EditorProtocolMessage;
@@ -75,7 +75,7 @@ impl SocketReadActor {
         loop {
             match lines.next_line().await {
                 Ok(Some(line)) => {
-                    debug!("Got a line from the client: {:#?}", line);
+                    trace!("Got a line from the client: {:#?}", line);
                     let jsonrpc = EditorProtocolMessage::from_jsonrpc(&line)
                         .expect("Failed to parse JSON-RPC message");
                     self.document_handle
@@ -91,14 +91,14 @@ impl SocketReadActor {
             }
         }
         self.shutdown_token.cancel();
-        info!("Client disconnect.");
+        info!("Client disconnected");
     }
 }
 
 pub struct SocketWriteActor {
     writer: WriteHalf<UnixStream>,
-    shutdown_token: CancellationToken,
     editor_message_receiver: EditorMessageReceiver,
+    shutdown_token: CancellationToken,
 }
 
 impl SocketWriteActor {
@@ -115,11 +115,10 @@ impl SocketWriteActor {
     }
 
     async fn write_to_socket(&mut self, message: EditorProtocolMessage) {
-        debug!("Received editor message to send to it.");
         let payload = message
             .to_jsonrpc()
             .expect("Failed to serialize JSON-RPC message");
-        debug!("Sending message to editor: {:#?}", payload);
+        trace!("Sending message to editor: {:#?}", payload);
         self.writer
             .write_all(format!("{payload}\n").as_bytes())
             .await
@@ -130,7 +129,7 @@ impl SocketWriteActor {
         // We're sending an editor message to the client.
         loop {
             tokio::select! {
-                _ = self.shutdown_token.cancelled() => {
+                () = self.shutdown_token.cancelled() => {
                     debug!("Shutting down JSON-RPC sender (due to socket disconnet)");
                     break;
                 }

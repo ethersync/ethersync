@@ -16,7 +16,7 @@ operational-transform = "0.6.1"
 anyhow = "1.0.81"
 tracing = "0.1.40"
 tracing-subscriber = { version = "0.3.18", features = ["local-time"] }
-nvim-rs = {version = "0.7.0", features = ["use_tokio"]}
+nvim-rs = { version = "0.7.0", features = ["use_tokio"] }
 temp-dir = "0.1.13"
 async-trait = "0.1.79"
 pretty_assertions = "1.4.0"
@@ -29,10 +29,11 @@ time-macros = { version = "0.2.0-alpha.1" }
 local-ip-address = "0.6.1"
 public-ip = "0.2.2"
 tokio-util = "0.7.11"
+walkdir = "2.5.0"
 
-[features]
-simulate_edits_from_editor = []
-simulate_edits_on_crdt = []
+[dev-dependencies]
+assert_matches = "1.5"
+
 
 [profile.release]
 debug = true

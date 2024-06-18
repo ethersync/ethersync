@@ -1,10 +1,5 @@
 local M = {}
 
-function M.appendNewline()
-    print("Appending newline...")
-    vim.cmd("normal! Go")
-end
-
 -- The following functions are taken from the Neovim source code:
 -- https://github.com/neovim/neovim/blob/master/runtime/lua/vim/lsp/util.lua
 
@@ -94,7 +89,6 @@ function M.apply_text_edits(text_edits, bufnr, offset_encoding)
     end
 
     -- Apply text edits.
-    --local has_eol_text_edit = false
     local disable_eol = false
     for _, text_edit in ipairs(text_edits) do
         -- Normalize line ending
@@ -121,7 +115,6 @@ function M.apply_text_edits(text_edits, bufnr, offset_encoding)
             if max <= e.end_row then
                 e.end_row = max - 1
                 e.end_col = last_line_len
-                --has_eol_text_edit = true
                 disable_eol = true
                 -- "a" + 'eol' + replace((0,1), (1,0), "") => "a" + 'noeol'
                 -- "a" + 'eol' + replace((0,1), (1,0), "\n\n") => "a\n\n" + 'noeol' (I guess?)
@@ -166,12 +159,6 @@ function M.apply_text_edits(text_edits, bufnr, offset_encoding)
     if disable_eol then
         vim.bo.eol = false
     end
-    --local fix_eol = has_eol_text_edit
-    --fix_eol = fix_eol and (vim.bo[bufnr].eol or (vim.bo[bufnr].fixeol and not vim.bo[bufnr].binary))
-    --fix_eol = fix_eol and get_line(bufnr, max - 1) == ""
-    --if fix_eol then
-    --    vim.api.nvim_buf_set_lines(bufnr, -2, -1, false, {})
-    --end
 end
 
 return M

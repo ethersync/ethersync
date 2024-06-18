@@ -1,8 +1,9 @@
 #![allow(dead_code)]
-use automerge::PatchAction;
+use automerge::{Patch, PatchAction};
 use operational_transform::{Operation as OTOperation, OperationSeq};
 use ropey::Rope;
 use serde::{Deserialize, Serialize};
+use tracing::warn;
 
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct TextDelta(pub Vec<TextOp>);
@@ -71,6 +72,38 @@ impl RevisionedTextDelta {
     }
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct FileTextDelta {
+    pub file_path: String,
+    pub delta: TextDelta,
+}
+
+impl FileTextDelta {
+    #[must_use]
+    pub fn new(file_path: String, delta: TextDelta) -> Self {
+        Self { file_path, delta }
+    }
+
+    pub fn from_crdt_patches(patches: Vec<Patch>) -> Vec<Self> {
+        let mut file_deltas: Vec<Self> = vec![];
+
+        for patch in patches {
+            match patch.try_into() {
+                Ok(result) => {
+                    file_deltas.push(result);
+                }
+                Err(e) => {
+                    warn!("Failed to convert patch to delta: {:#?}", e);
+                }
+            }
+        }
+
+        file_deltas
+    }
+}
+
+type DocumentUri = String;
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "method", content = "params", rename_all = "camelCase")]
 pub enum EditorProtocolMessage {
@@ -89,6 +122,9 @@ pub enum EditorProtocolMessage {
 }
 
 impl EditorProtocolMessage {
+    /// # Errors
+    ///
+    /// Will return an error if the conversion to JSONRPC fails.
     pub fn to_jsonrpc(&self) -> Result<String, anyhow::Error> {
         let json_value =
             serde_json::to_value(self).expect("Failed to convert editor message to a JSON value");
@@ -107,8 +143,6 @@ impl EditorProtocolMessage {
         Ok(message)
     }
 }
-
-type DocumentUri = String;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct EditorTextOp {
@@ -185,6 +219,9 @@ impl TextDelta {
         }
     }
 
+    /// # Errors
+    ///
+    /// Will return an error if the composition of the deltas fails.
     #[must_use]
     pub fn compose(self, other: Self) -> Self {
         let mut my_op_seq: OperationSeq = self.into();
@@ -204,30 +241,56 @@ impl TextDelta {
     // +transform_position?
 }
 
-impl TryFrom<PatchAction> for TextDelta {
+impl TryFrom<Patch> for FileTextDelta {
     type Error = anyhow::Error;
 
-    fn try_from(patch_action: PatchAction) -> Result<Self, Self::Error> {
+    fn try_from(patch: Patch) -> Result<Self, Self::Error> {
+        fn file_path_from_path_default(path: &[(automerge::ObjId, automerge::Prop)]) -> String {
+            assert!(
+                path.len() == 1,
+                "Unexpected path in Automerge patch, length is not 1"
+            );
+            let (_obj_id, prop) = &path[0];
+            if let automerge::Prop::Map(file_path) = prop {
+                return file_path.into();
+            }
+            panic!("Unexpected path in Automerge patch: Prop is not a map");
+        }
+
         let mut delta = TextDelta::default();
 
-        match patch_action {
+        match patch.action {
             PatchAction::SpliceText { index, value, .. } => {
                 delta.retain(index);
                 delta.insert(&value.make_string());
+                Ok(FileTextDelta::new(
+                    file_path_from_path_default(&patch.path),
+                    delta,
+                ))
             }
             PatchAction::DeleteSeq { index, length } => {
                 delta.retain(index);
                 delta.delete(length);
+                Ok(FileTextDelta::new(
+                    file_path_from_path_default(&patch.path),
+                    delta,
+                ))
             }
-            _ => {
-                return Err(anyhow::anyhow!(
-                    "Unsupported patch action: {}",
-                    patch_action
-                ));
+            PatchAction::PutMap { key, .. } => {
+                // This action happens when a new file is created.
+                // We return an empty delta on the new file, so that the file is created on disk when
+                // synced over to another peer. TODO: Is this the best way to solve this?
+                assert!(
+                    patch.path.is_empty(),
+                    "Unexpected PutMap on non-ROOT in Automerge patch",
+                );
+                Ok(FileTextDelta::new(key, delta))
             }
+            other_action => Err(anyhow::anyhow!(
+                "Unsupported patch action: {}",
+                other_action
+            )),
         }
-
-        Ok(delta)
     }
 }
 
@@ -302,6 +365,9 @@ impl From<TextDelta> for OperationSeq {
 }
 
 impl TextDelta {
+    /// # Panics
+    ///
+    /// Will panic if the delta contains multiple operations.
     pub fn from_ed_delta(ed_delta: EditorTextDelta, content: &str) -> Self {
         let mut delta = TextDelta::default();
         // TODO: add support, when needed
@@ -370,21 +436,21 @@ pub mod factories {
     use super::*;
 
     pub fn insert(at: usize, s: &str) -> TextDelta {
-        let mut delta: TextDelta = Default::default();
+        let mut delta = TextDelta::default();
         delta.retain(at);
         delta.insert(s);
         delta
     }
 
     pub fn delete(from: usize, length: usize) -> TextDelta {
-        let mut delta: TextDelta = Default::default();
+        let mut delta = TextDelta::default();
         delta.retain(from);
         delta.delete(length);
         delta
     }
 
     pub fn replace(from: usize, length: usize, s: &str) -> TextDelta {
-        let mut delta: TextDelta = Default::default();
+        let mut delta = TextDelta::default();
         delta.retain(from);
         delta.delete(length);
         delta.insert(s);
@@ -477,21 +543,21 @@ mod tests {
     #[test]
     fn conversion_editor_to_text_delta_insert() {
         let ed_delta = ed_delta_single((0, 1), (0, 1), "a");
-        let delta: TextDelta = TextDelta::from_ed_delta(ed_delta, "foo");
+        let delta = TextDelta::from_ed_delta(ed_delta, "foo");
         assert_eq!(delta, insert(1, "a"));
     }
 
     #[test]
     fn conversion_editor_to_text_delta_delete() {
         let ed_delta = ed_delta_single((0, 0), (0, 1), "");
-        let delta: TextDelta = TextDelta::from_ed_delta(ed_delta, "foo");
+        let delta = TextDelta::from_ed_delta(ed_delta, "foo");
         assert_eq!(delta, delete(0, 1));
     }
 
     #[test]
     fn conversion_editor_to_text_delta_replacement() {
         let ed_delta = ed_delta_single((0, 5), (1, 0), "\nhello\n");
-        let delta: TextDelta = TextDelta::from_ed_delta(ed_delta, "hello\n");
+        let delta = TextDelta::from_ed_delta(ed_delta, "hello\n");
         let mut expected_delta = TextDelta::default();
         expected_delta.retain(5);
         expected_delta.insert("\nhello\n");
@@ -502,13 +568,13 @@ mod tests {
     #[test]
     fn conversion_editor_to_text_delta_full_line_deletion() {
         let ed_delta = ed_delta_single((0, 0), (1, 0), "");
-        let delta: TextDelta = TextDelta::from_ed_delta(ed_delta, "a");
+        let delta = TextDelta::from_ed_delta(ed_delta, "a");
         let mut expected_delta = TextDelta::default();
         expected_delta.delete(1);
         assert_eq!(expected_delta, delta);
 
         let ed_delta = ed_delta_single((0, 0), (1, 0), "");
-        let delta: TextDelta = TextDelta::from_ed_delta(ed_delta, "a\n");
+        let delta = TextDelta::from_ed_delta(ed_delta, "a\n");
         let mut expected_delta = TextDelta::default();
         expected_delta.delete(2);
         assert_eq!(expected_delta, delta);
@@ -517,7 +583,7 @@ mod tests {
     #[test]
     fn conversion_editor_to_text_delta_multiline_replacement() {
         let ed_delta = ed_delta_single((1, 0), (2, 0), "xzwei\nx");
-        let delta: TextDelta = TextDelta::from_ed_delta(ed_delta, "xeins\nzwei\ndrei\n");
+        let delta = TextDelta::from_ed_delta(ed_delta, "xeins\nzwei\ndrei\n");
         let mut expected_delta = TextDelta::default();
         expected_delta.retain(6);
         expected_delta.insert("xzwei\nx");
@@ -569,7 +635,7 @@ mod tests {
             replace_ed((0, 1), (0, 1), "long"),
             replace_ed((0, 2), (0, 2), "short"),
         ]);
-        let delta: TextDelta = TextDelta::from_ed_delta(ed_delta, "oneliner");
+        let delta = TextDelta::from_ed_delta(ed_delta, "oneliner");
         let mut expected = TextDelta::default();
         expected.retain(1);
         expected.insert("l");

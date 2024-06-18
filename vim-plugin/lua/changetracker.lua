@@ -4,10 +4,6 @@ local debug = require("logging").debug
 
 local M = {}
 
--- Used to remember the previous content of the buffer, so that we can
--- calculate the difference between the previous and the current content.
-local prev_lines
-
 -- Used to note that changes to the buffer should be ignored, and not be sent out as deltas.
 local ignore_edits = false
 
@@ -15,7 +11,9 @@ local ignore_edits = false
 --
 -- The delta can be expected to be in the format as specified in the daemon-editor protocol.
 function M.trackChanges(buffer, callback)
-    prev_lines = vim.api.nvim_buf_get_lines(buffer, 0, -1, true)
+    -- Used to remember the previous content of the buffer, so that we can
+    -- calculate the difference between the previous and the current content.
+    local prev_lines = vim.api.nvim_buf_get_lines(buffer, 0, -1, true)
 
     vim.api.nvim_buf_attach(buffer, false, {
         on_lines = function(
@@ -45,6 +43,7 @@ function M.trackChanges(buffer, callback)
             debug({ diff = diff })
 
             -- TODO: Simplify the solution?
+            -- For example, pull tests into good variable names like "ends_with_newline".
             -- TODO: Update the following comment to describe the problem and the solution more clearly.
 
             -- Sometimes, Vim deletes full lines by deleting the last line, plus an imaginary newline at the end. For example, to delete the second line, Vim would delete from (line: 1, column: 0) to (line: 2, column 0).
@@ -58,7 +57,7 @@ function M.trackChanges(buffer, callback)
                     -- Instead, we just shorten the range by one character.
                     diff.range["end"].line = diff.range["end"].line - 1
                     diff.range["end"].character = vim.fn.strchars(prev_lines[#prev_lines])
-                    if string.sub(diff.text, vim.fn.strchars(diff.text)) == "\n" then
+                    if string.sub(diff.text, -1) == "\n" then
                         -- The replacement ends with a newline.
                         -- Drop it, because we shortened the range not to include the newline.
                         diff.text = string.sub(diff.text, 1, -2)
@@ -72,15 +71,14 @@ function M.trackChanges(buffer, callback)
                             -- Modify edit, s.t. not the last \n, but the one before is replaced.
                             diff.range["start"].line = diff.range["start"].line - 1
                             diff.range["end"].line = diff.range["end"].line - 1
-                            diff.range["start"].character =
-                                vim.fn.strchars(prev_lines[diff.range["start"].line + 1], false)
-                            diff.range["end"].character = vim.fn.strchars(prev_lines[diff.range["end"].line + 1], false)
-                        elseif string.sub(diff.text, vim.fn.strchars(diff.text)) == "\n" then
+                            diff.range["start"].character = vim.fn.strchars(prev_lines[diff.range["start"].line + 1])
+                            diff.range["end"].character = vim.fn.strchars(prev_lines[diff.range["end"].line + 1])
+                        elseif string.sub(diff.text, -1) == "\n" then
                             -- The replacement ends with a newline.
                             -- Drop it, and shorten the range by one character.
                             diff.text = string.sub(diff.text, 1, -2)
                             diff.range["end"].line = diff.range["end"].line - 1
-                            diff.range["end"].character = vim.fn.strchars(prev_lines[diff.range["end"].line + 1], false)
+                            diff.range["end"].character = vim.fn.strchars(prev_lines[diff.range["end"].line + 1])
                         else
                             vim.fn.echoerr(
                                 "We don't know how to handle this case for a deletion after the last visible line. Please file a bug."

@@ -1,7 +1,7 @@
 #![allow(dead_code)]
 use crate::types::{EditorTextDelta, RevisionedEditorTextDelta, RevisionedTextDelta, TextDelta};
 use operational_transform::OperationSeq;
-use tracing::{debug, trace};
+use tracing::debug;
 
 ///    `OTServer` receives operations from both the CRDT world, and one editor and makes sure that
 ///    the editor operations (which might be based on an older document) are applicable to the
@@ -135,10 +135,9 @@ impl OTServer {
         );
         let confirmed_queue = self.editor_queue.drain(..seen_operations);
         for confirmed_editor_op in confirmed_queue {
-            trace!(
+            debug!(
                 "Applying confirmed operation {:#?} to last confirmed editor content {:?}",
-                &confirmed_editor_op,
-                &self.last_confirmed_editor_content
+                &confirmed_editor_op, &self.last_confirmed_editor_content
             );
             self.last_confirmed_editor_content = Self::force_apply(
                 &self.last_confirmed_editor_content,
@@ -151,10 +150,9 @@ impl OTServer {
         );
         op_seq = rev_delta.delta.into();
 
-        trace!(
+        debug!(
             "Applying incoming editor operation {:#?} to last confirmed editor content {:?}",
-            &op_seq,
-            &self.last_confirmed_editor_content
+            &op_seq, &self.last_confirmed_editor_content
         );
         self.last_confirmed_editor_content =
             Self::force_apply(&self.last_confirmed_editor_content, op_seq.clone());
@@ -163,7 +161,6 @@ impl OTServer {
         self.current_content = Self::force_apply(&self.current_content, op_seq.clone());
 
         let deltas_for_editor = self.deltas_for_editor();
-        debug!(for_editor = ?deltas_for_editor);
 
         (op_seq.into(), deltas_for_editor)
     }
@@ -196,16 +193,13 @@ impl OTServer {
             op_seq.retain((doc_chars - op_seq.base_len()) as u64);
         }
         op_seq.apply(document).unwrap_or_else(|_| {
-            panic!(
-                "Could not apply operation {:?} to string with length {} ('{:?}')",
-                op_seq, doc_chars, document
-            )
+            panic!("Could not apply operation {op_seq:?} to string with length {doc_chars} ('{document:?}')")
         })
     }
 }
 
-/// This function takes operations t1 and m1 ... m_n,
-/// and returns operations t1' and m1' ... m_n'.
+/// This function takes operations t1 and m1 ... `m_n`,
+/// and returns operations t1' and m1' ... `m_n`'.
 /// .
 ///        t1
 ///     * ----> *

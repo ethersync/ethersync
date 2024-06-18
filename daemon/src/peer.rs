@@ -12,10 +12,10 @@ use tracing::{debug, info};
 
 use crate::daemon::{DocMessage, DocumentActorHandle};
 
-pub fn spawn_peer_sync(stream: TcpStream, document_handle: DocumentActorHandle) {
+pub fn spawn_peer_sync(stream: TcpStream, document_handle: &DocumentActorHandle) {
     let (my_send, my_recv) = oneshot::channel();
     let tcp_handle = TCPActorHandle::new(stream, my_recv);
-    let sync_handle = SyncActorHandle::new(document_handle.clone(), tcp_handle);
+    let sync_handle = SyncActorHandle::new(document_handle, &tcp_handle);
     let _ = my_send.send(sync_handle);
 }
 
@@ -42,7 +42,7 @@ impl TCPReadActor {
     async fn forward_sync_message(&self, message: Vec<u8>) {
         let message =
             AutomergeSyncMessage::decode(&message).expect("Failed to decode automerge message");
-        self.sync_handle.send(message).await
+        self.sync_handle.send(message).await;
     }
 
     async fn read_message(&mut self) -> Result<Vec<u8>> {
@@ -59,7 +59,7 @@ impl TCPReadActor {
             self.forward_sync_message(message).await;
         }
         info!("Sync Receive loop stopped (peer disconnected)");
-        self.shutdown_token.cancel()
+        self.shutdown_token.cancel();
     }
 }
 
@@ -158,7 +158,7 @@ impl SyncActor {
 
         loop {
             tokio::select! {
-                _ = self.tcp_handle.shutdown_token.cancelled() => {
+                () = self.tcp_handle.shutdown_token.cancelled() => {
                     debug!("Shutting down main SyncActor loop");
                     break;
                 }
@@ -192,7 +192,7 @@ pub struct SyncActorHandle {
 }
 
 impl SyncActorHandle {
-    pub fn new(document_handle: DocumentActorHandle, tcp_handle: TCPActorHandle) -> Self {
+    pub fn new(document_handle: &DocumentActorHandle, tcp_handle: &TCPActorHandle) -> Self {
         let (syncer_message_tx, syncer_message_rx) = mpsc::channel(16);
 
         // Sync actor.
@@ -210,7 +210,7 @@ impl SyncActorHandle {
         self.syncer_message_tx
             .send(message)
             .await
-            .expect("Channel closed (TODO)")
+            .expect("Channel closed (TODO)");
     }
 }
 
@@ -241,9 +241,8 @@ impl TCPActorHandle {
         let (tcp_read, tcp_write) = tokio::io::split(stream);
         let (automerge_message_tx, automerge_message_rx) = mpsc::channel(16);
         tokio::spawn(async move {
-            let sync_handle = match sync_handle.await {
-                Ok(my_handle) => my_handle,
-                Err(_) => return,
+            let Ok(sync_handle) = sync_handle.await else {
+                return;
             };
             let mut receiver = TCPReadActor::new(tcp_read, sync_handle, read_shutdown_token);
             tokio::spawn(async move {

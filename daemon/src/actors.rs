@@ -28,6 +28,9 @@ pub struct Neovim {
 }
 
 impl Neovim {
+    /// # Panics
+    ///
+    /// Will panic if Neovim cannot be started or if the file cannot be opened.
     pub async fn new(file_path: PathBuf) -> Self {
         let handler = Dummy::new();
         let mut cmd = tokio::process::Command::new("nvim");
@@ -42,6 +45,9 @@ impl Neovim {
         Self { nvim, buffer }
     }
 
+    /// # Panics
+    ///
+    /// Will panic if input cannot be sent to Neovim.
     pub async fn input(&mut self, input: &str) {
         self.nvim
             .input(input)
@@ -84,7 +90,7 @@ impl Actor for Neovim {
             "🥕".to_string(),
             "\n".to_string(),
         ];
-        let s = random_string(rand_usize_inclusive(1, 5), string_components);
+        let s = random_string(rand_usize_inclusive(1, 5), &string_components);
 
         let components = vec![
             "h".to_string(),
@@ -109,7 +115,7 @@ impl Actor for Neovim {
             format!("I{}", s),
         ];
 
-        vim_normal_command.push_str(&random_string(rand_usize_inclusive(1, 2), components));
+        vim_normal_command.push_str(&random_string(rand_usize_inclusive(1, 2), &components));
 
         self.nvim
             .command(&format!(r#"silent! execute "normal {vim_normal_command}""#))
@@ -147,7 +153,7 @@ impl Actor for Neovim {
     }*/
 }
 
-fn random_string(length: usize, components: Vec<String>) -> String {
+fn random_string(length: usize, components: &[String]) -> String {
     (0..length)
         .map(|_| components[rand_usize_inclusive(0, components.len() - 1)].clone())
         .collect::<String>()
@@ -169,7 +175,7 @@ struct MockSocket {
 
 #[allow(dead_code)]
 impl MockSocket {
-    async fn new(socket_path: &str, ignore_reads: bool) -> Self {
+    fn new(socket_path: &str, ignore_reads: bool) -> Self {
         if Path::new(socket_path).exists() {
             fs::remove_file(socket_path).expect("Could not remove existing socket file");
         }
@@ -226,19 +232,12 @@ impl MockSocket {
     }
 
     async fn recv(&mut self) -> JSONValue {
-        loop {
-            let line = self
-                .reader_rx
-                .recv()
-                .await
-                .expect("Could not receive message");
-            let json: JSONValue = serde_json::from_str(&line).expect("Could not parse JSON");
-            if json["method"] == "debug" {
-                continue;
-            } else {
-                return json;
-            }
-        }
+        let line = self
+            .reader_rx
+            .recv()
+            .await
+            .expect("Could not receive message");
+        serde_json::from_str(&line).expect("Could not parse JSON")
     }
 }
 
@@ -277,7 +276,7 @@ pub mod tests {
     ) {
         let runtime = Runtime::new().expect("Could not create Tokio runtime");
         runtime.block_on(async {
-            let mut socket = MockSocket::new("/tmp/ethersync", true).await;
+            let mut socket = MockSocket::new("/tmp/ethersync", true);
             let (nvim, file_path) = Neovim::new_ethersync_enabled(initial_content).await;
 
             for op in &deltas {
@@ -345,7 +344,7 @@ pub mod tests {
         let runtime = Runtime::new().expect("Could not create Tokio runtime");
         runtime.block_on(async {
             timeout(Duration::from_millis(5000), async {
-                let mut socket = MockSocket::new("/tmp/ethersync", false).await;
+                let mut socket = MockSocket::new("/tmp/ethersync", false);
                 let (mut nvim, _file_path) = Neovim::new_ethersync_enabled(initial_content).await;
 
                 let msg = socket.recv().await;
@@ -507,7 +506,18 @@ pub mod tests {
         assert_vim_input_yields_replacements("ä", "dd", vec![replace_ed((0, 0), (0, 1), "")]);
 
         assert_vim_input_yields_replacements("a\n", "yyp", vec![replace_ed((0, 1), (0, 1), "\na")]);
+        assert_vim_input_yields_replacements(
+            "🥕\n",
+            "yyp",
+            vec![replace_ed((0, 1), (0, 1), "\n🥕")],
+        );
         assert_vim_input_yields_replacements("a", "yyp", vec![replace_ed((0, 1), (0, 1), "\na")]);
+
+        assert_vim_input_yields_replacements(
+            "a\n🥕\n",
+            "jyyp",
+            vec![replace_ed((1, 1), (1, 1), "\n🥕")],
+        );
 
         assert_vim_input_yields_replacements("a", "o", vec![replace_ed((0, 1), (0, 1), "\n")]);
 
