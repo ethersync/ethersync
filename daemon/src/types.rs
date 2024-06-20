@@ -628,8 +628,9 @@ mod tests {
         assert_eq!(expected_ed_delta, ed_delta);
     }
 
+    /*
+    // TODO: Uncomment when we support multiple ops in one delta.
     #[test]
-    #[ignore] // TODO: enable, when we support multiple ops in one delta
     fn conversion_editor_to_text_delta_insert_twice() {
         let ed_delta = EditorTextDelta(vec![
             replace_ed((0, 1), (0, 1), "long"),
@@ -643,6 +644,7 @@ mod tests {
         expected.insert("ong");
         assert_eq!(delta, expected);
     }
+    */
 
     mod position {
         use super::Position;
@@ -923,7 +925,8 @@ mod tests {
             Position::from_offset(17, "h🥕llo,\nneue\nwelt");
         }
 
-        #[ignore] // WIP, see below.
+        /*
+        // TODO: This should probably panic?
         #[test]
         #[should_panic]
         fn offset_out_of_bounds_to_offset() {
@@ -940,5 +943,6 @@ mod tests {
             }
             .to_offset("h🥕llo,\nneue\nwelt");
         }
+        */
     }
 }
