@@ -197,6 +197,9 @@ impl Position {
 
     fn to_offset(&self, content: &str) -> usize {
         let rope = Rope::from_str(content);
+
+        assert!(self.character <= rope.line(self.line).len_chars());
+
         rope.line_to_char(self.line) + self.character
     }
 }
@@ -568,16 +571,17 @@ mod tests {
     #[test]
     fn conversion_editor_to_text_delta_full_line_deletion() {
         let ed_delta = ed_delta_single((0, 0), (1, 0), "");
-        let delta = TextDelta::from_ed_delta(ed_delta, "a");
-        let mut expected_delta = TextDelta::default();
-        expected_delta.delete(1);
-        assert_eq!(expected_delta, delta);
-
-        let ed_delta = ed_delta_single((0, 0), (1, 0), "");
         let delta = TextDelta::from_ed_delta(ed_delta, "a\n");
         let mut expected_delta = TextDelta::default();
         expected_delta.delete(2);
         assert_eq!(expected_delta, delta);
+    }
+
+    #[test]
+    #[should_panic]
+    fn conversion_editor_to_text_delta_full_line_deletion_fails() {
+        let ed_delta = ed_delta_single((0, 0), (1, 0), "");
+        TextDelta::from_ed_delta(ed_delta, "a");
     }
 
     #[test]
@@ -626,22 +630,6 @@ mod tests {
         ]);
 
         assert_eq!(expected_ed_delta, ed_delta);
-    }
-
-    #[test]
-    #[ignore] // TODO: enable, when we support multiple ops in one delta
-    fn conversion_editor_to_text_delta_insert_twice() {
-        let ed_delta = EditorTextDelta(vec![
-            replace_ed((0, 1), (0, 1), "long"),
-            replace_ed((0, 2), (0, 2), "short"),
-        ]);
-        let delta = TextDelta::from_ed_delta(ed_delta, "oneliner");
-        let mut expected = TextDelta::default();
-        expected.retain(1);
-        expected.insert("l");
-        expected.insert("short");
-        expected.insert("ong");
-        assert_eq!(delta, expected);
     }
 
     mod position {
@@ -882,26 +870,22 @@ mod tests {
                 .to_offset("a\n"),
                 2
             );
-            assert_eq!(
-                Position {
-                    line: 1,
-                    character: 0
-                }
-                .to_offset("a"),
-                1
-            );
         }
 
         #[test]
         #[should_panic]
-        fn referencing_after_last_lines_fails() {
-            assert_eq!(
-                Position {
-                    line: 1,
-                    character: 0
-                },
-                Position::from_offset(2, "a")
-            );
+        fn referencing_after_last_line_fails() {
+            Position {
+                line: 1,
+                character: 0,
+            }
+            .to_offset("a");
+        }
+
+        #[test]
+        #[should_panic]
+        fn offset_after_end_fails() {
+            Position::from_offset(2, "a");
         }
 
         #[test]
@@ -923,22 +907,14 @@ mod tests {
             Position::from_offset(17, "h🥕llo,\nneue\nwelt");
         }
 
-        #[ignore] // WIP, see below.
         #[test]
         #[should_panic]
-        fn offset_out_of_bounds_to_offset() {
-            // TODO: do we want this to panic?
+        fn line_too_short() {
             Position {
-                line: 2,
+                line: 1,
                 character: 5,
             }
-            .to_offset("h🥕llo,\nneue\nwelt");
-            // even this doesn't panic, that surprises me. Check.
-            Position {
-                line: 3,
-                character: 5,
-            }
-            .to_offset("h🥕llo,\nneue\nwelt");
+            .to_offset("h🥕llo\nwelt");
         }
     }
 }

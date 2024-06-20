@@ -249,6 +249,7 @@ pub mod tests {
         RevisionedEditorTextDelta,
     };
     use pretty_assertions::assert_eq;
+    use serial_test::serial;
     use tokio::{
         runtime::Runtime,
         time::{timeout, Duration},
@@ -265,7 +266,26 @@ pub mod tests {
             let (nvim, _, _) = new_child_cmd(&mut cmd, handler).await.unwrap();
             nvim.command("EthersyncInfo")
                 .await
-                .expect("Failed to run Ethersync");
+                .expect("Failed to run EthersyncInfo");
+        });
+    }
+
+    #[test]
+    #[ignore]
+    fn ethersync_executable_from_vim() {
+        let runtime = Runtime::new().unwrap();
+        runtime.block_on(async {
+            let handler = Dummy::new();
+            let mut cmd = tokio::process::Command::new("nvim");
+            cmd.arg("--headless").arg("--embed");
+            let (nvim, _, _) = new_child_cmd(&mut cmd, handler).await.unwrap();
+            assert_eq!(
+                nvim.command_output("echomsg executable('ethersync')")
+                    .await
+                    .expect("Failed to run executable() in Vim"),
+                "1",
+                "Failed to run ethersync executable from Vim"
+            );
         });
     }
 
@@ -294,7 +314,7 @@ pub mod tests {
                 socket.send(&format!("{payload}\n")).await;
             }
 
-            tokio::time::sleep(Duration::from_millis(2000)).await; // TODO: This is a bit funny, but it seems necessary?
+            tokio::time::sleep(Duration::from_millis(100)).await;
 
             let actual_content = nvim.content().await;
             assert_eq!(
@@ -311,6 +331,7 @@ pub mod tests {
 
     #[test]
     #[ignore]
+    #[serial]
     fn vim_processes_deltas_correctly() {
         assert_vim_deltas_yield_content("", vec![replace_ed((0, 0), (0, 0), "a")], "a");
         assert_vim_deltas_yield_content("x\n", vec![replace_ed((0, 1), (1, 0), "")], "x");
@@ -380,6 +401,7 @@ pub mod tests {
 
     #[ignore]
     #[test]
+    #[serial]
     fn vim_sends_correct_delta() {
         // Edits on a single line.
         assert_vim_input_yields_replacements("", "ia", vec![replace_ed((0, 0), (0, 0), "a")]);
