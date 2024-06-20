@@ -1,6 +1,6 @@
 ---
 date: 2024-03-19
-updated: 2024-04-17
+updated: 2024-06-17
 ---
 
 This document describes the protocol between the Ethersync daemon and the text editors. It should contain everything you need to implement a plugin for a new editor!
