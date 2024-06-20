@@ -265,7 +265,26 @@ pub mod tests {
             let (nvim, _, _) = new_child_cmd(&mut cmd, handler).await.unwrap();
             nvim.command("EthersyncInfo")
                 .await
-                .expect("Failed to run Ethersync");
+                .expect("Failed to run EthersyncInfo");
+        });
+    }
+
+    #[test]
+    #[ignore]
+    fn ethersync_executable_from_vim() {
+        let runtime = Runtime::new().unwrap();
+        runtime.block_on(async {
+            let handler = Dummy::new();
+            let mut cmd = tokio::process::Command::new("nvim");
+            cmd.arg("--headless").arg("--embed");
+            let (nvim, _, _) = new_child_cmd(&mut cmd, handler).await.unwrap();
+            assert_eq!(
+                nvim.command_output("echomsg executable('ethersync')")
+                    .await
+                    .expect("Failed to run executable() in Vim"),
+                "1",
+                "Failed to run ethersync executable from Vim"
+            );
         });
     }
 
