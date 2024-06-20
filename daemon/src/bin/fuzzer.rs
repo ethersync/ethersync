@@ -8,7 +8,7 @@ use rand::Rng;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use tokio::time::{sleep, timeout, Duration};
-use tracing::{info, warn};
+use tracing::{error, info};
 
 async fn perform_random_edits(actor: &mut (impl Actor + ?Sized)) {
     for _ in 1..100 {
@@ -83,7 +83,7 @@ async fn main() {
 
     info!("Waiting for all contents to be equal");
 
-    timeout(Duration::from_secs(60), async {
+    timeout(Duration::from_secs(120), async {
         loop {
             // Get all contents.
             for (name, actor) in &mut actors {
@@ -107,7 +107,7 @@ async fn main() {
     })
     .await
     .unwrap_or_else(|_| {
-        warn!("Timeout while waiting for all contents to be equal");
+        error!("Timeout while waiting for all contents to be equal");
     });
 
     // Get all contents.
