@@ -4,11 +4,12 @@ use ethersync::logging;
 use std::io;
 use std::path::PathBuf;
 use tokio::signal;
-use tracing::info;
+use tracing::{error, info};
 
 mod jsonrpc_forwarder;
 
 const DEFAULT_SOCKET_PATH: &str = "/tmp/ethersync";
+const ETHERSYNC_CONFIG_DIR: &str = ".ethersync";
 
 #[derive(Parser)]
 #[command(version, about, long_about = None)]
@@ -42,6 +43,11 @@ enum Commands {
     Client,
 }
 
+fn has_ethersync_directory(mut dir: PathBuf) -> bool {
+    dir.push(ETHERSYNC_CONFIG_DIR);
+    dir.exists() && dir.is_dir()
+}
+
 #[tokio::main]
 async fn main() -> io::Result<()> {
     let default_panic = std::panic::take_hook();
@@ -66,6 +72,14 @@ async fn main() -> io::Result<()> {
                 .unwrap_or(std::env::current_dir().expect("Could not access current directory"))
                 .canonicalize()
                 .expect("Could not access given directory");
+            if !has_ethersync_directory(directory.clone()) {
+                error!(
+                    "No {} found in {} (create it to Ethersync-enable the directory)",
+                    ETHERSYNC_CONFIG_DIR,
+                    directory.display()
+                );
+                return Ok(());
+            }
             info!("Starting Ethersync on {}", directory.display());
             Daemon::new(port, peer, &socket_path, &directory);
             match signal::ctrl_c().await {
