@@ -103,6 +103,18 @@ impl FileTextDelta {
 }
 
 type DocumentUri = String;
+type UserId = Vec<u8>;
+#[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
+pub struct RevisionedRanges {
+    revision: usize,
+    ranges: Vec<Range>,
+}
+
+struct CursorState {
+    userid: UserId,
+    uri: DocumentUri,
+    ranges: RevisionedRanges,
+}
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "method", content = "params", rename_all = "camelCase")]
@@ -117,8 +129,11 @@ pub enum EditorProtocolMessage {
         uri: DocumentUri,
         delta: RevisionedEditorTextDelta,
     },
-    // TODO coming later:
-    // Cursor{uri: DocumentUri, ranges: RevisionedRanges}
+    Cursor {
+        userid: UserId,
+        uri: DocumentUri,
+        ranges: RevisionedRanges,
+    },
 }
 
 impl EditorProtocolMessage {
@@ -248,16 +263,21 @@ impl TryFrom<Patch> for FileTextDelta {
     type Error = anyhow::Error;
 
     fn try_from(patch: Patch) -> Result<Self, Self::Error> {
-        fn file_path_from_path_default(path: &[(automerge::ObjId, automerge::Prop)]) -> String {
-            assert!(
-                path.len() == 1,
-                "Unexpected path in Automerge patch, length is not 1"
-            );
+        fn file_path_from_path_default(
+            path: &[(automerge::ObjId, automerge::Prop)],
+        ) -> Result<String, anyhow::Error> {
+            if path.len() != 2 {
+                return Err(anyhow::anyhow!(
+                    "Unexpected path in Automerge patch, length is not 2"
+                ));
+            }
             let (_obj_id, prop) = &path[0];
             if let automerge::Prop::Map(file_path) = prop {
-                return file_path.into();
+                return Ok(file_path.into());
             }
-            panic!("Unexpected path in Automerge patch: Prop is not a map");
+            Err(anyhow::anyhow!(
+                "Unexpected path in Automerge patch: Prop is not a map"
+            ))
         }
 
         let mut delta = TextDelta::default();
@@ -267,7 +287,7 @@ impl TryFrom<Patch> for FileTextDelta {
                 delta.retain(index);
                 delta.insert(&value.make_string());
                 Ok(FileTextDelta::new(
-                    file_path_from_path_default(&patch.path),
+                    file_path_from_path_default(&patch.path)?,
                     delta,
                 ))
             }
@@ -275,19 +295,36 @@ impl TryFrom<Patch> for FileTextDelta {
                 delta.retain(index);
                 delta.delete(length);
                 Ok(FileTextDelta::new(
-                    file_path_from_path_default(&patch.path),
+                    file_path_from_path_default(&patch.path)?,
                     delta,
                 ))
             }
             PatchAction::PutMap { key, .. } => {
-                // This action happens when a new file is created.
+                // This action is only relevant for us in the "files" path.
+                // There, it happens when a new file is created.
                 // We return an empty delta on the new file, so that the file is created on disk when
                 // synced over to another peer. TODO: Is this the best way to solve this?
-                assert!(
-                    patch.path.is_empty(),
-                    "Unexpected PutMap on non-ROOT in Automerge patch",
-                );
-                Ok(FileTextDelta::new(key, delta))
+
+                if patch.path.len() == 1 {
+                    let (_obj_id, prop) = &patch.path[0];
+                    if let automerge::Prop::Map(map_key) = prop {
+                        if map_key == "files" {
+                            Ok(FileTextDelta::new(key, delta))
+                        } else {
+                            Err(anyhow::anyhow!(
+                                "Unexpected path in Automerge patch, expected 'files'"
+                            ))
+                        }
+                    } else {
+                        Err(anyhow::anyhow!(
+                            "Unexpected path in Automerge patch, Prop is not a map"
+                        ))
+                    }
+                } else {
+                    Err(anyhow::anyhow!(
+                        "Unexpected path in Automerge patch, length is not 1"
+                    ))
+                }
             }
             other_action => Err(anyhow::anyhow!(
                 "Unsupported patch action: {}",
