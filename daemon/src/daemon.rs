@@ -813,9 +813,9 @@ mod tests {
             let subdir = dir.child("sub");
             std::fs::create_dir(subdir).unwrap();
             let file3 = dir.child("sub/file3");
-            std::fs::write(&file1, "content1").unwrap();
-            std::fs::write(&file2, "content2").unwrap();
-            std::fs::write(&file3, "content3").unwrap();
+            std::fs::write(file1, "content1").unwrap();
+            std::fs::write(file2, "content2").unwrap();
+            std::fs::write(file3, "content3").unwrap();
             dir
         }
 
