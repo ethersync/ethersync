@@ -2,8 +2,8 @@ use crate::connect;
 use crate::editor::EditorHandle;
 use crate::ot::OTServer;
 use crate::types::{
-    EditorProtocolMessage, EditorTextDelta, FileTextDelta, RevisionedEditorTextDelta,
-    RevisionedRanges, TextDelta,
+    CursorState, EditorProtocolMessage, EditorTextDelta, FileTextDelta, PatchEffect,
+    RevisionedEditorTextDelta, RevisionedRanges, TextDelta,
 };
 use anyhow::Result;
 use automerge::{
@@ -13,7 +13,6 @@ use automerge::{
     AutoCommit, ObjType, Patch, PatchLog, ReadDoc,
 };
 use rand::Rng;
-use serde_json::json;
 use std::collections::{HashMap, HashSet};
 use std::fmt;
 use std::path::{Path, PathBuf};
@@ -200,17 +199,24 @@ impl Document {
         let state_map = self
             .top_level_map_obj("states")
             .expect("Failed to get states Map object");
-        let userid_string = String::from_utf8(userid).expect("Failed to convert userid to string");
+        let userid_string =
+            String::from_utf8(userid.clone()).expect("Failed to convert userid to string");
         let user_obj = self
             .doc
             .put_object(state_map, userid_string, ObjType::Text)
             .expect("Failed to initialize user state Map object in Automerge document");
-        let data = json!({
-            "ranges": ranges,
-            "file_path": file_path,
-        });
+        let cursor_state = CursorState {
+            userid,
+            file_path,
+            ranges,
+        };
         self.doc
-            .splice_text(user_obj, 0, 0, &data.to_string())
+            .splice_text(
+                user_obj,
+                0,
+                0,
+                &serde_json::to_string(&cursor_state).expect("Could not serialize cursor state"),
+            )
             .expect("Failed to splice text into Automerge text object");
     }
 }
@@ -278,12 +284,25 @@ impl DocumentActor {
             } => {
                 let patches = self.apply_sync_message_to_doc(message, &mut peer_state);
 
-                // TODO, CONTINUE HERE: Patches now could also be a cursor state change. Use an
-                // enum which can be either a FileTextDelta or a CursorState?
-                let file_deltas = FileTextDelta::from_crdt_patches(patches);
+                let patch_effects = PatchEffect::from_crdt_patches(patches);
+
+                let mut file_deltas = vec![];
+                let mut cursor_states = vec![];
+
+                for patch_effect in patch_effects {
+                    match patch_effect {
+                        PatchEffect::FileChange(file_text_delta) => {
+                            file_deltas.push(file_text_delta);
+                        }
+                        PatchEffect::CursorChange(cursor_state) => {
+                            cursor_states.push(cursor_state);
+                        }
+                    }
+                }
 
                 self.maybe_write_files_changed_in_file_deltas(&file_deltas);
                 self.maybe_process_crdt_file_deltas_in_ot(file_deltas).await;
+                self.process_cursor_states(cursor_states).await;
 
                 response_tx
                     .send(peer_state)
@@ -455,6 +474,24 @@ impl DocumentActor {
                 let rev_text_delta_for_editor = ot_server.apply_crdt_change(delta);
                 self.send_to_editors(rev_text_delta_for_editor, &file_path)
                     .await;
+            }
+        }
+    }
+
+    async fn process_cursor_states(&mut self, cursor_states: Vec<CursorState>) {
+        for CursorState {
+            userid,
+            file_path,
+            ranges,
+        } in cursor_states
+        {
+            let message = EditorProtocolMessage::Cursor {
+                userid,
+                uri: format!("file://{}", self.absolute_path_for_file_path(&file_path)),
+                ranges,
+            };
+            for handle in &mut self.editor_clients.values_mut() {
+                handle.send(message.clone()).await;
             }
         }
     }

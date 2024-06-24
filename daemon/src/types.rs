@@ -83,7 +83,29 @@ impl FileTextDelta {
     pub fn new(file_path: String, delta: TextDelta) -> Self {
         Self { file_path, delta }
     }
+}
 
+type DocumentUri = String;
+type UserId = Vec<u8>;
+#[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
+pub struct RevisionedRanges {
+    revision: usize,
+    ranges: Vec<Range>,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct CursorState {
+    pub userid: UserId,
+    pub file_path: String,
+    pub ranges: RevisionedRanges,
+}
+
+pub enum PatchEffect {
+    FileChange(FileTextDelta),
+    CursorChange(CursorState),
+}
+
+impl PatchEffect {
     pub fn from_crdt_patches(patches: Vec<Patch>) -> Vec<Self> {
         let mut file_deltas: Vec<Self> = vec![];
 
@@ -100,20 +122,6 @@ impl FileTextDelta {
 
         file_deltas
     }
-}
-
-type DocumentUri = String;
-type UserId = Vec<u8>;
-#[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
-pub struct RevisionedRanges {
-    revision: usize,
-    ranges: Vec<Range>,
-}
-
-struct CursorState {
-    userid: UserId,
-    uri: DocumentUri,
-    ranges: RevisionedRanges,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -259,7 +267,7 @@ impl TextDelta {
     // +transform_position?
 }
 
-impl TryFrom<Patch> for FileTextDelta {
+impl TryFrom<Patch> for PatchEffect {
     type Error = anyhow::Error;
 
     fn try_from(patch: Patch) -> Result<Self, Self::Error> {
@@ -271,7 +279,7 @@ impl TryFrom<Patch> for FileTextDelta {
                     "Unexpected path in Automerge patch, length is not 2"
                 ));
             }
-            let (_obj_id, prop) = &path[0];
+            let (_obj_id, prop) = &path[1];
             if let automerge::Prop::Map(file_path) = prop {
                 return Ok(file_path.into());
             }
@@ -282,53 +290,77 @@ impl TryFrom<Patch> for FileTextDelta {
 
         let mut delta = TextDelta::default();
 
-        match patch.action {
-            PatchAction::SpliceText { index, value, .. } => {
-                delta.retain(index);
-                delta.insert(&value.make_string());
-                Ok(FileTextDelta::new(
-                    file_path_from_path_default(&patch.path)?,
-                    delta,
-                ))
-            }
-            PatchAction::DeleteSeq { index, length } => {
-                delta.retain(index);
-                delta.delete(length);
-                Ok(FileTextDelta::new(
-                    file_path_from_path_default(&patch.path)?,
-                    delta,
-                ))
-            }
-            PatchAction::PutMap { key, .. } => {
-                // This action is only relevant for us in the "files" path.
-                // There, it happens when a new file is created.
-                // We return an empty delta on the new file, so that the file is created on disk when
-                // synced over to another peer. TODO: Is this the best way to solve this?
+        if patch.path.is_empty() {
+            return Err(anyhow::anyhow!(
+                "Path is empty, this is probably a top-level change creating the files or states map"
+            ));
+        }
 
+        match &patch.path[0] {
+            (_, automerge::Prop::Map(key)) if key == "files" => {
                 if patch.path.len() == 1 {
-                    let (_obj_id, prop) = &patch.path[0];
-                    if let automerge::Prop::Map(map_key) = prop {
-                        if map_key == "files" {
-                            Ok(FileTextDelta::new(key, delta))
-                        } else {
-                            Err(anyhow::anyhow!(
-                                "Unexpected path in Automerge patch, expected 'files'"
-                            ))
+                    match patch.action {
+                        PatchAction::PutMap { key, .. } => {
+                            // This action happens when a new file is created.
+                            // We return an empty delta on the new file, so that the file is created on disk when
+                            // synced over to another peer. TODO: Is this the best way to solve this?
+                            Ok(PatchEffect::FileChange(FileTextDelta::new(key, delta)))
                         }
-                    } else {
-                        Err(anyhow::anyhow!(
-                            "Unexpected path in Automerge patch, Prop is not a map"
-                        ))
+                        other_action => Err(anyhow::anyhow!(
+                            "Unsupported patch action for path 'files': {}",
+                            other_action
+                        )),
+                    }
+                } else if patch.path.len() == 2 {
+                    match patch.action {
+                        PatchAction::SpliceText { index, value, .. } => {
+                            delta.retain(index);
+                            delta.insert(&value.make_string());
+                            Ok(PatchEffect::FileChange(FileTextDelta::new(
+                                file_path_from_path_default(&patch.path)?,
+                                delta,
+                            )))
+                        }
+                        PatchAction::DeleteSeq { index, length } => {
+                            delta.retain(index);
+                            delta.delete(length);
+                            Ok(PatchEffect::FileChange(FileTextDelta::new(
+                                file_path_from_path_default(&patch.path)?,
+                                delta,
+                            )))
+                        }
+                        other_action => Err(anyhow::anyhow!(
+                            "Unsupported patch action for path 'files/*': {}",
+                            other_action
+                        )),
                     }
                 } else {
                     Err(anyhow::anyhow!(
-                        "Unexpected path in Automerge patch, length is not 1"
+                        "Unexpected path action for path 'files/**', expected it to be of length 1 or 2"
                     ))
                 }
             }
-            other_action => Err(anyhow::anyhow!(
-                "Unsupported patch action: {}",
-                other_action
+            (_, automerge::Prop::Map(key)) if key == "states" => {
+                if patch.path.len() == 2 {
+                    match patch.action {
+                        PatchAction::SpliceText { index, value, .. } => {
+                            assert_eq!(index, 0);
+                            let cursor_state = serde_json::from_str(&value.make_string())?;
+                            Ok(PatchEffect::CursorChange(cursor_state))
+                        }
+                        other_action => Err(anyhow::anyhow!(
+                            "Unsupported patch action for path 'states/*': {}",
+                            other_action
+                        )),
+                    }
+                } else {
+                    Err(anyhow::anyhow!(
+                        "Unexpected path action for path 'states/...', expected it to be of length 2"
+                    ))
+                }
+            }
+            (_, _) => Err(anyhow::anyhow!(
+                "Unexpected path in Automerge patch, expected it to begin with 'files' or 'states'"
             )),
         }
     }
