@@ -2,8 +2,8 @@ use crate::connect;
 use crate::editor::EditorHandle;
 use crate::ot::OTServer;
 use crate::types::{
-    CursorState, EditorProtocolMessage, EditorTextDelta, FileTextDelta, PatchEffect,
-    RevisionedEditorTextDelta, RevisionedRanges, TextDelta,
+    CursorState, EditorProtocolMessageFromEditor, EditorProtocolMessageToEditor, EditorTextDelta,
+    FileTextDelta, PatchEffect, RevisionedEditorTextDelta, RevisionedRanges, TextDelta,
 };
 use anyhow::Result;
 use automerge::{
@@ -27,7 +27,7 @@ pub enum DocMessage {
     GetContent {
         response_tx: oneshot::Sender<Result<String>>,
     },
-    FromEditor(EditorProtocolMessage),
+    FromEditor(EditorProtocolMessageFromEditor),
     RandomEdit,
     ReceiveSyncMessage {
         message: AutomergeSyncMessage,
@@ -73,6 +73,10 @@ pub struct Document {
 }
 
 impl Document {
+    fn actor_id(&self) -> Vec<u8> {
+        self.doc.get_actor().to_bytes().to_vec()
+    }
+
     fn receive_sync_message_log_patches(
         &mut self,
         message: AutomergeSyncMessage,
@@ -346,19 +350,19 @@ impl DocumentActor {
         format!("{}/{}", self.base_dir.display(), file_path)
     }
 
-    async fn handle_message_from_editor(&mut self, message: EditorProtocolMessage) {
+    async fn handle_message_from_editor(&mut self, message: EditorProtocolMessageFromEditor) {
         match message {
-            EditorProtocolMessage::Open { uri } => {
+            EditorProtocolMessageFromEditor::Open { uri } => {
                 let file_path = self.file_path_for_uri(&uri);
                 debug!("Got an 'open' message for {file_path}");
                 self.open_file_path(file_path);
             }
-            EditorProtocolMessage::Close { uri } => {
+            EditorProtocolMessageFromEditor::Close { uri } => {
                 let file_path = self.file_path_for_uri(&uri);
                 debug!("Got a 'close' message for {file_path}");
                 self.ot_servers.remove(&file_path);
             }
-            EditorProtocolMessage::Edit {
+            EditorProtocolMessageFromEditor::Edit {
                 delta: rev_delta,
                 uri,
             } => {
@@ -371,12 +375,9 @@ impl DocumentActor {
                 self.send_deltas_to_editor(rev_deltas_for_editor, &file_path)
                     .await;
             }
-            EditorProtocolMessage::Cursor {
-                userid,
-                uri,
-                ranges,
-            } => {
+            EditorProtocolMessageFromEditor::Cursor { uri, ranges } => {
                 let file_path = self.file_path_for_uri(&uri);
+                let userid = self.crdt_doc.actor_id();
                 self.store_cursor_position(userid, file_path, ranges);
             }
         }
@@ -485,7 +486,7 @@ impl DocumentActor {
             ranges,
         } in cursor_states
         {
-            let message = EditorProtocolMessage::Cursor {
+            let message = EditorProtocolMessageToEditor::Cursor {
                 userid,
                 uri: format!("file://{}", self.absolute_path_for_file_path(&file_path)),
                 ranges,
@@ -497,7 +498,7 @@ impl DocumentActor {
     }
 
     async fn send_to_editors(&mut self, rev_delta: RevisionedEditorTextDelta, file_path: &str) {
-        let message = EditorProtocolMessage::Edit {
+        let message = EditorProtocolMessageToEditor::Edit {
             uri: format!("file://{}", self.absolute_path_for_file_path(file_path)),
             delta: rev_delta,
         };

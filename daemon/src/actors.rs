@@ -245,7 +245,7 @@ impl MockSocket {
 pub mod tests {
     use super::*;
     use crate::types::{
-        factories::*, EditorProtocolMessage, EditorTextDelta, EditorTextOp,
+        factories::*, EditorProtocolMessageFromEditor, EditorTextDelta, EditorTextOp,
         RevisionedEditorTextDelta,
     };
     use pretty_assertions::assert_eq;
@@ -304,7 +304,7 @@ pub mod tests {
                     revision: 0,
                     delta: EditorTextDelta(vec![op.clone()]),
                 };
-                let editor_message = EditorProtocolMessage::Edit {
+                let editor_message = EditorProtocolMessageFromEditor::Edit {
                     uri: format!("file://{}", file_path.display()),
                     delta: rev_editor_delta,
                 };
@@ -380,9 +380,9 @@ pub mod tests {
                 // expected ones.
                 for expected_replacement in expected_replacements {
                     let msg = socket.recv().await;
-                    let message: EditorProtocolMessage = serde_json::from_str(&msg.to_string())
+                    let message: EditorProtocolMessageFromEditor = serde_json::from_str(&msg.to_string())
                         .expect("Could not parse EditorProtocolMessage");
-                    if let EditorProtocolMessage::Edit{ delta, ..} = message {
+                    if let EditorProtocolMessageFromEditor::Edit{ delta, ..} = message {
                         let operations = delta.delta.0;
                         assert_eq!(vec![expected_replacement], operations, "Different replacements when applying input '{}' to content '{:?}'", input, initial_content);
                     } else {

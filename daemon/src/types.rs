@@ -126,7 +126,7 @@ impl PatchEffect {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "method", content = "params", rename_all = "camelCase")]
-pub enum EditorProtocolMessage {
+pub enum EditorProtocolMessageFromEditor {
     Open {
         uri: DocumentUri,
     },
@@ -138,13 +138,33 @@ pub enum EditorProtocolMessage {
         delta: RevisionedEditorTextDelta,
     },
     Cursor {
+        uri: DocumentUri,
+        ranges: RevisionedRanges,
+    },
+}
+
+impl EditorProtocolMessageFromEditor {
+    pub fn from_jsonrpc(jsonrpc: &str) -> Result<Self, anyhow::Error> {
+        let message = serde_json::from_str(jsonrpc).expect("Failed to deserialize editor message");
+        Ok(message)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "method", content = "params", rename_all = "camelCase")]
+pub enum EditorProtocolMessageToEditor {
+    Edit {
+        uri: DocumentUri,
+        delta: RevisionedEditorTextDelta,
+    },
+    Cursor {
         userid: UserId,
         uri: DocumentUri,
         ranges: RevisionedRanges,
     },
 }
 
-impl EditorProtocolMessage {
+impl EditorProtocolMessageToEditor {
     /// # Errors
     ///
     /// Will return an error if the conversion to JSONRPC fails.
@@ -159,11 +179,6 @@ impl EditorProtocolMessage {
         } else {
             panic!("EditorProtocolMessage was not serialized to a map");
         }
-    }
-
-    pub fn from_jsonrpc(jsonrpc: &str) -> Result<Self, anyhow::Error> {
-        let message = serde_json::from_str(jsonrpc).expect("Failed to deserialize editor message");
-        Ok(message)
     }
 }
 
@@ -267,6 +282,8 @@ impl TextDelta {
     // +transform_position?
 }
 
+// TODO: This feels like it should go into another file, close to where Document handles writing to
+// the Automerge document. Both places need to know about our chosen structure.
 impl TryFrom<Patch> for PatchEffect {
     type Error = anyhow::Error;
 
