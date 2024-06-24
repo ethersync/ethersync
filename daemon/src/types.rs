@@ -87,17 +87,12 @@ impl FileTextDelta {
 
 type DocumentUri = String;
 type UserId = Vec<u8>;
-#[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
-pub struct RevisionedRanges {
-    revision: usize,
-    ranges: Vec<Range>,
-}
 
 #[derive(Serialize, Deserialize)]
 pub struct CursorState {
     pub userid: UserId,
     pub file_path: String,
-    pub ranges: RevisionedRanges,
+    pub ranges: Vec<Range>,
 }
 
 pub enum PatchEffect {
@@ -139,7 +134,7 @@ pub enum EditorProtocolMessageFromEditor {
     },
     Cursor {
         uri: DocumentUri,
-        ranges: RevisionedRanges,
+        ranges: Vec<Range>,
     },
 }
 
@@ -160,7 +155,7 @@ pub enum EditorProtocolMessageToEditor {
     Cursor {
         userid: UserId,
         uri: DocumentUri,
-        ranges: RevisionedRanges,
+        ranges: Vec<Range>,
     },
 }
 

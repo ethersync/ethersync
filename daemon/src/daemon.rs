@@ -3,7 +3,7 @@ use crate::editor::EditorHandle;
 use crate::ot::OTServer;
 use crate::types::{
     CursorState, EditorProtocolMessageFromEditor, EditorProtocolMessageToEditor, EditorTextDelta,
-    FileTextDelta, PatchEffect, RevisionedEditorTextDelta, RevisionedRanges, TextDelta,
+    FileTextDelta, PatchEffect, Range, RevisionedEditorTextDelta, TextDelta,
 };
 use anyhow::Result;
 use automerge::{
@@ -194,34 +194,25 @@ impl Document {
         }
     }
 
-    fn store_cursor_position(
-        &mut self,
-        userid: Vec<u8>,
-        file_path: String,
-        ranges: RevisionedRanges,
-    ) {
+    fn store_cursor_position(&mut self, userid: Vec<u8>, file_path: String, ranges: Vec<Range>) {
         let state_map = self
             .top_level_map_obj("states")
             .expect("Failed to get states Map object");
-        let userid_string =
-            String::from_utf8(userid.clone()).expect("Failed to convert userid to string");
+        let userid_string = format!("{:?}", &userid);
         let user_obj = self
             .doc
-            .put_object(state_map, userid_string, ObjType::Text)
+            .put_object(state_map, &userid_string, ObjType::Text)
             .expect("Failed to initialize user state Map object in Automerge document");
         let cursor_state = CursorState {
             userid,
             file_path,
             ranges,
         };
+        let data = serde_json::to_string(&cursor_state).expect("Could not serialize cursor state");
         self.doc
-            .splice_text(
-                user_obj,
-                0,
-                0,
-                &serde_json::to_string(&cursor_state).expect("Could not serialize cursor state"),
-            )
+            .splice_text(user_obj, 0, 0, &data)
             .expect("Failed to splice text into Automerge text object");
+        debug!("Stored user state for '{userid_string}': {data}");
     }
 }
 
@@ -577,14 +568,10 @@ impl DocumentActor {
         self.maybe_write_file(file_path);
     }
 
-    fn store_cursor_position(
-        &mut self,
-        userid: Vec<u8>,
-        file_path: String,
-        ranges: RevisionedRanges,
-    ) {
+    fn store_cursor_position(&mut self, userid: Vec<u8>, file_path: String, ranges: Vec<Range>) {
         self.crdt_doc
             .store_cursor_position(userid, file_path, ranges);
+        let _ = self.doc_changed_ping_tx.send(());
     }
 
     async fn run(&mut self) {
