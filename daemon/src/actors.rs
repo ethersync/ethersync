@@ -245,8 +245,8 @@ impl MockSocket {
 pub mod tests {
     use super::*;
     use crate::types::{
-        factories::*, EditorProtocolMessageFromEditor, EditorTextDelta, EditorTextOp,
-        RevisionedEditorTextDelta,
+        factories::*, EditorProtocolMessageFromEditor, EditorProtocolMessageToEditor,
+        EditorTextDelta, EditorTextOp, RevisionedEditorTextDelta,
     };
     use pretty_assertions::assert_eq;
     use serial_test::serial;
@@ -304,7 +304,7 @@ pub mod tests {
                     revision: 0,
                     delta: EditorTextDelta(vec![op.clone()]),
                 };
-                let editor_message = EditorProtocolMessageFromEditor::Edit {
+                let editor_message = EditorProtocolMessageToEditor::Edit {
                     uri: format!("file://{}", file_path.display()),
                     delta: rev_editor_delta,
                 };
