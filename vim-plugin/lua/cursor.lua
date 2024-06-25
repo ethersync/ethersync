@@ -7,8 +7,10 @@ function M.setCursor(bufnr, user_id, ranges)
     local offset_encoding = "utf-32"
 
     if user_cursors[user_id] ~= nil then
-        for _, cursor_id in ipairs(user_cursors[user_id]) do
-            vim.api.nvim_buf_del_extmark(bufnr, cursor_namespace, cursor_id)
+        for _, cursor_buffer_tuple in ipairs(user_cursors[user_id]) do
+            local old_cursor_id = cursor_buffer_tuple.cursor_id
+            local old_bufnr = cursor_buffer_tuple.bufnr
+            vim.api.nvim_buf_del_extmark(old_bufnr, cursor_namespace, old_cursor_id)
         end
     end
     user_cursors[user_id] = {}
@@ -48,7 +50,7 @@ function M.setCursor(bufnr, user_id, ranges)
             end_col = e.end_col,
             end_row = e.end_row,
         })
-        table.insert(user_cursors[user_id], cursor_id)
+        table.insert(user_cursors[user_id], { cursor_id = cursor_id, bufnr = bufnr })
     end
 end
 
