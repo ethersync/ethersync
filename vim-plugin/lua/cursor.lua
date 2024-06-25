@@ -20,20 +20,30 @@ function M.setCursor(bufnr, user_id, ranges)
 
     for _, range in ipairs(ranges) do
         -- Convert from LSP style ranges to Neovim style ranges.
-        local e = {
-            start_row = range.start.line,
-            start_col = vim.lsp.util._get_line_byte_from_position(bufnr, range.start, offset_encoding),
-            end_row = range["end"].line,
-            end_col = vim.lsp.util._get_line_byte_from_position(bufnr, range["end"], offset_encoding),
-        }
+        local start_row = range.start.line
+        local start_col = vim.lsp.util._get_line_byte_from_position(bufnr, range.start, offset_encoding)
+        local end_row = range["end"].line
+        local end_col = vim.lsp.util._get_line_byte_from_position(bufnr, range["end"], offset_encoding)
 
-        -- TODO: Implement those two things?
-        -- if head == anchor then
-        --     anchor = head + 1
-        -- end
-        -- if head > anchor then
-        --     head, anchor = anchor, head
-        -- end
+        local is_forward = (start_row < end_row) or (start_row == end_row and start_col <= end_col)
+
+        -- If the range is backwards, swap the start and end positions.
+        if not is_forward then
+            start_row, end_row = end_row, start_row
+            start_col, end_col = end_col, start_col
+        end
+
+        -- If the range is empty, expand the highlighted range by 1 to make it visible.
+        if start_row == end_row and start_col == end_col then
+            end_col = end_col + 1
+        end
+
+        local e = {
+            start_row = start_row,
+            start_col = start_col,
+            end_row = end_row,
+            end_col = end_col,
+        }
 
         -- TODO:
         -- -- If the cursor is at the end of the buffer, don't show it.
@@ -47,13 +57,16 @@ function M.setCursor(bufnr, user_id, ranges)
         -- How can we display something at the end of lines?
         -- Virtual text, like the Copilot plugin?
 
-        local cursor_id = vim.api.nvim_buf_set_extmark(bufnr, cursor_namespace, e.start_row, e.start_col, {
-            hl_mode = "combine",
-            hl_group = "TermCursor",
-            end_col = e.end_col,
-            end_row = e.end_row,
-        })
-        table.insert(user_cursors[user_id], { cursor_id = cursor_id, bufnr = bufnr })
+        -- Try setting the extmark, ignore errors (which can happen at end of lines/buffers).
+        pcall(function()
+            local cursor_id = vim.api.nvim_buf_set_extmark(bufnr, cursor_namespace, e.start_row, e.start_col, {
+                hl_mode = "combine",
+                hl_group = "TermCursor",
+                end_col = e.end_col,
+                end_row = e.end_row,
+            })
+            table.insert(user_cursors[user_id], { cursor_id = cursor_id, bufnr = bufnr })
+        end)
     end
 end
 
