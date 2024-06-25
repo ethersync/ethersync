@@ -86,7 +86,7 @@ impl FileTextDelta {
 }
 
 type DocumentUri = String;
-type UserId = Vec<u8>;
+type UserId = String;
 
 #[derive(Serialize, Deserialize)]
 pub struct CursorState {

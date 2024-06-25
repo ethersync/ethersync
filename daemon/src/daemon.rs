@@ -73,8 +73,8 @@ pub struct Document {
 }
 
 impl Document {
-    fn actor_id(&self) -> Vec<u8> {
-        self.doc.get_actor().to_bytes().to_vec()
+    fn actor_id(&self) -> String {
+        self.doc.get_actor().to_hex_string()
     }
 
     fn receive_sync_message_log_patches(
@@ -194,17 +194,16 @@ impl Document {
         }
     }
 
-    fn store_cursor_position(&mut self, userid: Vec<u8>, file_path: String, ranges: Vec<Range>) {
+    fn store_cursor_position(&mut self, userid: String, file_path: String, ranges: Vec<Range>) {
         let state_map = self
             .top_level_map_obj("states")
             .expect("Failed to get states Map object");
-        let userid_string = format!("{:?}", &userid);
         let user_obj = self
             .doc
-            .put_object(state_map, &userid_string, ObjType::Text)
+            .put_object(state_map, &userid, ObjType::Text)
             .expect("Failed to initialize user state Map object in Automerge document");
         let cursor_state = CursorState {
-            userid,
+            userid: userid.clone(),
             file_path,
             ranges,
         };
@@ -212,7 +211,7 @@ impl Document {
         self.doc
             .splice_text(user_obj, 0, 0, &data)
             .expect("Failed to splice text into Automerge text object");
-        debug!("Stored user state for '{userid_string}': {data}");
+        debug!("Stored user state for '{userid}': {data}");
     }
 }
 
@@ -568,7 +567,7 @@ impl DocumentActor {
         self.maybe_write_file(file_path);
     }
 
-    fn store_cursor_position(&mut self, userid: Vec<u8>, file_path: String, ranges: Vec<Range>) {
+    fn store_cursor_position(&mut self, userid: String, file_path: String, ranges: Vec<Range>) {
         self.crdt_doc
             .store_cursor_position(userid, file_path, ranges);
         let _ = self.doc_changed_ping_tx.send(());
