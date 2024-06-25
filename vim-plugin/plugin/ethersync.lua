@@ -37,24 +37,24 @@ local function processOperationForEditor(method, parameters)
         uri = parameters.uri
         print("Got URI " .. uri)
         filepath = vim.uri_to_fname(uri)
-        local ranges = parameters.ranges.ranges
+        local ranges = parameters.ranges
         local userid = parameters.userid
-        theEditorRevision = parameters.ranges.revision
-        if theEditorRevision == files[filepath].editorRevision then
-            -- Find correct buffer to apply edits to.
-            local bufnr = vim.uri_to_bufnr(uri)
-            local ranges_se = {}
-            for _, range in ipairs(ranges) do
-                table.insert(ranges_se, {
-                    start = range.anchor,
-                    ["end"] = range.head,
-                })
-            end
-            cursor.setCursor(bufnr, userid, ranges_se)
-        else
-            -- Operation is not up-to-date to our content, ignore it!
-            -- The daemon will send a transformed one later.
+        --theEditorRevision = parameters.ranges.revision
+        --if theEditorRevision == files[filepath].editorRevision then
+        -- Find correct buffer to apply edits to.
+        local bufnr = vim.uri_to_bufnr(uri)
+        local ranges_se = {}
+        for _, range in ipairs(ranges) do
+            table.insert(ranges_se, {
+                start = range.anchor,
+                ["end"] = range.head,
+            })
         end
+        cursor.setCursor(bufnr, userid, ranges_se)
+        --else
+        --    -- Operation is not up-to-date to our content, ignore it!
+        --    -- The daemon will send a transformed one later.
+        --end
     else
         print("Unknown method: " .. method)
     end
