@@ -14,6 +14,10 @@ function M.setCursor(bufnr, user_id, ranges)
     end
     user_cursors[user_id] = {}
 
+    if not vim.api.nvim_buf_is_loaded(bufnr) then
+        return
+    end
+
     for _, range in ipairs(ranges) do
         -- Convert from LSP style ranges to Neovim style ranges.
         local e = {
