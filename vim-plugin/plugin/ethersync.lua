@@ -149,6 +149,10 @@ function EthersyncOpenBuffer()
 
         sendNotification("edit", params)
     end)
+    cursor.trackCursor(0, function(ranges)
+        local params = { uri = uri, ranges = ranges }
+        sendNotification("cursor", params)
+    end)
 end
 
 function EthersyncCloseBuffer()

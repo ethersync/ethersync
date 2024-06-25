@@ -1,11 +1,10 @@
 local M = {}
 local user_cursors = {}
 local cursor_namespace = vim.api.nvim_create_namespace("Ethersync")
+local offset_encoding = "utf-32"
 
 -- A new set of ranges means, we delete all existing ones for that user.
 function M.setCursor(bufnr, user_id, ranges)
-    local offset_encoding = "utf-32"
-
     if user_cursors[user_id] ~= nil then
         for _, cursor_buffer_tuple in ipairs(user_cursors[user_id]) do
             local old_cursor_id = cursor_buffer_tuple.cursor_id
@@ -52,6 +51,21 @@ function M.setCursor(bufnr, user_id, ranges)
         })
         table.insert(user_cursors[user_id], { cursor_id = cursor_id, bufnr = bufnr })
     end
+end
+
+function M.trackCursor(bufnr, callback)
+    vim.api.nvim_create_autocmd({ "CursorMoved", "CursorMovedI" }, {
+        buffer = bufnr,
+        callback = function()
+            local row, col = unpack(vim.api.nvim_win_get_cursor(0))
+            local line = row - 1
+            local character = vim.lsp.util.character_offset(0, line, col, offset_encoding)
+            local ranges = {
+                { anchor = { line = line, character = character }, head = { line = line, character = character + 1 } },
+            }
+            callback(ranges)
+        end,
+    })
 end
 
 return M
