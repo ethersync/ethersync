@@ -3,6 +3,10 @@ local user_cursors = {}
 local cursor_namespace = vim.api.nvim_create_namespace("Ethersync")
 local offset_encoding = "utf-32"
 
+function is_forward(start_row, end_row, start_col, end_col)
+    return (start_row < end_row) or (start_row == end_row and start_col <= end_col)
+end
+
 -- A new set of ranges means, we delete all existing ones for that user.
 function M.setCursor(bufnr, user_id, ranges)
     if user_cursors[user_id] ~= nil then
@@ -25,10 +29,8 @@ function M.setCursor(bufnr, user_id, ranges)
         local end_row = range["end"].line
         local end_col = vim.lsp.util._get_line_byte_from_position(bufnr, range["end"], offset_encoding)
 
-        local is_forward = (start_row < end_row) or (start_row == end_row and start_col <= end_col)
-
         -- If the range is backwards, swap the start and end positions.
-        if not is_forward then
+        if not is_forward(start_row, end_row, start_col, end_col) then
             start_row, end_row = end_row, start_row
             start_col, end_col = end_col, start_col
         end
@@ -44,14 +46,6 @@ function M.setCursor(bufnr, user_id, ranges)
             end_row = end_row,
             end_col = end_col,
         }
-
-        -- TODO:
-        -- -- If the cursor is at the end of the buffer, don't show it.
-        -- -- This is because otherwise, the calculation that follows (to find the location for head+1) would fail.
-        -- -- TODO: Find a way to display the cursor nevertheless.
-        -- if head == utils.contentOfCurrentBuffer() then
-        --     return
-        -- end
 
         -- TODO:
         -- How can we display something at the end of lines?
@@ -74,11 +68,28 @@ function M.trackCursor(bufnr, callback)
     vim.api.nvim_create_autocmd({ "CursorMoved", "CursorMovedI" }, {
         buffer = bufnr,
         callback = function()
-            local row, col = unpack(vim.api.nvim_win_get_cursor(0))
-            local line = row - 1
-            local character = vim.lsp.util.character_offset(0, line, col, offset_encoding)
+            local visualSelection = vim.fn.mode() == "v" or vim.fn.mode() == "V" or vim.fn.mode() == ""
+            local range
+            if visualSelection then
+                local start_row, start_col = unpack(vim.api.nvim_win_get_cursor(0))
+                local _, end_row, end_col = unpack(vim.fn.getpos("v"))
+                end_col = end_col - 2
+                if is_forward(start_row, end_row, start_col, end_col) then
+                    end_col = end_col + 1
+                else
+                    start_col = start_col + 1
+                end
+                range = vim.lsp.util.make_given_range_params(
+                    { start_row, start_col },
+                    { end_row, end_col },
+                    bufnr,
+                    offset_encoding
+                ).range
+            else
+                range = vim.lsp.util.make_range_params(0, offset_encoding).range
+            end
             local ranges = {
-                { anchor = { line = line, character = character }, head = { line = line, character = character + 1 } },
+                { anchor = range["end"], head = range.start },
             }
             callback(ranges)
         end,
