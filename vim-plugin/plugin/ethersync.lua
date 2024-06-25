@@ -17,6 +17,7 @@ local function processOperationForEditor(method, parameters)
     local uri, filepath, theEditorRevision
     if method == "edit" then
         uri = parameters.uri
+        -- TODO: Determine the proper filepath (relative to project dir).
         filepath = vim.uri_to_fname(uri)
         local delta = parameters.delta.delta
         theEditorRevision = parameters.delta.revision
