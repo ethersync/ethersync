@@ -68,8 +68,9 @@ function M.trackCursor(bufnr, callback)
     vim.api.nvim_create_autocmd({ "CursorMoved", "CursorMovedI", "ModeChanged" }, {
         buffer = bufnr,
         callback = function()
+            local ranges = {}
+
             local visualSelection = vim.fn.mode() == "v" or vim.fn.mode() == "V" or vim.fn.mode() == ""
-            local range
             if visualSelection then
                 local start_row, start_col = unpack(vim.api.nvim_win_get_cursor(0))
                 local _, end_row, end_col = unpack(vim.fn.getpos("v"))
@@ -98,18 +99,43 @@ function M.trackCursor(bufnr, callback)
                     end
                 end
 
-                range = vim.lsp.util.make_given_range_params(
-                    { start_row, start_col },
-                    { end_row, end_col },
-                    bufnr,
-                    offset_encoding
-                ).range
+                if vim.fn.mode() == "v" or vim.fn.mode() == "V" then
+                    local range = vim.lsp.util.make_given_range_params(
+                        { start_row, start_col },
+                        { end_row, end_col },
+                        bufnr,
+                        offset_encoding
+                    ).range
+                    ranges = { range }
+                elseif vim.fn.mode() == "" then
+                    -- Blockwise visual mode! Calculate the individual pieces.
+                    -- TODO: There's still a off-by-one error here depending on the left-right direction of the visual blockwise selection.
+                    -- TODO: Re-using the same colums doesn't seem right, there's wrong behaviour for umlauts/Unicode characters.
+                    local smaller_row = math.min(start_row, end_row)
+                    local larger_row = math.max(start_row, end_row)
+                    for row = smaller_row, larger_row do
+                        local range = vim.lsp.util.make_given_range_params(
+                            { row, start_col },
+                            { row, end_col },
+                            bufnr,
+                            offset_encoding
+                        ).range
+                        table.insert(ranges, range)
+                    end
+                end
             else
-                range = vim.lsp.util.make_range_params(0, offset_encoding).range
+                local range = vim.lsp.util.make_range_params(0, offset_encoding).range
+                ranges = { range }
             end
-            local ranges = {
-                { anchor = range["end"], head = range.start },
-            }
+
+            -- Rename from start/end schema to anchor/head.
+            for _, range in ipairs(ranges) do
+                range.anchor = range.start
+                range.head = range["end"]
+                range.start = nil
+                range["end"] = nil
+            end
+
             callback(ranges)
         end,
     })
