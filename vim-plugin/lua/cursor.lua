@@ -65,7 +65,7 @@ function M.setCursor(bufnr, user_id, ranges)
 end
 
 function M.trackCursor(bufnr, callback)
-    vim.api.nvim_create_autocmd({ "CursorMoved", "CursorMovedI" }, {
+    vim.api.nvim_create_autocmd({ "CursorMoved", "CursorMovedI", "ModeChanged" }, {
         buffer = bufnr,
         callback = function()
             local visualSelection = vim.fn.mode() == "v" or vim.fn.mode() == "V" or vim.fn.mode() == ""
@@ -73,12 +73,31 @@ function M.trackCursor(bufnr, callback)
             if visualSelection then
                 local start_row, start_col = unpack(vim.api.nvim_win_get_cursor(0))
                 local _, end_row, end_col = unpack(vim.fn.getpos("v"))
-                end_col = end_col - 2
+
+                -- When using getpos(), the column is 1-indexed, but we want it to be 0-indexed.
+                end_col = end_col - 1
+
+                -- We're not sure why this is necessary.
+                end_col = end_col - 1
+
+                -- Include the last character of the visual selection.
                 if is_forward(start_row, end_row, start_col, end_col) then
                     end_col = end_col + 1
                 else
                     start_col = start_col + 1
                 end
+
+                -- If we're in linewise visual mode, expand the range to include the entire line(s).
+                if vim.fn.mode() == "V" then
+                    if is_forward(start_row, end_row, start_col, end_col) then
+                        start_col = 0
+                        end_col = vim.fn.strlen(vim.fn.getline(end_row)) - 1
+                    else
+                        start_col = vim.fn.strlen(vim.fn.getline(start_row))
+                        end_col = -1
+                    end
+                end
+
                 range = vim.lsp.util.make_given_range_params(
                     { start_row, start_col },
                     { end_row, end_col },
