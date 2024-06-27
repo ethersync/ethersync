@@ -3,7 +3,6 @@ use automerge::{Patch, PatchAction};
 use operational_transform::{Operation as OTOperation, OperationSeq};
 use ropey::Rope;
 use serde::{Deserialize, Serialize};
-use tracing::warn;
 
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct TextDelta(pub Vec<TextOp>);
@@ -111,7 +110,7 @@ impl PatchEffect {
                     file_deltas.push(result);
                 }
                 Err(e) => {
-                    warn!("Failed to convert patch to delta: {:#?}", e);
+                    panic!("Failed to convert patch to delta: {:#?}", e);
                 }
             }
         }
