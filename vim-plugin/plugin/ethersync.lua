@@ -35,7 +35,6 @@ local function processOperationForEditor(method, parameters)
         end
     elseif method == "cursor" then
         uri = parameters.uri
-        print("Got URI " .. uri)
         filepath = vim.uri_to_fname(uri)
         local ranges = parameters.ranges
         local userid = parameters.userid
