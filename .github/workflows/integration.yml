@@ -4,7 +4,13 @@ on:
   push:
     branches:
       - 'main'
+    paths:
+      - 'daemon/**'
+      - 'vim-plugin/**'
   pull_request:
+    paths:
+      - 'daemon/**'
+      - 'vim-plugin/**'
 
 env:
   CARGO_TERM_COLOR: always
