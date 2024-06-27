@@ -245,8 +245,8 @@ impl MockSocket {
 pub mod tests {
     use super::*;
     use crate::types::{
-        factories::*, EditorProtocolMessage, EditorTextDelta, EditorTextOp,
-        RevisionedEditorTextDelta,
+        factories::*, EditorProtocolMessageFromEditor, EditorProtocolMessageToEditor,
+        EditorTextDelta, EditorTextOp, RevisionedEditorTextDelta,
     };
     use pretty_assertions::assert_eq;
     use serial_test::serial;
@@ -304,7 +304,7 @@ pub mod tests {
                     revision: 0,
                     delta: EditorTextDelta(vec![op.clone()]),
                 };
-                let editor_message = EditorProtocolMessage::Edit {
+                let editor_message = EditorProtocolMessageToEditor::Edit {
                     uri: format!("file://{}", file_path.display()),
                     delta: rev_editor_delta,
                 };
@@ -360,7 +360,7 @@ pub mod tests {
     fn assert_vim_input_yields_replacements(
         initial_content: &str,
         input: &str,
-        expected_replacements: Vec<EditorTextOp>,
+        mut expected_replacements: Vec<EditorTextOp>,
     ) {
         let runtime = Runtime::new().expect("Could not create Tokio runtime");
         runtime.block_on(async {
@@ -376,17 +376,16 @@ pub mod tests {
                     nvim.input(&input_clone).await;
                 });
 
-                // TODO: This doesn't check whether there are more replacements pending than the
+                // Note: This doesn't check whether there are more replacements pending than the
                 // expected ones.
-                for expected_replacement in expected_replacements {
+                while !expected_replacements.is_empty() {
                     let msg = socket.recv().await;
-                    let message: EditorProtocolMessage = serde_json::from_str(&msg.to_string())
+                    let message: EditorProtocolMessageFromEditor = serde_json::from_str(&msg.to_string())
                         .expect("Could not parse EditorProtocolMessage");
-                    if let EditorProtocolMessage::Edit{ delta, ..} = message {
+                    if let EditorProtocolMessageFromEditor::Edit{ delta, ..} = message {
+                        let expected_replacement = expected_replacements.remove(0);
                         let operations = delta.delta.0;
                         assert_eq!(vec![expected_replacement], operations, "Different replacements when applying input '{}' to content '{:?}'", input, initial_content);
-                    } else {
-                        panic!("Expected edit message, got {:?}", message);
                     }
                 }
             })

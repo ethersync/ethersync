@@ -1,4 +1,5 @@
 local changetracker = require("changetracker")
+local cursor = require("cursor")
 
 -- JSON-RPC connection.
 local client
@@ -13,11 +14,13 @@ end
 
 -- Take an operation from the daemon and apply it to the editor.
 local function processOperationForEditor(method, parameters)
+    local uri, filepath, theEditorRevision
     if method == "edit" then
-        local uri = parameters.uri
-        local filepath = vim.uri_to_fname(uri)
+        uri = parameters.uri
+        -- TODO: Determine the proper filepath (relative to project dir).
+        filepath = vim.uri_to_fname(uri)
         local delta = parameters.delta.delta
-        local theEditorRevision = parameters.delta.revision
+        theEditorRevision = parameters.delta.revision
 
         if theEditorRevision == files[filepath].editorRevision then
             -- Find correct buffer to apply edits to.
@@ -30,6 +33,27 @@ local function processOperationForEditor(method, parameters)
             -- Operation is not up-to-date to our content, ignore it!
             -- The daemon will send a transformed one later.
         end
+    elseif method == "cursor" then
+        uri = parameters.uri
+        filepath = vim.uri_to_fname(uri)
+        local ranges = parameters.ranges
+        local userid = parameters.userid
+        --theEditorRevision = parameters.ranges.revision
+        --if theEditorRevision == files[filepath].editorRevision then
+        -- Find correct buffer to apply edits to.
+        local bufnr = vim.uri_to_bufnr(uri)
+        local ranges_se = {}
+        for _, range in ipairs(ranges) do
+            table.insert(ranges_se, {
+                start = range.anchor,
+                ["end"] = range.head,
+            })
+        end
+        cursor.setCursor(bufnr, userid, ranges_se)
+        --else
+        --    -- Operation is not up-to-date to our content, ignore it!
+        --    -- The daemon will send a transformed one later.
+        --end
     else
         print("Unknown method: " .. method)
     end
@@ -123,6 +147,10 @@ function EthersyncOpenBuffer()
         local params = { uri = uri, delta = rev_delta }
 
         sendNotification("edit", params)
+    end)
+    cursor.trackCursor(0, function(ranges)
+        local params = { uri = uri, ranges = ranges }
+        sendNotification("cursor", params)
     end)
 end
 

@@ -3,7 +3,6 @@ use automerge::{Patch, PatchAction};
 use operational_transform::{Operation as OTOperation, OperationSeq};
 use ropey::Rope;
 use serde::{Deserialize, Serialize};
-use tracing::warn;
 
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct TextDelta(pub Vec<TextOp>);
@@ -83,7 +82,25 @@ impl FileTextDelta {
     pub fn new(file_path: String, delta: TextDelta) -> Self {
         Self { file_path, delta }
     }
+}
 
+type DocumentUri = String;
+type UserId = String;
+
+#[derive(Serialize, Deserialize)]
+pub struct CursorState {
+    pub userid: UserId,
+    pub file_path: String,
+    pub ranges: Vec<Range>,
+}
+
+pub enum PatchEffect {
+    FileChange(FileTextDelta),
+    CursorChange(CursorState),
+    NoEffect,
+}
+
+impl PatchEffect {
     pub fn from_crdt_patches(patches: Vec<Patch>) -> Vec<Self> {
         let mut file_deltas: Vec<Self> = vec![];
 
@@ -93,7 +110,7 @@ impl FileTextDelta {
                     file_deltas.push(result);
                 }
                 Err(e) => {
-                    warn!("Failed to convert patch to delta: {:#?}", e);
+                    panic!("Failed to convert patch to delta: {:#?}", e);
                 }
             }
         }
@@ -102,11 +119,9 @@ impl FileTextDelta {
     }
 }
 
-type DocumentUri = String;
-
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "method", content = "params", rename_all = "camelCase")]
-pub enum EditorProtocolMessage {
+pub enum EditorProtocolMessageFromEditor {
     Open {
         uri: DocumentUri,
     },
@@ -117,11 +132,34 @@ pub enum EditorProtocolMessage {
         uri: DocumentUri,
         delta: RevisionedEditorTextDelta,
     },
-    // TODO coming later:
-    // Cursor{uri: DocumentUri, ranges: RevisionedRanges}
+    Cursor {
+        uri: DocumentUri,
+        ranges: Vec<Range>,
+    },
 }
 
-impl EditorProtocolMessage {
+impl EditorProtocolMessageFromEditor {
+    pub fn from_jsonrpc(jsonrpc: &str) -> Result<Self, anyhow::Error> {
+        let message = serde_json::from_str(jsonrpc).expect("Failed to deserialize editor message");
+        Ok(message)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "method", content = "params", rename_all = "camelCase")]
+pub enum EditorProtocolMessageToEditor {
+    Edit {
+        uri: DocumentUri,
+        delta: RevisionedEditorTextDelta,
+    },
+    Cursor {
+        userid: UserId,
+        uri: DocumentUri,
+        ranges: Vec<Range>,
+    },
+}
+
+impl EditorProtocolMessageToEditor {
     /// # Errors
     ///
     /// Will return an error if the conversion to JSONRPC fails.
@@ -136,11 +174,6 @@ impl EditorProtocolMessage {
         } else {
             panic!("EditorProtocolMessage was not serialized to a map");
         }
-    }
-
-    pub fn from_jsonrpc(jsonrpc: &str) -> Result<Self, anyhow::Error> {
-        let message = serde_json::from_str(jsonrpc).expect("Failed to deserialize editor message");
-        Ok(message)
     }
 }
 
@@ -244,54 +277,122 @@ impl TextDelta {
     // +transform_position?
 }
 
-impl TryFrom<Patch> for FileTextDelta {
+// TODO: This feels like it should go into another file, close to where Document handles writing to
+// the Automerge document. Both places need to know about our chosen structure.
+impl TryFrom<Patch> for PatchEffect {
     type Error = anyhow::Error;
 
     fn try_from(patch: Patch) -> Result<Self, Self::Error> {
-        fn file_path_from_path_default(path: &[(automerge::ObjId, automerge::Prop)]) -> String {
-            assert!(
-                path.len() == 1,
-                "Unexpected path in Automerge patch, length is not 1"
-            );
-            let (_obj_id, prop) = &path[0];
-            if let automerge::Prop::Map(file_path) = prop {
-                return file_path.into();
+        fn file_path_from_path_default(
+            path: &[(automerge::ObjId, automerge::Prop)],
+        ) -> Result<String, anyhow::Error> {
+            if path.len() != 2 {
+                return Err(anyhow::anyhow!(
+                    "Unexpected path in Automerge patch, length is not 2"
+                ));
             }
-            panic!("Unexpected path in Automerge patch: Prop is not a map");
+            let (_obj_id, prop) = &path[1];
+            if let automerge::Prop::Map(file_path) = prop {
+                return Ok(file_path.into());
+            }
+            Err(anyhow::anyhow!(
+                "Unexpected path in Automerge patch: Prop is not a map"
+            ))
         }
 
         let mut delta = TextDelta::default();
 
-        match patch.action {
-            PatchAction::SpliceText { index, value, .. } => {
-                delta.retain(index);
-                delta.insert(&value.make_string());
-                Ok(FileTextDelta::new(
-                    file_path_from_path_default(&patch.path),
-                    delta,
-                ))
+        if patch.path.is_empty() {
+            return match patch.action {
+                PatchAction::PutMap { key, .. } => {
+                    if key == "files" || key == "states" {
+                        Ok(PatchEffect::NoEffect)
+                    } else {
+                        Err(anyhow::anyhow!(
+                            "Path is empty and action is PutMap, but key is not 'files' or 'states'",
+                        ))
+                    }
+                }
+                other_action => Err(anyhow::anyhow!(
+                    "Unsupported patch action for empty path: {}",
+                    other_action
+                )),
+            };
+        }
+
+        match &patch.path[0] {
+            (_, automerge::Prop::Map(key)) if key == "files" => {
+                if patch.path.len() == 1 {
+                    match patch.action {
+                        PatchAction::PutMap { key, .. } => {
+                            // This action happens when a new file is created.
+                            // We return an empty delta on the new file, so that the file is created on disk when
+                            // synced over to another peer. TODO: Is this the best way to solve this?
+                            Ok(PatchEffect::FileChange(FileTextDelta::new(key, delta)))
+                        }
+                        other_action => Err(anyhow::anyhow!(
+                            "Unsupported patch action for path 'files': {}",
+                            other_action
+                        )),
+                    }
+                } else if patch.path.len() == 2 {
+                    match patch.action {
+                        PatchAction::SpliceText { index, value, .. } => {
+                            delta.retain(index);
+                            delta.insert(&value.make_string());
+                            Ok(PatchEffect::FileChange(FileTextDelta::new(
+                                file_path_from_path_default(&patch.path)?,
+                                delta,
+                            )))
+                        }
+                        PatchAction::DeleteSeq { index, length } => {
+                            delta.retain(index);
+                            delta.delete(length);
+                            Ok(PatchEffect::FileChange(FileTextDelta::new(
+                                file_path_from_path_default(&patch.path)?,
+                                delta,
+                            )))
+                        }
+                        other_action => Err(anyhow::anyhow!(
+                            "Unsupported patch action for path 'files/*': {}",
+                            other_action
+                        )),
+                    }
+                } else {
+                    Err(anyhow::anyhow!(
+                        "Unexpected path action for path 'files/**', expected it to be of length 1 or 2"
+                    ))
+                }
             }
-            PatchAction::DeleteSeq { index, length } => {
-                delta.retain(index);
-                delta.delete(length);
-                Ok(FileTextDelta::new(
-                    file_path_from_path_default(&patch.path),
-                    delta,
-                ))
+            (_, automerge::Prop::Map(key)) if key == "states" => {
+                if patch.path.len() == 2 {
+                    match patch.action {
+                        PatchAction::SpliceText { index, value, .. } => {
+                            assert_eq!(index, 0);
+                            let cursor_state = serde_json::from_str(&value.make_string())?;
+                            Ok(PatchEffect::CursorChange(cursor_state))
+                        }
+                        other_action => Err(anyhow::anyhow!(
+                            "Unsupported patch action for path 'states/*': {}",
+                            other_action
+                        )),
+                    }
+                } else if patch.path.len() == 1 {
+                    match patch.action {
+                        PatchAction::PutMap { .. } => Ok(PatchEffect::NoEffect),
+                        other_action => Err(anyhow::anyhow!(
+                            "Unsupported patch action for path 'states': {}",
+                            other_action
+                        )),
+                    }
+                } else {
+                    Err(anyhow::anyhow!(
+                        "Unexpected path action for path 'states/...', path length is not 1 or 2"
+                    ))
+                }
             }
-            PatchAction::PutMap { key, .. } => {
-                // This action happens when a new file is created.
-                // We return an empty delta on the new file, so that the file is created on disk when
-                // synced over to another peer. TODO: Is this the best way to solve this?
-                assert!(
-                    patch.path.is_empty(),
-                    "Unexpected PutMap on non-ROOT in Automerge patch",
-                );
-                Ok(FileTextDelta::new(key, delta))
-            }
-            other_action => Err(anyhow::anyhow!(
-                "Unsupported patch action: {}",
-                other_action
+            (_, _) => Err(anyhow::anyhow!(
+                "Unexpected path in Automerge patch, expected it to begin with 'files' or 'states'"
             )),
         }
     }
