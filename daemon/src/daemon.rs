@@ -310,9 +310,11 @@ impl DocumentActor {
                 response_tx,
             } => {
                 let message = self.crdt_doc.generate_sync_message(&mut peer_state);
-                response_tx.send((peer_state, message)).expect(
-                    "Failed to send peer state and sync message in response to GenerateSyncMessage",
-                );
+                let val = response_tx.send((peer_state, message));
+
+                if let Err(val) = val {
+                    warn!("Failed to send peer state and sync message in response to GenerateSyncMessage: {val:?}");
+                }
             }
             DocMessage::NewEditorConnection(editor_handle) => {
                 // TODO: if we use more than one ID, we should now easily have multiple editors.
