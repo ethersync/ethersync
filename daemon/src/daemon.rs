@@ -39,6 +39,7 @@ pub enum DocMessage {
         response_tx: oneshot::Sender<(SyncState, Option<AutomergeSyncMessage>)>,
     },
     NewEditorConnection(EditorHandle),
+    CloseEditorConnection,
 }
 
 impl fmt::Debug for DocMessage {
@@ -50,6 +51,7 @@ impl fmt::Debug for DocMessage {
             DocMessage::ReceiveSyncMessage { .. } => "<automerge internal sync rcv>",
             DocMessage::GenerateSyncMessage { .. } => "<automerge internal sync gen>",
             DocMessage::NewEditorConnection(_) => "editor connected",
+            DocMessage::CloseEditorConnection => "editor disconnected",
         };
         write!(f, "{repr}")
     }
@@ -315,6 +317,9 @@ impl DocumentActor {
                 // TODO: if we use more than one ID, we should now easily have multiple editors.
                 // Modulo managing the OT server for each of them per file...
                 self.editor_clients.insert(EditorId(0), editor_handle);
+            }
+            DocMessage::CloseEditorConnection => {
+                self.editor_clients.remove(&EditorId(0));
             }
         }
     }

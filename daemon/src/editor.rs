@@ -92,6 +92,9 @@ impl SocketReadActor {
             }
         }
         self.shutdown_token.cancel();
+        self.document_handle
+            .send_message(DocMessage::CloseEditorConnection)
+            .await;
         info!("Client disconnected");
     }
 }
