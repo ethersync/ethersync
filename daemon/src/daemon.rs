@@ -293,6 +293,7 @@ impl DocumentActor {
                         PatchEffect::CursorChange(cursor_state) => {
                             cursor_states.push(cursor_state);
                         }
+                        PatchEffect::NoEffect => {}
                     }
                 }
 

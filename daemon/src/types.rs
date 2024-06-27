@@ -98,6 +98,7 @@ pub struct CursorState {
 pub enum PatchEffect {
     FileChange(FileTextDelta),
     CursorChange(CursorState),
+    NoEffect,
 }
 
 impl PatchEffect {
@@ -303,9 +304,21 @@ impl TryFrom<Patch> for PatchEffect {
         let mut delta = TextDelta::default();
 
         if patch.path.is_empty() {
-            return Err(anyhow::anyhow!(
-                "Path is empty, this is probably a top-level change creating the files or states map"
-            ));
+            return match patch.action {
+                PatchAction::PutMap { key, .. } => {
+                    if key == "files" || key == "states" {
+                        Ok(PatchEffect::NoEffect)
+                    } else {
+                        Err(anyhow::anyhow!(
+                            "Path is empty and action is PutMap, but key is not 'files' or 'states'",
+                        ))
+                    }
+                }
+                other_action => Err(anyhow::anyhow!(
+                    "Unsupported patch action for empty path: {}",
+                    other_action
+                )),
+            };
         }
 
         match &patch.path[0] {
@@ -365,9 +378,17 @@ impl TryFrom<Patch> for PatchEffect {
                             other_action
                         )),
                     }
+                } else if patch.path.len() == 1 {
+                    match patch.action {
+                        PatchAction::PutMap { .. } => Ok(PatchEffect::NoEffect),
+                        other_action => Err(anyhow::anyhow!(
+                            "Unsupported patch action for path 'states': {}",
+                            other_action
+                        )),
+                    }
                 } else {
                     Err(anyhow::anyhow!(
-                        "Unexpected path action for path 'states/...', expected it to be of length 2"
+                        "Unexpected path action for path 'states/...', path length is not 1 or 2"
                     ))
                 }
             }
