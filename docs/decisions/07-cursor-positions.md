@@ -1,6 +1,6 @@
 ---
-status: draft
-date: 2024-06-21
+status: accepted
+date: 2024-06-27
 ---
 # How do we transmit cursor positions?
 
@@ -19,15 +19,13 @@ Our solution should ideally be:
 
 ## Considered Options
 
-* {title of option 1}
-* {title of option 2}
-* {title of option 3}
-* … <!-- numbers of options can vary -->
+* Store user state in automerge
+* Gossip user states to last-write-wins
 
 ## Decision Outcome
 
-Chosen option: "{title of option 1}", because
-{justification. e.g., only option, which meets k.o. criterion decision driver | which resolves force {force} | … | comes out best (see below)}.
+Chosen option: "Store user state in automerge", because
+it is (was) easy to build and we think it will be easy to change if necessary.
 
 ## Pros and Cons of the Options
 
