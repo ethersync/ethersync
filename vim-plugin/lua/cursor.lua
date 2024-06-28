@@ -1,3 +1,5 @@
+local debug = require("logging").debug
+
 local M = {}
 local user_cursors = {}
 local cursor_namespace = vim.api.nvim_create_namespace("Ethersync")
@@ -78,14 +80,17 @@ function M.trackCursor(bufnr, callback)
                 -- When using getpos(), the column is 1-indexed, but we want it to be 0-indexed.
                 end_col = end_col - 1
 
-                -- We're not sure why this is necessary.
-                end_col = end_col - 1
+                if vim.fn.mode() == "v" or vim.fn.mode() == "V" then
+                    -- We're not sure why this is necessary.
+                    end_col = end_col - 1
 
-                -- Include the last character of the visual selection.
-                if is_forward(start_row, end_row, start_col, end_col) then
-                    end_col = end_col + 1
-                else
-                    start_col = start_col + 1
+                    -- Include the last character of the visual selection.
+                    -- TODO: This is not in "screen columns", but in "bytes"!
+                    if is_forward(start_row, end_row, start_col, end_col) then
+                        end_col = end_col + 1
+                    else
+                        start_col = start_col + 1
+                    end
                 end
 
                 -- If we're in linewise visual mode, expand the range to include the entire line(s).
@@ -108,19 +113,42 @@ function M.trackCursor(bufnr, callback)
                     ).range
                     ranges = { range }
                 elseif vim.fn.mode() == "" then
-                    -- Blockwise visual mode! Calculate the individual pieces.
-                    -- TODO: There's still a off-by-one error here depending on the left-right direction of the visual blockwise selection.
-                    -- TODO: Re-using the same colums doesn't seem right, there's wrong behaviour for umlauts/Unicode characters.
+                    -- We are in blockwise visual mode. Calculate the individual pieces.
+
+                    -- TODO: There are still some inconsistencies; when the cursor is inside a multi-column character, other lines might be too short.
+
+                    -- At this point, start_col and end_col are zero-indexed, in bytes, and related to the position in front of the cursor.
+
+                    local start_line = vim.fn.getline(start_row)
+                    local end_line = vim.fn.getline(end_row)
+
+                    local string_to_start = string.sub(start_line, 0, start_col)
+                    local string_to_end = string.sub(end_line, 0, end_col)
+
+                    -- This is in "display cells".
+                    local cells_to_start = vim.fn.strdisplaywidth(string_to_start)
+                    local cells_to_end = vim.fn.strdisplaywidth(string_to_end)
+
+                    local smaller_cell = math.min(cells_to_start, cells_to_end)
+                    local larger_cell = math.max(cells_to_start, cells_to_end)
+
                     local smaller_row = math.min(start_row, end_row)
                     local larger_row = math.max(start_row, end_row)
+
                     for row = smaller_row, larger_row do
-                        local range = vim.lsp.util.make_given_range_params(
-                            { row, start_col },
-                            { row, end_col },
-                            bufnr,
-                            offset_encoding
-                        ).range
-                        table.insert(ranges, range)
+                        local bytes_start = vim.fn.virtcol2col(bufnr, row, smaller_cell + 1) - 1
+                        local bytes_end = vim.fn.virtcol2col(bufnr, row, larger_cell + 1) - 1
+
+                        if bytes_start ~= -1 then
+                            -- The line is not empty, add a range.
+                            local range = vim.lsp.util.make_given_range_params(
+                                { row, bytes_start },
+                                { row, bytes_end },
+                                bufnr,
+                                offset_encoding
+                            ).range
+                            table.insert(ranges, range)
+                        end
                     end
                 end
             else
