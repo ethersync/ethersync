@@ -2,6 +2,7 @@ local M = {}
 local user_cursors = {}
 local cursor_namespace = vim.api.nvim_create_namespace("Ethersync")
 local offset_encoding = "utf-32"
+local cursor_timeout_ms = 30 * 1000
 
 function is_forward(start_row, end_row, start_col, end_col)
     return (start_row < end_row) or (start_row == end_row and start_col <= end_col)
@@ -59,6 +60,9 @@ function M.setCursor(bufnr, user_id, ranges)
                 end_col = e.end_col,
                 end_row = e.end_row,
             })
+            vim.defer_fn(function()
+                vim.api.nvim_buf_del_extmark(bufnr, cursor_namespace, cursor_id)
+            end, cursor_timeout_ms)
             table.insert(user_cursors[user_id], { cursor_id = cursor_id, bufnr = bufnr })
         end)
     end
