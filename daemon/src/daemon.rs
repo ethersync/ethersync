@@ -165,6 +165,9 @@ impl DocumentActor {
             }
             DocMessage::CloseEditorConnection => {
                 self.editor_clients.remove(&EditorId(0));
+
+                let userid = self.crdt_doc.actor_id();
+                self.maybe_delete_cursor_position(userid);
             }
         }
     }
@@ -431,6 +434,11 @@ impl DocumentActor {
     fn store_cursor_position(&mut self, userid: String, file_path: String, ranges: Vec<Range>) {
         self.crdt_doc
             .store_cursor_position(userid, file_path, ranges);
+        let _ = self.doc_changed_ping_tx.send(());
+    }
+
+    fn maybe_delete_cursor_position(&mut self, userid: String) {
+        self.crdt_doc.maybe_delete_cursor_position(userid);
         let _ = self.doc_changed_ping_tx.send(());
     }
 

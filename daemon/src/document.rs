@@ -163,6 +163,23 @@ impl Document {
             .expect("Failed to splice text into Automerge text object");
         debug!("Stored user state for '{userid}': {data}");
     }
+
+    pub fn maybe_delete_cursor_position(&mut self, userid: String) {
+        // We try to set an empty cursor position, but in case we don't have any file in the
+        // project its not a big deal if it stays.
+        if let Some(file_path) = self.get_valid_file_path() {
+            self.store_cursor_position(userid, file_path, vec![])
+        }
+    }
+
+    fn get_valid_file_path(&self) -> Option<String> {
+        let file_map = self.top_level_map_obj("files");
+        if let Ok(file_map) = file_map {
+            self.doc.keys(file_map).next()
+        } else {
+            None
+        }
+    }
 }
 
 #[cfg(test)]
