@@ -1,6 +1,7 @@
 /// A peer is another daemon. This module is all about daemon to daemon communication.
 use anyhow::Result;
 use automerge::sync::{Message as AutomergeSyncMessage, State as SyncState};
+use shutdown_async::ShutdownMonitor;
 use std::mem;
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt, ReadHalf, WriteHalf},
@@ -12,7 +13,11 @@ use tracing::{debug, info};
 
 use crate::daemon::{DocMessage, DocumentActorHandle};
 
-pub fn spawn_peer_sync(stream: TcpStream, document_handle: &DocumentActorHandle) {
+pub fn spawn_peer_sync(
+    stream: TcpStream,
+    document_handle: &DocumentActorHandle,
+    _shutdown_monitor: &ShutdownMonitor,
+) {
     let (my_send, my_recv) = oneshot::channel();
     let tcp_handle = TCPActorHandle::new(stream, my_recv);
     let sync_handle = SyncActorHandle::new(document_handle, &tcp_handle);
@@ -24,6 +29,12 @@ struct TCPReadActor {
     sync_handle: SyncActorHandle,
     reader: ReadHalf<TcpStream>,
     shutdown_token: CancellationToken,
+}
+
+impl Drop for TCPReadActor {
+    fn drop(&mut self) {
+        info!("Dropping TCPReadActor!");
+    }
 }
 
 impl TCPReadActor {
@@ -66,6 +77,12 @@ impl TCPReadActor {
 struct TCPWriteActor {
     writer: WriteHalf<TcpStream>,
     automerge_message_receiver: mpsc::Receiver<AutomergeSyncMessage>,
+}
+
+impl Drop for TCPWriteActor {
+    fn drop(&mut self) {
+        info!("Dropping TCPWriteActor!");
+    }
 }
 
 impl TCPWriteActor {
@@ -191,6 +208,12 @@ pub struct SyncActorHandle {
     syncer_message_tx: mpsc::Sender<AutomergeSyncMessage>,
 }
 
+impl Drop for SyncActorHandle {
+    fn drop(&mut self) {
+        info!("Dropping SyncActorHandle!");
+    }
+}
+
 impl SyncActorHandle {
     pub fn new(document_handle: &DocumentActorHandle, tcp_handle: &TCPActorHandle) -> Self {
         let (syncer_message_tx, syncer_message_rx) = mpsc::channel(16);
@@ -218,6 +241,12 @@ impl SyncActorHandle {
 pub struct TCPActorHandle {
     automerge_message_tx: mpsc::Sender<AutomergeSyncMessage>,
     shutdown_token: CancellationToken,
+}
+
+impl Drop for TCPActorHandle {
+    fn drop(&mut self) {
+        info!("Dropping TCPActorHandle!");
+    }
 }
 
 /// The TCP statemachine works as follows:

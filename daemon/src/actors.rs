@@ -12,6 +12,7 @@ use tokio::{
     process::ChildStdin,
     sync::mpsc,
 };
+use tracing::info;
 
 // TODO: Consider renaming this, to avoid confusion with tokio "actors".
 #[async_trait]
@@ -25,6 +26,12 @@ pub trait Actor: Send {
 pub struct Neovim {
     nvim: nvim_rs::Neovim<Compat<ChildStdin>>,
     buffer: nvim_rs::Buffer<Compat<ChildStdin>>,
+}
+
+impl Drop for Neovim {
+    fn drop(&mut self) {
+        info!("Dropping Neovim!");
+    }
 }
 
 impl Neovim {

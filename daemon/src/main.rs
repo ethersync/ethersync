@@ -81,9 +81,12 @@ async fn main() -> io::Result<()> {
                 return Ok(());
             }
             info!("Starting Ethersync on {}", directory.display());
+
             Daemon::new(port, peer, &socket_path, &directory);
             match signal::ctrl_c().await {
-                Ok(()) => {}
+                Ok(()) => {
+                    info!("Shutting down ");
+                }
                 Err(err) => {
                     eprintln!("Unable to listen for shutdown signal: {err}");
                     // still shut down.

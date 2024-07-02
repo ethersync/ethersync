@@ -12,6 +12,7 @@ use automerge::{
     Patch,
 };
 use rand::Rng;
+use shutdown_async::ShutdownController;
 use std::collections::{HashMap, HashSet};
 use std::fmt;
 use std::path::{Path, PathBuf};
@@ -510,6 +511,7 @@ impl DocumentActorHandle {
 
 pub struct Daemon {
     pub document_handle: DocumentActorHandle,
+    shutdown_controller: ShutdownController,
 }
 
 impl Daemon {
@@ -523,12 +525,17 @@ impl Daemon {
         // If the peer address is empty, we're the host.
         let is_host = peer.is_none();
 
+        let shutdown = ShutdownController::new();
+
         let document_handle = DocumentActorHandle::new(base_dir, is_host);
 
         let connection_document_handle = document_handle.clone();
         let peer_info = connect::PeerConnectionInfo::new(port, peer);
-        tokio::spawn(async move {
-            connect::make_peer_connection(peer_info, connection_document_handle).await;
+        tokio::spawn({
+            let monitor = shutdown.subscribe();
+            async move {
+                connect::make_peer_connection(peer_info, connection_document_handle, monitor).await;
+            }
         });
 
         let editor_socket_path = socket_path.to_path_buf();
@@ -537,9 +544,28 @@ impl Daemon {
             connect::make_editor_connection(editor_socket_path, editor_document_handle).await;
         });
 
-        Self { document_handle }
+        Self {
+            document_handle,
+            shutdown_controller: shutdown,
+        }
+    }
+
+    pub async fn shutdown(self) {
+        self.shutdown_controller.shutdown().await;
     }
 }
+
+impl Drop for DocumentActor {
+    fn drop(&mut self) {
+        info!("Dropping DocumentActor!");
+    }
+}
+
+// impl Drop for DocumentActorHandle {
+//     fn drop(&mut self) {
+//         info!("Dropping DocumentActorHandle!");
+//     }
+// }
 
 #[cfg(test)]
 mod tests {

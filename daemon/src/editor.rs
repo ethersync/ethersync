@@ -72,6 +72,12 @@ pub struct SocketReadActor {
     document_handle: DocumentActorHandle,
 }
 
+impl Drop for SocketReadActor {
+    fn drop(&mut self) {
+        info!("Dropping SocketReadActor!");
+    }
+}
+
 impl SocketReadActor {
     pub fn new(
         reader: ReadHalf<UnixStream>,
@@ -119,6 +125,12 @@ pub struct SocketWriteActor {
     writer: WriteHalf<UnixStream>,
     editor_message_receiver: EditorMessageReceiver,
     shutdown_token: CancellationToken,
+}
+
+impl Drop for SocketWriteActor {
+    fn drop(&mut self) {
+        info!("Dropping SocketWriteActor!");
+    }
 }
 
 impl SocketWriteActor {

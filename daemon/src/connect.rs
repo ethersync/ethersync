@@ -1,4 +1,5 @@
 use local_ip_address::local_ip;
+use shutdown_async::ShutdownMonitor;
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
@@ -27,12 +28,13 @@ impl PeerConnectionInfo {
 pub async fn make_peer_connection(
     connection_info: PeerConnectionInfo,
     document_handle: DocumentActorHandle,
+    shutdown_monitor: ShutdownMonitor,
 ) {
     let result = if let Some(peer) = connection_info.peer {
-        connect_with_peer(peer, document_handle).await
+        connect_with_peer(peer, document_handle, shutdown_monitor).await
     } else {
         let port = connection_info.port.unwrap_or(4242);
-        accept_peer_loop(port, document_handle).await
+        accept_peer_loop(port, document_handle, shutdown_monitor).await
     };
     match result {
         Ok(()) => { /* successfully connected/started accept loop */ }
@@ -77,16 +79,18 @@ async fn accept_editor_loop(
 async fn connect_with_peer(
     address: String,
     document_handle: DocumentActorHandle,
+    shutdown_monitor: ShutdownMonitor,
 ) -> Result<(), io::Error> {
     let stream = TcpStream::connect(address).await?;
     info!("Connected to Peer.");
-    spawn_peer_sync(stream, &document_handle);
+    spawn_peer_sync(stream, &document_handle, &shutdown_monitor);
     Ok(())
 }
 
 async fn accept_peer_loop(
     port: u16,
     document_handle: DocumentActorHandle,
+    shutdown_monitor: ShutdownMonitor,
 ) -> Result<(), io::Error> {
     let listener = TcpListener::bind(format!("0.0.0.0:{port}")).await?;
 
@@ -107,6 +111,6 @@ async fn accept_peer_loop(
     loop {
         let (stream, _addr) = listener.accept().await?;
         info!("Peer dialed us.");
-        spawn_peer_sync(stream, &document_handle);
+        spawn_peer_sync(stream, &document_handle, &shutdown_monitor);
     }
 }
