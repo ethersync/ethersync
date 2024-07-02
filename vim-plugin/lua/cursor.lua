@@ -72,6 +72,7 @@ function M.trackCursor(bufnr, callback)
         callback = function()
             local ranges = {}
 
+            -- TODO: Split this code into multiple functions.
             local visualSelection = vim.fn.mode() == "v" or vim.fn.mode() == "V" or vim.fn.mode() == ""
             if visualSelection then
                 local start_row, start_col = unpack(vim.api.nvim_win_get_cursor(0))
@@ -115,6 +116,10 @@ function M.trackCursor(bufnr, callback)
                 elseif vim.fn.mode() == "" then
                     -- We are in blockwise visual mode. Calculate the individual pieces.
 
+                    -- This calculation is a bit more involved, because Vim forms a blockwise range visually, going by the
+                    -- "display cells", so that the range is always rectangular. We need to perform our own calculations with
+                    -- these display cells to make sure that we send out the same ranges.
+
                     -- TODO: There are still some inconsistencies; when the cursor is inside a multi-column character, other lines might be too short.
 
                     -- At this point, start_col and end_col are zero-indexed, in bytes, and related to the position in front of the cursor.
@@ -125,7 +130,7 @@ function M.trackCursor(bufnr, callback)
                     local string_to_start = string.sub(start_line, 0, start_col)
                     local string_to_end = string.sub(end_line, 0, end_col)
 
-                    -- This is in "display cells".
+                    -- These are the widths of the strings in "display cells".
                     local cells_to_start = vim.fn.strdisplaywidth(string_to_start)
                     local cells_to_end = vim.fn.strdisplaywidth(string_to_end)
 
