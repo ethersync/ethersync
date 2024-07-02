@@ -301,19 +301,18 @@ impl DocumentActor {
                 self.maybe_process_crdt_file_deltas_in_ot(file_deltas).await;
                 self.process_cursor_states(cursor_states).await;
 
-                response_tx
-                    .send(peer_state)
-                    .expect("Failed to send peer state in response to ReceiveSyncMessage");
+                if response_tx.send(peer_state).is_err() {
+                    warn!("Failed to send peer state in response to ReceiveSyncMessage.");
+                }
             }
             DocMessage::GenerateSyncMessage {
                 state: mut peer_state,
                 response_tx,
             } => {
                 let message = self.crdt_doc.generate_sync_message(&mut peer_state);
-                let val = response_tx.send((peer_state, message));
 
-                if let Err(val) = val {
-                    warn!("Failed to send peer state and sync message in response to GenerateSyncMessage: {val:?}");
+                if response_tx.send((peer_state, message)).is_err() {
+                    warn!("Failed to send peer state and sync message in response to GenerateSyncMessage.");
                 }
             }
             DocMessage::NewEditorConnection(editor_handle) => {
@@ -596,7 +595,7 @@ impl DocumentActor {
         while let Some(message) = self.doc_message_rx.recv().await {
             self.handle_message(message).await;
         }
-        panic!("Channel towards document task has been closed");
+        debug!("Channel towards document handle has been closed (probably shutting down)");
     }
 }
 
