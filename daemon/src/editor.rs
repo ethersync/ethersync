@@ -1,4 +1,5 @@
 /// This module is all about daemon to editor communication.
+use std::io;
 use tokio::{
     io::{AsyncBufReadExt, AsyncWriteExt, BufReader, ReadHalf, WriteHalf},
     net::UnixStream,
@@ -22,6 +23,7 @@ pub async fn spawn_editor_connection(stream: UnixStream, document_handle: Docume
 
 pub struct EditorHandle {
     editor_message_tx: EditorMessageSender,
+    shutdown_token: CancellationToken,
 }
 
 impl EditorHandle {
@@ -35,18 +37,32 @@ impl EditorHandle {
         let mut reader = SocketReadActor::new(stream_read, shutdown_token.clone(), document_handle);
         tokio::spawn(async move { reader.run().await });
 
-        let mut writer = SocketWriteActor::new(stream_write, socket_message_rx, shutdown_token);
+        let mut writer =
+            SocketWriteActor::new(stream_write, socket_message_rx, shutdown_token.clone());
         tokio::spawn(async move { writer.run().await });
         Self {
             editor_message_tx: socket_message_tx,
+            shutdown_token,
         }
     }
 
-    pub async fn send(&self, message: EditorProtocolMessageToEditor) {
-        self.editor_message_tx
-            .send(message)
-            .await
-            .expect("Failed to send to editor.");
+    pub async fn send(&self, message: EditorProtocolMessageToEditor) -> Result<(), io::Error> {
+        // Can fail during shutdown or editor disconnect, when Actors already have been killed/closed
+        if self.editor_message_tx.send(message).await.is_err() {
+            Err(io::Error::new(
+                io::ErrorKind::BrokenPipe,
+                "Can't keep up or dead",
+            ))
+        } else {
+            Ok(())
+        }
+    }
+}
+
+impl Drop for EditorHandle {
+    fn drop(&mut self) {
+        debug!("Editor Handle dropped, shutting down socket actors");
+        self.shutdown_token.cancel();
     }
 }
 
@@ -134,7 +150,7 @@ impl SocketWriteActor {
         loop {
             tokio::select! {
                 () = self.shutdown_token.cancelled() => {
-                    debug!("Shutting down JSON-RPC sender (due to socket disconnet)");
+                    debug!("Shutting down JSON-RPC sender (due to socket disconnect)");
                     break;
                 }
                 editor_message_maybe = self.editor_message_receiver.recv() => match editor_message_maybe {
