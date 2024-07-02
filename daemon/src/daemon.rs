@@ -489,9 +489,7 @@ impl DocumentActor {
                 uri: format!("file://{}", self.absolute_path_for_file_path(&file_path)),
                 ranges,
             };
-            for handle in &mut self.editor_clients.values_mut() {
-                handle.send(message.clone()).await;
-            }
+            self.send_to_editor_clients(message).await;
         }
     }
 
@@ -500,9 +498,22 @@ impl DocumentActor {
             uri: format!("file://{}", self.absolute_path_for_file_path(file_path)),
             delta: rev_delta,
         };
+        self.send_to_editor_clients(message).await;
+    }
 
-        for handle in &mut self.editor_clients.values_mut() {
-            handle.send(message.clone()).await;
+    async fn send_to_editor_clients(&mut self, message: EditorProtocolMessageToEditor) {
+        let mut to_remove = Vec::new();
+        for (id, handle) in &mut self.editor_clients.iter_mut() {
+            if handle.send(message.clone()).await.is_err() {
+                // Remove this client.
+                to_remove.push(*id);
+            }
+        }
+        for id in to_remove {
+            // The destructor of EditorHandle will shut down the actors when
+            // we remove it from the HashMap.
+            info!("Removing EditorHandle from client list.");
+            self.editor_clients.remove(&id);
         }
     }
 
