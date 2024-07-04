@@ -38,6 +38,7 @@ local function processOperationForEditor(method, parameters)
         filepath = vim.uri_to_fname(uri)
         local ranges = parameters.ranges
         local userid = parameters.userid
+        local name = parameters.name
         --theEditorRevision = parameters.ranges.revision
         --if theEditorRevision == files[filepath].editorRevision then
         -- Find correct buffer to apply edits to.
@@ -49,7 +50,7 @@ local function processOperationForEditor(method, parameters)
                 ["end"] = range.head,
             })
         end
-        cursor.setCursor(bufnr, userid, ranges_se)
+        cursor.setCursor(bufnr, userid, name, ranges_se)
         --else
         --    -- Operation is not up-to-date to our content, ignore it!
         --    -- The daemon will send a transformed one later.

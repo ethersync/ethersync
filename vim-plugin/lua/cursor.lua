@@ -6,12 +6,18 @@ local cursor_namespace = vim.api.nvim_create_namespace("Ethersync")
 local offset_encoding = "utf-32"
 local cursor_timeout_ms = 30 * 1000
 
+vim.api.nvim_create_autocmd("ColorScheme", {
+    callback = function()
+        vim.api.nvim_set_hl(0, "EthersyncUsername", { fg = "#808080", ctermfg = 12 })
+    end,
+})
+
 function is_forward(start_row, end_row, start_col, end_col)
     return (start_row < end_row) or (start_row == end_row and start_col <= end_col)
 end
 
 -- A new set of ranges means, we delete all existing ones for that user.
-function M.setCursor(bufnr, user_id, ranges)
+function M.setCursor(bufnr, user_id, name, ranges)
     if user_cursors[user_id] ~= nil then
         for _, cursor_buffer_tuple in ipairs(user_cursors[user_id]) do
             local old_cursor_id = cursor_buffer_tuple.cursor_id
@@ -25,7 +31,7 @@ function M.setCursor(bufnr, user_id, ranges)
         return
     end
 
-    for _, range in ipairs(ranges) do
+    for i, range in ipairs(ranges) do
         -- Convert from LSP style ranges to Neovim style ranges.
         local start_row = range.start.line
         local start_col = vim.lsp.util._get_line_byte_from_position(bufnr, range.start, offset_encoding)
@@ -54,6 +60,11 @@ function M.setCursor(bufnr, user_id, ranges)
         -- How can we display something at the end of lines?
         -- Virtual text, like the Copilot plugin?
 
+        local virt_text = {}
+        if i == 1 and name ~= nil then
+            virt_text = { { name, "EthersyncUsername" } }
+        end
+
         -- Try setting the extmark, ignore errors (which can happen at end of lines/buffers).
         pcall(function()
             local cursor_id = vim.api.nvim_buf_set_extmark(bufnr, cursor_namespace, e.start_row, e.start_col, {
@@ -61,6 +72,7 @@ function M.setCursor(bufnr, user_id, ranges)
                 hl_group = "TermCursor",
                 end_col = e.end_col,
                 end_row = e.end_row,
+                virt_text = virt_text,
             })
             vim.defer_fn(function()
                 vim.api.nvim_buf_del_extmark(bufnr, cursor_namespace, cursor_id)
