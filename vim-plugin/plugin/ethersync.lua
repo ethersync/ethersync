@@ -188,4 +188,8 @@ end
 vim.api.nvim_create_autocmd({ "BufRead", "BufNewFile" }, { callback = EthersyncOpenBuffer })
 vim.api.nvim_create_autocmd("BufUnload", { callback = EthersyncCloseBuffer })
 
+vim.keymap.set("n", "<leader>ej", function()
+    cursor.JumpToCursor()
+end)
+
 vim.api.nvim_create_user_command("EthersyncInfo", EthersyncInfo, {})
