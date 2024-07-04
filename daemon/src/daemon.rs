@@ -325,12 +325,14 @@ impl DocumentActor {
     async fn process_cursor_states(&mut self, cursor_states: Vec<CursorState>) {
         for CursorState {
             userid,
+            name,
             file_path,
             ranges,
         } in cursor_states
         {
             let message = EditorProtocolMessageToEditor::Cursor {
                 userid,
+                name,
                 uri: format!("file://{}", self.absolute_path_for_file_path(&file_path)),
                 ranges,
             };

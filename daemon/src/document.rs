@@ -7,6 +7,7 @@ use automerge::{
     transaction::Transactable,
     AutoCommit, ObjType, Patch, PatchLog, ReadDoc,
 };
+use std::env;
 use tracing::{debug, info};
 
 /// Encapsulates the Automerge `AutoCommit` and provides a generic interface,
@@ -154,6 +155,7 @@ impl Document {
             .expect("Failed to initialize user state Map object in Automerge document");
         let cursor_state = CursorState {
             userid: userid.clone(),
+            name: env::var("USER").ok(),
             file_path,
             ranges,
         };

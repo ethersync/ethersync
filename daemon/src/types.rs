@@ -90,6 +90,7 @@ type UserId = String;
 #[derive(Serialize, Deserialize)]
 pub struct CursorState {
     pub userid: UserId,
+    pub name: Option<String>,
     pub file_path: String,
     pub ranges: Vec<Range>,
 }
@@ -154,6 +155,7 @@ pub enum EditorProtocolMessageToEditor {
     },
     Cursor {
         userid: UserId,
+        name: Option<String>,
         uri: DocumentUri,
         ranges: Vec<Range>,
     },
