@@ -6,11 +6,14 @@ local cursor_namespace = vim.api.nvim_create_namespace("Ethersync")
 local offset_encoding = "utf-32"
 local cursor_timeout_ms = 30 * 1000
 
+-- https://www.reddit.com/r/neovim/comments/152bs5t/unable_to_render_comments_in_the_color_id_like/
 vim.api.nvim_create_autocmd("ColorScheme", {
+    pattern = "*",
     callback = function()
         vim.api.nvim_set_hl(0, "EthersyncUsername", { fg = "#808080", ctermfg = 12 })
     end,
 })
+vim.api.nvim_exec_autocmds("ColorScheme", {})
 
 function is_forward(start_row, end_row, start_col, end_col)
     return (start_row < end_row) or (start_row == end_row and start_col <= end_col)
