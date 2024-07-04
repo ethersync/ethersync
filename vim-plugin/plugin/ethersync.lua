@@ -1,3 +1,7 @@
+-- SPDX-FileCopyrightText: 2024 Blinry
+--
+-- SPDX-License-Identifier: AGPL-3.0-or-later
+
 local changetracker = require("changetracker")
 local cursor = require("cursor")
 local debug = require("logging").debug

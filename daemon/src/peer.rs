@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2024 Blinry
+//
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 //! A peer is another daemon. This module is all about daemon to daemon communication.
 
 use crate::daemon::{DocMessage, DocumentActorHandle};
