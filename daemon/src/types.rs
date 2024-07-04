@@ -1,4 +1,9 @@
 #![allow(dead_code)]
+
+// SPDX-FileCopyrightText: 2024 Blinry
+//
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 use automerge::{Patch, PatchAction};
 use operational_transform::{Operation as OTOperation, OperationSeq};
 use ropey::Rope;
