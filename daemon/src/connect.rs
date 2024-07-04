@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2024 Blinry
+//
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 use crate::daemon::DocumentActorHandle;
 use crate::editor::spawn_editor_connection;
 use crate::sandbox;
