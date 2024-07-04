@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2024 Blinry
+//
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 use crate::{
     path::RelativePath,
     types::{CursorState, EditorTextDelta, Range, TextDelta},

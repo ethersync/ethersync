@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2024 Blinry
+//
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 //! This module is all about daemon to editor communication.
 use crate::daemon::{DocMessage, DocumentActorHandle};
 use crate::sandbox;
