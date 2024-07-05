@@ -3,10 +3,14 @@ local debug = require("logging").debug
 local M = {}
 
 -- This variable is a table that maps user IDs to a list of cursors.
--- Each cursor has an URI, an LSP range,
+-- Each cursor has an URI, an LSP range, an optional name,
 -- and, if we already created it, an optional extmark information,
 -- (including the buffer number and the extmark id).
--- {user_id => {{ uri, range, extmark: { bufnr: int, id: int}?}}}
+-- { user_id => {
+--      name: string,
+--      cursors: { uri, range, name?, extmark: { bufnr: int, id: int}?}}
+--    }
+-- }
 local user_cursors = {}
 local cursor_namespace = vim.api.nvim_create_namespace("Ethersync")
 local offset_encoding = "utf-32"
@@ -48,12 +52,12 @@ function M.setCursor(uri, user_id, name, ranges)
             end
         end
     end
-    user_cursors[user_id] = {}
+    user_cursors[user_id] = { name = name, cursors = {} }
 
     if not vim.api.nvim_buf_is_loaded(bufnr) then
         -- TODO: Should we also implement a timeout here?
         for _, range in ipairs(ranges_se) do
-            table.insert(user_cursors[user_id], { uri = uri, range = range, extmark = nil })
+            table.insert(user_cursors[user_id].cursors, { uri = uri, range = range, name = name, extmark = nil })
         end
         return
     end
@@ -106,19 +110,19 @@ function M.setCursor(uri, user_id, name, ranges)
             })
             vim.defer_fn(function()
                 vim.api.nvim_buf_del_extmark(bufnr, cursor_namespace, extmark_id)
-                for _, user_cursor in ipairs(user_cursors[user_id]) do
+                for _, user_cursor in ipairs(user_cursors[user_id].cursors) do
                     if user_cursor.extmark ~= nil and user_cursor.extmark.id == extmark_id then
                         -- If we find our own extmark_id, we can remove all ranges,
                         -- because they were all created at the same time.
-                        user_cursors[user_id] = {}
+                        user_cursors[user_id].cursors = {}
                         break
                     end
                 end
             end, cursor_timeout_ms)
 
             table.insert(
-                user_cursors[user_id],
-                { uri = uri, range = range, extmark = { id = extmark_id, bufnr = bufnr } }
+                user_cursors[user_id].cursors,
+                { uri = uri, range = range, name = name, extmark = { id = extmark_id, bufnr = bufnr } }
             )
         end)
     end
@@ -233,7 +237,7 @@ function M.trackCursor(bufnr, callback)
 end
 
 local function get_first_user_cursor()
-    local _, first_user_cursors = next(user_cursors)
+    local _, first_user_cursors = next(user_cursors.cursors)
 
     if first_user_cursors == nil then
         return nil
@@ -260,6 +264,35 @@ function M.JumpToCursor()
         targetSelectionRange = cursor.range,
     }
     vim.lsp.util.jump_to_location(location, offset_encoding, true)
+end
+
+function M.ListCursors()
+    local message = ""
+
+    if next(user_cursors) == nil then
+        message = "No cursors."
+    else
+        for user_id, data in pairs(user_cursors) do
+            local name = data.name
+            local cursors = data.cursors
+            message = message .. name .. ":"
+            if #cursors == 0 then
+                message = message .. " No cursors"
+            elseif #cursors == 1 then
+                message = message
+                    .. " "
+                    .. cursors[1].uri
+                    .. ":"
+                    .. cursors[1].range.start.line
+                    .. ":"
+                    .. cursors[1].range.start.character
+            else
+                message = message .. " Multiple cursors in " .. cursors[1].uri
+            end
+        end
+    end
+
+    return message
 end
 
 return M

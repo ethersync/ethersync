@@ -158,7 +158,7 @@ end
 
 function EthersyncInfo()
     if client then
-        print("Connected to Ethersync daemon!")
+        print("Connected to Ethersync daemon." .. "\n" .. cursor.ListCursors())
     else
         print("Not connected to Ethersync daemon.")
     end
