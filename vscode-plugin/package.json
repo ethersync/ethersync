@@ -9,7 +9,9 @@
     "categories": [
         "Other"
     ],
-    "activationEvents": [],
+    "activationEvents": [
+        "onFileSystem:file"
+    ],
     "main": "./out/extension.js",
     "contributes": {
         "commands": [
