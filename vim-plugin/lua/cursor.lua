@@ -49,7 +49,14 @@ function M.setCursor(bufnr, user_id, name, ranges)
 
         -- If the range is empty, expand the highlighted range by 1 to make it visible.
         if start_row == end_row and start_col == end_col then
-            end_col = end_col + 1
+            local bytes_in_end_row = vim.fn.strlen(vim.fn.getline(end_row + 1))
+            if bytes_in_end_row > end_col then
+                -- Note: Instead of 1, we should actually add the byte length of the character at this position.
+                end_col = end_col + 1
+            elseif bytes_in_end_row > 0 then
+                -- This highlights the last character in the row.
+                start_col = start_col - 1
+            end
         end
 
         local e = {
@@ -58,10 +65,6 @@ function M.setCursor(bufnr, user_id, name, ranges)
             end_row = end_row,
             end_col = end_col,
         }
-
-        -- TODO:
-        -- How can we display something at the end of lines?
-        -- Virtual text, like the Copilot plugin?
 
         local virt_text = {}
         if i == 1 and name ~= nil then
