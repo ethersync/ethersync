@@ -1,6 +1,12 @@
 local debug = require("logging").debug
 
 local M = {}
+
+-- This variable is a table that maps user IDs to a list of cursors.
+-- Each cursor has an URI, an LSP range,
+-- and, if we already created it, an optional extmark information,
+-- (including the buffer number and the extmark id).
+-- {user_id => {{ uri, range, extmark: { bufnr: int, id: int}?}}}
 local user_cursors = {}
 local cursor_namespace = vim.api.nvim_create_namespace("Ethersync")
 local offset_encoding = "utf-32"
@@ -15,26 +21,44 @@ vim.api.nvim_create_autocmd("ColorScheme", {
 })
 vim.api.nvim_exec_autocmds("ColorScheme", {})
 
-function is_forward(start_row, end_row, start_col, end_col)
+local function is_forward(start_row, end_row, start_col, end_col)
     return (start_row < end_row) or (start_row == end_row and start_col <= end_col)
 end
 
 -- A new set of ranges means, we delete all existing ones for that user.
-function M.setCursor(bufnr, user_id, name, ranges)
+function M.setCursor(uri, user_id, name, ranges)
+    -- Find correct buffer to apply edits to.
+    local bufnr = vim.uri_to_bufnr(uri)
+
+    -- Convert range format to LSP's "start"/"end" format.
+    local ranges_se = {}
+    for _, range in ipairs(ranges) do
+        table.insert(ranges_se, {
+            start = range.anchor,
+            ["end"] = range.head,
+        })
+    end
+
     if user_cursors[user_id] ~= nil then
-        for _, cursor_buffer_tuple in ipairs(user_cursors[user_id]) do
-            local old_cursor_id = cursor_buffer_tuple.cursor_id
-            local old_bufnr = cursor_buffer_tuple.bufnr
-            vim.api.nvim_buf_del_extmark(old_bufnr, cursor_namespace, old_cursor_id)
+        for _, user_cursor in ipairs(user_cursors[user_id]) do
+            if user_cursor.extmark ~= nil then
+                local old_id = user_cursor.extmark.id
+                local old_bufnr = user_cursor.extmark.bufnr
+                vim.api.nvim_buf_del_extmark(old_bufnr, cursor_namespace, old_id)
+            end
         end
     end
     user_cursors[user_id] = {}
 
     if not vim.api.nvim_buf_is_loaded(bufnr) then
+        -- TODO: Should we also implement a timeout here?
+        for _, range in ipairs(ranges_se) do
+            table.insert(user_cursors[user_id], { uri = uri, range = range, extmark = nil })
+        end
         return
     end
 
-    for i, range in ipairs(ranges) do
+    for i, range in ipairs(ranges_se) do
         -- Convert from LSP style ranges to Neovim style ranges.
         local start_row = range.start.line
         local start_col = vim.lsp.util._get_line_byte_from_position(bufnr, range.start, offset_encoding)
@@ -73,7 +97,7 @@ function M.setCursor(bufnr, user_id, name, ranges)
 
         -- Try setting the extmark, ignore errors (which can happen at end of lines/buffers).
         pcall(function()
-            local cursor_id = vim.api.nvim_buf_set_extmark(bufnr, cursor_namespace, e.start_row, e.start_col, {
+            local extmark_id = vim.api.nvim_buf_set_extmark(bufnr, cursor_namespace, e.start_row, e.start_col, {
                 hl_mode = "combine",
                 hl_group = "TermCursor",
                 end_col = e.end_col,
@@ -81,17 +105,21 @@ function M.setCursor(bufnr, user_id, name, ranges)
                 virt_text = virt_text,
             })
             vim.defer_fn(function()
-                vim.api.nvim_buf_del_extmark(bufnr, cursor_namespace, cursor_id)
-                for _, v in ipairs(user_cursors[user_id]) do
-                    if v.cursor_id == cursor_id then
-                        -- If we find our own cursor_id, we can remove all ranges,
+                vim.api.nvim_buf_del_extmark(bufnr, cursor_namespace, extmark_id)
+                for _, user_cursor in ipairs(user_cursors[user_id]) do
+                    if user_cursor.extmark ~= nil and user_cursor.extmark.id == extmark_id then
+                        -- If we find our own extmark_id, we can remove all ranges,
                         -- because they were all created at the same time.
                         user_cursors[user_id] = {}
                         break
                     end
                 end
             end, cursor_timeout_ms)
-            table.insert(user_cursors[user_id], { cursor_id = cursor_id, bufnr = bufnr })
+
+            table.insert(
+                user_cursors[user_id],
+                { uri = uri, range = range, extmark = { id = extmark_id, bufnr = bufnr } }
+            )
         end)
     end
 end
@@ -204,35 +232,32 @@ function M.trackCursor(bufnr, callback)
     })
 end
 
+local function get_first_user_cursor()
+    local _, first_user_cursors = next(user_cursors)
+
+    if first_user_cursors == nil then
+        return nil
+    end
+
+    local _, first_cursor = next(first_user_cursors)
+
+    if first_cursor == nil then
+        return nil
+    end
+
+    return first_cursor
+end
+
 function M.JumpToCursor()
-    local _, ranges = next(user_cursors)
-
-    if ranges == nil then
+    local cursor = get_first_user_cursor()
+    if cursor == nil then
         return
     end
-
-    local _, first_range = next(ranges)
-
-    if first_range == nil then
-        return
-    end
-
-    local pos = vim.api.nvim_buf_get_extmark_by_id(first_range.bufnr, cursor_namespace, first_range.cursor_id, {})
-    local row = pos[1] + 1 -- Adjust to be 1-indexed.
-    local col = pos[2]
-    local range_params = vim.lsp.util.make_given_range_params(
-        { row, col },
-        { row, col },
-        first_range.bufnr,
-        offset_encoding
-    )
-    local range = range_params.range
-    local uri = range_params.textDocument.uri
 
     local location = {
-        targetUri = uri,
-        targetRange = range,
-        targetSelectionRange = range,
+        targetUri = cursor.uri,
+        targetRange = cursor.range,
+        targetSelectionRange = cursor.range,
     }
     vim.lsp.util.jump_to_location(location, offset_encoding, true)
 end

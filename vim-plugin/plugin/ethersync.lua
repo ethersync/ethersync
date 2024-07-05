@@ -14,13 +14,12 @@ end
 
 -- Take an operation from the daemon and apply it to the editor.
 local function processOperationForEditor(method, parameters)
-    local uri, filepath, theEditorRevision
     if method == "edit" then
-        uri = parameters.uri
+        local uri = parameters.uri
         -- TODO: Determine the proper filepath (relative to project dir).
-        filepath = vim.uri_to_fname(uri)
+        local filepath = vim.uri_to_fname(uri)
         local delta = parameters.delta.delta
-        theEditorRevision = parameters.delta.revision
+        local theEditorRevision = parameters.delta.revision
 
         if theEditorRevision == files[filepath].editorRevision then
             -- Find correct buffer to apply edits to.
@@ -34,27 +33,7 @@ local function processOperationForEditor(method, parameters)
             -- The daemon will send a transformed one later.
         end
     elseif method == "cursor" then
-        uri = parameters.uri
-        filepath = vim.uri_to_fname(uri)
-        local ranges = parameters.ranges
-        local userid = parameters.userid
-        local name = parameters.name
-        --theEditorRevision = parameters.ranges.revision
-        --if theEditorRevision == files[filepath].editorRevision then
-        -- Find correct buffer to apply edits to.
-        local bufnr = vim.uri_to_bufnr(uri)
-        local ranges_se = {}
-        for _, range in ipairs(ranges) do
-            table.insert(ranges_se, {
-                start = range.anchor,
-                ["end"] = range.head,
-            })
-        end
-        cursor.setCursor(bufnr, userid, name, ranges_se)
-        --else
-        --    -- Operation is not up-to-date to our content, ignore it!
-        --    -- The daemon will send a transformed one later.
-        --end
+        cursor.setCursor(parameters.uri, parameters.userid, parameters.name, parameters.ranges)
     else
         print("Unknown method: " .. method)
     end
