@@ -65,6 +65,8 @@ This should show the available options.
     ```lua
     {
         dir = os.getenv("HOME") .. "/path/to/ethersync/vim-plugin",
+        keys = { { "<leader>ej", "<cmd>EthersyncJumpToCursor<cr>" } },
+        lazy = false,
     }
     ```
 
