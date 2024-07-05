@@ -2,10 +2,24 @@
 
 Ethersync enables real-time co-editing of local text files. You will be able to use it for pair programming or note-taking, for example.
 
-Currently, we have a **simple working prototype**, but we're still near the beginning of development.
+Currently, we have a **simple working prototype**, but we're still rather at the beginning of development.
 Thus be warned, that everything is in flux and can change/break/move around quickly.
+Especially the communication protocols are subject to modifications, so reach out to us if you want to
+work on an editor plugin for you favorite editor.
+Also the software has some limitations and bugs that might eat your cat.
 
-Currently, we only allow collaborating on one single file at a time. Multi-file collaboration will be one of the next steps.
+The current features (including some planned ones marked with the construction emoji) are:
+
+- ✅ Neovim support
+  - ✅ collaborative editing
+  - ✅ cursor/peer awareness
+  - ✅/🚧 Multi-file support
+    - ✅ collaborating on a static set of files & directories
+    - 🚧 choosing which files are shared (e.g. via .gitignore/--ignore)
+    - 🚧 collaborating on a changing set of files (adding/deleting files)
+  - ❌ individual undo/redo (we probably won't work on this soon)
+- 🚧 VS Code support
+- 🚧 Basic authentication
 
 ## Components
 
