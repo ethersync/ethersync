@@ -1,6 +1,23 @@
 import * as vscode from "vscode"
 import * as cp from "child_process"
 import * as rpc from "vscode-jsonrpc/node"
+import * as path from "path"
+import * as fs from "fs"
+
+function isEthersyncEnabled(dir: string) {
+    if (fs.existsSync(path.join(dir, '.ethersync'))) {
+        return true;
+    }
+
+    const parentDir = path.resolve(dir, '..');
+
+    // If we are at the root directory, stop the recursion.
+    if (parentDir === dir) {
+        return false;
+    }
+
+    return isEthersyncEnabled(parentDir);
+}
 
 interface Position {
     line: number
@@ -32,12 +49,15 @@ let daemonRevision = 0
 let editorRevision = 0
 
 export function activate(context: vscode.ExtensionContext) {
-    console.log('Congratulations, your extension "ethersync" is now active!')
-
+    console.log("Ethersync extension activated!")
     const ethersyncClient = cp.spawn("ethersync", ["client"])
 
     ethersyncClient.on("error", (err) => {
         console.error(`Failed to start ethersync client: ${err.message}`)
+    })
+
+    ethersyncClient.on("exit", () => {
+        vscode.window.showErrorMessage("Connection to Ethersync daemon lost.")
     })
 
     const connection = rpc.createMessageConnection(
@@ -94,11 +114,15 @@ export function activate(context: vscode.ExtensionContext) {
     context.subscriptions.push(disposable)
 
     disposable = vscode.workspace.onDidChangeTextDocument((event) => {
-        if (ignoreEdits) {
+       if (ignoreEdits) {
             return
         }
 
         const filename = event.document.fileName
+        if (!isEthersyncEnabled(path.dirname(filename))) {
+            return
+        }
+        
         console.log(event.document.version)
         for (const change of event.contentChanges) {
             let delta = {
