@@ -8,7 +8,7 @@ local M = {}
 -- (including the buffer number and the extmark id).
 -- { user_id => {
 --      name: string,
---      cursors: { uri, range, name?, extmark: { bufnr: int, id: int}?}}
+--      cursors: { uri, range, extmark: { bufnr: int, id: int}?}}
 --    }
 -- }
 local user_cursors = {}
