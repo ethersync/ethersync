@@ -187,30 +187,30 @@ pub struct EditorTextOp {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Range {
-    pub anchor: Position,
-    pub head: Position,
+    pub start: Position,
+    pub end: Position,
 }
 
 impl Range {
     #[must_use]
     pub fn is_empty(&self) -> bool {
-        self.anchor == self.head
+        self.start == self.end
     }
 
     #[must_use]
     pub fn is_forward(&self) -> bool {
-        (self.anchor.line < self.head.line)
-            || (self.anchor.line == self.head.line && self.anchor.character <= self.head.character)
+        (self.start.line < self.end.line)
+            || (self.start.line == self.end.line && self.start.character <= self.end.character)
     }
 
     #[must_use]
     pub fn as_relative(&self, content: &str) -> (usize, usize) {
-        let anchor_offset = self.anchor.to_offset(content);
-        let head_offset = self.head.to_offset(content);
+        let start_offset = self.start.to_offset(content);
+        let end_offset = self.end.to_offset(content);
         if self.is_forward() {
-            (anchor_offset, head_offset - anchor_offset)
+            (start_offset, end_offset - start_offset)
         } else {
-            (head_offset, anchor_offset - head_offset)
+            (end_offset, start_offset - end_offset)
         }
     }
 }
@@ -486,7 +486,7 @@ impl TextDelta {
             if ed_op.range.is_empty() {
                 if !ed_op.replacement.is_empty() {
                     // insert
-                    delta_step.retain(ed_op.range.anchor.to_offset(content));
+                    delta_step.retain(ed_op.range.start.to_offset(content));
                     delta_step.insert(&ed_op.replacement);
                 }
             } else {
@@ -515,8 +515,8 @@ impl EditorTextDelta {
                 TextOp::Delete(n) => {
                     editor_ops.push(EditorTextOp {
                         range: Range {
-                            anchor: Position::from_offset(position, content),
-                            head: Position::from_offset(position + n, content),
+                            start: Position::from_offset(position, content),
+                            end: Position::from_offset(position + n, content),
                         },
                         replacement: String::new(),
                     });
@@ -525,8 +525,8 @@ impl EditorTextDelta {
                 TextOp::Insert(s) => {
                     editor_ops.push(EditorTextOp {
                         range: Range {
-                            anchor: Position::from_offset(position, content),
-                            head: Position::from_offset(position, content),
+                            start: Position::from_offset(position, content),
+                            end: Position::from_offset(position, content),
                         },
                         replacement: s.to_string(),
                     });
@@ -571,45 +571,45 @@ pub mod factories {
         RevisionedEditorTextDelta::new(revision, delta)
     }
 
-    pub fn range(anchor: (usize, usize), head: (usize, usize)) -> Range {
+    pub fn range(start: (usize, usize), end: (usize, usize)) -> Range {
         Range {
-            anchor: Position {
-                line: anchor.0,
-                character: anchor.1,
+            start: Position {
+                line: start.0,
+                character: start.1,
             },
-            head: Position {
-                line: head.0,
-                character: head.1,
+            end: Position {
+                line: end.0,
+                character: end.1,
             },
         }
     }
 
     pub fn ed_delta_single(
-        anchor: (usize, usize),
-        head: (usize, usize),
+        start: (usize, usize),
+        end: (usize, usize),
         replacement: &str,
     ) -> EditorTextDelta {
-        EditorTextDelta(vec![replace_ed(anchor, head, replacement)])
+        EditorTextDelta(vec![replace_ed(start, end, replacement)])
     }
 
     pub fn replace_ed(
-        anchor: (usize, usize),
-        head: (usize, usize),
+        start: (usize, usize),
+        end: (usize, usize),
         replacement: &str,
     ) -> EditorTextOp {
         EditorTextOp {
-            range: range(anchor, head),
+            range: range(start, end),
             replacement: replacement.to_string(),
         }
     }
 
     pub fn rev_ed_delta_single(
         revision: usize,
-        anchor: (usize, usize),
-        head: (usize, usize),
+        start: (usize, usize),
+        end: (usize, usize),
         replacement: &str,
     ) -> RevisionedEditorTextDelta {
-        rev_ed_delta(revision, ed_delta_single(anchor, head, replacement))
+        rev_ed_delta(revision, ed_delta_single(start, end, replacement))
     }
 }
 
