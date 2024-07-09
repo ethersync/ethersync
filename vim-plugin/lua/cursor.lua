@@ -44,7 +44,7 @@ function M.setCursor(uri, user_id, name, ranges)
     end
 
     if user_cursors[user_id] ~= nil then
-        for _, user_cursor in ipairs(user_cursors[user_id]) do
+        for _, user_cursor in ipairs(user_cursors[user_id].cursors) do
             if user_cursor.extmark ~= nil then
                 local old_id = user_cursor.extmark.id
                 local old_bufnr = user_cursor.extmark.bufnr
@@ -57,7 +57,7 @@ function M.setCursor(uri, user_id, name, ranges)
     if not vim.api.nvim_buf_is_loaded(bufnr) then
         -- TODO: Should we also implement a timeout here?
         for _, range in ipairs(ranges_se) do
-            table.insert(user_cursors[user_id].cursors, { uri = uri, range = range, name = name, extmark = nil })
+            table.insert(user_cursors[user_id].cursors, { uri = uri, range = range, extmark = nil })
         end
         return
     end
@@ -122,7 +122,7 @@ function M.setCursor(uri, user_id, name, ranges)
 
             table.insert(
                 user_cursors[user_id].cursors,
-                { uri = uri, range = range, name = name, extmark = { id = extmark_id, bufnr = bufnr } }
+                { uri = uri, range = range, extmark = { id = extmark_id, bufnr = bufnr } }
             )
         end)
     end
