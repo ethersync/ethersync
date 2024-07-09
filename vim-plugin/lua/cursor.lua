@@ -1,5 +1,3 @@
-local debug = require("logging").debug
-
 local M = {}
 
 -- This variable is a table that maps user IDs to a list of cursors.
@@ -128,27 +126,23 @@ function M.trackCursor(bufnr, callback)
             -- TODO: Split this code into multiple functions.
             local visualSelection = vim.fn.mode() == "v" or vim.fn.mode() == "V" or vim.fn.mode() == ""
             if visualSelection then
-                local start_row, start_col = unpack(vim.api.nvim_win_get_cursor(0))
-                local _, end_row, end_col = unpack(vim.fn.getpos("v"))
+                -- This is the "active end" that the protocol talks about.
+                local end_row, end_col = unpack(vim.api.nvim_win_get_cursor(0))
+                -- Whereas this corresponds the the "anchor" in other range data structures.
+                local _, start_row, start_col = unpack(vim.fn.getpos("v"))
 
                 -- When using getpos(), the column is 1-indexed, but we want it to be 0-indexed.
-                end_col = end_col - 1
+                start_col = start_col - 1
 
-                if vim.fn.mode() == "v" or vim.fn.mode() == "V" then
-                    -- We're not sure why this is necessary.
-                    end_col = end_col - 1
-
-                    -- Include the last character of the visual selection.
+                if vim.fn.mode() == "v" then
                     -- TODO: This is not in "screen columns", but in "bytes"!
-                    if is_forward(start_row, end_row, start_col, end_col) then
-                        end_col = end_col + 1
-                    else
+                    if not is_forward(start_row, end_row, start_col, end_col) then
+                        -- If the selection is backwards, we need to extend it on both ends for some reason.
+                        end_col = end_col - 1
                         start_col = start_col + 1
                     end
-                end
-
-                -- If we're in linewise visual mode, expand the range to include the entire line(s).
-                if vim.fn.mode() == "V" then
+                elseif vim.fn.mode() == "V" then
+                    -- If we're in linewise visual mode, expand the range to include the entire line(s).
                     if is_forward(start_row, end_row, start_col, end_col) then
                         start_col = 0
                         end_col = vim.fn.strlen(vim.fn.getline(end_row)) - 1
