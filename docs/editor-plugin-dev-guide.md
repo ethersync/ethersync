@@ -1,6 +1,6 @@
 ---
 date: 2024-03-19
-updated: 2024-06-17
+updated: 2024-07-09
 ---
 
 This document describes the protocol between the Ethersync daemon and the text editors. It should contain everything you need to implement a plugin for a new editor!
@@ -31,9 +31,9 @@ The protocol uses a couple of basic data types:
 
     A position inside a text document. Characters are counted in Unicode characters (as opposed to UTF-8 or UTF-16 byte counts).
 
-- `Range: {anchor: Position, head: Position}`
+- `Range: {start: Position, end: Position}`
 
-    A range inside a text document. For cursor selections, the *head* is the end of the selection where the active/movable end of the selection is.
+    A range inside a text document. For cursor selections, the *end* is the part of the selection where the active/movable end of the selection is.
 
 - `Delta: {range: Range, replacement: string}[]`
 

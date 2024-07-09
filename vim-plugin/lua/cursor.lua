@@ -34,15 +34,6 @@ function M.setCursor(uri, user_id, name, ranges)
     -- Find correct buffer to apply edits to.
     local bufnr = vim.uri_to_bufnr(uri)
 
-    -- Convert range format to LSP's "start"/"end" format.
-    local ranges_se = {}
-    for _, range in ipairs(ranges) do
-        table.insert(ranges_se, {
-            start = range.anchor,
-            ["end"] = range.head,
-        })
-    end
-
     if user_cursors[user_id] ~= nil then
         for _, user_cursor in ipairs(user_cursors[user_id].cursors) do
             if user_cursor.extmark ~= nil then
@@ -56,13 +47,13 @@ function M.setCursor(uri, user_id, name, ranges)
 
     if not vim.api.nvim_buf_is_loaded(bufnr) then
         -- TODO: Should we also implement a timeout here?
-        for _, range in ipairs(ranges_se) do
+        for _, range in ipairs(ranges) do
             table.insert(user_cursors[user_id].cursors, { uri = uri, range = range, extmark = nil })
         end
         return
     end
 
-    for i, range in ipairs(ranges_se) do
+    for i, range in ipairs(ranges) do
         -- Convert from LSP style ranges to Neovim style ranges.
         local start_row = range.start.line
         local start_col = vim.lsp.util._get_line_byte_from_position(bufnr, range.start, offset_encoding)
@@ -221,14 +212,6 @@ function M.trackCursor(bufnr, callback)
             else
                 local range = vim.lsp.util.make_range_params(0, offset_encoding).range
                 ranges = { range }
-            end
-
-            -- Rename from start/end schema to anchor/head.
-            for _, range in ipairs(ranges) do
-                range.anchor = range.start
-                range.head = range["end"]
-                range.start = nil
-                range["end"] = nil
             end
 
             callback(ranges)

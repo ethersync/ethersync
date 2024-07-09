@@ -96,10 +96,7 @@ function M.trackChanges(buffer, callback)
 
             local delta = {
                 {
-                    range = {
-                        anchor = diff.range.start,
-                        head = diff.range["end"],
-                    },
+                    range = diff.range,
                     replacement = diff.text,
                 },
             }
@@ -115,10 +112,7 @@ function M.applyDelta(buffer, delta)
     local text_edits = {}
     for _, replacement in ipairs(delta) do
         local text_edit = {
-            range = {
-                start = replacement.range.anchor,
-                ["end"] = replacement.range.head,
-            },
+            range = replacement.range,
             newText = replacement.replacement,
         }
         table.insert(text_edits, text_edit)
