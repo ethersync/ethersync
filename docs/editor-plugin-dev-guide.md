@@ -41,7 +41,7 @@ The protocol uses a couple of basic data types:
 
 - `RevisionedDelta: {delta: Delta, revision: number}`
 
-    This attaches a revision number to a delta. The semantics are that the delta *applies to* (is inteded for) that specified revision.
+    This attaches a revision number to a delta. The semantics are that the delta *applies to* (is intended for) that specified revision.
 
 - `RevisionedRanges: {ranges: Range[], revision: number}`
 
@@ -56,7 +56,7 @@ Similar how Git repositories have a `.git` directory at the top level, Ethersync
 ## `"open" {uri: DocumentUri}`
 
 - Sent when the editor opens a document. By sending this message, the editor takes ownership of the file, and tells the daemon that it is interested in receiving updates for it.
-- The editor has to initialize its editor revision and deamon revision for that document to 0.
+- The editor has to initialize its editor revision and daemon revision for that document to 0.
 
 ## `"close" {uri: DocumentUri}`
 
