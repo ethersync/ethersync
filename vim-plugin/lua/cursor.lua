@@ -213,34 +213,59 @@ function M.track_cursor(bufnr, callback)
     })
 end
 
-local function get_first_user_cursor()
-    local _, first_user_cursors = next(user_cursors)
-
-    if first_user_cursors == nil then
-        return nil
-    end
-
-    local _, first_cursor = next(first_user_cursors.cursors)
-
-    if first_cursor == nil then
-        return nil
-    end
-
-    return first_cursor
-end
-
 function M.jump_to_cursor()
-    local cursor = get_first_user_cursor()
-    if cursor == nil then
+    local descriptions = {}
+    local locations = {}
+    local max_width = 10
+    for _, data in pairs(user_cursors) do
+        local _, cursor = next(data.cursors)
+        if cursor ~= nil then
+            local description = data.name .. "@" .. cursor.uri .. ":" .. cursor.range.start.line
+            local desc_width = vim.fn.strdisplaywidth(description)
+            if desc_width > max_width then
+                max_width = desc_width
+            end
+
+            table.insert(descriptions, description)
+
+            table.insert(locations, {
+                targetUri = cursor.uri,
+                targetRange = cursor.range,
+                targetSelectionRange = cursor.range,
+            })
+        end
+    end
+
+    if #locations == 0 then
+        print("No cursors to jump to.")
         return
     end
 
-    local location = {
-        targetUri = cursor.uri,
-        targetRange = cursor.range,
-        targetSelectionRange = cursor.range,
+    local buf = vim.api.nvim_create_buf(false, true)
+    vim.api.nvim_buf_set_lines(buf, 0, -1, true, descriptions)
+    vim.bo[buf].modifiable = false
+
+    local opts = {
+        relative = "cursor",
+        width = max_width,
+        height = #descriptions,
+        col = 0,
+        row = 1,
+        anchor = "NW",
+        style = "minimal",
     }
-    vim.lsp.util.jump_to_location(location, offset_encoding, true)
+    local win = vim.api.nvim_open_win(buf, true, opts)
+
+    vim.api.nvim_buf_set_keymap(buf, "n", "<CR>", "", {
+        noremap = true,
+        silent = true,
+        callback = function()
+            local line_number = vim.fn.line(".")
+            local location = locations[line_number]
+            vim.api.nvim_win_close(win, true)
+            vim.lsp.util.jump_to_location(location, offset_encoding, true)
+        end,
+    })
 end
 
 function M.list_cursors()
