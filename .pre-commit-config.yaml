@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: NONE
+#
+# SPDX-License-Identifier: CC0-1.0
+
 # See https://pre-commit.com for more information
 # See https://pre-commit.com/hooks.html for more hooks
 repos:
@@ -15,8 +19,12 @@ repos:
         args: ['--manifest-path', './daemon/Cargo.toml', '--']
     -   id: cargo-check
         args: ['--manifest-path', './daemon/Cargo.toml']
-- repo: https://github.com/JohnnyMorganz/StyLua
-  rev: v0.20.0
-  hooks:
-    - id: stylua
-      args: ['--config-path', 'vim-plugin/.stylua.toml', '--check', 'vim-plugin']
+-   repo: https://github.com/JohnnyMorganz/StyLua
+    rev: v0.20.0
+    hooks:
+    -   id: stylua
+        args: ['--config-path', 'vim-plugin/.stylua.toml', '--check', 'vim-plugin']
+-   repo: https://github.com/Wuestengecko/reuse-tool
+    rev: 7d19244ab46b6a125d1a4dbe4a3ebb9ca767ab1a
+    hooks:
+    -   id: reuse
