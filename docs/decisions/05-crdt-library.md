@@ -1,3 +1,10 @@
+<!--
+SPDX-FileCopyrightText: 2024 blinry
+SPDX-FileCopyrightText: 2024 zormit
+
+SPDX-License-Identifier: AGPL-3.0-or-later
+-->
+
 ---
 status: accepted
 date: 2024-02-29
