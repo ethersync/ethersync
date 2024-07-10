@@ -214,13 +214,13 @@ function M.trackCursor(bufnr, callback)
 end
 
 local function get_first_user_cursor()
-    local _, first_user_cursors = next(user_cursors.cursors)
+    local _, first_user_cursors = next(user_cursors)
 
     if first_user_cursors == nil then
         return nil
     end
 
-    local _, first_cursor = next(first_user_cursors)
+    local _, first_cursor = next(first_user_cursors.cursors)
 
     if first_cursor == nil then
         return nil
@@ -249,7 +249,7 @@ function M.ListCursors()
     if next(user_cursors) == nil then
         message = "No cursors."
     else
-        for user_id, data in pairs(user_cursors) do
+        for _, data in pairs(user_cursors) do
             local name = data.name
             local cursors = data.cursors
             message = message .. name .. ":"
