@@ -1,3 +1,10 @@
+<!--
+SPDX-FileCopyrightText: 2024 blinry
+SPDX-FileCopyrightText: 2024 zormit
+
+SPDX-License-Identifier: AGPL-3.0-or-later
+-->
+
 ---
 # These are optional elements. Feel free to remove any of them.
 status: {proposed | rejected | accepted | deprecated | … | superseded by [ADR-0005](0005-example.md)}

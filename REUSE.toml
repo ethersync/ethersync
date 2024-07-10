@@ -1,0 +1,12 @@
+version = 1
+
+[[annotations]]
+path = "*"
+SPDX-FileCopyrightText = ["2024 blinry", "2024 zormit"]
+SPDX-License-Identifier = "AGPL-3.0-or-later"
+
+# Computer-generated files.
+[[annotations]]
+path = ["flake.lock", "daemon/Cargo.lock"]
+SPDX-FileCopyrightText = "NONE"
+SPDX-License-Identifier = "CC0-1.0"
