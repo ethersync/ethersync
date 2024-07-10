@@ -220,7 +220,7 @@ function M.jump_to_cursor()
     for _, data in pairs(user_cursors) do
         local _, cursor = next(data.cursors)
         if cursor ~= nil then
-            local description = data.name .. "@" .. cursor.uri .. ":" .. cursor.range.start.line
+            local description = data.name .. "@" .. cursor.uri .. ":" .. cursor.range.start.line + 1
             local desc_width = vim.fn.strdisplaywidth(description)
             if desc_width > max_width then
                 max_width = desc_width
@@ -285,9 +285,9 @@ function M.list_cursors()
                     .. " "
                     .. cursors[1].uri
                     .. ":"
-                    .. cursors[1].range.start.line
+                    .. cursors[1].range.start.line + 1
                     .. ":"
-                    .. cursors[1].range.start.character
+                    .. cursors[1].range.start.character + 1
             else
                 message = message .. " Multiple cursors in " .. cursors[1].uri
             end
