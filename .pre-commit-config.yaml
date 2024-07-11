@@ -15,3 +15,8 @@ repos:
         args: ['--manifest-path', './daemon/Cargo.toml', '--']
     -   id: cargo-check
         args: ['--manifest-path', './daemon/Cargo.toml']
+- repo: https://github.com/JohnnyMorganz/StyLua
+  rev: v0.20.0
+  hooks:
+    - id: stylua
+      args: ['--config-path', 'vim-plugin/.stylua.toml', '--check', 'vim-plugin']
