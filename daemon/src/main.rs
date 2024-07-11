@@ -9,6 +9,7 @@ use tracing::{error, info};
 mod jsonrpc_forwarder;
 
 const DEFAULT_SOCKET_PATH: &str = "/tmp/ethersync";
+const DEFAULT_PORT: &str = "4242";
 const ETHERSYNC_CONFIG_DIR: &str = ".ethersync";
 
 #[derive(Parser)]
@@ -31,9 +32,9 @@ enum Commands {
     Daemon {
         // TODO: Move the default port definition to a constant.
         /// Port to listen on as a hosting peer.
-        #[arg(short, long, default_value = "4242")]
+        #[arg(short, long, default_value = DEFAULT_PORT)]
         port: Option<u16>,
-        /// The directory to sync.
+        /// The directory to sync. Defaults to current directory.
         directory: Option<PathBuf>,
         /// IP + port of a peer to connect to. Example: 192.168.1.42:1234
         #[arg(long)]
