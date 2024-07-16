@@ -64,7 +64,7 @@ Similar how Git repositories have a `.git` directory at the top level, Ethersync
 
 ## `"edit" {uri: DocumentUri, delta: RevisionedDelta}`
 
-- `revision` in the `RevisionedDelta` is the last revision seen from the daemon.
+- The `revision` attribute of `RevisionedDelta` is the last revision seen from the daemon.
 - After each user edit, the editor must increase its editor revision.
 
 ## `"cursor" {uri: DocumentUri, ranges: RevisionedRanges}`
