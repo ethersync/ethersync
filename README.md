@@ -129,7 +129,7 @@ To collaborate on a file called `file` in a directory called `playground`, follo
 
 ## Development
 
-If you're interested in building new editor plugins, read the specification for the [daemon-editor protocol](docs/daemon-editor-protocol.md). For more information about Ethersync's design, refer to the list of [decision records](docs/decisions/).
+If you're interested in building new editor plugins, read the specification for the [daemon-editor protocol](/docs/editor-plugin-dev-guide.md). For more information about Ethersync's design, refer to the list of [decision records](docs/decisions/).
 
 ## Sponsors
 
