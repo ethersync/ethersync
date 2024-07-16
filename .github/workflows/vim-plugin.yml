@@ -12,7 +12,7 @@ on:
 
 jobs:
   check_lua:
-    name: Check Lua formatting
+    name: Check Lua formatting and linting
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -20,4 +20,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: cargo install stylua
-      - run: stylua -c .
+      - name: Stylua Formatting
+        run: stylua -c .
+      - name: Luacheck Linting
+        uses: lunarmodules/luacheck@v1
+        with:
+          args: --config vim-plugin/.luacheckrc vim-plugin
