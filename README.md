@@ -106,7 +106,7 @@ To collaborate on a file called `file` in a directory called `playground`, follo
     - As the **host**, run:
 
         ```bash
-        ethersync daemon --file=path/to/playground/file
+        ethersync daemon --file=path/to/playground
         ```
 
         This will print an IP address and port (like `192.168.178.23:4242`), which others can use to connect to you. (It prints the local IP address by default, but you can also be reached using your public IP address. Right now, you might need to configure the host computer to open the port to the outside. A more convenient way to do that is planned.)
