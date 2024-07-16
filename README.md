@@ -67,6 +67,8 @@ This should show the available options.
 
 ### Neovim Plugin
 
+**The plugin currently requires Neovim >= v0.7.**
+
 - If you're not using a plugin manager, here's a "quick and dirty" way to install the plugin:
 
     ```bash
