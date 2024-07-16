@@ -1,3 +1,8 @@
+// SPDX-FileCopyrightText: 2024 blinry
+// SPDX-FileCopyrightText: 2024 zormit
+//
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 use crate::types::EditorTextDelta;
 use crate::types::{CursorState, Range};
 use anyhow::Result;
