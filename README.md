@@ -67,7 +67,7 @@ This should show the available options.
 
 ### Neovim Plugin
 
-**The plugin currently requires Neovim >= v0.7.**
+**The plugin currently requires Neovim v0.10.**
 
 - If you're not using a plugin manager, here's a "quick and dirty" way to install the plugin:
 
@@ -93,6 +93,8 @@ We manually publish the latest version at <https://github.com/ethersync/ethersyn
     Plug 'ethersync/ethersync-vim'
     ```
 
+To confirm that the plugin works, try running the `:EthersyncInfo` command in Neovim.
+
 ## Usage
 
 To collaborate on a file called `file` in a directory called `playground`, follow these steps:
@@ -108,15 +110,15 @@ To collaborate on a file called `file` in a directory called `playground`, follo
     - As the **host**, run:
 
         ```bash
-        ethersync daemon --file=path/to/playground
+        ethersync daemon path/to/playground
         ```
 
-        This will print an IP address and port (like `192.168.178.23:4242`), which others can use to connect to you. (It prints the local IP address by default, but you can also be reached using your public IP address. Right now, you might need to configure the host computer to open the port to the outside. A more convenient way to do that is planned.)
+        This will print an IP address and port (like `192.168.178.23:4242`), which others can use to connect to you. (It prints the local and public IP address. Right now, if you want others to be able to join you from outside your local network, you might need to configure your router to enable port forwarding to your computer. A more convenient way to do that is planned.)
 
     - As a **peer**, specify the IP address and port of the host:
 
         ```bash
-        ethersync daemon --file=path/to/playground/file 192.168.178.23:4242
+        ethersync daemon path/to/playground/file --peer 192.168.178.23:4242
         ```
 
 3. Finally, open the file in Vim:
