@@ -32,9 +32,9 @@ function M.set_cursor(uri, user_id, name, ranges)
     -- Find correct buffer to apply edits to.
     local bufnr = vim.uri_to_bufnr(uri)
 
-    if user_cursors[user_id] ~= nil then
+    if user_cursors[user_id] then
         for _, user_cursor in ipairs(user_cursors[user_id].cursors) do
-            if user_cursor.extmark ~= nil then
+            if user_cursor.extmark then
                 local old_id = user_cursor.extmark.id
                 local old_bufnr = user_cursor.extmark.bufnr
                 vim.api.nvim_buf_del_extmark(old_bufnr, cursor_namespace, old_id)
@@ -84,7 +84,7 @@ function M.set_cursor(uri, user_id, name, ranges)
         }
 
         local virt_text = {}
-        if i == 1 and name ~= nil then
+        if i == 1 and name then
             virt_text = { { name, "EthersyncUsername" } }
         end
 
