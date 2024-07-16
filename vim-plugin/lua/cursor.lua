@@ -14,6 +14,10 @@ local cursor_namespace = vim.api.nvim_create_namespace("Ethersync")
 local offset_encoding = "utf-32"
 local cursor_timeout_ms = 30 * 1000
 
+local function show_cursor_information(name, cursor)
+    return name .. " @ " .. vim.uri_to_fname(cursor.uri) .. ":" .. cursor.range.start.line + 1
+end
+
 -- https://www.reddit.com/r/neovim/comments/152bs5t/unable_to_render_comments_in_the_color_id_like/
 vim.api.nvim_create_autocmd("ColorScheme", {
     pattern = "*",
@@ -219,8 +223,8 @@ function M.jump_to_cursor()
     local max_width = 10
     for _, data in pairs(user_cursors) do
         local _, cursor = next(data.cursors)
-        if cursor ~= nil then
-            local description = data.name .. "@" .. cursor.uri .. ":" .. cursor.range.start.line + 1
+        if cursor then
+            local description = show_cursor_information(data.name, cursor)
             local desc_width = vim.fn.strdisplaywidth(description)
             if desc_width > max_width then
                 max_width = desc_width
@@ -239,6 +243,10 @@ function M.jump_to_cursor()
     if #locations == 0 then
         print("No cursors to jump to.")
         return
+    elseif #locations == 1 then
+        -- Jump immediately.
+        vim.lsp.util.jump_to_location(locations[1], offset_encoding, true)
+        return
     end
 
     local buf = vim.api.nvim_create_buf(false, true)
@@ -253,17 +261,27 @@ function M.jump_to_cursor()
         row = 1,
         anchor = "NW",
         style = "minimal",
+        border = "single",
     }
     local win = vim.api.nvim_open_win(buf, true, opts)
 
     vim.api.nvim_buf_set_keymap(buf, "n", "<CR>", "", {
-        noremap = true,
-        silent = true,
         callback = function()
             local line_number = vim.fn.line(".")
             local location = locations[line_number]
             vim.api.nvim_win_close(win, true)
             vim.lsp.util.jump_to_location(location, offset_encoding, true)
+        end,
+    })
+    vim.api.nvim_buf_set_keymap(buf, "n", "<Esc>", "", {
+        callback = function()
+            vim.api.nvim_win_close(win, true)
+        end,
+    })
+    vim.api.nvim_create_autocmd("BufLeave", {
+        buffer = buf,
+        callback = function()
+            vim.api.nvim_win_close(win, true)
         end,
     })
 end
@@ -281,15 +299,9 @@ function M.list_cursors()
             if #cursors == 0 then
                 message = message .. " No cursors"
             elseif #cursors == 1 then
-                message = message
-                    .. " "
-                    .. cursors[1].uri
-                    .. ":"
-                    .. cursors[1].range.start.line + 1
-                    .. ":"
-                    .. cursors[1].range.start.character + 1
+                message = show_cursor_information(name, cursors[1])
             else
-                message = message .. " Multiple cursors in " .. cursors[1].uri
+                message = message .. " Multiple cursors in " .. vim.uri_to_fname(cursors[1].uri)
             end
         end
     end
