@@ -29,7 +29,7 @@ time-macros = { version = "0.2.0-alpha.1" }
 local-ip-address = "0.6.1"
 public-ip = "0.2.2"
 tokio-util = "0.7.11"
-walkdir = "2.5.0"
+ignore = "0.4.22"
 
 [dev-dependencies]
 assert_matches = "1.5"

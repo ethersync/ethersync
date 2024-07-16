@@ -11,13 +11,13 @@ use automerge::{
     sync::{Message as AutomergeSyncMessage, State as SyncState},
     Patch,
 };
+use ignore::WalkBuilder;
 use rand::Rng;
 use std::collections::{HashMap, HashSet};
 use std::fmt;
 use std::path::{Path, PathBuf};
 use tokio::sync::{broadcast, mpsc, oneshot};
 use tracing::{debug, info, warn};
-use walkdir::WalkDir;
 
 pub const TEST_FILE_PATH: &str = "text";
 
@@ -400,13 +400,28 @@ impl DocumentActor {
 
     /// Reading in the file is a preparatory step, before kicking off the actor.
     fn read_current_content_from_dir(&mut self) {
-        // TODO: Filter out files ignored by .gitignore and such.
-        WalkDir::new(self.base_dir.clone())
-            .into_iter()
+        // TODO: How to deal with binary files?
+        WalkBuilder::new(self.base_dir.clone())
+            .standard_filters(true)
+            .hidden(false)
+            // Interestingly, the standard filters don't seem to ignore .git.
+            .filter_entry(|dir_entry| {
+                dir_entry
+                    .path()
+                    .file_name()
+                    .expect("Failed to get file name from path.")
+                    != ".git"
+            })
+            .build()
             .filter_map(Result::ok)
-            .filter(|metadata| metadata.file_type().is_file())
-            .for_each(|file_path| {
-                let file_path = file_path.path();
+            .filter(|dir_entry| {
+                dir_entry
+                    .file_type()
+                    .expect("Couldn't get file type of dir entry.")
+                    .is_file()
+            })
+            .for_each(|dir_entry| {
+                let file_path = dir_entry.path();
                 match std::fs::read_to_string(file_path) {
                     Ok(text) => {
                         let relative_file_path = self.file_path_for_uri(
