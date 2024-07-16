@@ -28,13 +28,13 @@ local function is_forward(start_row, end_row, start_col, end_col)
 end
 
 -- A new set of ranges means, we delete all existing ones for that user.
-function M.setCursor(uri, user_id, name, ranges)
+function M.set_cursor(uri, user_id, name, ranges)
     -- Find correct buffer to apply edits to.
     local bufnr = vim.uri_to_bufnr(uri)
 
-    if user_cursors[user_id] ~= nil then
+    if user_cursors[user_id] then
         for _, user_cursor in ipairs(user_cursors[user_id].cursors) do
-            if user_cursor.extmark ~= nil then
+            if user_cursor.extmark then
                 local old_id = user_cursor.extmark.id
                 local old_bufnr = user_cursor.extmark.bufnr
                 vim.api.nvim_buf_del_extmark(old_bufnr, cursor_namespace, old_id)
@@ -84,7 +84,7 @@ function M.setCursor(uri, user_id, name, ranges)
         }
 
         local virt_text = {}
-        if i == 1 and name ~= nil then
+        if i == 1 and name then
             virt_text = { { name, "EthersyncUsername" } }
         end
 
@@ -117,7 +117,7 @@ function M.setCursor(uri, user_id, name, ranges)
     end
 end
 
-function M.trackCursor(bufnr, callback)
+function M.track_cursor(bufnr, callback)
     vim.api.nvim_create_autocmd({ "CursorMoved", "CursorMovedI", "ModeChanged" }, {
         buffer = bufnr,
         callback = function()
@@ -229,7 +229,7 @@ local function get_first_user_cursor()
     return first_cursor
 end
 
-function M.JumpToCursor()
+function M.jump_to_cursor()
     local cursor = get_first_user_cursor()
     if cursor == nil then
         return
@@ -243,7 +243,7 @@ function M.JumpToCursor()
     vim.lsp.util.jump_to_location(location, offset_encoding, true)
 end
 
-function M.ListCursors()
+function M.list_cursors()
     local message = ""
 
     if next(user_cursors) == nil then

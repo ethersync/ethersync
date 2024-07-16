@@ -12,12 +12,16 @@ on:
 
 jobs:
   check_lua:
-    name: Check Lua formatting
+    name: Check Lua formatting and linting
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: ./vim-plugin
     steps:
       - uses: actions/checkout@v4
-      - run: cargo install stylua
-      - run: stylua -c .
+      - uses: JohnnyMorganz/stylua-action@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          version: 0.20.0
+          args: --config-path vim-plugin/.stylua.toml --check vim-plugin
+      - name: Luacheck Linting
+        uses: lunarmodules/luacheck@v1
+        with:
+          args: --config vim-plugin/.luacheckrc vim-plugin

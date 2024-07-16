@@ -10,7 +10,7 @@ local ignore_edits = false
 -- Subscribes the callback to changes for a given buffer id and reports with a delta.
 --
 -- The delta can be expected to be in the format as specified in the daemon-editor protocol.
-function M.trackChanges(buffer, callback)
+function M.track_changes(buffer, callback)
     -- Used to remember the previous content of the buffer, so that we can
     -- calculate the difference between the previous and the current content.
     local prev_lines = vim.api.nvim_buf_get_lines(buffer, 0, -1, true)
@@ -108,7 +108,7 @@ function M.trackChanges(buffer, callback)
     })
 end
 
-function M.applyDelta(buffer, delta)
+function M.apply_delta(buffer, delta)
     local text_edits = {}
     for _, replacement in ipairs(delta) do
         local text_edit = {
