@@ -227,9 +227,16 @@ impl DocumentActor {
     }
 
     fn open_file_path(&mut self, file_path: String) {
-        let ot_server = OTServer::new(self.current_file_content(&file_path).unwrap_or_else(|_| {
-            panic!("Could not open file {file_path}, because it doesn't exist in the CRDT")
-        }));
+        let text = match self.current_file_content(&file_path) {
+            Ok(text) => text,
+            Err(_) => {
+                // The file doesn't exist yet - create it in the Automerge document.
+                let text = "".to_string();
+                self.crdt_doc.initialize_text(&text, &file_path);
+                text
+            }
+        };
+        let ot_server = OTServer::new(text);
         self.ot_servers.insert(file_path, ot_server);
     }
 
