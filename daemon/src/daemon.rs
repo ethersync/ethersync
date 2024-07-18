@@ -12,11 +12,15 @@ use automerge::{
     Patch,
 };
 use ignore::WalkBuilder;
+use notify::{RecursiveMode, Result as NotifyResult, Watcher};
 use rand::Rng;
 use std::collections::{HashMap, HashSet};
 use std::fmt;
 use std::path::{Path, PathBuf};
-use tokio::sync::{broadcast, mpsc, oneshot};
+use tokio::{
+    sync::{broadcast, mpsc, oneshot},
+    time::Duration,
+};
 use tracing::{debug, info, warn};
 
 pub const TEST_FILE_PATH: &str = "text";
@@ -27,6 +31,9 @@ pub enum DocMessage {
         response_tx: oneshot::Sender<Result<String>>,
     },
     FromEditor(EditorProtocolMessageFromEditor),
+    RemoveFile {
+        file_path: String,
+    },
     RandomEdit,
     ReceiveSyncMessage {
         message: AutomergeSyncMessage,
@@ -46,6 +53,7 @@ impl fmt::Debug for DocMessage {
         let repr = match self {
             DocMessage::GetContent { .. } => "get content",
             DocMessage::FromEditor(_) => "open/close/edit/... message from editor",
+            DocMessage::RemoveFile { .. } => "delete file",
             DocMessage::RandomEdit => "random edit",
             DocMessage::ReceiveSyncMessage { .. } => "<automerge internal sync rcv>",
             DocMessage::GenerateSyncMessage { .. } => "<automerge internal sync gen>",
@@ -116,6 +124,11 @@ impl DocumentActor {
                 .await;
             }
             DocMessage::FromEditor(message) => self.handle_message_from_editor(message).await,
+            DocMessage::RemoveFile { file_path } => {
+                let file_path = self.file_path_for_uri(&file_path);
+                self.crdt_doc.remove_text(&file_path);
+                let _ = self.doc_changed_ping_tx.send(());
+            }
             DocMessage::ReceiveSyncMessage {
                 message,
                 state: mut peer_state,
@@ -135,6 +148,10 @@ impl DocumentActor {
                         }
                         PatchEffect::CursorChange(cursor_state) => {
                             cursor_states.push(cursor_state);
+                        }
+                        PatchEffect::FileRemoval(file_path) => {
+                            std::fs::remove_file(self.absolute_path_for_file_path(&file_path))
+                                .unwrap_or_else(|_| panic!("Failed to delete file {file_path}"));
                         }
                         PatchEffect::NoEffect => {}
                     }
@@ -556,6 +573,45 @@ impl Daemon {
         let is_host = peer.is_none();
 
         let document_handle = DocumentActorHandle::new(base_dir, is_host);
+
+        // Initialize file watcher.
+        let watcher_document_handle = document_handle.clone();
+        let watcher_base_dir = base_dir.to_path_buf();
+        tokio::spawn(async move {
+            let mut watcher =
+                notify::recommended_watcher(move |res: NotifyResult<notify::Event>| {
+                    futures::executor::block_on(async {
+                        match res {
+                            Ok(event) => {
+                                if event.kind.is_remove() {
+                                    println!("event: {:?}", event);
+                                    // TODO: only watch for files that we track.
+                                    for path in event.paths {
+                                        watcher_document_handle
+                                            .send_message(DocMessage::RemoveFile {
+                                                // TODO: panic if losing something
+                                                file_path: path.display().to_string(),
+                                            })
+                                            .await;
+                                    }
+                                }
+                            }
+                            Err(e) => println!("watch error: {:?}", e),
+                        }
+                    })
+                })
+                .expect("Failed to initialize file watcher");
+
+            // Add a path to be watched. All files and directories at that path and
+            // below will be monitored for changes.
+            watcher
+                .watch(&watcher_base_dir, RecursiveMode::Recursive)
+                .expect("Failed to watch directory");
+
+            loop {
+                tokio::time::sleep(Duration::from_millis(100)).await;
+            }
+        });
 
         let connection_document_handle = document_handle.clone();
         let peer_info = connect::PeerConnectionInfo::new(port, peer);

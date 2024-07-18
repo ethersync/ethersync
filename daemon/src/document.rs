@@ -119,6 +119,21 @@ impl Document {
             .expect("Failed to splice text into Automerge text object");
     }
 
+    pub fn remove_text(&mut self, file_path: &str) {
+        if self.text_obj(file_path).is_err() {
+            debug!("Failed to get {file_path} Text object, so I can't remove it from the CRDT");
+            return;
+        };
+
+        debug!("Removing {file_path} from CRDT.");
+        let file_map = self
+            .top_level_map_obj("files")
+            .expect("Failed to get files Map object");
+        self.doc
+            .delete(file_map, file_path)
+            .expect("Failed to delete text object");
+    }
+
     fn top_level_map_obj(&self, name: &str) -> Result<automerge::ObjId> {
         let file_map = self.doc.get(automerge::ROOT, name);
         if let Ok(Some((automerge::Value::Object(ObjType::Map), file_map))) = file_map {

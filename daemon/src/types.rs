@@ -3,6 +3,7 @@ use automerge::{Patch, PatchAction};
 use operational_transform::{Operation as OTOperation, OperationSeq};
 use ropey::Rope;
 use serde::{Deserialize, Serialize};
+use tracing::debug;
 
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct TextDelta(pub Vec<TextOp>);
@@ -97,6 +98,7 @@ pub struct CursorState {
 
 pub enum PatchEffect {
     FileChange(FileTextDelta),
+    FileRemoval(String), // (relative file path)
     CursorChange(CursorState),
     NoEffect,
 }
@@ -331,6 +333,11 @@ impl TryFrom<Patch> for PatchEffect {
                             // We return an empty delta on the new file, so that the file is created on disk when
                             // synced over to another peer. TODO: Is this the best way to solve this?
                             Ok(PatchEffect::FileChange(FileTextDelta::new(key, delta)))
+                        }
+                        PatchAction::DeleteMap { key } => {
+                            // This action happens when a file is deleted.
+                            debug!("Got file removal from patch: {key}");
+                            Ok(PatchEffect::FileRemoval(key))
                         }
                         other_action => Err(anyhow::anyhow!(
                             "Unsupported patch action for path 'files': {}",
