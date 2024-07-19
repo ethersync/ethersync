@@ -1,5 +1,4 @@
-use crate::types::EditorTextDelta;
-use crate::types::{CursorState, Range};
+use crate::types::{CursorState, EditorTextDelta, Range, TextDelta};
 use anyhow::Result;
 use automerge::{
     patches::TextRepresentation,
@@ -7,9 +6,10 @@ use automerge::{
     transaction::Transactable,
     AutoCommit, ObjType, Patch, PatchLog, ReadDoc,
 };
+use difference::Changeset;
 use std::env;
 use std::path::Path;
-use tracing::{debug, info};
+use tracing::{debug, info, warn};
 
 /// Encapsulates the Automerge `AutoCommit` and provides a generic interface,
 /// s.t. we don't need to worry about automerge internals elsewhere.
@@ -132,6 +132,26 @@ impl Document {
         self.doc
             .splice_text(text_obj, 0, 0, text)
             .expect("Failed to splice text into Automerge text object");
+    }
+
+    // This function is used to integrate text that was changed while the daemon was offline.
+    // We need to calculate the patches compared to the current CRDT content, and apply them.
+    pub fn update_text(&mut self, desired_text: &str, file_path: &str) {
+        let current_text = self
+            .current_file_content(file_path)
+            .unwrap_or_else(|_| panic!("Failed to get {file_path} text object"));
+
+        let changeset = Changeset::new(&current_text, desired_text, "");
+
+        if changeset.distance == 0 {
+            // No changes, nothing to do.
+            return;
+        }
+
+        let text_delta: TextDelta = changeset.into();
+        let editor_delta = EditorTextDelta::from_delta(text_delta, &current_text);
+        warn!("File {file_path} has changed while the daemon was offline. Applying delta: {editor_delta:?}");
+        self.apply_delta_to_doc(&editor_delta, file_path);
     }
 
     pub fn remove_text(&mut self, file_path: &str) {

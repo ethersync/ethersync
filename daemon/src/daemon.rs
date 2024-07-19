@@ -115,9 +115,7 @@ impl DocumentActor {
             crdt_doc,
         };
 
-        if !persistence_file.exists() {
-            s.read_current_content_from_dir();
-        }
+        s.read_current_content_from_dir();
 
         s
     }
@@ -455,7 +453,7 @@ impl DocumentActor {
 
     /// Reading in the file is a preparatory step, before kicking off the actor.
     fn read_current_content_from_dir(&mut self) {
-        let ignored_things = vec![".git", ".ethersync"];
+        let ignored_things = [".git", ".ethersync"];
         // TODO: How to deal with binary files?
         WalkBuilder::new(self.base_dir.clone())
             .standard_filters(true)
@@ -487,7 +485,7 @@ impl DocumentActor {
                                 .to_str()
                                 .expect("Could not convert PathBuf to str"),
                         );
-                        self.crdt_doc.initialize_text(&text, &relative_file_path);
+                        self.crdt_doc.update_text(&text, &relative_file_path);
                     }
                     Err(e) => {
                         warn!("Failed to read file {}: {e}", file_path.display());
@@ -712,7 +710,7 @@ mod tests {
                 // The sync tasks will subscribe to it, and react to it by syncing with the peers.
                 let (doc_changed_ping_tx, _doc_changed_ping_rx) = broadcast::channel::<()>(1);
 
-                DocumentActor::new(doc_message_rx, doc_changed_ping_tx.clone(), directory)
+                DocumentActor::new(doc_message_rx, doc_changed_ping_tx.clone(), directory, true)
             }
             fn assert_file_content(&self, file_path: &str, content: &str) {
                 // unfortunately anyhow::Error doesn't implement PartialEq, so we'll rather unwrap.
