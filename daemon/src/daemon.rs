@@ -125,9 +125,13 @@ impl DocumentActor {
             }
             DocMessage::FromEditor(message) => self.handle_message_from_editor(message).await,
             DocMessage::RemoveFile { file_path } => {
-                let file_path = self.file_path_for_uri(&file_path);
-                self.crdt_doc.remove_text(&file_path);
-                let _ = self.doc_changed_ping_tx.send(());
+                // TODO: This is a workaround. Handle this case better by returning a Result in
+                // file_path_for_uri! The deletion happens when the fuzzer removes the temp dir.
+                if file_path.as_str() != self.base_dir.as_os_str() {
+                    let file_path = self.file_path_for_uri(&file_path);
+                    self.crdt_doc.remove_text(&file_path);
+                    let _ = self.doc_changed_ping_tx.send(());
+                }
             }
             DocMessage::ReceiveSyncMessage {
                 message,
@@ -603,7 +607,10 @@ async fn spawn_file_watcher(base_dir: PathBuf, document_handle: DocumentActorHan
         futures::executor::block_on(async {
             match res {
                 Ok(event) => {
-                    if event.kind.is_remove() {
+                    // TODO: On Linux, even a directory deletion seems to yield a Remove(File)?
+                    if let notify::event::EventKind::Remove(notify::event::RemoveKind::File) =
+                        event.kind
+                    {
                         println!("event: {:?}", event);
                         for path in event.paths {
                             document_handle
