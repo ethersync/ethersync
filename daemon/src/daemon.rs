@@ -93,12 +93,12 @@ impl DocumentActor {
         doc_message_rx: mpsc::Receiver<DocMessage>,
         doc_changed_ping_tx: DocChangedSender,
         base_dir: PathBuf,
-        host: bool,
+        init: bool,
     ) -> Self {
         // If there is a persisted version in base_dir/.ethersync/doc, load it.
         // TODO: Pull out ".ethersync" string into a constant.
         let persistence_file = base_dir.join(".ethersync/doc");
-        let crdt_doc = if persistence_file.exists() {
+        let crdt_doc = if persistence_file.exists() && !init {
             info!("Loading persisted CRDT document from {persistence_file:?}");
             Document::load(&persistence_file)
         } else {
@@ -115,7 +115,9 @@ impl DocumentActor {
             crdt_doc,
         };
 
-        s.read_current_content_from_dir();
+        if persistence_file.exists() {
+            s.read_current_content_from_dir(init);
+        }
 
         s
     }
@@ -452,7 +454,7 @@ impl DocumentActor {
     }
 
     /// Reading in the file is a preparatory step, before kicking off the actor.
-    fn read_current_content_from_dir(&mut self) {
+    fn read_current_content_from_dir(&mut self, init: bool) {
         let ignored_things = [".git", ".ethersync"];
         // TODO: How to deal with binary files?
         WalkBuilder::new(self.base_dir.clone())
@@ -485,7 +487,11 @@ impl DocumentActor {
                                 .to_str()
                                 .expect("Could not convert PathBuf to str"),
                         );
-                        self.crdt_doc.update_text(&text, &relative_file_path);
+                        if init {
+                            self.crdt_doc.initialize_text(&text, &relative_file_path);
+                        } else {
+                            self.crdt_doc.update_text(&text, &relative_file_path);
+                        }
                     }
                     Err(e) => {
                         warn!("Failed to read file {}: {e}", file_path.display());
@@ -537,7 +543,7 @@ pub struct DocumentActorHandle {
 }
 
 impl DocumentActorHandle {
-    pub fn new(base_dir: &Path, host: bool) -> Self {
+    pub fn new(base_dir: &Path, init: bool) -> Self {
         // The document task will receive messages on this channel.
         let (doc_message_tx, doc_message_rx) = mpsc::channel(1);
 
@@ -549,13 +555,8 @@ impl DocumentActorHandle {
             doc_message_rx,
             doc_changed_ping_tx.clone(),
             base_dir.into(),
-            host,
+            init,
         );
-
-        // Initialize the text from the file_path, if this is the document owned by the host.
-        //if host {
-        //    actor.read_current_content_from_dir();
-        //}
 
         tokio::spawn(async move { actor.run().await });
 
@@ -605,11 +606,12 @@ impl Daemon {
         peer: Option<String>,
         socket_path: &Path,
         base_dir: &Path,
+        init: bool,
     ) -> Self {
         // If the peer address is empty, we're the host.
-        let is_host = peer.is_none();
+        //let is_host = peer.is_none();
 
-        let document_handle = DocumentActorHandle::new(base_dir, is_host);
+        let document_handle = DocumentActorHandle::new(base_dir, init);
 
         // Initialize file watcher.
         let watcher_document_handle = document_handle.clone();

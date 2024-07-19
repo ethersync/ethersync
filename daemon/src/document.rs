@@ -105,14 +105,6 @@ impl Document {
 
     pub fn initialize_text(&mut self, text: &str, file_path: &str) {
         info!("Initializing {file_path} in CRDT");
-        if self.text_obj(file_path).is_ok() {
-            // While automerge accepts putting an object multiple times, in our current
-            // architecture this should not happen: Only the host should initialize every file
-            // once, while peers just take in whatever already exists.
-            //
-            // This might change in a future more peer to peer world.
-            panic!("It seems {file_path} was already initialized.");
-        }
 
         // TODO: I don't love the assumption that the first document to initialize a text
         // object should initialize the maps...
@@ -137,21 +129,27 @@ impl Document {
     // This function is used to integrate text that was changed while the daemon was offline.
     // We need to calculate the patches compared to the current CRDT content, and apply them.
     pub fn update_text(&mut self, desired_text: &str, file_path: &str) {
-        let current_text = self
-            .current_file_content(file_path)
-            .unwrap_or_else(|_| panic!("Failed to get {file_path} text object"));
+        if self.text_obj(file_path).is_ok() {
+            let current_text = self
+                .current_file_content(file_path)
+                .unwrap_or_else(|_| panic!("Failed to get '{file_path}' text object"));
 
-        let changeset = Changeset::new(&current_text, desired_text, "");
+            let changeset = Changeset::new(&current_text, desired_text, "");
 
-        if changeset.distance == 0 {
-            // No changes, nothing to do.
-            return;
+            if changeset.distance == 0 {
+                // No changes, nothing to do.
+                return;
+            }
+
+            let text_delta: TextDelta = changeset.into();
+            let editor_delta = EditorTextDelta::from_delta(text_delta, &current_text);
+            warn!("File {file_path} has changed while the daemon was offline. Applying delta: {editor_delta:?}");
+            self.apply_delta_to_doc(&editor_delta, file_path);
+        } else {
+            // The file doesn't exist in the CRDT yet, so we need to initialize it.
+            info!("File {file_path} doesn't exist in CRDT yet. Initializing it.");
+            self.initialize_text(desired_text, file_path);
         }
-
-        let text_delta: TextDelta = changeset.into();
-        let editor_delta = EditorTextDelta::from_delta(text_delta, &current_text);
-        warn!("File {file_path} has changed while the daemon was offline. Applying delta: {editor_delta:?}");
-        self.apply_delta_to_doc(&editor_delta, file_path);
     }
 
     pub fn remove_text(&mut self, file_path: &str) {
