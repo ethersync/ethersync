@@ -105,6 +105,7 @@ impl DocumentActor {
             info!("Initializing a new CRDT document");
             Document::default()
         };
+        info!("Done.");
 
         let mut s = Self {
             doc_message_rx,
@@ -182,7 +183,9 @@ impl DocumentActor {
                         }
                         PatchEffect::FileRemoval(file_path) => {
                             std::fs::remove_file(self.absolute_path_for_file_path(&file_path))
-                                .unwrap_or_else(|_| panic!("Failed to delete file {file_path}"));
+                                .unwrap_or_else(|err| {
+                                    warn!("Failed to remove file {file_path}: {err}")
+                                });
                         }
                         PatchEffect::NoEffect => {}
                     }
@@ -326,7 +329,7 @@ impl DocumentActor {
     ) -> (EditorTextDelta, Vec<RevisionedEditorTextDelta>) {
         let text = self
             .current_file_content(file_path)
-            .expect("Should have initialized text before performing random edit");
+            .expect("Should have initialized text before performing edit");
         let ot_server = self.get_ot_server(file_path);
         let (delta_for_crdt, rev_deltas_for_editor) =
             ot_server.apply_editor_operation(rev_editor_delta);

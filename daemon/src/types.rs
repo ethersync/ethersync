@@ -340,6 +340,12 @@ impl TryFrom<Patch> for PatchEffect {
                             debug!("Got file removal from patch: {key}");
                             Ok(PatchEffect::FileRemoval(key))
                         }
+                        PatchAction::Conflict { .. } => {
+                            // This can happen when both sides create the same file.
+                            // We ignore it for now.
+                            // TODO: Should we use this information somehow?
+                            Ok(PatchEffect::NoEffect)
+                        }
                         other_action => Err(anyhow::anyhow!(
                             "Unsupported patch action for path 'files': {}",
                             other_action
