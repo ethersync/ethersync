@@ -94,6 +94,7 @@ impl DocumentActor {
         doc_changed_ping_tx: DocChangedSender,
         base_dir: PathBuf,
         init: bool,
+        is_host: bool,
     ) -> Self {
         // If there is a persisted version in base_dir/.ethersync/doc, load it.
         // TODO: Pull out ".ethersync" string into a constant.
@@ -118,6 +119,8 @@ impl DocumentActor {
 
         if persistence_file.exists() {
             s.read_current_content_from_dir(init);
+        } else if is_host {
+            s.read_current_content_from_dir(true);
         }
 
         s
@@ -546,7 +549,7 @@ pub struct DocumentActorHandle {
 }
 
 impl DocumentActorHandle {
-    pub fn new(base_dir: &Path, init: bool) -> Self {
+    pub fn new(base_dir: &Path, init: bool, is_host: bool) -> Self {
         // The document task will receive messages on this channel.
         let (doc_message_tx, doc_message_rx) = mpsc::channel(1);
 
@@ -559,6 +562,7 @@ impl DocumentActorHandle {
             doc_changed_ping_tx.clone(),
             base_dir.into(),
             init,
+            is_host,
         );
 
         tokio::spawn(async move { actor.run().await });
@@ -612,9 +616,9 @@ impl Daemon {
         init: bool,
     ) -> Self {
         // If the peer address is empty, we're the host.
-        //let is_host = peer.is_none();
+        let is_host = peer.is_none();
 
-        let document_handle = DocumentActorHandle::new(base_dir, init);
+        let document_handle = DocumentActorHandle::new(base_dir, init, is_host);
 
         // Initialize file watcher.
         let watcher_document_handle = document_handle.clone();
