@@ -8,6 +8,7 @@ use automerge::{
     AutoCommit, ObjType, Patch, PatchLog, ReadDoc,
 };
 use std::env;
+use std::path::Path;
 use tracing::{debug, info};
 
 /// Encapsulates the Automerge `AutoCommit` and provides a generic interface,
@@ -24,6 +25,20 @@ pub struct Document {
 }
 
 impl Document {
+    pub fn load(file: &Path) -> Self {
+        let bytes = std::fs::read(file).unwrap_or_else(|_| {
+            panic!("Failed to read file {}", file.display());
+        });
+        let doc = AutoCommit::load(&bytes).unwrap_or_else(|_| {
+            panic!("Failed to load Automerge document from {}", file.display());
+        });
+        Self { doc }
+    }
+
+    pub fn save(&mut self) -> Vec<u8> {
+        self.doc.save()
+    }
+
     pub fn actor_id(&self) -> String {
         self.doc.get_actor().to_hex_string()
     }

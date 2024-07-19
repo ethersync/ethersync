@@ -34,6 +34,7 @@ pub enum DocMessage {
     RemoveFile {
         file_path: String,
     },
+    Persist,
     RandomEdit,
     ReceiveSyncMessage {
         message: AutomergeSyncMessage,
@@ -54,6 +55,7 @@ impl fmt::Debug for DocMessage {
             DocMessage::GetContent { .. } => "get content",
             DocMessage::FromEditor(_) => "open/close/edit/... message from editor",
             DocMessage::RemoveFile { .. } => "delete file",
+            DocMessage::Persist => "persist",
             DocMessage::RandomEdit => "random edit",
             DocMessage::ReceiveSyncMessage { .. } => "<automerge internal sync rcv>",
             DocMessage::GenerateSyncMessage { .. } => "<automerge internal sync gen>",
@@ -91,15 +93,33 @@ impl DocumentActor {
         doc_message_rx: mpsc::Receiver<DocMessage>,
         doc_changed_ping_tx: DocChangedSender,
         base_dir: PathBuf,
+        host: bool,
     ) -> Self {
-        Self {
+        // If there is a persisted version in base_dir/.ethersync/doc, load it.
+        // TODO: Pull out ".ethersync" string into a constant.
+        let persistence_file = base_dir.join(".ethersync/doc");
+        let crdt_doc = if persistence_file.exists() {
+            info!("Loading persisted CRDT document from {persistence_file:?}");
+            Document::load(&persistence_file)
+        } else {
+            info!("Initializing a new CRDT document");
+            Document::default()
+        };
+
+        let mut s = Self {
             doc_message_rx,
             doc_changed_ping_tx,
             editor_clients: HashMap::default(),
             base_dir,
             ot_servers: HashMap::default(),
-            crdt_doc: Document::default(),
+            crdt_doc,
+        };
+
+        if !persistence_file.exists() {
+            s.read_current_content_from_dir();
         }
+
+        s
     }
 
     async fn handle_message(&mut self, message: DocMessage) {
@@ -132,6 +152,13 @@ impl DocumentActor {
                     self.crdt_doc.remove_text(&file_path);
                     let _ = self.doc_changed_ping_tx.send(());
                 }
+            }
+            DocMessage::Persist => {
+                debug!("Persisting!");
+                let bytes = self.crdt_doc.save();
+                let persistence_file = self.base_dir.join(".ethersync/doc");
+                std::fs::write(&persistence_file, bytes)
+                    .unwrap_or_else(|_| panic!("Failed to persist to {persistence_file:?}"));
             }
             DocMessage::ReceiveSyncMessage {
                 message,
@@ -428,17 +455,20 @@ impl DocumentActor {
 
     /// Reading in the file is a preparatory step, before kicking off the actor.
     fn read_current_content_from_dir(&mut self) {
+        let ignored_things = vec![".git", ".ethersync"];
         // TODO: How to deal with binary files?
         WalkBuilder::new(self.base_dir.clone())
             .standard_filters(true)
             .hidden(false)
             // Interestingly, the standard filters don't seem to ignore .git.
-            .filter_entry(|dir_entry| {
-                dir_entry
+            .filter_entry(move |dir_entry| {
+                let name = dir_entry
                     .path()
                     .file_name()
                     .expect("Failed to get file name from path.")
-                    != ".git"
+                    .to_str()
+                    .expect("Failed to convert OsStr to str");
+                !ignored_things.contains(&name)
             })
             .build()
             .filter_map(Result::ok)
@@ -464,6 +494,7 @@ impl DocumentActor {
                     }
                 }
             });
+        let _ = self.doc_changed_ping_tx.send(());
     }
 
     fn current_file_content(&self, file_path: &str) -> Result<String> {
@@ -516,13 +547,17 @@ impl DocumentActorHandle {
         // The sync tasks will subscribe to it, and react to it by syncing with the peers.
         let (doc_changed_ping_tx, _doc_changed_ping_rx) = broadcast::channel::<()>(1);
 
-        let mut actor =
-            DocumentActor::new(doc_message_rx, doc_changed_ping_tx.clone(), base_dir.into());
+        let mut actor = DocumentActor::new(
+            doc_message_rx,
+            doc_changed_ping_tx.clone(),
+            base_dir.into(),
+            host,
+        );
 
         // Initialize the text from the file_path, if this is the document owned by the host.
-        if host {
-            actor.read_current_content_from_dir();
-        }
+        //if host {
+        //    actor.read_current_content_from_dir();
+        //}
 
         tokio::spawn(async move { actor.run().await });
 
@@ -583,6 +618,22 @@ impl Daemon {
         let watcher_base_dir = base_dir.to_path_buf();
         tokio::spawn(async move {
             spawn_file_watcher(watcher_base_dir, watcher_document_handle).await;
+        });
+
+        // Initialize persister.
+        let persister_document_handle = document_handle.clone();
+        tokio::spawn(async move {
+            let mut doc_changed_ping_rx = persister_document_handle.subscribe_document_changes();
+
+            persister_document_handle
+                .send_message(DocMessage::Persist)
+                .await;
+
+            while doc_changed_ping_rx.recv().await.is_ok() {
+                persister_document_handle
+                    .send_message(DocMessage::Persist)
+                    .await;
+            }
         });
 
         let connection_document_handle = document_handle.clone();
