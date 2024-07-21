@@ -163,11 +163,13 @@ impl P2PActor {
         let (we_to_peer_tx, we_to_peer_rx) = mpsc::channel(16);
         let (peer_to_us_tx, peer_to_us_rx) = mpsc::channel(16);
 
-        let syncer = SyncActor::new(self.document_handle.clone(), we_to_peer_rx, peer_to_us_tx);
+        let syncer = SyncActor::new(self.document_handle.clone(), peer_to_us_rx, we_to_peer_tx);
         tokio::spawn(async move {
-            syncer.run().await;
+            tokio::spawn(async move {
+                syncer.run().await;
+            });
 
-            match Self::protocol_handler(stream, peer_to_us_rx, we_to_peer_tx).await {
+            match Self::protocol_handler(stream, peer_to_us_tx, we_to_peer_rx).await {
                 Ok(()) => {
                     info!("Sync successful! Do we ever get here?");
                 }
@@ -180,14 +182,14 @@ impl P2PActor {
 
     async fn protocol_handler(
         mut stream: Stream,
-        mut peer_to_us_rx: mpsc::Receiver<AutomergeSyncMessage>,
-        we_to_peer_tx: mpsc::Sender<AutomergeSyncMessage>,
+        peer_to_us_tx: mpsc::Sender<AutomergeSyncMessage>,
+        mut we_to_peer_rx: mpsc::Receiver<AutomergeSyncMessage>,
     ) -> anyhow::Result<()> {
         loop {
             let mut message_len_buf = [0; 4];
 
             tokio::select! {
-                message_maybe = peer_to_us_rx.recv() => {
+                message_maybe = we_to_peer_rx.recv() => {
                     match message_maybe {
                         Some(message) => {
                             let message = message.encode();
@@ -211,7 +213,7 @@ impl P2PActor {
 
                     let message =
                         AutomergeSyncMessage::decode(&message_buf)?;
-                    we_to_peer_tx.send(message).await?;
+                    peer_to_us_tx.send(message).await?;
                 }
             }
         }
