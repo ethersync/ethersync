@@ -793,8 +793,13 @@ impl Daemon {
         });
 
         let connection_document_handle = document_handle.clone();
+        let connection_base_dir = base_dir.to_path_buf();
         tokio::spawn(async move {
-            let p2p_actor = peer::P2PActor::new(peer_connection_info, connection_document_handle);
+            let p2p_actor = peer::P2PActor::new(
+                peer_connection_info,
+                connection_document_handle,
+                &connection_base_dir,
+            );
             let _ = p2p_actor.run().await;
         });
 

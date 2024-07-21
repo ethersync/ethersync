@@ -7,11 +7,13 @@ use futures::{AsyncReadExt, AsyncWriteExt};
 use libp2p::Stream;
 use libp2p::StreamProtocol;
 use libp2p::{multiaddr::Protocol, Multiaddr};
+use libp2p_identity::Keypair;
 use libp2p_stream as stream;
 use std::mem;
 use tokio::sync::{broadcast, mpsc, oneshot};
 use tokio::time::Duration;
 //use tokio_util::sync::CancellationToken;
+use std::path::{Path, PathBuf};
 use tracing::{debug, error, info};
 
 const ETHERSYNC_PROTOCOL: StreamProtocol = StreamProtocol::new("/ethersync");
@@ -43,18 +45,25 @@ impl PeerConnectionInfo {
 pub struct P2PActor {
     connection_info: PeerConnectionInfo,
     document_handle: DocumentActorHandle,
+    base_dir: PathBuf,
 }
 
 impl P2PActor {
-    pub fn new(connection_info: PeerConnectionInfo, document_handle: DocumentActorHandle) -> Self {
+    pub fn new(
+        connection_info: PeerConnectionInfo,
+        document_handle: DocumentActorHandle,
+        base_dir: &Path,
+    ) -> Self {
         Self {
             connection_info,
             document_handle,
+            base_dir: base_dir.to_path_buf(),
         }
     }
 
     pub async fn run(self) -> anyhow::Result<()> {
-        let mut swarm = libp2p::SwarmBuilder::with_new_identity()
+        let keypair = self.get_keypair();
+        let mut swarm = libp2p::SwarmBuilder::with_existing_identity(keypair)
             .with_tokio()
             .with_quic()
             .with_behaviour(|_| stream::Behaviour::new())?
@@ -130,6 +139,23 @@ impl P2PActor {
                 }
                 event => tracing::trace!(?event),
             }
+        }
+    }
+
+    fn get_keypair(&self) -> Keypair {
+        let keyfile = self.base_dir.join(".ethersync").join("key");
+        if keyfile.exists() {
+            info!("Re-using existing keypair");
+            let bytes = std::fs::read(keyfile).expect("Failed to read key file");
+            Keypair::from_protobuf_encoding(&bytes).expect("Failed to deserialize key file")
+        } else {
+            info!("Generating new keypair");
+            let keypair = Keypair::generate_ed25519();
+            let bytes = keypair
+                .to_protobuf_encoding()
+                .expect("Failed to serialize keypair");
+            std::fs::write(keyfile, bytes).expect("Failed to write key file");
+            keypair
         }
     }
 

@@ -35,6 +35,7 @@ dissimilar = "1.0.9"
 path-clean = "1.0.1"
 libp2p = { version = "0.53.2", features = ["tokio", "quic"]}
 libp2p-stream = "0.1.0-alpha.1"
+libp2p-identity = { version ="0.2.9", features = ["ed25519"] }
 
 [dev-dependencies]
 assert_matches = "1.5"

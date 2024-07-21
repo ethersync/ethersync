@@ -789,6 +789,7 @@ dependencies = [
  "ignore",
  "jsonrpc-core",
  "libp2p",
+ "libp2p-identity",
  "libp2p-stream",
  "local-ip-address",
  "notify",
