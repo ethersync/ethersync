@@ -10,14 +10,15 @@ use libp2p::{multiaddr::Protocol, Multiaddr};
 use libp2p_identity::Keypair;
 use libp2p_stream as stream;
 use std::mem;
+use std::path::{Path, PathBuf};
 use tokio::sync::{broadcast, mpsc, oneshot};
 use tokio::time::Duration;
-//use tokio_util::sync::CancellationToken;
-use std::path::{Path, PathBuf};
 use tracing::{debug, error, info};
 
 const ETHERSYNC_PROTOCOL: StreamProtocol = StreamProtocol::new("/ethersync");
 
+/// Responsible for offering peer-to-peer connectivity to the outside world. Uses libp2p.
+/// For every new connection, spawns and runs a SyncActor.
 #[derive(Clone)]
 pub enum PeerConnectionInfo {
     /// Port
@@ -142,6 +143,7 @@ impl P2PActor {
         }
     }
 
+    /// Returns an existing keypair, or generates a new one.
     fn get_keypair(&self) -> Keypair {
         let keyfile = self.base_dir.join(".ethersync").join("key");
         if keyfile.exists() {
@@ -150,6 +152,7 @@ impl P2PActor {
             Keypair::from_protobuf_encoding(&bytes).expect("Failed to deserialize key file")
         } else {
             info!("Generating new keypair");
+            // TODO: Is this the best algorithm?
             let keypair = Keypair::generate_ed25519();
             let bytes = keypair
                 .to_protobuf_encoding()
@@ -180,6 +183,7 @@ impl P2PActor {
         });
     }
 
+    /// Core low-level syncing protocol.
     async fn protocol_handler(
         mut stream: Stream,
         peer_to_us_tx: mpsc::Sender<AutomergeSyncMessage>,
@@ -202,7 +206,8 @@ impl P2PActor {
                                 .await?;
                             }
                         None => {
-                            // TODO: ?
+                            // TODO: What should we do?
+                            error!("None on we_to_peer_rx");
                         }
                     }
                 }
@@ -220,6 +225,9 @@ impl P2PActor {
     }
 }
 
+/// Transport-agnostic logic of how to sync with another peer.
+/// Receives Automerge sync messages on one channel, and sends some out on another.
+/// Maintains the sync state, and communicates with the document.
 struct SyncActor {
     peer_state: SyncState,
     document_handle: DocumentActorHandle,
