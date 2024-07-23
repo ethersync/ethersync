@@ -2,6 +2,7 @@
 use ethersync::actors::{Actor, Neovim};
 use ethersync::daemon::{Daemon, TEST_FILE_PATH};
 use ethersync::logging;
+use ethersync::security;
 use futures::future::join_all;
 use pretty_assertions::assert_eq;
 use rand::Rng;
@@ -26,7 +27,7 @@ fn initialize_project() -> (temp_dir::TempDir, PathBuf) {
     std::fs::create_dir(ethersync_dir).expect("Failed to create .ethersync directory");
 
     let file = dir.child(TEST_FILE_PATH);
-    std::fs::write(&file, "").expect("Failed to create file in temp directory");
+    security::write_file(dir.path(), &file, b"").expect("Failed to create file in temp directory");
 
     (dir, file)
 }

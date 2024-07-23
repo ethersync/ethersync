@@ -2,6 +2,7 @@ use crate::connect;
 use crate::document::Document;
 use crate::editor::EditorHandle;
 use crate::ot::OTServer;
+use crate::security;
 use crate::types::{
     CursorState, EditorProtocolMessageFromEditor, EditorProtocolMessageToEditor, EditorTextDelta,
     FileTextDelta, PatchEffect, Range, RevisionedEditorTextDelta, TextDelta,
@@ -101,7 +102,9 @@ impl DocumentActor {
         let persistence_file = base_dir.join(".ethersync/doc");
         let crdt_doc = if persistence_file.exists() && !init {
             info!("Loading persisted CRDT document from {persistence_file:?}");
-            Document::load(&persistence_file)
+            let bytes = security::read_file(&base_dir, &persistence_file)
+                .unwrap_or_else(|_| panic!("Could not read file '{persistence_file:?}'"));
+            Document::load(&bytes)
         } else {
             info!("Initializing a new CRDT document");
             Document::default()
@@ -161,7 +164,7 @@ impl DocumentActor {
                 debug!("Persisting!");
                 let bytes = self.crdt_doc.save();
                 let persistence_file = self.base_dir.join(".ethersync/doc");
-                std::fs::write(&persistence_file, bytes)
+                security::write_file(&self.base_dir, &persistence_file, &bytes)
                     .unwrap_or_else(|_| panic!("Failed to persist to {persistence_file:?}"));
             }
             DocMessage::ReceiveSyncMessage {
@@ -451,7 +454,7 @@ impl DocumentActor {
                     panic!("Could not create parent directory {}", parent_dir.display())
                 });
 
-                std::fs::write(&abs_path, text)
+                security::write_file(&self.base_dir, Path::new(&abs_path), &text.into_bytes())
                     .unwrap_or_else(|_| panic!("Could not write to file {abs_path}"));
             } else {
                 warn!("Failed to get content of file '{file_path}' when writing to disk. Key should have existed?");
@@ -486,13 +489,14 @@ impl DocumentActor {
             })
             .for_each(|dir_entry| {
                 let file_path = dir_entry.path();
-                match std::fs::read_to_string(file_path) {
-                    Ok(text) => {
+                match security::read_file(&self.base_dir, file_path) {
+                    Ok(bytes) => {
                         let relative_file_path = self.file_path_for_uri(
                             file_path
                                 .to_str()
                                 .expect("Could not convert PathBuf to str"),
                         );
+                        let text = String::from_utf8(bytes).expect("Could not read file as UTF-8");
                         if init {
                             self.crdt_doc.initialize_text(&text, &relative_file_path);
                         } else {
@@ -749,9 +753,9 @@ mod tests {
             let subdir = dir.child("sub");
             std::fs::create_dir(subdir).unwrap();
             let file3 = dir.child("sub/file3");
-            std::fs::write(file1, "content1").unwrap();
-            std::fs::write(file2, "content2").unwrap();
-            std::fs::write(file3, "content3").unwrap();
+            security::write_file(dir.path(), &file1, b"content1").unwrap();
+            security::write_file(dir.path(), &file2, b"content2").unwrap();
+            security::write_file(dir.path(), &file3, b"content3").unwrap();
             dir
         }
 

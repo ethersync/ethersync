@@ -1,4 +1,5 @@
 use crate::daemon::Daemon;
+use crate::security;
 use async_trait::async_trait;
 use nvim_rs::{compat::tokio::Compat, create::tokio::new_child_cmd, rpc::handler::Dummy};
 use rand::Rng;
@@ -61,7 +62,8 @@ impl Neovim {
         let ethersync_dir = dir.child(".ethersync");
         std::fs::create_dir(ethersync_dir).unwrap();
         let file_path = dir.child("test");
-        std::fs::write(&file_path, initial_content).unwrap();
+        security::write_file(dir.path(), &file_path, initial_content.as_bytes())
+            .expect("Failed to write initial file content");
 
         (Self::new(file_path.clone()).await, file_path)
     }
