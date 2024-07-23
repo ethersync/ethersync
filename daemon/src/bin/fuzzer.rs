@@ -24,7 +24,8 @@ fn initialize_project() -> (temp_dir::TempDir, PathBuf) {
     let dir = temp_dir::TempDir::new().expect("Failed to create temp directory");
     let mut ethersync_dir = dir.path().to_path_buf();
     ethersync_dir.push(".ethersync");
-    std::fs::create_dir(ethersync_dir).expect("Failed to create .ethersync directory");
+    security::create_dir(dir.path(), &ethersync_dir)
+        .expect("Failed to create .ethersync directory");
 
     let file = dir.child(TEST_FILE_PATH);
     security::write_file(dir.path(), &file, b"").expect("Failed to create file in temp directory");

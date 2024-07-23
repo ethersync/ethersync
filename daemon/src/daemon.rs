@@ -188,10 +188,13 @@ impl DocumentActor {
                             cursor_states.push(cursor_state);
                         }
                         PatchEffect::FileRemoval(file_path) => {
-                            std::fs::remove_file(self.absolute_path_for_file_path(&file_path))
-                                .unwrap_or_else(|err| {
-                                    warn!("Failed to remove file {file_path}: {err}")
-                                });
+                            security::remove_file(
+                                &self.base_dir,
+                                Path::new(&self.absolute_path_for_file_path(&file_path)),
+                            )
+                            .unwrap_or_else(|err| {
+                                warn!("Failed to remove file {file_path}: {err}")
+                            });
                         }
                         PatchEffect::NoEffect => {}
                     }
@@ -450,7 +453,7 @@ impl DocumentActor {
 
                 // Create the parent directorie(s), if neccessary.
                 let parent_dir = Path::new(&abs_path).parent().unwrap();
-                std::fs::create_dir_all(parent_dir).unwrap_or_else(|_| {
+                security::create_dir_all(&self.base_dir, parent_dir).unwrap_or_else(|_| {
                     panic!("Could not create parent directory {}", parent_dir.display())
                 });
 
@@ -751,7 +754,7 @@ mod tests {
             let file1 = dir.child("file1");
             let file2 = dir.child("file2");
             let subdir = dir.child("sub");
-            std::fs::create_dir(subdir).unwrap();
+            security::create_dir(dir.path(), &subdir).unwrap();
             let file3 = dir.child("sub/file3");
             security::write_file(dir.path(), &file1, b"content1").unwrap();
             security::write_file(dir.path(), &file2, b"content2").unwrap();
@@ -803,16 +806,16 @@ mod tests {
 
             // Thus, we only expect file1 to be changed on disk.
             assert_eq!(
-                std::fs::read_to_string(dir.child("file1")).unwrap(),
-                "foobarcontent1",
+                security::read_file(dir.path(), &dir.child("file1")).unwrap(),
+                b"foobarcontent1",
             );
             assert_eq!(
-                std::fs::read_to_string(dir.child("file2")).unwrap(),
-                "content2",
+                security::read_file(dir.path(), &dir.child("file2")).unwrap(),
+                b"content2",
             );
             assert_eq!(
-                std::fs::read_to_string(dir.child("sub/file3")).unwrap(),
-                "content3",
+                security::read_file(dir.path(), &dir.child("sub/file3")).unwrap(),
+                b"content3",
             );
         }
 

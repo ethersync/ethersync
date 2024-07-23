@@ -4,7 +4,6 @@ use async_trait::async_trait;
 use nvim_rs::{compat::tokio::Compat, create::tokio::new_child_cmd, rpc::handler::Dummy};
 use rand::Rng;
 use serde_json::Value as JSONValue;
-use std::fs;
 use std::path::{Path, PathBuf};
 use temp_dir::TempDir;
 use tokio::{
@@ -60,7 +59,7 @@ impl Neovim {
     async fn new_ethersync_enabled(initial_content: &str) -> (Self, PathBuf) {
         let dir = TempDir::new().unwrap();
         let ethersync_dir = dir.child(".ethersync");
-        std::fs::create_dir(ethersync_dir).unwrap();
+        security::create_dir(dir.path(), &ethersync_dir).unwrap();
         let file_path = dir.child("test");
         security::write_file(dir.path(), &file_path, initial_content.as_bytes())
             .expect("Failed to write initial file content");
@@ -179,7 +178,8 @@ struct MockSocket {
 impl MockSocket {
     fn new(socket_path: &str, ignore_reads: bool) -> Self {
         if Path::new(socket_path).exists() {
-            fs::remove_file(socket_path).expect("Could not remove existing socket file");
+            security::remove_file(Path::new("/tmp"), Path::new(socket_path))
+                .expect("Could not remove socket");
         }
 
         let listener = UnixListener::bind(socket_path).expect("Could not bind to socket");
