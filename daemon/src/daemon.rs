@@ -504,6 +504,15 @@ impl DocumentActor {
                     }
                 }
             });
+        for file_path in self.crdt_doc.files() {
+            let absolute_file_path = self.absolute_path_for_file_path(&file_path);
+            if !Path::new(&absolute_file_path).exists() {
+                warn!(
+                    "File '{file_path}' exists in the CRDT, but not on disk. Deleting from CRDT."
+                );
+                self.crdt_doc.remove_text(&file_path);
+            }
+        }
         let _ = self.doc_changed_ping_tx.send(());
     }
 
@@ -670,7 +679,6 @@ async fn spawn_file_watcher(base_dir: PathBuf, document_handle: DocumentActorHan
                     if let notify::event::EventKind::Remove(notify::event::RemoveKind::File) =
                         event.kind
                     {
-                        println!("event: {:?}", event);
                         for path in event.paths {
                             document_handle
                                 .send_message(DocMessage::RemoveFile {
@@ -683,7 +691,7 @@ async fn spawn_file_watcher(base_dir: PathBuf, document_handle: DocumentActorHan
                         }
                     }
                 }
-                Err(e) => println!("watch error: {:?}", e),
+                Err(e) => panic!("watch error: {:?}", e),
             }
         })
     })

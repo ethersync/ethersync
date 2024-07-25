@@ -191,6 +191,13 @@ impl Document {
         }
     }
 
+    pub fn files(&self) -> Vec<String> {
+        let file_map = self
+            .top_level_map_obj("files")
+            .expect("Failed to get files store from document");
+        self.doc.keys(file_map).collect()
+    }
+
     pub fn store_cursor_position(&mut self, userid: String, file_path: String, ranges: Vec<Range>) {
         let state_map = self
             .top_level_map_obj("states")
