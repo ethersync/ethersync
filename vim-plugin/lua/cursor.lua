@@ -12,7 +12,7 @@ local M = {}
 local user_cursors = {}
 local cursor_namespace = vim.api.nvim_create_namespace("Ethersync")
 local offset_encoding = "utf-32"
-local cursor_timeout_ms = 30 * 1000
+local cursor_timeout_ms = 300 * 1000
 
 local function show_cursor_information(name, cursor)
     return name .. " @ " .. vim.uri_to_fname(cursor.uri) .. ":" .. cursor.range.start.line + 1
