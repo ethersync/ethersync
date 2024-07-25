@@ -334,7 +334,7 @@ impl TryFrom<Patch> for PatchEffect {
                             // We return an empty delta on the new file, so that the file is created on disk when
                             // synced over to another peer. TODO: Is this the best way to solve this?
                             if conflict {
-                                warn!("Resolved conflict for file '{key}' by overwriting one of the versions");
+                                warn!("Resolved conflict for file '{key}' by overwriting your version");
                             }
                             Ok(PatchEffect::FileChange(FileTextDelta::new(key, delta)))
                         }
@@ -347,7 +347,9 @@ impl TryFrom<Patch> for PatchEffect {
                             // This can happen when both sides create the same file.
                             match prop {
                                 automerge::Prop::Map(file_name) => {
-                                    warn!("Conflict for file '{file_name}'");
+                                    // We assume that conflict resolution works the way, that the
+                                    // side that gets the PatchAction is the one that "wins".
+                                    warn!("Conflict for file '{file_name}' resolved. Taking your version");
                                     Ok(PatchEffect::NoEffect)
                                 }
                                 other_prop => Err(anyhow::anyhow!(
