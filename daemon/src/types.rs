@@ -329,10 +329,13 @@ impl TryFrom<Patch> for PatchEffect {
             (_, automerge::Prop::Map(key)) if key == "files" => {
                 if patch.path.len() == 1 {
                     match patch.action {
-                        PatchAction::PutMap { key, .. } => {
+                        PatchAction::PutMap { key, conflict, .. } => {
                             // This action happens when a new file is created.
                             // We return an empty delta on the new file, so that the file is created on disk when
                             // synced over to another peer. TODO: Is this the best way to solve this?
+                            if conflict {
+                                warn!("Resolved conflict for file '{key}' by overwriting one of the versions");
+                            }
                             Ok(PatchEffect::FileChange(FileTextDelta::new(key, delta)))
                         }
                         PatchAction::DeleteMap { key } => {
