@@ -1,6 +1,6 @@
 #![allow(dead_code)]
 use automerge::{Patch, PatchAction};
-use difference::Changeset;
+use dissimilar::Chunk;
 use operational_transform::{Operation as OTOperation, OperationSeq};
 use ropey::Rope;
 use serde::{Deserialize, Serialize};
@@ -519,19 +519,19 @@ impl TextDelta {
     }
 }
 
-impl From<Changeset> for TextDelta {
-    fn from(changeset: Changeset) -> Self {
+impl<'a> From<Vec<Chunk<'a>>> for TextDelta {
+    fn from(chunks: Vec<Chunk>) -> Self {
         let mut delta = TextDelta::default();
-        for change in changeset.diffs {
-            match change {
-                difference::Difference::Same(string) => {
-                    delta.retain(string.chars().count());
+        for chunk in chunks {
+            match chunk {
+                Chunk::Equal(s) => {
+                    delta.retain(s.chars().count());
                 }
-                difference::Difference::Add(string) => {
-                    delta.insert(&string);
+                Chunk::Delete(s) => {
+                    delta.delete(s.chars().count());
                 }
-                difference::Difference::Rem(string) => {
-                    delta.delete(string.chars().count());
+                Chunk::Insert(s) => {
+                    delta.insert(s);
                 }
             }
         }
@@ -770,15 +770,16 @@ mod tests {
     }
 
     // Test conversion from the difference crate.
-    mod difference {
-        use super::{Changeset, TextDelta};
+    mod dissimilar {
+        use super::TextDelta;
+        use dissimilar::diff;
 
         #[test]
         fn same() {
             let mut delta = TextDelta::default();
             delta.retain(6);
 
-            assert_eq!(delta, Changeset::new("tö🥕s\nt", "tö🥕s\nt", "").into());
+            assert_eq!(delta, diff("tö🥕s\nt", "tö🥕s\nt").into());
         }
 
         #[test]
@@ -788,7 +789,7 @@ mod tests {
             delta.insert("ü");
             delta.retain(3);
 
-            assert_eq!(delta, Changeset::new("tö🥕s\nt", "tö🥕üs\nt", "").into());
+            assert_eq!(delta, diff("tö🥕s\nt", "tö🥕üs\nt").into());
         }
 
         #[test]
@@ -798,7 +799,7 @@ mod tests {
             delta.delete(1);
             delta.retain(3);
 
-            assert_eq!(delta, Changeset::new("tö🥕s\nt", "tös\nt", "").into());
+            assert_eq!(delta, diff("tö🥕s\nt", "tös\nt").into());
         }
     }
 

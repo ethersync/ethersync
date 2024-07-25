@@ -636,6 +636,7 @@ impl Daemon {
                 .send_message(DocMessage::Persist)
                 .await;
 
+            // TODO: debounce / slow down?
             while doc_changed_ping_rx.recv().await.is_ok() {
                 persister_document_handle
                     .send_message(DocMessage::Persist)

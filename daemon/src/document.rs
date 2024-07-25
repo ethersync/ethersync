@@ -6,7 +6,7 @@ use automerge::{
     transaction::Transactable,
     AutoCommit, ObjType, Patch, PatchLog, ReadDoc,
 };
-use difference::Changeset;
+use dissimilar::Chunk;
 use std::env;
 use std::path::Path;
 use tracing::{debug, info, warn};
@@ -134,14 +134,12 @@ impl Document {
                 .current_file_content(file_path)
                 .unwrap_or_else(|_| panic!("Failed to get '{file_path}' text object"));
 
-            let changeset = Changeset::new(&current_text, desired_text, "");
-
-            if changeset.distance == 0 {
-                // No changes, nothing to do.
+            let chunks = dissimilar::diff(&current_text, desired_text);
+            if let [] | [Chunk::Equal(_)] = chunks.as_slice() {
                 return;
             }
 
-            let text_delta: TextDelta = changeset.into();
+            let text_delta: TextDelta = chunks.into();
             let editor_delta = EditorTextDelta::from_delta(text_delta, &current_text);
             warn!("File {file_path} has changed while the daemon was offline. Applying delta: {editor_delta:?}");
             self.apply_delta_to_doc(&editor_delta, file_path);
