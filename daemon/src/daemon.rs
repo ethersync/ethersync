@@ -719,7 +719,13 @@ mod tests {
                 // The sync tasks will subscribe to it, and react to it by syncing with the peers.
                 let (doc_changed_ping_tx, _doc_changed_ping_rx) = broadcast::channel::<()>(1);
 
-                DocumentActor::new(doc_message_rx, doc_changed_ping_tx.clone(), directory, true)
+                DocumentActor::new(
+                    doc_message_rx,
+                    doc_changed_ping_tx.clone(),
+                    directory,
+                    true,
+                    true,
+                )
             }
             fn assert_file_content(&self, file_path: &str, content: &str) {
                 // unfortunately anyhow::Error doesn't implement PartialEq, so we'll rather unwrap.
@@ -745,7 +751,7 @@ mod tests {
             let dir = setup_filesystem_for_testing();
             let mut actor = DocumentActor::setup_for_testing(dir.path().to_path_buf());
 
-            actor.read_current_content_from_dir();
+            actor.read_current_content_from_dir(true);
 
             actor.assert_file_content("file1", "content1");
             actor.assert_file_content("file2", "content2");
@@ -759,7 +765,7 @@ mod tests {
             debug!("{}", dir.path().display());
             let mut actor = DocumentActor::setup_for_testing(dir.path().to_path_buf());
 
-            actor.read_current_content_from_dir();
+            actor.read_current_content_from_dir(true);
 
             // One change to rule them all.
             let ed_delta = ed_delta_single((0, 0), (0, 0), "foobar");
@@ -844,7 +850,7 @@ mod tests {
         fn test_simulate_editor_edits() {
             let dir = setup_filesystem_for_testing();
             let mut actor = DocumentActor::setup_for_testing(dir.path().to_path_buf());
-            actor.read_current_content_from_dir();
+            actor.read_current_content_from_dir(true);
 
             let file_path = "file1".to_string();
 

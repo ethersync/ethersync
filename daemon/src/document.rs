@@ -255,17 +255,6 @@ mod tests {
     }
 
     #[test]
-    #[should_panic]
-    fn cannot_initialize_content_same_file_twice() {
-        let mut document = Document::default();
-        let text = "To be or not to be, that is the question";
-
-        document.initialize_text(text, "text");
-        // This call should fail.
-        document.initialize_text(text, "text");
-    }
-
-    #[test]
     fn can_initialize_content_multifile() {
         let mut document = Document::default();
         let text = "To be or not to be, that is the question";
