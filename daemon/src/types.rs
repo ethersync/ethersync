@@ -4,7 +4,7 @@ use dissimilar::Chunk;
 use operational_transform::{Operation as OTOperation, OperationSeq};
 use ropey::Rope;
 use serde::{Deserialize, Serialize};
-use tracing::debug;
+use tracing::{debug, warn};
 
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct TextDelta(pub Vec<TextOp>);
@@ -340,11 +340,18 @@ impl TryFrom<Patch> for PatchEffect {
                             debug!("Got file removal from patch: {key}");
                             Ok(PatchEffect::FileRemoval(key))
                         }
-                        PatchAction::Conflict { .. } => {
+                        PatchAction::Conflict { prop } => {
                             // This can happen when both sides create the same file.
-                            // We ignore it for now.
-                            // TODO: Should we use this information somehow?
-                            Ok(PatchEffect::NoEffect)
+                            match prop {
+                                automerge::Prop::Map(file_name) => {
+                                    warn!("Conflict for file '{file_name}");
+                                    Ok(PatchEffect::NoEffect)
+                                }
+                                other_prop => Err(anyhow::anyhow!(
+                                    "Got a Seq-type prop as a conflict, expected Map: {}",
+                                    other_prop
+                                )),
+                            }
                         }
                         other_action => Err(anyhow::anyhow!(
                             "Unsupported patch action for path 'files': {}",
