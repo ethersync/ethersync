@@ -140,4 +140,8 @@ async fn main() {
     }
 
     println!("SUCCESS! 🥳");
+
+    // Quit immediately, so that we don't run into cleanup issues, which would make our CI fail...
+    // TODO: Handle shutdown more gracefully.
+    std::process::exit(0);
 }

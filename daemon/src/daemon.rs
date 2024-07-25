@@ -12,11 +12,15 @@ use automerge::{
     Patch,
 };
 use ignore::WalkBuilder;
+use notify::{RecursiveMode, Result as NotifyResult, Watcher};
 use rand::Rng;
 use std::collections::{HashMap, HashSet};
 use std::fmt;
 use std::path::{Path, PathBuf};
-use tokio::sync::{broadcast, mpsc, oneshot};
+use tokio::{
+    sync::{broadcast, mpsc, oneshot},
+    time::Duration,
+};
 use tracing::{debug, info, warn};
 
 pub const TEST_FILE_PATH: &str = "text";
@@ -27,6 +31,9 @@ pub enum DocMessage {
         response_tx: oneshot::Sender<Result<String>>,
     },
     FromEditor(EditorProtocolMessageFromEditor),
+    RemoveFile {
+        file_path: String,
+    },
     RandomEdit,
     ReceiveSyncMessage {
         message: AutomergeSyncMessage,
@@ -46,6 +53,7 @@ impl fmt::Debug for DocMessage {
         let repr = match self {
             DocMessage::GetContent { .. } => "get content",
             DocMessage::FromEditor(_) => "open/close/edit/... message from editor",
+            DocMessage::RemoveFile { .. } => "delete file",
             DocMessage::RandomEdit => "random edit",
             DocMessage::ReceiveSyncMessage { .. } => "<automerge internal sync rcv>",
             DocMessage::GenerateSyncMessage { .. } => "<automerge internal sync gen>",
@@ -116,6 +124,15 @@ impl DocumentActor {
                 .await;
             }
             DocMessage::FromEditor(message) => self.handle_message_from_editor(message).await,
+            DocMessage::RemoveFile { file_path } => {
+                // TODO: This is a workaround. Handle this case better by returning a Result in
+                // file_path_for_uri! The deletion happens when the fuzzer removes the temp dir.
+                if file_path.as_str() != self.base_dir.as_os_str() {
+                    let file_path = self.file_path_for_uri(&file_path);
+                    self.crdt_doc.remove_text(&file_path);
+                    let _ = self.doc_changed_ping_tx.send(());
+                }
+            }
             DocMessage::ReceiveSyncMessage {
                 message,
                 state: mut peer_state,
@@ -135,6 +152,10 @@ impl DocumentActor {
                         }
                         PatchEffect::CursorChange(cursor_state) => {
                             cursor_states.push(cursor_state);
+                        }
+                        PatchEffect::FileRemoval(file_path) => {
+                            std::fs::remove_file(self.absolute_path_for_file_path(&file_path))
+                                .unwrap_or_else(|_| panic!("Failed to delete file {file_path}"));
                         }
                         PatchEffect::NoEffect => {}
                     }
@@ -227,9 +248,16 @@ impl DocumentActor {
     }
 
     fn open_file_path(&mut self, file_path: String) {
-        let ot_server = OTServer::new(self.current_file_content(&file_path).unwrap_or_else(|_| {
-            panic!("Could not open file {file_path}, because it doesn't exist in the CRDT")
-        }));
+        let text = match self.current_file_content(&file_path) {
+            Ok(text) => text,
+            Err(_) => {
+                // The file doesn't exist yet - create it in the Automerge document.
+                let text = "".to_string();
+                self.crdt_doc.initialize_text(&text, &file_path);
+                text
+            }
+        };
+        let ot_server = OTServer::new(text);
         self.ot_servers.insert(file_path, ot_server);
     }
 
@@ -550,6 +578,13 @@ impl Daemon {
 
         let document_handle = DocumentActorHandle::new(base_dir, is_host);
 
+        // Initialize file watcher.
+        let watcher_document_handle = document_handle.clone();
+        let watcher_base_dir = base_dir.to_path_buf();
+        tokio::spawn(async move {
+            spawn_file_watcher(watcher_base_dir, watcher_document_handle).await;
+        });
+
         let connection_document_handle = document_handle.clone();
         let peer_info = connect::PeerConnectionInfo::new(port, peer);
         tokio::spawn(async move {
@@ -563,6 +598,47 @@ impl Daemon {
         });
 
         Self { document_handle }
+    }
+}
+
+async fn spawn_file_watcher(base_dir: PathBuf, document_handle: DocumentActorHandle) {
+    // Beware of the file watching spaghetti triangle monster.
+    let mut watcher = notify::recommended_watcher(move |res: NotifyResult<notify::Event>| {
+        futures::executor::block_on(async {
+            match res {
+                Ok(event) => {
+                    // TODO: On Linux, even a directory deletion seems to yield a Remove(File)?
+                    if let notify::event::EventKind::Remove(notify::event::RemoveKind::File) =
+                        event.kind
+                    {
+                        println!("event: {:?}", event);
+                        for path in event.paths {
+                            document_handle
+                                .send_message(DocMessage::RemoveFile {
+                                    file_path: path
+                                        .to_str()
+                                        .expect("Failed to convert path to string")
+                                        .into(),
+                                })
+                                .await;
+                        }
+                    }
+                }
+                Err(e) => println!("watch error: {:?}", e),
+            }
+        })
+    })
+    .expect("Failed to initialize file watcher");
+
+    // Add a path to be watched. All files and directories at that path and
+    // below will be monitored for changes.
+    watcher
+        .watch(&base_dir, RecursiveMode::Recursive)
+        .expect("Failed to watch directory");
+
+    // TODO: can this be event based?
+    loop {
+        tokio::time::sleep(Duration::from_millis(100)).await;
     }
 }
 
