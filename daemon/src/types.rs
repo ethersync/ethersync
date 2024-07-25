@@ -1,9 +1,10 @@
 #![allow(dead_code)]
 use automerge::{Patch, PatchAction};
+use dissimilar::Chunk;
 use operational_transform::{Operation as OTOperation, OperationSeq};
 use ropey::Rope;
 use serde::{Deserialize, Serialize};
-use tracing::debug;
+use tracing::{debug, warn};
 
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct TextDelta(pub Vec<TextOp>);
@@ -328,16 +329,34 @@ impl TryFrom<Patch> for PatchEffect {
             (_, automerge::Prop::Map(key)) if key == "files" => {
                 if patch.path.len() == 1 {
                     match patch.action {
-                        PatchAction::PutMap { key, .. } => {
+                        PatchAction::PutMap { key, conflict, .. } => {
                             // This action happens when a new file is created.
                             // We return an empty delta on the new file, so that the file is created on disk when
                             // synced over to another peer. TODO: Is this the best way to solve this?
+                            if conflict {
+                                warn!("Resolved conflict for file '{key}' by overwriting your version");
+                            }
                             Ok(PatchEffect::FileChange(FileTextDelta::new(key, delta)))
                         }
                         PatchAction::DeleteMap { key } => {
                             // This action happens when a file is deleted.
                             debug!("Got file removal from patch: {key}");
                             Ok(PatchEffect::FileRemoval(key))
+                        }
+                        PatchAction::Conflict { prop } => {
+                            // This can happen when both sides create the same file.
+                            match prop {
+                                automerge::Prop::Map(file_name) => {
+                                    // We assume that conflict resolution works the way, that the
+                                    // side that gets the PatchAction is the one that "wins".
+                                    warn!("Conflict for file '{file_name}' resolved. Taking your version");
+                                    Ok(PatchEffect::NoEffect)
+                                }
+                                other_prop => Err(anyhow::anyhow!(
+                                    "Got a Seq-type prop as a conflict, expected Map: {}",
+                                    other_prop
+                                )),
+                            }
                         }
                         other_action => Err(anyhow::anyhow!(
                             "Unsupported patch action for path 'files': {}",
@@ -507,6 +526,26 @@ impl TextDelta {
                 }
             }
             delta = delta.compose(delta_step);
+        }
+        delta
+    }
+}
+
+impl<'a> From<Vec<Chunk<'a>>> for TextDelta {
+    fn from(chunks: Vec<Chunk>) -> Self {
+        let mut delta = TextDelta::default();
+        for chunk in chunks {
+            match chunk {
+                Chunk::Equal(s) => {
+                    delta.retain(s.chars().count());
+                }
+                Chunk::Delete(s) => {
+                    delta.delete(s.chars().count());
+                }
+                Chunk::Insert(s) => {
+                    delta.insert(s);
+                }
+            }
         }
         delta
     }
@@ -740,6 +779,69 @@ mod tests {
         ]);
 
         assert_eq!(expected_ed_delta, ed_delta);
+    }
+
+    // Test conversion from the difference crate.
+    mod dissimilar {
+        use super::TextDelta;
+        use dissimilar::diff;
+
+        #[test]
+        fn same() {
+            let mut delta = TextDelta::default();
+            delta.retain(6);
+
+            assert_eq!(delta, diff("tö🥕s\nt", "tö🥕s\nt").into());
+        }
+
+        #[test]
+        fn insertion() {
+            let mut delta = TextDelta::default();
+            delta.retain(3);
+            delta.insert("ü");
+            delta.retain(3);
+
+            assert_eq!(delta, diff("tö🥕s\nt", "tö🥕üs\nt").into());
+        }
+
+        #[test]
+        fn deletion() {
+            let mut delta = TextDelta::default();
+            delta.retain(2);
+            delta.delete(1);
+            delta.retain(3);
+
+            assert_eq!(delta, diff("tö🥕s\nt", "tös\nt").into());
+        }
+
+        #[test]
+        fn complex() {
+            let mut delta = TextDelta::default();
+            // word => werd
+            delta.retain(1);
+            delta.delete(1);
+            delta.insert("e");
+
+            // word => wordle
+            delta.retain(7);
+            delta.insert("le");
+
+            // word => word
+            delta.retain(6);
+
+            // word => vorort
+            delta.delete(1);
+            delta.insert("vor");
+            delta.retain(2);
+            delta.delete(1);
+            delta.insert("t");
+            delta.retain(1);
+
+            assert_eq!(
+                delta,
+                diff("word\nword\nword\nword\n", "werd\nwordle\nword\nvorort\n").into()
+            );
+        }
     }
 
     mod position {

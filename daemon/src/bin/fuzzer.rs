@@ -47,7 +47,13 @@ async fn main() {
     let (dir2, file2) = initialize_project();
 
     // Set up the actors.
-    let daemon = Daemon::new(Some(2424), None, Path::new("/tmp/ethersync"), dir.path());
+    let daemon = Daemon::new(
+        Some(2424),
+        None,
+        Path::new("/tmp/ethersync"),
+        dir.path(),
+        true,
+    );
 
     let nvim = Neovim::new(file).await;
 
@@ -56,6 +62,7 @@ async fn main() {
         Some("127.0.0.1:2424".to_string()),
         Path::new("/tmp/etherbonk"),
         dir2.path(),
+        false,
     );
     // Make sure peer has synced with the other daemon before connecting Vim!
     // Otherwise, peer might not have a document yet.

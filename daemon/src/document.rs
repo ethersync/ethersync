@@ -1,5 +1,4 @@
-use crate::types::EditorTextDelta;
-use crate::types::{CursorState, Range};
+use crate::types::{CursorState, EditorTextDelta, Range, TextDelta};
 use anyhow::Result;
 use automerge::{
     patches::TextRepresentation,
@@ -7,8 +6,10 @@ use automerge::{
     transaction::Transactable,
     AutoCommit, ObjType, Patch, PatchLog, ReadDoc,
 };
+use dissimilar::Chunk;
 use std::env;
-use tracing::{debug, info};
+use std::path::Path;
+use tracing::{debug, info, warn};
 
 /// Encapsulates the Automerge `AutoCommit` and provides a generic interface,
 /// s.t. we don't need to worry about automerge internals elsewhere.
@@ -24,6 +25,20 @@ pub struct Document {
 }
 
 impl Document {
+    pub fn load(file: &Path) -> Self {
+        let bytes = std::fs::read(file).unwrap_or_else(|_| {
+            panic!("Failed to read file {}", file.display());
+        });
+        let doc = AutoCommit::load(&bytes).unwrap_or_else(|_| {
+            panic!("Failed to load Automerge document from {}", file.display());
+        });
+        Self { doc }
+    }
+
+    pub fn save(&mut self) -> Vec<u8> {
+        self.doc.save()
+    }
+
     pub fn actor_id(&self) -> String {
         self.doc.get_actor().to_hex_string()
     }
@@ -90,14 +105,6 @@ impl Document {
 
     pub fn initialize_text(&mut self, text: &str, file_path: &str) {
         info!("Initializing {file_path} in CRDT");
-        if self.text_obj(file_path).is_ok() {
-            // While automerge accepts putting an object multiple times, in our current
-            // architecture this should not happen: Only the host should initialize every file
-            // once, while peers just take in whatever already exists.
-            //
-            // This might change in a future more peer to peer world.
-            panic!("It seems {file_path} was already initialized.");
-        }
 
         // TODO: I don't love the assumption that the first document to initialize a text
         // object should initialize the maps...
@@ -117,6 +124,30 @@ impl Document {
         self.doc
             .splice_text(text_obj, 0, 0, text)
             .expect("Failed to splice text into Automerge text object");
+    }
+
+    // This function is used to integrate text that was changed while the daemon was offline.
+    // We need to calculate the patches compared to the current CRDT content, and apply them.
+    pub fn update_text(&mut self, desired_text: &str, file_path: &str) {
+        if self.text_obj(file_path).is_ok() {
+            let current_text = self
+                .current_file_content(file_path)
+                .unwrap_or_else(|_| panic!("Failed to get '{file_path}' text object"));
+
+            let chunks = dissimilar::diff(&current_text, desired_text);
+            if let [] | [Chunk::Equal(_)] = chunks.as_slice() {
+                return;
+            }
+
+            let text_delta: TextDelta = chunks.into();
+            let editor_delta = EditorTextDelta::from_delta(text_delta, &current_text);
+            warn!("File {file_path} has changed while the daemon was offline. Applying delta: {editor_delta:?}");
+            self.apply_delta_to_doc(&editor_delta, file_path);
+        } else {
+            // The file doesn't exist in the CRDT yet, so we need to initialize it.
+            info!("File {file_path} doesn't exist in CRDT yet. Initializing it.");
+            self.initialize_text(desired_text, file_path);
+        }
     }
 
     pub fn remove_text(&mut self, file_path: &str) {
@@ -158,6 +189,13 @@ impl Document {
                 "Automerge document doesn't have a {file_path} Text object, so I can't provide it"
             ))
         }
+    }
+
+    pub fn files(&self) -> Vec<String> {
+        let file_map = self
+            .top_level_map_obj("files")
+            .expect("Failed to get files store from document");
+        self.doc.keys(file_map).collect()
     }
 
     pub fn store_cursor_position(&mut self, userid: String, file_path: String, ranges: Vec<Range>) {
@@ -219,17 +257,6 @@ mod tests {
         document.initialize_text(text, "text");
 
         document.assert_file_content("text", text);
-    }
-
-    #[test]
-    #[should_panic]
-    fn cannot_initialize_content_same_file_twice() {
-        let mut document = Document::default();
-        let text = "To be or not to be, that is the question";
-
-        document.initialize_text(text, "text");
-        // This call should fail.
-        document.initialize_text(text, "text");
     }
 
     #[test]

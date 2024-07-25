@@ -39,6 +39,9 @@ enum Commands {
         /// IP + port of a peer to connect to. Example: 192.168.1.42:1234
         #[arg(long)]
         peer: Option<String>,
+        /// Initialize the current contents of the directory as a new Ethersync directory.
+        #[arg(long, default_value = "false")]
+        init: bool,
     },
     /// Open a JSON-RPC connection to the Ethersync daemon on stdin/stdout.
     Client,
@@ -68,6 +71,7 @@ async fn main() -> io::Result<()> {
             port,
             directory,
             peer,
+            init,
         } => {
             let directory = directory
                 .unwrap_or(std::env::current_dir().expect("Could not access current directory"))
@@ -82,7 +86,7 @@ async fn main() -> io::Result<()> {
                 return Ok(());
             }
             info!("Starting Ethersync on {}", directory.display());
-            Daemon::new(port, peer, &socket_path, &directory);
+            Daemon::new(port, peer, &socket_path, &directory, init);
             match signal::ctrl_c().await {
                 Ok(()) => {}
                 Err(err) => {
