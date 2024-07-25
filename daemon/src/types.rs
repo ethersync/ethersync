@@ -808,6 +808,35 @@ mod tests {
 
             assert_eq!(delta, diff("tö🥕s\nt", "tös\nt").into());
         }
+
+        #[test]
+        fn complex() {
+            let mut delta = TextDelta::default();
+            // word => werd
+            delta.retain(1);
+            delta.delete(1);
+            delta.insert("e");
+
+            // word => wordle
+            delta.retain(7);
+            delta.insert("le");
+
+            // word => word
+            delta.retain(6);
+
+            // word => vorort
+            delta.delete(1);
+            delta.insert("vor");
+            delta.retain(2);
+            delta.delete(1);
+            delta.insert("t");
+            delta.retain(1);
+
+            assert_eq!(
+                delta,
+                diff("word\nword\nword\nword\n", "werd\nwordle\nword\nvorort\n").into()
+            );
+        }
     }
 
     mod position {
