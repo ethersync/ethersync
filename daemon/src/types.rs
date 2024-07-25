@@ -347,7 +347,7 @@ impl TryFrom<Patch> for PatchEffect {
                             // This can happen when both sides create the same file.
                             match prop {
                                 automerge::Prop::Map(file_name) => {
-                                    warn!("Conflict for file '{file_name}");
+                                    warn!("Conflict for file '{file_name}'");
                                     Ok(PatchEffect::NoEffect)
                                 }
                                 other_prop => Err(anyhow::anyhow!(
