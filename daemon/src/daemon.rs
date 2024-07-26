@@ -255,30 +255,46 @@ impl DocumentActor {
 
     async fn handle_message_from_editor(
         &mut self,
-        _editor_id: EditorId,
+        editor_id: EditorId,
         message: EditorProtocolMessageFromEditor,
     ) {
         match message {
-            EditorProtocolMessageFromEditor::Request { id: _id, payload } => match payload {
-                EditorProtocolRequestFromEditor::Open { uri } => {
-                    let file_path = self.file_path_for_uri(&uri);
-                    debug!("Got an 'open' message for {file_path}");
-                    self.open_file_path(file_path);
-                }
-                EditorProtocolRequestFromEditor::Edit {
-                    delta: rev_delta,
-                    uri,
-                } => {
-                    debug!("Handling RevDelta from editor: {:#?}", rev_delta);
-                    let file_path = self.file_path_for_uri(&uri);
-                    let (editor_delta_for_crdt, rev_deltas_for_editor) =
-                        self.apply_delta_to_ot(rev_delta, &file_path);
+            EditorProtocolMessageFromEditor::Request { id, payload } => {
+                match payload {
+                    EditorProtocolRequestFromEditor::Open { uri } => {
+                        let file_path = self.file_path_for_uri(&uri);
+                        debug!("Got an 'open' message for {file_path}");
+                        self.open_file_path(file_path);
+                    }
+                    EditorProtocolRequestFromEditor::Edit {
+                        delta: rev_delta,
+                        uri,
+                    } => {
+                        debug!("Handling RevDelta from editor: {:#?}", rev_delta);
+                        let file_path = self.file_path_for_uri(&uri);
+                        if !self.crdt_doc.file_exists(&file_path) {
+                            let response = EditorProtocolMessageToEditor::RequestError {
+                                id,
+                                code: -1,
+                                message: "File not found".into(),
+                                data:
+                                    "Please stop sending edits for this file or 'open' it before."
+                                        .into(),
+                            };
+                            self.send_to_editor_client(&editor_id, response).await;
+                            return;
+                        }
+                        let (editor_delta_for_crdt, rev_deltas_for_editor) =
+                            self.apply_delta_to_ot(rev_delta, &file_path);
 
-                    self.apply_delta_to_doc(&editor_delta_for_crdt, &file_path);
-                    self.send_deltas_to_editor(rev_deltas_for_editor, &file_path)
-                        .await;
+                        self.apply_delta_to_doc(&editor_delta_for_crdt, &file_path);
+                        self.send_deltas_to_editor(rev_deltas_for_editor, &file_path)
+                            .await;
+                    }
                 }
-            },
+                let response = EditorProtocolMessageToEditor::RequestSuccess { id };
+                self.send_to_editor_client(&editor_id, response).await;
+            }
             EditorProtocolMessageFromEditor::Notification { payload } => match payload {
                 EditorProtocolNotificationFromEditor::Close { uri } => {
                     let file_path = self.file_path_for_uri(&uri);
@@ -421,6 +437,24 @@ impl DocumentActor {
             delta: rev_delta,
         };
         self.send_to_editor_clients(message).await;
+    }
+
+    async fn send_to_editor_client(
+        &mut self,
+        editor_id: &EditorId,
+        message: EditorProtocolMessageToEditor,
+    ) {
+        if let Some(handle) = self.editor_clients.get(editor_id) {
+            if handle.send(message).await.is_err() {
+                info!("Removing EditorHandle from client list.");
+                self.editor_clients.remove(editor_id);
+            }
+        } else {
+            warn!(
+                "Sending to editor client failed: We don't have a client registered with id #{}.",
+                editor_id.0
+            );
+        }
     }
 
     async fn send_to_editor_clients(&mut self, message: EditorProtocolMessageToEditor) {

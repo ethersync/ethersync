@@ -157,6 +157,7 @@ impl Document {
         };
 
         debug!("Removing {file_path} from CRDT.");
+        // TODO: Also remove it from ot server, if applicable
         let file_map = self
             .top_level_map_obj("files")
             .expect("Failed to get files Map object");
@@ -196,6 +197,10 @@ impl Document {
             .top_level_map_obj("files")
             .expect("Failed to get files store from document");
         self.doc.keys(file_map).collect()
+    }
+
+    pub fn file_exists(&self, file_path: &str) -> bool {
+        self.text_obj(file_path).is_ok()
     }
 
     pub fn store_cursor_position(&mut self, userid: String, file_path: String, ranges: Vec<Range>) {
