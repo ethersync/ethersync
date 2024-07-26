@@ -138,7 +138,8 @@ pub enum EditorProtocolMessageFromEditor {
 }
 impl EditorProtocolMessageFromEditor {
     pub fn from_jsonrpc(jsonrpc: &str) -> Result<Self, anyhow::Error> {
-        let message = serde_json::from_str(jsonrpc).expect("Failed to deserialize editor message");
+        let error_message = format!("Failed to deserialize editor message: {jsonrpc}");
+        let message = serde_json::from_str(jsonrpc).expect(&error_message);
         Ok(message)
     }
 }
@@ -175,11 +176,11 @@ mod test_serde {
 
     #[test]
     fn open() {
-        let jsonrpc = EditorProtocolMessageFromEditor::from_jsonrpc(
+        let message = EditorProtocolMessageFromEditor::from_jsonrpc(
             r#"{"jsonrpc":"2.0","id":1,"method":"open","params":{"uri":"file:\/\/\/tmp\/file"}}"#,
         );
         assert_eq!(
-            jsonrpc.unwrap(),
+            message.unwrap(),
             EditorProtocolMessageFromEditor::Request {
                 id: 1,
                 payload: EditorProtocolRequestFromEditor::Open {
@@ -187,6 +188,32 @@ mod test_serde {
                 }
             }
         );
+    }
+
+    #[test]
+    fn success() {
+        let message = EditorProtocolMessageToEditor::RequestSuccess { id: 1 };
+        let jsonrpc = message.to_jsonrpc();
+        assert_eq!(
+            jsonrpc.unwrap(),
+            r#"{"id":"1","jsonrpc":"2.0","result":"success"}"#
+        )
+    }
+
+    #[test]
+    fn error() {
+        let message = EditorProtocolMessageToEditor::RequestError {
+            id: 1,
+            code: -1,
+            message: "title".into(),
+            data: "content".into(),
+        };
+        let jsonrpc = message.to_jsonrpc();
+        assert_eq!(
+            jsonrpc.unwrap(),
+            // TODO: the inner id should not be there. It doesn't hurt though, I guess.
+            r#"{"error":{"code":-1,"data":"content","id":1,"message":"title"},"id":"1","jsonrpc":"2.0"}"#
+        )
     }
 }
 
@@ -203,6 +230,16 @@ pub enum EditorProtocolMessageToEditor {
         uri: DocumentUri,
         ranges: Vec<Range>,
     },
+    RequestSuccess {
+        id: usize,
+    },
+    RequestError {
+        id: usize,
+        code: i64,
+        message: String,
+        // We could change this datatype, if we wanted to.
+        data: String,
+    },
 }
 
 impl EditorProtocolMessageToEditor {
@@ -214,6 +251,20 @@ impl EditorProtocolMessageToEditor {
             serde_json::to_value(self).expect("Failed to convert editor message to a JSON value");
         if let serde_json::Value::Object(mut map) = json_value {
             map.insert("jsonrpc".to_string(), "2.0".into());
+            if let Self::RequestSuccess { id } = self {
+                // TODO: Fix this blunt hack with proper jsonrpc serialization.
+                map.insert("id".to_string(), id.to_string().into());
+                map.insert("result".to_string(), "success".into());
+                map.remove("params");
+                map.remove("method");
+            }
+            if let Self::RequestError { id, .. } = self {
+                // TODO: Fix this blunt hack with proper jsonrpc serialization.
+                map.insert("id".to_string(), id.to_string().into());
+                map.insert("error".to_string(), map.get("params").unwrap().clone());
+                map.remove("params");
+                map.remove("method");
+            }
             let payload =
                 serde_json::to_string(&map).expect("Failed to serialize modified editor message");
             Ok(payload)
