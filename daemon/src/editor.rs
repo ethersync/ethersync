@@ -42,7 +42,8 @@ impl EditorHandle {
         let (stream_read, stream_write) = tokio::io::split(stream);
         let shutdown_token = CancellationToken::new();
 
-        let mut reader = SocketReadActor::new(stream_read, shutdown_token.clone(), document_handle);
+        let mut reader =
+            SocketReadActor::new(stream_read, shutdown_token.clone(), document_handle, id);
         tokio::spawn(async move { reader.run().await });
 
         let mut writer =
@@ -79,6 +80,7 @@ pub struct SocketReadActor {
     reader: ReadHalf<UnixStream>,
     shutdown_token: CancellationToken,
     document_handle: DocumentActorHandle,
+    editor_id: EditorId,
 }
 
 impl SocketReadActor {
@@ -86,11 +88,13 @@ impl SocketReadActor {
         reader: ReadHalf<UnixStream>,
         shutdown_token: CancellationToken,
         document_handle: DocumentActorHandle,
+        editor_id: EditorId,
     ) -> Self {
         Self {
             reader,
             shutdown_token,
             document_handle,
+            editor_id,
         }
     }
 
@@ -105,7 +109,7 @@ impl SocketReadActor {
                     let jsonrpc = EditorProtocolMessageFromEditor::from_jsonrpc(&line)
                         .expect("Failed to parse JSON-RPC message");
                     self.document_handle
-                        .send_message(DocMessage::FromEditor(jsonrpc))
+                        .send_message(DocMessage::FromEditor(self.editor_id, jsonrpc))
                         .await;
                 }
                 Ok(None) => {
@@ -118,7 +122,7 @@ impl SocketReadActor {
         }
         self.shutdown_token.cancel();
         self.document_handle
-            .send_message(DocMessage::CloseEditorConnection)
+            .send_message(DocMessage::CloseEditorConnection(self.editor_id))
             .await;
         info!("Client disconnected");
     }

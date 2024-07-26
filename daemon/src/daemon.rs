@@ -35,7 +35,7 @@ pub enum DocMessage {
     GetContent {
         response_tx: oneshot::Sender<Result<String>>,
     },
-    FromEditor(EditorProtocolMessageFromEditor),
+    FromEditor(EditorId, EditorProtocolMessageFromEditor),
     RemoveFile {
         file_path: String,
     },
@@ -51,21 +51,23 @@ pub enum DocMessage {
         response_tx: oneshot::Sender<(SyncState, Option<AutomergeSyncMessage>)>,
     },
     NewEditorConnection(EditorHandle),
-    CloseEditorConnection,
+    CloseEditorConnection(EditorId),
 }
 
 impl fmt::Debug for DocMessage {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let repr = match self {
             DocMessage::GetContent { .. } => "get content",
-            DocMessage::FromEditor(_) => "open/close/edit/... message from editor",
+            DocMessage::FromEditor(EditorId(i), _) => {
+                &format!("open/close/edit/... message from editor #{i}")
+            }
             DocMessage::RemoveFile { .. } => "delete file",
             DocMessage::Persist => "persist",
             DocMessage::RandomEdit => "random edit",
             DocMessage::ReceiveSyncMessage { .. } => "<automerge internal sync rcv>",
             DocMessage::GenerateSyncMessage { .. } => "<automerge internal sync gen>",
             DocMessage::NewEditorConnection(_) => "editor connected",
-            DocMessage::CloseEditorConnection => "editor disconnected",
+            DocMessage::CloseEditorConnection(EditorId(i)) => &format!("editor #{i} disconnected"),
         };
         write!(f, "{repr}")
     }
@@ -149,7 +151,9 @@ impl DocumentActor {
                 )])
                 .await;
             }
-            DocMessage::FromEditor(message) => self.handle_message_from_editor(message).await,
+            DocMessage::FromEditor(editor_id, message) => {
+                self.handle_message_from_editor(editor_id, message).await
+            }
             DocMessage::RemoveFile { file_path } => {
                 // TODO: This is a workaround. Handle this case better by returning a Result in
                 // file_path_for_uri! The deletion happens when the fuzzer removes the temp dir.
@@ -217,10 +221,10 @@ impl DocumentActor {
             DocMessage::NewEditorConnection(editor_handle) => {
                 // TODO: if we use more than one ID, we should now easily have multiple editors.
                 // Modulo managing the OT server for each of them per file...
-                self.editor_clients.insert(EditorId(0), editor_handle);
+                self.editor_clients.insert(editor_handle.id, editor_handle);
             }
-            DocMessage::CloseEditorConnection => {
-                self.editor_clients.remove(&EditorId(0));
+            DocMessage::CloseEditorConnection(editor_id) => {
+                self.editor_clients.remove(&editor_id);
 
                 let userid = self.crdt_doc.actor_id();
                 self.maybe_delete_cursor_position(userid);
@@ -249,7 +253,11 @@ impl DocumentActor {
         format!("{}/{}", self.base_dir.display(), file_path)
     }
 
-    async fn handle_message_from_editor(&mut self, message: EditorProtocolMessageFromEditor) {
+    async fn handle_message_from_editor(
+        &mut self,
+        _editor_id: EditorId,
+        message: EditorProtocolMessageFromEditor,
+    ) {
         match message {
             EditorProtocolMessageFromEditor::Request { id: _id, payload } => match payload {
                 EditorProtocolRequestFromEditor::Open { uri } => {
