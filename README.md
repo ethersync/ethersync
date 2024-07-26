@@ -1,63 +1,78 @@
-# Ethersync
+# 🍃 Ethersync
 
-Ethersync enables real-time co-editing of local text files. You will be able to use it for pair programming or note-taking, for example.
+Ethersync enables real-time co-editing of local text files. You can use it for pair programming or note-taking, for example! Think Google Docs, but from the comfort of your favorite text editor!
 
-Currently, we have a **simple working prototype**, but we're still rather at the beginning of development.
-Thus be warned, that everything is in flux and can change/break/move around quickly.
-Especially the communication protocols are subject to modifications, so reach out to us if you want to
-work on an editor plugin for you favorite editor.
-Also the software has some limitations and bugs that might eat your cat.
+> [!CAUTION]
+> The project is under active development right now. Everything might change, break, or move around quickly.
 
-The current features (including some planned ones marked with the construction emoji) are:
+## Current Features
 
-- ✅ Neovim support
-  - ✅ collaborative editing
-  - ✅ cursor/peer awareness
-  - ✅/🚧 Multi-file support
-    - ✅ collaborating on a static set of files & directories
-    - 🚧 choosing which files are shared (e.g. via .gitignore/--ignore)
-    - 🚧 collaborating on a changing set of files (adding/deleting files)
-  - ❌ individual undo/redo (we probably won't work on this soon)
-- 🚧 VS Code support
-- 🚧 Basic authentication
+- 👥 Real-time collaborative text editing
+- 📍 See other people's cursors
+- 🗃️ Work on entire projects
+- ✒️ Local-first: You always have full access, even offline
+- 🇳 Fully-featured Neovim plugin
+- 🧩 Simple protocol for writing new editor plugins
 
-## Components
+## Planned features
 
-Ethersync consists of two components:
+- 🪟 VS Code plugin
+- 🔒 Basic authentication
+- 🔄 Individual undo/redo (we probably won't work on this soon)
+- 🌐 Peer-to-peer connections, no need for a server
 
-- Every participant needs a **daemon**, that runs on their local machine, and connects to other peers.
-- **Editor plugins** connect to the daemon, send it what you type, and receive other peoples' changes.
-  Currently, there's a plugin for Neovim, but other editor integrations are planned.
+## Installation
 
-## Setup
+### 😈 Daemon
 
-Each participant (one is the **host**, all others are **peers**) need to set up these two components.
-First, clone this repository:
+Every participant needs a **daemon**, that runs on their local machine, and connects to other peers.
+You might be able to use one of the following packages, or you could try a manual installation.
 
-```bash
-git clone git@github.com:ethersync/ethersync
-cd ethersync
-```
+> [!TIP]
+> You can use the Nix package on any Linux or MacOS system!
 
-### Daemon
+<details>
+  <summary>Arch Linux</summary>
+  <br>
 
-To install the daemon component, you need a [Rust](https://www.rust-lang.org) installation. You can compile the daemon like this:
+  Install the [ethersync-git](https://aur.archlinux.org/packages/ethersync-git) package from the AUR.
+</details>
 
-```bash
-cd daemon
-cargo build
-```
+<details>
+  <summary>Nix</summary>
+  <br>
+  This repository provides a Nix flake. You can put it in your PATH like this:
 
-This should download all dependencies, and successfully compile the project (currently as a debug build, as we're in early development).
+  ```bash
+  nix shell github:ethersync/ethersync
+  ```
 
-For the next steps to succeed you need to make sure that the resulting `ethersync` binary is in your shell PATH.
-One option to do this temporarily is to run this command in the terminal:
+  If you want to install it permamently, you probably know what your favorite approach is.
+</details>
 
-```bash
-export PATH="$HOME/path/to/ethersync/daemon/target/debug:$PATH"
-```
+<details>
+  <summary>Manual installation</summary>
+  <br>
 
-To confirm that worked, try running it:
+  You will need a [Rust](https://www.rust-lang.org) installation. You can then compile the daemon like this:
+
+  ```bash
+  git clone git@github.com:ethersync/ethersync
+  cd ethersync/daemon
+  cargo build --release
+  ```
+
+  This should download all dependencies, and successfully compile the project.
+
+  For the next steps to succeed you need to make sure that the resulting `ethersync` binary is in your shell PATH.
+  One option to do this temporarily is to run this command in the terminal:
+
+  ```bash
+  export PATH="$HOME/path/to/ethersync/daemon/target/release:$PATH"
+  ```
+</details>
+
+To confirm that the installation worked, try running:
 
 ```bash
 ethersync
@@ -65,75 +80,111 @@ ethersync
 
 This should show the available options.
 
-### Neovim Plugin
+### 🇳 Neovim Plugin
 
-**The plugin currently requires Neovim v0.10.**
+You will also need an **editor plugin** connect to the daemon, send it what you type, and receive other peoples' changes.
+Right now, we are offering a Neovim plugin. More plugins are planned.
 
-- If you're not using a plugin manager, here's a "quick and dirty" way to install the plugin:
+> [!IMPORTANT]
+> The plugin currently requires Neovim v0.10.
 
-    ```bash
-    mkdir -p $HOME/.local/share/nvim/site/pack/plugins/start
-    ln -s $HOME/path/to/ethersync/vim-plugin $HOME/.local/share/nvim/site/pack/plugins/start/ethersync
-    ```
+Again, we have several options of how to install it:
 
-- If you're using [Lazy](https://github.com/folke/lazy.nvim), you can specify the path to the `vim-plugin` directory in this repository like this:
+<details>
+  <summary>Lazy plugin manager</summary>
+  <br>
 
-    ```lua
-    {
-        dir = os.getenv("HOME") .. "/path/to/ethersync/vim-plugin",
-        keys = { { "<leader>ej", "<cmd>EthersyncJumpToCursor<cr>" } },
-        lazy = false,
-    }
-    ```
+  If you're using [Lazy](https://github.com/folke/lazy.nvim), you can use a configuration like this:
 
-- For other plugin managers, it's often convenient to provide a Git repository which contains the plugin at the top level.
-We manually publish the latest version at <https://github.com/ethersync/ethersync-vim>, so you can specify the repo like this (for example, for [vim-plug](https://github.com/junegunn/vim-plug)):
+  ```lua
+  {
+      "ethersync/ethersync",
+      config = function(plugin)
+          -- Load the plugin from a subfolder:
+          vim.opt.rtp:append(plugin.dir .. "/vim-plugin")
+          require("lazy.core.loader").packadd(plugin.dir .. "/vim-plugin")
+      end,
+      keys = { { "<leader>j", "<cmd>EthersyncJumpToCursor<cr>" } },
+      lazy = false,
+  }
+  ```
+</details>
 
-    ```vim
-    Plug 'ethersync/ethersync-vim'
-    ```
+<details>
+  <summary>Nix</summary>
+  <br>
 
-To confirm that the plugin works, try running the `:EthersyncInfo` command in Neovim.
+  For testing purposes, you can run an Ethersync-enabled Neovim like this:
+
+  ```bash
+  nix run github:ethersync/ethersync#neovim
+  ```
+</details>
+
+<details>
+  <summary>Manual installation</summary>
+  <br>
+
+  If you're not using a plugin manager, here's a "quick and dirty" way to install the plugin:
+
+  ```bash
+  git clone git@github.com:ethersync/ethersync
+  mkdir -p $HOME/.local/share/nvim/site/pack/plugins/start
+  ln -s ethersync/vim-plugin $HOME/.local/share/nvim/site/pack/plugins/start/ethersync
+  ```
+</details>
+
+To confirm that the plugin is installed, try running the `:EthersyncInfo` command in Neovim.
 
 ## Usage
 
-To collaborate on a file called `file` in a directory called `playground`, follow these steps:
+To collaborate on a directory called `playground`, follow these steps:
 
-1. Right now, our convention to mark an "Ethersync-enabled" directory is that there is a subdirectory called `.ethersync` in it. (A more convenient way to use Ethersync is planned.) So you need to create it:
 
-    ```bash
-    mkdir -p playground/.ethersync
-    ```
+### 1. Create an "Ethersync-enabled" directory
 
-2. After that, start the daemon. In a group, one person needs to "host" the session, while the others join it. (Peer-to-peer support is planned.)
+Our current convention is to have a subdirectory called `.ethersync` in an Ethersync-enabled directory. Create it like this:
 
-    - As the **host**, run:
+```bash
+mkdir -p playground/.ethersync
+```
 
-        ```bash
-        ethersync daemon path/to/playground
-        ```
+### 2. Start the daemon
 
-        This will print an IP address and port (like `192.168.178.23:4242`), which others can use to connect to you. (It prints the local and public IP address. Right now, if you want others to be able to join you from outside your local network, you might need to configure your router to enable port forwarding to your computer. A more convenient way to do that is planned.)
+In a group, one person needs to "host" the session, while the others join it. (Peer-to-peer support is planned.)
 
-    - As a **peer**, specify the IP address and port of the host:
-
-        ```bash
-        ethersync daemon path/to/playground/file --peer 192.168.178.23:4242
-        ```
-
-3. Finally, open the file in Vim:
+- As the **host**, run:
 
     ```bash
-    nvim path/to/playground/file
+    ethersync daemon path/to/playground
     ```
 
-    If everything went correctly, you should see `Ethersync activated!` in the nvim messages and `Client connection established.` in the logs of the daemon.
-    If that doesn't work, make sure that there's an `.ethersync` directory next to the `file`, and that the `ethersync` command is in the PATH in the terminal where you run Neovim.
-    You can now collaboratively edit the file together in real-time!
+    This will print an IP address and port (like `192.168.178.23:4242`), which others can use to connect to you. (It prints the local and public IP address. Right now, if you want others to be able to join you from outside your local network, you might need to configure your router to enable port forwarding to your computer. A more convenient way to do that is planned.)
+
+- As a **peer**, specify the IP address and port of the host:
+
+    ```bash
+    ethersync daemon path/to/playground --peer 192.168.178.23:4242
+    ```
+
+### 3. Start collaborating in real-time!
+
+You can now open, edit, and delete files in the shared directory, and connected peers will get your changes! For example, open a new file:
+
+```bash
+nvim path/to/playground/file
+```
+
+If everything went correctly, you should see `Ethersync activated!` in Neovim's messages and `Client connection established.` in the logs of the daemon.
+
+> [!TIP]
+> If that doesn't work, make sure that there's an `.ethersync` directory in the `playground`, and that the `ethersync` command is in the PATH in the terminal where you run Neovim.
 
 ## Development
 
-If you're interested in building new editor plugins, read the specification for the [daemon-editor protocol](/docs/editor-plugin-dev-guide.md). For more information about Ethersync's design, refer to the list of [decision records](docs/decisions/).
+If you're interested in building new editor plugins, read the specification for the [daemon-editor protocol](/docs/editor-plugin-dev-guide.md).
+
+For more information about Ethersync's design, refer to the list of [decision records](docs/decisions/).
 
 ## Sponsors
 
