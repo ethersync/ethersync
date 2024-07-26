@@ -47,7 +47,7 @@ You might be able to use one of the following packages, or you could try a manua
   nix shell github:ethersync/ethersync
   ```
 
-  If you want to install it permamently, you probably know what your favorite approach is.
+  If you want to install it permanently, you probably know what your favorite approach is.
 </details>
 
 <details>
