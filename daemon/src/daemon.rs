@@ -57,17 +57,17 @@ pub enum DocMessage {
 impl fmt::Debug for DocMessage {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let repr = match self {
-            DocMessage::GetContent { .. } => "get content",
+            DocMessage::GetContent { .. } => "get content".to_string(),
             DocMessage::FromEditor(EditorId(i), _) => {
-                &format!("open/close/edit/... message from editor #{i}")
+                format!("open/close/edit/... message from editor #{i}")
             }
-            DocMessage::RemoveFile { .. } => "delete file",
-            DocMessage::Persist => "persist",
-            DocMessage::RandomEdit => "random edit",
-            DocMessage::ReceiveSyncMessage { .. } => "<automerge internal sync rcv>",
-            DocMessage::GenerateSyncMessage { .. } => "<automerge internal sync gen>",
-            DocMessage::NewEditorConnection(_) => "editor connected",
-            DocMessage::CloseEditorConnection(EditorId(i)) => &format!("editor #{i} disconnected"),
+            DocMessage::RemoveFile { .. } => "delete file".to_string(),
+            DocMessage::Persist => "persist".to_string(),
+            DocMessage::RandomEdit => "random edit".to_string(),
+            DocMessage::ReceiveSyncMessage { .. } => "<automerge internal sync rcv>".to_string(),
+            DocMessage::GenerateSyncMessage { .. } => "<automerge internal sync gen>".to_string(),
+            DocMessage::NewEditorConnection(_) => "editor connected".to_string(),
+            DocMessage::CloseEditorConnection(EditorId(i)) => format!("editor #{i} disconnected"),
         };
         write!(f, "{repr}")
     }
