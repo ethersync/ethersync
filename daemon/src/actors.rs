@@ -246,7 +246,7 @@ pub mod tests {
     use super::*;
     use crate::types::{
         factories::*, EditorProtocolMessageFromEditor, EditorProtocolMessageToEditor,
-        EditorTextDelta, EditorTextOp, RevisionedEditorTextDelta,
+        EditorProtocolRequestFromEditor, EditorTextDelta, EditorTextOp, RevisionedEditorTextDelta,
     };
     use pretty_assertions::assert_eq;
     use serial_test::serial;
@@ -382,11 +382,12 @@ pub mod tests {
                     let msg = socket.recv().await;
                     let message: EditorProtocolMessageFromEditor = serde_json::from_str(&msg.to_string())
                         .expect("Could not parse EditorProtocolMessage");
-                    if let EditorProtocolMessageFromEditor::Edit{ delta, ..} = message {
+                    if let EditorProtocolMessageFromEditor::Request{payload, ..} = message {
+                        if let EditorProtocolRequestFromEditor::Edit{ delta, ..} = payload {
                         let expected_replacement = expected_replacements.remove(0);
                         let operations = delta.delta.0;
                         assert_eq!(vec![expected_replacement], operations, "Different replacements when applying input '{}' to content '{:?}'", input, initial_content);
-                    }
+                    }}
                 }
             })
             .await

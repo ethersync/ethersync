@@ -3,7 +3,8 @@ use crate::document::Document;
 use crate::editor::EditorHandle;
 use crate::ot::OTServer;
 use crate::types::{
-    CursorState, EditorProtocolMessageFromEditor, EditorProtocolMessageToEditor, EditorTextDelta,
+    CursorState, EditorProtocolMessageFromEditor, EditorProtocolMessageToEditor,
+    EditorProtocolNotificationFromEditor, EditorProtocolRequestFromEditor, EditorTextDelta,
     FileTextDelta, PatchEffect, Range, RevisionedEditorTextDelta, TextDelta,
 };
 use anyhow::Result;
@@ -249,34 +250,38 @@ impl DocumentActor {
 
     async fn handle_message_from_editor(&mut self, message: EditorProtocolMessageFromEditor) {
         match message {
-            EditorProtocolMessageFromEditor::Open { uri } => {
-                let file_path = self.file_path_for_uri(&uri);
-                debug!("Got an 'open' message for {file_path}");
-                self.open_file_path(file_path);
-            }
-            EditorProtocolMessageFromEditor::Close { uri } => {
-                let file_path = self.file_path_for_uri(&uri);
-                debug!("Got a 'close' message for {file_path}");
-                self.ot_servers.remove(&file_path);
-            }
-            EditorProtocolMessageFromEditor::Edit {
-                delta: rev_delta,
-                uri,
-            } => {
-                debug!("Handling RevDelta from editor: {:#?}", rev_delta);
-                let file_path = self.file_path_for_uri(&uri);
-                let (editor_delta_for_crdt, rev_deltas_for_editor) =
-                    self.apply_delta_to_ot(rev_delta, &file_path);
+            EditorProtocolMessageFromEditor::Request { id: _id, payload } => match payload {
+                EditorProtocolRequestFromEditor::Open { uri } => {
+                    let file_path = self.file_path_for_uri(&uri);
+                    debug!("Got an 'open' message for {file_path}");
+                    self.open_file_path(file_path);
+                }
+                EditorProtocolRequestFromEditor::Edit {
+                    delta: rev_delta,
+                    uri,
+                } => {
+                    debug!("Handling RevDelta from editor: {:#?}", rev_delta);
+                    let file_path = self.file_path_for_uri(&uri);
+                    let (editor_delta_for_crdt, rev_deltas_for_editor) =
+                        self.apply_delta_to_ot(rev_delta, &file_path);
 
-                self.apply_delta_to_doc(&editor_delta_for_crdt, &file_path);
-                self.send_deltas_to_editor(rev_deltas_for_editor, &file_path)
-                    .await;
-            }
-            EditorProtocolMessageFromEditor::Cursor { uri, ranges } => {
-                let file_path = self.file_path_for_uri(&uri);
-                let userid = self.crdt_doc.actor_id();
-                self.store_cursor_position(userid, file_path, ranges);
-            }
+                    self.apply_delta_to_doc(&editor_delta_for_crdt, &file_path);
+                    self.send_deltas_to_editor(rev_deltas_for_editor, &file_path)
+                        .await;
+                }
+            },
+            EditorProtocolMessageFromEditor::Notification { payload } => match payload {
+                EditorProtocolNotificationFromEditor::Close { uri } => {
+                    let file_path = self.file_path_for_uri(&uri);
+                    debug!("Got a 'close' message for {file_path}");
+                    self.ot_servers.remove(&file_path);
+                }
+                EditorProtocolNotificationFromEditor::Cursor { uri, ranges } => {
+                    let file_path = self.file_path_for_uri(&uri);
+                    let userid = self.crdt_doc.actor_id();
+                    self.store_cursor_position(userid, file_path, ranges);
+                }
+            },
         }
     }
 

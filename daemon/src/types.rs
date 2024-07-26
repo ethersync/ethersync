@@ -124,17 +124,42 @@ impl PatchEffect {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(tag = "method", content = "params", rename_all = "camelCase")]
+#[serde(untagged)]
 pub enum EditorProtocolMessageFromEditor {
-    Open {
-        uri: DocumentUri,
+    Request {
+        id: usize,
+        #[serde(flatten)]
+        payload: EditorProtocolRequestFromEditor,
     },
-    Close {
+    Notification {
+        #[serde(flatten)]
+        payload: EditorProtocolNotificationFromEditor,
+    },
+}
+impl EditorProtocolMessageFromEditor {
+    pub fn from_jsonrpc(jsonrpc: &str) -> Result<Self, anyhow::Error> {
+        let message = serde_json::from_str(jsonrpc).expect("Failed to deserialize editor message");
+        Ok(message)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "method", content = "params", rename_all = "camelCase")]
+pub enum EditorProtocolRequestFromEditor {
+    Open {
         uri: DocumentUri,
     },
     Edit {
         uri: DocumentUri,
         delta: RevisionedEditorTextDelta,
+    },
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "method", content = "params", rename_all = "camelCase")]
+pub enum EditorProtocolNotificationFromEditor {
+    Close {
+        uri: DocumentUri,
     },
     Cursor {
         uri: DocumentUri,
@@ -142,10 +167,26 @@ pub enum EditorProtocolMessageFromEditor {
     },
 }
 
-impl EditorProtocolMessageFromEditor {
-    pub fn from_jsonrpc(jsonrpc: &str) -> Result<Self, anyhow::Error> {
-        let message = serde_json::from_str(jsonrpc).expect("Failed to deserialize editor message");
-        Ok(message)
+#[cfg(test)]
+mod test_serde {
+
+    use super::*;
+    use pretty_assertions::assert_eq;
+
+    #[test]
+    fn open() {
+        let jsonrpc = EditorProtocolMessageFromEditor::from_jsonrpc(
+            r#"{"jsonrpc":"2.0","id":1,"method":"open","params":{"uri":"file:\/\/\/tmp\/file"}}"#,
+        );
+        assert_eq!(
+            jsonrpc.unwrap(),
+            EditorProtocolMessageFromEditor::Request {
+                id: 1,
+                payload: EditorProtocolRequestFromEditor::Open {
+                    uri: "file:///tmp/file".into()
+                }
+            }
+        );
     }
 }
 
