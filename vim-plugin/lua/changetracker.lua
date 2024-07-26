@@ -90,6 +90,21 @@ function M.track_changes(buffer, callback)
                         )
                     end
                 end
+            elseif diff.range["end"].line < #prev_lines then
+                -- The range ends before the line after the last visible buffer line.
+                -- We might still want to make the delta prettier.
+                -- TODO: Integrate this case in the above if branches somehow?
+                if
+                    diff.range["end"].character == 0
+                    and string.sub(diff.text, -1) == "\n"
+                    and diff.range["start"].line < diff.range["end"].line
+                then
+                    -- Range ends on the beginning of a line, but the replacement ends with a newline.
+                    -- This newline is redundant, and leads to less-pretty diffs. Remove it.
+                    diff.text = string.sub(diff.text, 1, -2)
+                    diff.range["end"].line = diff.range["end"].line - 1
+                    diff.range["end"].character = vim.fn.strchars(prev_lines[diff.range["end"].line + 1])
+                end
             end
 
             prev_lines = curr_lines

@@ -554,6 +554,12 @@ pub mod tests {
             vec![replace_ed((1, 3), (1, 3), "\n")],
         );
 
+        assert_vim_input_yields_replacements(
+            "eins\ntwo\nthree",
+            "jo",
+            vec![replace_ed((1, 3), (1, 3), "\n")],
+        );
+
         // Tests where Vim behaves a bit weirdly.
 
         // A direct replace_ed((0, 1), (1, 0), " ") would be nicer.
