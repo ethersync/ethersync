@@ -11,23 +11,31 @@ use tracing::{debug, error, info, trace};
 use crate::daemon::{DocMessage, DocumentActorHandle};
 use crate::types::{EditorProtocolMessageFromEditor, EditorProtocolMessageToEditor};
 
-pub type EditorMessageSender = mpsc::Sender<EditorProtocolMessageToEditor>;
-pub type EditorMessageReceiver = mpsc::Receiver<EditorProtocolMessageToEditor>;
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
+pub struct EditorId(pub usize);
 
-pub async fn spawn_editor_connection(stream: UnixStream, document_handle: DocumentActorHandle) {
-    let editor_handle = EditorHandle::new(stream, document_handle.clone());
+type EditorMessageSender = mpsc::Sender<EditorProtocolMessageToEditor>;
+type EditorMessageReceiver = mpsc::Receiver<EditorProtocolMessageToEditor>;
+
+pub async fn spawn_editor_connection(
+    stream: UnixStream,
+    document_handle: DocumentActorHandle,
+    editor_id: EditorId,
+) {
+    let editor_handle = EditorHandle::new(editor_id, stream, document_handle.clone());
     document_handle
         .send_message(DocMessage::NewEditorConnection(editor_handle))
         .await;
 }
 
 pub struct EditorHandle {
+    pub id: EditorId,
     editor_message_tx: EditorMessageSender,
     shutdown_token: CancellationToken,
 }
 
 impl EditorHandle {
-    pub fn new(stream: UnixStream, document_handle: DocumentActorHandle) -> Self {
+    pub fn new(id: EditorId, stream: UnixStream, document_handle: DocumentActorHandle) -> Self {
         // The document task will send messages intended for the socket connection on this channel.
         let (socket_message_tx, socket_message_rx) =
             mpsc::channel::<EditorProtocolMessageToEditor>(1);
@@ -41,6 +49,7 @@ impl EditorHandle {
             SocketWriteActor::new(stream_write, socket_message_rx, shutdown_token.clone());
         tokio::spawn(async move { writer.run().await });
         Self {
+            id,
             editor_message_tx: socket_message_tx,
             shutdown_token,
         }

@@ -1,6 +1,6 @@
 use crate::connect;
 use crate::document::Document;
-use crate::editor::EditorHandle;
+use crate::editor::{EditorHandle, EditorId};
 use crate::ot::OTServer;
 use crate::types::{
     CursorState, EditorProtocolMessageFromEditor, EditorProtocolMessageToEditor,
@@ -18,6 +18,10 @@ use rand::Rng;
 use std::collections::{HashMap, HashSet};
 use std::fmt;
 use std::path::{Path, PathBuf};
+use std::sync::{
+    atomic::{AtomicUsize, Ordering},
+    Arc,
+};
 use tokio::{
     sync::{broadcast, mpsc, oneshot},
     time::Duration,
@@ -70,9 +74,6 @@ impl fmt::Debug for DocMessage {
 type DocMessageSender = mpsc::Sender<DocMessage>;
 type DocChangedSender = broadcast::Sender<()>;
 type DocChangedReceiver = broadcast::Receiver<()>;
-
-#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
-pub struct EditorId(usize);
 
 /// This Actor is responsible for applying changes to the document asynchronously.
 ///
@@ -560,6 +561,7 @@ impl DocumentActor {
 pub struct DocumentActorHandle {
     doc_message_tx: DocMessageSender,
     doc_changed_ping_tx: DocChangedSender,
+    next_id: Arc<AtomicUsize>,
 }
 
 impl DocumentActorHandle {
@@ -584,9 +586,9 @@ impl DocumentActorHandle {
         Self {
             doc_message_tx,
             doc_changed_ping_tx,
+            next_id: Default::default(),
         }
     }
-
     /// The TCP and socket connections will send messages through this when they receive something.
     pub async fn send_message(&self, message: DocMessage) {
         self.doc_message_tx
@@ -613,6 +615,11 @@ impl DocumentActorHandle {
             .send(message)
             .await
             .expect("Failed to send random edit to document task");
+    }
+
+    pub fn next_editor_id(&self) -> EditorId {
+        let id = self.next_id.fetch_add(1, Ordering::Relaxed);
+        EditorId(id)
     }
 }
 
