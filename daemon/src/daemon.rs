@@ -2,6 +2,7 @@ use crate::connect;
 use crate::document::Document;
 use crate::editor::EditorHandle;
 use crate::ot::OTServer;
+use crate::sandbox;
 use crate::types::{
     CursorState, EditorProtocolMessageFromEditor, EditorProtocolMessageToEditor, EditorTextDelta,
     FileTextDelta, PatchEffect, Range, RevisionedEditorTextDelta, TextDelta,
@@ -99,9 +100,14 @@ impl DocumentActor {
         // If there is a persisted version in base_dir/.ethersync/doc, load it.
         // TODO: Pull out ".ethersync" string into a constant.
         let persistence_file = base_dir.join(".ethersync/doc");
-        let crdt_doc = if persistence_file.exists() && !init {
+        let persistence_file_exists = sandbox::exists(&base_dir, &persistence_file)
+            .expect("Could not check for the existence of the persistence file");
+
+        let crdt_doc = if persistence_file_exists && !init {
             info!("Loading persisted CRDT document from {persistence_file:?}");
-            Document::load(&persistence_file)
+            let bytes = sandbox::read_file(&base_dir, &persistence_file)
+                .unwrap_or_else(|_| panic!("Could not read file '{persistence_file:?}'"));
+            Document::load(&bytes)
         } else {
             info!("Initializing a new CRDT document");
             Document::default()
@@ -117,7 +123,7 @@ impl DocumentActor {
             crdt_doc,
         };
 
-        if persistence_file.exists() {
+        if persistence_file_exists {
             s.read_current_content_from_dir(init);
         } else if is_host {
             s.read_current_content_from_dir(true);
@@ -161,7 +167,7 @@ impl DocumentActor {
                 debug!("Persisting!");
                 let bytes = self.crdt_doc.save();
                 let persistence_file = self.base_dir.join(".ethersync/doc");
-                std::fs::write(&persistence_file, bytes)
+                sandbox::write_file(&self.base_dir, &persistence_file, &bytes)
                     .unwrap_or_else(|_| panic!("Failed to persist to {persistence_file:?}"));
             }
             DocMessage::ReceiveSyncMessage {
@@ -185,10 +191,13 @@ impl DocumentActor {
                             cursor_states.push(cursor_state);
                         }
                         PatchEffect::FileRemoval(file_path) => {
-                            std::fs::remove_file(self.absolute_path_for_file_path(&file_path))
-                                .unwrap_or_else(|err| {
-                                    warn!("Failed to remove file {file_path}: {err}")
-                                });
+                            sandbox::remove_file(
+                                &self.base_dir,
+                                Path::new(&self.absolute_path_for_file_path(&file_path)),
+                            )
+                            .unwrap_or_else(|err| {
+                                warn!("Failed to remove file {file_path}: {err}")
+                            });
                         }
                         PatchEffect::NoEffect => {}
                     }
@@ -447,11 +456,11 @@ impl DocumentActor {
 
                 // Create the parent directorie(s), if neccessary.
                 let parent_dir = Path::new(&abs_path).parent().unwrap();
-                std::fs::create_dir_all(parent_dir).unwrap_or_else(|_| {
+                sandbox::create_dir_all(&self.base_dir, parent_dir).unwrap_or_else(|_| {
                     panic!("Could not create parent directory {}", parent_dir.display())
                 });
 
-                std::fs::write(&abs_path, text)
+                sandbox::write_file(&self.base_dir, Path::new(&abs_path), &text.into_bytes())
                     .unwrap_or_else(|_| panic!("Could not write to file {abs_path}"));
             } else {
                 warn!("Failed to get content of file '{file_path}' when writing to disk. Key should have existed?");
@@ -486,13 +495,14 @@ impl DocumentActor {
             })
             .for_each(|dir_entry| {
                 let file_path = dir_entry.path();
-                match std::fs::read_to_string(file_path) {
-                    Ok(text) => {
+                match sandbox::read_file(&self.base_dir, file_path) {
+                    Ok(bytes) => {
                         let relative_file_path = self.file_path_for_uri(
                             file_path
                                 .to_str()
                                 .expect("Could not convert PathBuf to str"),
                         );
+                        let text = String::from_utf8(bytes).expect("Could not read file as UTF-8");
                         if init {
                             self.crdt_doc.initialize_text(&text, &relative_file_path);
                         } else {
@@ -506,7 +516,7 @@ impl DocumentActor {
             });
         for file_path in self.crdt_doc.files() {
             let absolute_file_path = self.absolute_path_for_file_path(&file_path);
-            if !Path::new(&absolute_file_path).exists() {
+            if !sandbox::exists(&self.base_dir, Path::new(&absolute_file_path)).expect("") {
                 warn!(
                     "File '{file_path}' exists in the CRDT, but not on disk. Deleting from CRDT."
                 );
@@ -747,11 +757,11 @@ mod tests {
             let file1 = dir.child("file1");
             let file2 = dir.child("file2");
             let subdir = dir.child("sub");
-            std::fs::create_dir(subdir).unwrap();
+            sandbox::create_dir(dir.path(), &subdir).unwrap();
             let file3 = dir.child("sub/file3");
-            std::fs::write(file1, "content1").unwrap();
-            std::fs::write(file2, "content2").unwrap();
-            std::fs::write(file3, "content3").unwrap();
+            sandbox::write_file(dir.path(), &file1, b"content1").unwrap();
+            sandbox::write_file(dir.path(), &file2, b"content2").unwrap();
+            sandbox::write_file(dir.path(), &file3, b"content3").unwrap();
             dir
         }
 
@@ -799,16 +809,16 @@ mod tests {
 
             // Thus, we only expect file1 to be changed on disk.
             assert_eq!(
-                std::fs::read_to_string(dir.child("file1")).unwrap(),
-                "foobarcontent1",
+                sandbox::read_file(dir.path(), &dir.child("file1")).unwrap(),
+                b"foobarcontent1",
             );
             assert_eq!(
-                std::fs::read_to_string(dir.child("file2")).unwrap(),
-                "content2",
+                sandbox::read_file(dir.path(), &dir.child("file2")).unwrap(),
+                b"content2",
             );
             assert_eq!(
-                std::fs::read_to_string(dir.child("sub/file3")).unwrap(),
-                "content3",
+                sandbox::read_file(dir.path(), &dir.child("sub/file3")).unwrap(),
+                b"content3",
             );
         }
 

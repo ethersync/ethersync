@@ -8,7 +8,6 @@ use automerge::{
 };
 use dissimilar::Chunk;
 use std::env;
-use std::path::Path;
 use tracing::{debug, info, warn};
 
 /// Encapsulates the Automerge `AutoCommit` and provides a generic interface,
@@ -25,13 +24,9 @@ pub struct Document {
 }
 
 impl Document {
-    pub fn load(file: &Path) -> Self {
-        let bytes = std::fs::read(file).unwrap_or_else(|_| {
-            panic!("Failed to read file {}", file.display());
-        });
-        let doc = AutoCommit::load(&bytes).unwrap_or_else(|_| {
-            panic!("Failed to load Automerge document from {}", file.display());
-        });
+    pub fn load(bytes: &[u8]) -> Self {
+        let doc =
+            AutoCommit::load(&bytes).expect("Failed to load Automerge document from given bytes");
         Self { doc }
     }
 
