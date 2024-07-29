@@ -8,7 +8,7 @@ use tracing::{info, warn};
 use crate::daemon::DocumentActorHandle;
 use crate::editor::spawn_editor_connection;
 use crate::peer::spawn_peer_sync;
-use crate::security;
+use crate::sandbox;
 
 pub struct PeerConnectionInfo {
     port: Option<u16>,
@@ -47,7 +47,7 @@ pub async fn make_peer_connection(
 /// Will panic if we fail to listen on the socket, or if we fail to accept an incoming connection.
 pub async fn make_editor_connection(socket_path: PathBuf, document_handle: DocumentActorHandle) {
     if Path::new(&socket_path).exists() {
-        security::remove_file(Path::new("/tmp"), &socket_path).expect("Could not remove socket");
+        sandbox::remove_file(Path::new("/tmp"), &socket_path).expect("Could not remove socket");
     }
     let result = accept_editor_loop(&socket_path, document_handle).await;
     match result {

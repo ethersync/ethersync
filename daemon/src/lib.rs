@@ -6,5 +6,5 @@ pub mod editor;
 pub mod logging;
 pub mod ot;
 pub mod peer;
-pub mod security;
+pub mod sandbox;
 pub mod types;

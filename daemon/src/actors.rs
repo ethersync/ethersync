@@ -1,5 +1,5 @@
 use crate::daemon::Daemon;
-use crate::security;
+use crate::sandbox;
 use async_trait::async_trait;
 use nvim_rs::{compat::tokio::Compat, create::tokio::new_child_cmd, rpc::handler::Dummy};
 use rand::Rng;
@@ -59,9 +59,9 @@ impl Neovim {
     async fn new_ethersync_enabled(initial_content: &str) -> (Self, PathBuf) {
         let dir = TempDir::new().unwrap();
         let ethersync_dir = dir.child(".ethersync");
-        security::create_dir(dir.path(), &ethersync_dir).unwrap();
+        sandbox::create_dir(dir.path(), &ethersync_dir).unwrap();
         let file_path = dir.child("test");
-        security::write_file(dir.path(), &file_path, initial_content.as_bytes())
+        sandbox::write_file(dir.path(), &file_path, initial_content.as_bytes())
             .expect("Failed to write initial file content");
 
         (Self::new(file_path.clone()).await, file_path)
@@ -178,7 +178,7 @@ struct MockSocket {
 impl MockSocket {
     fn new(socket_path: &str, ignore_reads: bool) -> Self {
         if Path::new(socket_path).exists() {
-            security::remove_file(Path::new("/tmp"), Path::new(socket_path))
+            sandbox::remove_file(Path::new("/tmp"), Path::new(socket_path))
                 .expect("Could not remove socket");
         }
 

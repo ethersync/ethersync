@@ -2,7 +2,7 @@
 use ethersync::actors::{Actor, Neovim};
 use ethersync::daemon::{Daemon, TEST_FILE_PATH};
 use ethersync::logging;
-use ethersync::security;
+use ethersync::sandbox;
 use futures::future::join_all;
 use pretty_assertions::assert_eq;
 use rand::Rng;
@@ -24,11 +24,10 @@ fn initialize_project() -> (temp_dir::TempDir, PathBuf) {
     let dir = temp_dir::TempDir::new().expect("Failed to create temp directory");
     let mut ethersync_dir = dir.path().to_path_buf();
     ethersync_dir.push(".ethersync");
-    security::create_dir(dir.path(), &ethersync_dir)
-        .expect("Failed to create .ethersync directory");
+    sandbox::create_dir(dir.path(), &ethersync_dir).expect("Failed to create .ethersync directory");
 
     let file = dir.child(TEST_FILE_PATH);
-    security::write_file(dir.path(), &file, b"").expect("Failed to create file in temp directory");
+    sandbox::write_file(dir.path(), &file, b"").expect("Failed to create file in temp directory");
 
     (dir, file)
 }
