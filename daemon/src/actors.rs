@@ -177,7 +177,9 @@ struct MockSocket {
 #[allow(dead_code)]
 impl MockSocket {
     fn new(socket_path: &str, ignore_reads: bool) -> Self {
-        if Path::new(socket_path).exists() {
+        if sandbox::exists(Path::new("/tmp"), Path::new(socket_path))
+            .expect("Could not check for socket existence")
+        {
             sandbox::remove_file(Path::new("/tmp"), Path::new(socket_path))
                 .expect("Could not remove socket");
         }

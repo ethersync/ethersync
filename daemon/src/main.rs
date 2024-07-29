@@ -1,6 +1,5 @@
 use clap::{Parser, Subcommand};
-use ethersync::daemon::Daemon;
-use ethersync::logging;
+use ethersync::{daemon::Daemon, logging, sandbox};
 use std::io;
 use std::path::PathBuf;
 use tokio::signal;
@@ -47,9 +46,12 @@ enum Commands {
     Client,
 }
 
-fn has_ethersync_directory(mut dir: PathBuf) -> bool {
-    dir.push(ETHERSYNC_CONFIG_DIR);
-    dir.exists() && dir.is_dir()
+fn has_ethersync_directory(dir: PathBuf) -> bool {
+    let mut ethersync_dir = dir.clone();
+    ethersync_dir.push(ETHERSYNC_CONFIG_DIR);
+    // Using the sandbox method here is technically unnecessary,
+    // but we want to really run all path operations through the sandbox module.
+    sandbox::exists(&dir, &ethersync_dir).expect("Failed to check") && ethersync_dir.is_dir()
 }
 
 #[tokio::main]

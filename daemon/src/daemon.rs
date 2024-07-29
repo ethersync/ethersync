@@ -100,7 +100,10 @@ impl DocumentActor {
         // If there is a persisted version in base_dir/.ethersync/doc, load it.
         // TODO: Pull out ".ethersync" string into a constant.
         let persistence_file = base_dir.join(".ethersync/doc");
-        let crdt_doc = if persistence_file.exists() && !init {
+        let persistence_file_exists = sandbox::exists(&base_dir, &persistence_file)
+            .expect("Could not check for the existence of the persistence file");
+
+        let crdt_doc = if persistence_file_exists && !init {
             info!("Loading persisted CRDT document from {persistence_file:?}");
             let bytes = sandbox::read_file(&base_dir, &persistence_file)
                 .unwrap_or_else(|_| panic!("Could not read file '{persistence_file:?}'"));
@@ -120,7 +123,7 @@ impl DocumentActor {
             crdt_doc,
         };
 
-        if persistence_file.exists() {
+        if persistence_file_exists {
             s.read_current_content_from_dir(init);
         } else if is_host {
             s.read_current_content_from_dir(true);
@@ -513,7 +516,7 @@ impl DocumentActor {
             });
         for file_path in self.crdt_doc.files() {
             let absolute_file_path = self.absolute_path_for_file_path(&file_path);
-            if !Path::new(&absolute_file_path).exists() {
+            if !sandbox::exists(&self.base_dir, Path::new(&absolute_file_path)).expect("") {
                 warn!(
                     "File '{file_path}' exists in the CRDT, but not on disk. Deleting from CRDT."
                 );

@@ -46,8 +46,12 @@ pub async fn make_peer_connection(
 ///
 /// Will panic if we fail to listen on the socket, or if we fail to accept an incoming connection.
 pub async fn make_editor_connection(socket_path: PathBuf, document_handle: DocumentActorHandle) {
-    if Path::new(&socket_path).exists() {
-        sandbox::remove_file(Path::new("/tmp"), &socket_path).expect("Could not remove socket");
+    // Using the sandbox method here is technically unnecessary,
+    // but we want to really run all path operations through the sandbox module.
+    if sandbox::exists(Path::new("/"), Path::new(&socket_path))
+        .expect("Failed to check existence of path")
+    {
+        sandbox::remove_file(Path::new("/"), &socket_path).expect("Could not remove socket");
     }
     let result = accept_editor_loop(&socket_path, document_handle).await;
     match result {

@@ -46,6 +46,12 @@ pub fn create_dir_all(absolute_base_dir: &Path, absolute_dir_path: &Path) -> Res
     Ok(())
 }
 
+pub fn exists(absolute_base_dir: &Path, absolute_file_path: &Path) -> Result<bool> {
+    let canonical_file_path =
+        check_inside_base_dir_and_canonicalize(absolute_base_dir, absolute_file_path)?;
+    Ok(canonical_file_path.exists())
+}
+
 fn check_inside_base_dir_and_canonicalize(base_dir: &Path, path: &Path) -> Result<PathBuf> {
     let canonical_base_dir = absolute_and_canonicalized(base_dir)?;
     let canonical_path = absolute_and_canonicalized(path)?;
