@@ -9,13 +9,13 @@ use tokio_util::sync::CancellationToken;
 use tracing::{debug, error, info, trace};
 
 use crate::daemon::{DocMessage, DocumentActorHandle};
-use crate::types::{EditorProtocolMessageToEditor, JSONRPCFromEditor};
+use crate::types::{EditorProtocolObject, JSONRPCFromEditor};
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
 pub struct EditorId(pub usize);
 
-type EditorMessageSender = mpsc::Sender<EditorProtocolMessageToEditor>;
-type EditorMessageReceiver = mpsc::Receiver<EditorProtocolMessageToEditor>;
+type EditorMessageSender = mpsc::Sender<EditorProtocolObject>;
+type EditorMessageReceiver = mpsc::Receiver<EditorProtocolObject>;
 
 pub async fn spawn_editor_connection(
     stream: UnixStream,
@@ -37,8 +37,7 @@ pub struct EditorHandle {
 impl EditorHandle {
     pub fn new(id: EditorId, stream: UnixStream, document_handle: DocumentActorHandle) -> Self {
         // The document task will send messages intended for the socket connection on this channel.
-        let (socket_message_tx, socket_message_rx) =
-            mpsc::channel::<EditorProtocolMessageToEditor>(1);
+        let (socket_message_tx, socket_message_rx) = mpsc::channel::<EditorProtocolObject>(1);
         let (stream_read, stream_write) = tokio::io::split(stream);
         let shutdown_token = CancellationToken::new();
 
@@ -56,7 +55,7 @@ impl EditorHandle {
         }
     }
 
-    pub async fn send(&self, message: EditorProtocolMessageToEditor) -> Result<(), io::Error> {
+    pub async fn send(&self, message: EditorProtocolObject) -> Result<(), io::Error> {
         // Can fail during shutdown or editor disconnect, when Actors already have been killed/closed
         if self.editor_message_tx.send(message).await.is_err() {
             Err(io::Error::new(
@@ -147,7 +146,7 @@ impl SocketWriteActor {
         }
     }
 
-    async fn write_to_socket(&mut self, message: EditorProtocolMessageToEditor) {
+    async fn write_to_socket(&mut self, message: EditorProtocolObject) {
         let payload = message
             .to_jsonrpc()
             .expect("Failed to serialize JSON-RPC message");

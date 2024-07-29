@@ -246,7 +246,8 @@ pub mod tests {
     use super::*;
     use crate::types::{
         factories::*, EditorProtocolMessageFromEditor, EditorProtocolMessageToEditor,
-        EditorTextDelta, EditorTextOp, JSONRPCFromEditor, RevisionedEditorTextDelta,
+        EditorProtocolObject, EditorTextDelta, EditorTextOp, JSONRPCFromEditor,
+        RevisionedEditorTextDelta,
     };
     use pretty_assertions::assert_eq;
     use serial_test::serial;
@@ -308,8 +309,7 @@ pub mod tests {
                     uri: format!("file://{}", file_path.display()),
                     delta: rev_editor_delta,
                 };
-                let payload = editor_message
-                    .to_jsonrpc()
+                let payload = EditorProtocolObject::Request(editor_message).to_jsonrpc()
                     .expect("Could not serialize EditorTextDelta");
                 socket.send(&format!("{payload}\n")).await;
             }

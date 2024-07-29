@@ -4,8 +4,8 @@ use crate::editor::{EditorHandle, EditorId};
 use crate::ot::OTServer;
 use crate::types::{
     CursorState, EditorProtocolMessageError, EditorProtocolMessageFromEditor,
-    EditorProtocolMessageToEditor, EditorTextDelta, FileTextDelta, JSONRPCFromEditor, PatchEffect,
-    Range, RevisionedEditorTextDelta, TextDelta,
+    EditorProtocolMessageToEditor, EditorProtocolObject, EditorTextDelta, FileTextDelta,
+    JSONRPCFromEditor, JSONRPCResponse, PatchEffect, Range, RevisionedEditorTextDelta, TextDelta,
 };
 use anyhow::Result;
 use automerge::{
@@ -306,16 +306,15 @@ impl DocumentActor {
             JSONRPCFromEditor::Request { id, payload } => {
                 let result = self.react_to_message_from_editor(payload).await;
                 let response = match result {
-                    Err(error) => EditorProtocolMessageToEditor::RequestError {
+                    Err(error) => JSONRPCResponse::RequestError { id, error },
+                    Ok(_) => JSONRPCResponse::RequestSuccess {
                         id,
-                        code: error.code,
-                        message: error.message,
-                        data: error.data,
+                        result: "success".into(),
                     },
-                    Ok(_) => EditorProtocolMessageToEditor::RequestSuccess { id },
                 };
 
-                self.send_to_editor_client(&editor_id, response).await;
+                self.send_to_editor_client(&editor_id, EditorProtocolObject::Response(response))
+                    .await;
             }
             JSONRPCFromEditor::Notification { payload } => {
                 let _ = self.react_to_message_from_editor(payload).await;
@@ -452,11 +451,7 @@ impl DocumentActor {
         self.send_to_editor_clients(message).await;
     }
 
-    async fn send_to_editor_client(
-        &mut self,
-        editor_id: &EditorId,
-        message: EditorProtocolMessageToEditor,
-    ) {
+    async fn send_to_editor_client(&mut self, editor_id: &EditorId, message: EditorProtocolObject) {
         if let Some(handle) = self.editor_clients.get(editor_id) {
             if handle.send(message).await.is_err() {
                 info!("Removing EditorHandle from client list.");
@@ -473,7 +468,11 @@ impl DocumentActor {
     async fn send_to_editor_clients(&mut self, message: EditorProtocolMessageToEditor) {
         let mut to_remove = Vec::new();
         for (id, handle) in &mut self.editor_clients.iter_mut() {
-            if handle.send(message.clone()).await.is_err() {
+            if handle
+                .send(EditorProtocolObject::Request(message.clone()))
+                .await
+                .is_err()
+            {
                 // Remove this client.
                 to_remove.push(*id);
             }

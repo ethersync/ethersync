@@ -1,4 +1,5 @@
 #![allow(dead_code)]
+use anyhow::bail;
 use automerge::{Patch, PatchAction};
 use dissimilar::Chunk;
 use operational_transform::{Operation as OTOperation, OperationSeq};
@@ -163,6 +164,7 @@ pub enum EditorProtocolMessageFromEditor {
     },
 }
 
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct EditorProtocolMessageError {
     pub code: i32,
     pub message: String,
@@ -193,28 +195,53 @@ mod test_serde {
 
     #[test]
     fn success() {
-        let message = EditorProtocolMessageToEditor::RequestSuccess { id: 1 };
+        let message = EditorProtocolObject::Response(JSONRPCResponse::RequestSuccess {
+            id: 1,
+            result: "success".to_string(),
+        });
         let jsonrpc = message.to_jsonrpc();
         assert_eq!(
             jsonrpc.unwrap(),
-            r#"{"id":"1","jsonrpc":"2.0","result":"success"}"#
+            r#"{"id":1,"jsonrpc":"2.0","result":"success"}"#
         )
     }
 
     #[test]
     fn error() {
-        let message = EditorProtocolMessageToEditor::RequestError {
+        let message = EditorProtocolObject::Response(JSONRPCResponse::RequestError {
             id: 1,
-            code: -1,
-            message: "title".into(),
-            data: "content".into(),
-        };
+            error: EditorProtocolMessageError {
+                code: -1,
+                message: "title".into(),
+                data: "content".into(),
+            },
+        });
         let jsonrpc = message.to_jsonrpc();
         assert_eq!(
             jsonrpc.unwrap(),
-            // TODO: the inner id should not be there. It doesn't hurt though, I guess.
-            r#"{"error":{"code":-1,"data":"content","id":1,"message":"title"},"id":"1","jsonrpc":"2.0"}"#
+            r#"{"error":{"code":-1,"data":"content","message":"title"},"id":1,"jsonrpc":"2.0"}"#
         )
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum EditorProtocolObject {
+    Request(EditorProtocolMessageToEditor),
+    Response(JSONRPCResponse),
+}
+
+impl EditorProtocolObject {
+    pub fn to_jsonrpc(&self) -> Result<String, anyhow::Error> {
+        let json_value =
+            serde_json::to_value(self).expect("Failed to convert editor message to a JSON value");
+        if let serde_json::Value::Object(mut map) = json_value {
+            map.insert("jsonrpc".to_string(), "2.0".into());
+            let payload = serde_json::to_string(&map)?;
+            Ok(payload)
+        } else {
+            bail!("EditorProtocolMessage was not serialized to a map");
+        }
     }
 }
 
@@ -231,48 +258,19 @@ pub enum EditorProtocolMessageToEditor {
         uri: DocumentUri,
         ranges: Vec<Range>,
     },
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum JSONRPCResponse {
     RequestSuccess {
         id: usize,
+        result: String,
     },
     RequestError {
         id: usize,
-        code: i32,
-        message: String,
-        // We could change this datatype, if we wanted to.
-        data: String,
+        error: EditorProtocolMessageError,
     },
-}
-
-impl EditorProtocolMessageToEditor {
-    /// # Errors
-    ///
-    /// Will return an error if the conversion to JSONRPC fails.
-    pub fn to_jsonrpc(&self) -> Result<String, anyhow::Error> {
-        let json_value =
-            serde_json::to_value(self).expect("Failed to convert editor message to a JSON value");
-        if let serde_json::Value::Object(mut map) = json_value {
-            map.insert("jsonrpc".to_string(), "2.0".into());
-            if let Self::RequestSuccess { id } = self {
-                // TODO: Fix this blunt hack with proper jsonrpc serialization.
-                map.insert("id".to_string(), id.to_string().into());
-                map.insert("result".to_string(), "success".into());
-                map.remove("params");
-                map.remove("method");
-            }
-            if let Self::RequestError { id, .. } = self {
-                // TODO: Fix this blunt hack with proper jsonrpc serialization.
-                map.insert("id".to_string(), id.to_string().into());
-                map.insert("error".to_string(), map.get("params").unwrap().clone());
-                map.remove("params");
-                map.remove("method");
-            }
-            let payload =
-                serde_json::to_string(&map).expect("Failed to serialize modified editor message");
-            Ok(payload)
-        } else {
-            panic!("EditorProtocolMessage was not serialized to a map");
-        }
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
