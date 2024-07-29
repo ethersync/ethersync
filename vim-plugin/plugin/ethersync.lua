@@ -14,12 +14,7 @@ end
 
 local function send_request(method, params)
     client.request(method, params, function(err, res)
-        print("GOT RESPO")
-        if err then
-            print("had error: " .. vim.inspect(err))
-        else
-            print("with res: " .. vim.inspect(res))
-        end
+        -- TODO: React somehow!
     end)
 end
 
