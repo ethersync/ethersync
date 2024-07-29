@@ -3,9 +3,9 @@ use crate::document::Document;
 use crate::editor::{EditorHandle, EditorId};
 use crate::ot::OTServer;
 use crate::types::{
-    CursorState, EditorProtocolMessageFromEditor, EditorProtocolMessageToEditor,
-    EditorProtocolNotificationFromEditor, EditorProtocolRequestFromEditor, EditorTextDelta,
-    FileTextDelta, PatchEffect, Range, RevisionedEditorTextDelta, TextDelta,
+    CursorState, EditorProtocolMessageToEditor, EditorProtocolNotificationFromEditor,
+    EditorProtocolRequestFromEditor, EditorTextDelta, FileTextDelta, JSONRPCFromEditor,
+    PatchEffect, Range, RevisionedEditorTextDelta, TextDelta,
 };
 use anyhow::Result;
 use automerge::{
@@ -35,7 +35,7 @@ pub enum DocMessage {
     GetContent {
         response_tx: oneshot::Sender<Result<String>>,
     },
-    FromEditor(EditorId, EditorProtocolMessageFromEditor),
+    FromEditor(EditorId, JSONRPCFromEditor),
     RemoveFile {
         file_path: String,
     },
@@ -256,10 +256,10 @@ impl DocumentActor {
     async fn handle_message_from_editor(
         &mut self,
         editor_id: EditorId,
-        message: EditorProtocolMessageFromEditor,
+        message: JSONRPCFromEditor,
     ) {
         match message {
-            EditorProtocolMessageFromEditor::Request { id, payload } => {
+            JSONRPCFromEditor::Request { id, payload } => {
                 match payload {
                     EditorProtocolRequestFromEditor::Open { uri } => {
                         let file_path = self.file_path_for_uri(&uri);
@@ -295,7 +295,7 @@ impl DocumentActor {
                 let response = EditorProtocolMessageToEditor::RequestSuccess { id };
                 self.send_to_editor_client(&editor_id, response).await;
             }
-            EditorProtocolMessageFromEditor::Notification { payload } => match payload {
+            JSONRPCFromEditor::Notification { payload } => match payload {
                 EditorProtocolNotificationFromEditor::Close { uri } => {
                     let file_path = self.file_path_for_uri(&uri);
                     debug!("Got a 'close' message for {file_path}");

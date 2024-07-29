@@ -245,8 +245,8 @@ impl MockSocket {
 pub mod tests {
     use super::*;
     use crate::types::{
-        factories::*, EditorProtocolMessageFromEditor, EditorProtocolMessageToEditor,
-        EditorProtocolRequestFromEditor, EditorTextDelta, EditorTextOp, RevisionedEditorTextDelta,
+        factories::*, EditorProtocolMessageToEditor, EditorProtocolRequestFromEditor,
+        EditorTextDelta, EditorTextOp, JSONRPCFromEditor, RevisionedEditorTextDelta,
     };
     use pretty_assertions::assert_eq;
     use serial_test::serial;
@@ -380,9 +380,9 @@ pub mod tests {
                 // expected ones.
                 while !expected_replacements.is_empty() {
                     let msg = socket.recv().await;
-                    let message: EditorProtocolMessageFromEditor = serde_json::from_str(&msg.to_string())
+                    let message: JSONRPCFromEditor = serde_json::from_str(&msg.to_string())
                         .expect("Could not parse EditorProtocolMessage");
-                    let EditorProtocolMessageFromEditor::Request{
+                    let JSONRPCFromEditor::Request{
                         payload: EditorProtocolRequestFromEditor::Edit{ delta, ..},
                         ..
                     } = message else {continue;};

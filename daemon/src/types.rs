@@ -125,7 +125,7 @@ impl PatchEffect {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(untagged)]
-pub enum EditorProtocolMessageFromEditor {
+pub enum JSONRPCFromEditor {
     Request {
         id: usize,
         #[serde(flatten)]
@@ -136,7 +136,7 @@ pub enum EditorProtocolMessageFromEditor {
         payload: EditorProtocolNotificationFromEditor,
     },
 }
-impl EditorProtocolMessageFromEditor {
+impl JSONRPCFromEditor {
     pub fn from_jsonrpc(jsonrpc: &str) -> Result<Self, anyhow::Error> {
         let error_message = format!("Failed to deserialize editor message: {jsonrpc}");
         let message = serde_json::from_str(jsonrpc).expect(&error_message);
@@ -176,12 +176,12 @@ mod test_serde {
 
     #[test]
     fn open() {
-        let message = EditorProtocolMessageFromEditor::from_jsonrpc(
+        let message = JSONRPCFromEditor::from_jsonrpc(
             r#"{"jsonrpc":"2.0","id":1,"method":"open","params":{"uri":"file:\/\/\/tmp\/file"}}"#,
         );
         assert_eq!(
             message.unwrap(),
-            EditorProtocolMessageFromEditor::Request {
+            JSONRPCFromEditor::Request {
                 id: 1,
                 payload: EditorProtocolRequestFromEditor::Open {
                     uri: "file:///tmp/file".into()
