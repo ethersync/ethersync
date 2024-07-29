@@ -13,8 +13,14 @@ local function send_notification(method, params)
 end
 
 local function send_request(method, params)
-    client.request(method, params, function(err, res)
-        -- TODO: React somehow!
+    client.request(method, params, function(err, _)
+        if err then
+            local error_msg = "[ethersync] Error for '" .. method .. "': " .. err.message
+            if err.data then
+                error_msg = error_msg .. " (" .. err.data .. ")"
+            end
+            vim.api.nvim_err_writeln(error_msg)
+        end
     end)
 end
 
