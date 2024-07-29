@@ -12,6 +12,18 @@ local function send_notification(method, params)
     client.notify(method, params)
 end
 
+local function send_request(method, params)
+    client.request(method, params, function(err, _)
+        if err then
+            local error_msg = "[ethersync] Error for '" .. method .. "': " .. err.message
+            if err.data then
+                error_msg = error_msg .. " (" .. err.data .. ")"
+            end
+            vim.api.nvim_err_writeln(error_msg)
+        end
+    end)
+end
+
 -- Take an operation from the daemon and apply it to the editor.
 local function process_operation_for_editor(method, parameters)
     if method == "edit" then
@@ -102,7 +114,7 @@ local function on_buffer_open()
     }
 
     local uri = "file://" .. filename
-    send_notification("open", { uri = uri })
+    send_request("open", { uri = uri })
 
     -- Vim enables eol for an empty file, but we do use this option values
     -- assuming there's a trailing newline iff eol is true.
@@ -120,7 +132,7 @@ local function on_buffer_open()
 
         local params = { uri = uri, delta = rev_delta }
 
-        send_notification("edit", params)
+        send_request("edit", params)
     end)
     cursor.track_cursor(0, function(ranges)
         local params = { uri = uri, ranges = ranges }

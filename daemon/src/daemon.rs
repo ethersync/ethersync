@@ -1,11 +1,12 @@
 use crate::connect;
 use crate::document::Document;
-use crate::editor::EditorHandle;
+use crate::editor::{EditorHandle, EditorId};
 use crate::ot::OTServer;
 use crate::sandbox;
 use crate::types::{
-    CursorState, EditorProtocolMessageFromEditor, EditorProtocolMessageToEditor, EditorTextDelta,
-    FileTextDelta, PatchEffect, Range, RevisionedEditorTextDelta, TextDelta,
+    CursorState, EditorProtocolMessageError, EditorProtocolMessageFromEditor,
+    EditorProtocolMessageToEditor, EditorProtocolObject, EditorTextDelta, FileTextDelta,
+    JSONRPCFromEditor, JSONRPCResponse, PatchEffect, Range, RevisionedEditorTextDelta, TextDelta,
 };
 use anyhow::Result;
 use automerge::{
@@ -18,6 +19,10 @@ use rand::Rng;
 use std::collections::{HashMap, HashSet};
 use std::fmt;
 use std::path::{Path, PathBuf};
+use std::sync::{
+    atomic::{AtomicUsize, Ordering},
+    Arc,
+};
 use tokio::{
     sync::{broadcast, mpsc, oneshot},
     time::Duration,
@@ -31,7 +36,7 @@ pub enum DocMessage {
     GetContent {
         response_tx: oneshot::Sender<Result<String>>,
     },
-    FromEditor(EditorProtocolMessageFromEditor),
+    FromEditor(EditorId, JSONRPCFromEditor),
     RemoveFile {
         file_path: String,
     },
@@ -47,21 +52,23 @@ pub enum DocMessage {
         response_tx: oneshot::Sender<(SyncState, Option<AutomergeSyncMessage>)>,
     },
     NewEditorConnection(EditorHandle),
-    CloseEditorConnection,
+    CloseEditorConnection(EditorId),
 }
 
 impl fmt::Debug for DocMessage {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let repr = match self {
-            DocMessage::GetContent { .. } => "get content",
-            DocMessage::FromEditor(_) => "open/close/edit/... message from editor",
-            DocMessage::RemoveFile { .. } => "delete file",
-            DocMessage::Persist => "persist",
-            DocMessage::RandomEdit => "random edit",
-            DocMessage::ReceiveSyncMessage { .. } => "<automerge internal sync rcv>",
-            DocMessage::GenerateSyncMessage { .. } => "<automerge internal sync gen>",
-            DocMessage::NewEditorConnection(_) => "editor connected",
-            DocMessage::CloseEditorConnection => "editor disconnected",
+            DocMessage::GetContent { .. } => "get content".to_string(),
+            DocMessage::FromEditor(EditorId(i), _) => {
+                format!("open/close/edit/... message from editor #{i}")
+            }
+            DocMessage::RemoveFile { .. } => "delete file".to_string(),
+            DocMessage::Persist => "persist".to_string(),
+            DocMessage::RandomEdit => "random edit".to_string(),
+            DocMessage::ReceiveSyncMessage { .. } => "<automerge internal sync rcv>".to_string(),
+            DocMessage::GenerateSyncMessage { .. } => "<automerge internal sync gen>".to_string(),
+            DocMessage::NewEditorConnection(_) => "editor connected".to_string(),
+            DocMessage::CloseEditorConnection(EditorId(i)) => format!("editor #{i} disconnected"),
         };
         write!(f, "{repr}")
     }
@@ -70,9 +77,6 @@ impl fmt::Debug for DocMessage {
 type DocMessageSender = mpsc::Sender<DocMessage>;
 type DocChangedSender = broadcast::Sender<()>;
 type DocChangedReceiver = broadcast::Receiver<()>;
-
-#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
-pub struct EditorId(usize);
 
 /// This Actor is responsible for applying changes to the document asynchronously.
 ///
@@ -153,7 +157,9 @@ impl DocumentActor {
                 )])
                 .await;
             }
-            DocMessage::FromEditor(message) => self.handle_message_from_editor(message).await,
+            DocMessage::FromEditor(editor_id, message) => {
+                self.handle_message_from_editor(editor_id, message).await
+            }
             DocMessage::RemoveFile { file_path } => {
                 // TODO: This is a workaround. Handle this case better by returning a Result in
                 // file_path_for_uri! The deletion happens when the fuzzer removes the temp dir.
@@ -224,10 +230,10 @@ impl DocumentActor {
             DocMessage::NewEditorConnection(editor_handle) => {
                 // TODO: if we use more than one ID, we should now easily have multiple editors.
                 // Modulo managing the OT server for each of them per file...
-                self.editor_clients.insert(EditorId(0), editor_handle);
+                self.editor_clients.insert(editor_handle.id, editor_handle);
             }
-            DocMessage::CloseEditorConnection => {
-                self.editor_clients.remove(&EditorId(0));
+            DocMessage::CloseEditorConnection(editor_id) => {
+                self.editor_clients.remove(&editor_id);
 
                 let userid = self.crdt_doc.actor_id();
                 self.maybe_delete_cursor_position(userid);
@@ -256,17 +262,15 @@ impl DocumentActor {
         format!("{}/{}", self.base_dir.display(), file_path)
     }
 
-    async fn handle_message_from_editor(&mut self, message: EditorProtocolMessageFromEditor) {
+    async fn react_to_message_from_editor(
+        &mut self,
+        message: EditorProtocolMessageFromEditor,
+    ) -> Result<(), EditorProtocolMessageError> {
         match message {
             EditorProtocolMessageFromEditor::Open { uri } => {
                 let file_path = self.file_path_for_uri(&uri);
                 debug!("Got an 'open' message for {file_path}");
                 self.open_file_path(file_path);
-            }
-            EditorProtocolMessageFromEditor::Close { uri } => {
-                let file_path = self.file_path_for_uri(&uri);
-                debug!("Got a 'close' message for {file_path}");
-                self.ot_servers.remove(&file_path);
             }
             EditorProtocolMessageFromEditor::Edit {
                 delta: rev_delta,
@@ -274,6 +278,13 @@ impl DocumentActor {
             } => {
                 debug!("Handling RevDelta from editor: {:#?}", rev_delta);
                 let file_path = self.file_path_for_uri(&uri);
+                if !self.crdt_doc.file_exists(&file_path) {
+                    return Err(EditorProtocolMessageError {
+                        code: -1,
+                        message: "File not found".into(),
+                        data: "Please stop sending edits for this file or 'open' it before.".into(),
+                    });
+                }
                 let (editor_delta_for_crdt, rev_deltas_for_editor) =
                     self.apply_delta_to_ot(rev_delta, &file_path);
 
@@ -281,12 +292,43 @@ impl DocumentActor {
                 self.send_deltas_to_editor(rev_deltas_for_editor, &file_path)
                     .await;
             }
+            EditorProtocolMessageFromEditor::Close { uri } => {
+                let file_path = self.file_path_for_uri(&uri);
+                debug!("Got a 'close' message for {file_path}");
+                self.ot_servers.remove(&file_path);
+            }
             EditorProtocolMessageFromEditor::Cursor { uri, ranges } => {
                 let file_path = self.file_path_for_uri(&uri);
                 let userid = self.crdt_doc.actor_id();
                 self.store_cursor_position(userid, file_path, ranges);
             }
         }
+        Ok(())
+    }
+
+    async fn handle_message_from_editor(
+        &mut self,
+        editor_id: EditorId,
+        message: JSONRPCFromEditor,
+    ) {
+        match message {
+            JSONRPCFromEditor::Request { id, payload } => {
+                let result = self.react_to_message_from_editor(payload).await;
+                let response = match result {
+                    Err(error) => JSONRPCResponse::RequestError { id, error },
+                    Ok(_) => JSONRPCResponse::RequestSuccess {
+                        id,
+                        result: "success".into(),
+                    },
+                };
+
+                self.send_to_editor_client(&editor_id, EditorProtocolObject::Response(response))
+                    .await;
+            }
+            JSONRPCFromEditor::Notification { payload } => {
+                let _ = self.react_to_message_from_editor(payload).await;
+            }
+        };
     }
 
     fn open_file_path(&mut self, file_path: String) {
@@ -418,10 +460,28 @@ impl DocumentActor {
         self.send_to_editor_clients(message).await;
     }
 
+    async fn send_to_editor_client(&mut self, editor_id: &EditorId, message: EditorProtocolObject) {
+        if let Some(handle) = self.editor_clients.get(editor_id) {
+            if handle.send(message).await.is_err() {
+                info!("Removing EditorHandle from client list.");
+                self.editor_clients.remove(editor_id);
+            }
+        } else {
+            warn!(
+                "Sending to editor client failed: We don't have a client registered with id #{}.",
+                editor_id.0
+            );
+        }
+    }
+
     async fn send_to_editor_clients(&mut self, message: EditorProtocolMessageToEditor) {
         let mut to_remove = Vec::new();
         for (id, handle) in &mut self.editor_clients.iter_mut() {
-            if handle.send(message.clone()).await.is_err() {
+            if handle
+                .send(EditorProtocolObject::Request(message.clone()))
+                .await
+                .is_err()
+            {
                 // Remove this client.
                 to_remove.push(*id);
             }
@@ -565,6 +625,7 @@ impl DocumentActor {
 pub struct DocumentActorHandle {
     doc_message_tx: DocMessageSender,
     doc_changed_ping_tx: DocChangedSender,
+    next_id: Arc<AtomicUsize>,
 }
 
 impl DocumentActorHandle {
@@ -589,9 +650,9 @@ impl DocumentActorHandle {
         Self {
             doc_message_tx,
             doc_changed_ping_tx,
+            next_id: Default::default(),
         }
     }
-
     /// The TCP and socket connections will send messages through this when they receive something.
     pub async fn send_message(&self, message: DocMessage) {
         self.doc_message_tx
@@ -618,6 +679,11 @@ impl DocumentActorHandle {
             .send(message)
             .await
             .expect("Failed to send random edit to document task");
+    }
+
+    pub fn next_editor_id(&self) -> EditorId {
+        let id = self.next_id.fetch_add(1, Ordering::Relaxed);
+        EditorId(id)
     }
 }
 

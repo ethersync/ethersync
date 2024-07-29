@@ -80,13 +80,13 @@ function M.track_changes(buffer, callback)
                             diff.range["end"].line = diff.range["end"].line - 1
                             diff.range["end"].character = vim.fn.strchars(prev_lines[diff.range["end"].line + 1])
                         else
-                            vim.fn.echoerr(
-                                "We don't know how to handle this case for a deletion after the last visible line. Please file a bug."
+                            vim.api.nvim_err_writeln(
+                                "[ethersync] We don't know how to handle this case for a deletion after the last visible line. Please file a bug."
                             )
                         end
                     else
-                        vim.fn.echoerr(
-                            "We think a delta ending inside the line after the visible ones cannot happen. Please file a bug."
+                        vim.api.nvim_err_writeln(
+                            "[ethersync] We think a delta ending inside the line after the visible ones cannot happen. Please file a bug."
                         )
                     end
                 end

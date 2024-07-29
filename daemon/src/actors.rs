@@ -250,7 +250,8 @@ pub mod tests {
     use super::*;
     use crate::types::{
         factories::*, EditorProtocolMessageFromEditor, EditorProtocolMessageToEditor,
-        EditorTextDelta, EditorTextOp, RevisionedEditorTextDelta,
+        EditorProtocolObject, EditorTextDelta, EditorTextOp, JSONRPCFromEditor,
+        RevisionedEditorTextDelta,
     };
     use pretty_assertions::assert_eq;
     use serial_test::serial;
@@ -312,8 +313,7 @@ pub mod tests {
                     uri: format!("file://{}", file_path.display()),
                     delta: rev_editor_delta,
                 };
-                let payload = editor_message
-                    .to_jsonrpc()
+                let payload = EditorProtocolObject::Request(editor_message).to_jsonrpc()
                     .expect("Could not serialize EditorTextDelta");
                 socket.send(&format!("{payload}\n")).await;
             }
@@ -384,13 +384,15 @@ pub mod tests {
                 // expected ones.
                 while !expected_replacements.is_empty() {
                     let msg = socket.recv().await;
-                    let message: EditorProtocolMessageFromEditor = serde_json::from_str(&msg.to_string())
+                    let message: JSONRPCFromEditor = serde_json::from_str(&msg.to_string())
                         .expect("Could not parse EditorProtocolMessage");
-                    if let EditorProtocolMessageFromEditor::Edit{ delta, ..} = message {
-                        let expected_replacement = expected_replacements.remove(0);
-                        let operations = delta.delta.0;
-                        assert_eq!(vec![expected_replacement], operations, "Different replacements when applying input '{}' to content '{:?}'", input, initial_content);
-                    }
+                    let JSONRPCFromEditor::Request{
+                        payload: EditorProtocolMessageFromEditor::Edit{ delta, ..},
+                        ..
+                    } = message else {continue;};
+                    let expected_replacement = expected_replacements.remove(0);
+                    let operations = delta.delta.0;
+                    assert_eq!(vec![expected_replacement], operations, "Different replacements when applying input '{}' to content '{:?}'", input, initial_content);
                 }
             })
             .await

@@ -71,10 +71,11 @@ async fn accept_editor_loop(
 
     loop {
         let (stream, _addr) = listener.accept().await?;
-        info!("Editor connection established");
 
-        // TODO: we need to get rid of this await to accept multiple editors.
-        spawn_editor_connection(stream, document_handle.clone()).await;
+        let id = document_handle.next_editor_id();
+        info!("Editor connection established (#{})", id.0);
+
+        spawn_editor_connection(stream, document_handle.clone(), id).await;
     }
 }
 

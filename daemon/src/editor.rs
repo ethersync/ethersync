@@ -9,44 +9,53 @@ use tokio_util::sync::CancellationToken;
 use tracing::{debug, error, info, trace};
 
 use crate::daemon::{DocMessage, DocumentActorHandle};
-use crate::types::{EditorProtocolMessageFromEditor, EditorProtocolMessageToEditor};
+use crate::types::{EditorProtocolObject, JSONRPCFromEditor};
 
-pub type EditorMessageSender = mpsc::Sender<EditorProtocolMessageToEditor>;
-pub type EditorMessageReceiver = mpsc::Receiver<EditorProtocolMessageToEditor>;
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
+pub struct EditorId(pub usize);
 
-pub async fn spawn_editor_connection(stream: UnixStream, document_handle: DocumentActorHandle) {
-    let editor_handle = EditorHandle::new(stream, document_handle.clone());
+type EditorMessageSender = mpsc::Sender<EditorProtocolObject>;
+type EditorMessageReceiver = mpsc::Receiver<EditorProtocolObject>;
+
+pub async fn spawn_editor_connection(
+    stream: UnixStream,
+    document_handle: DocumentActorHandle,
+    editor_id: EditorId,
+) {
+    let editor_handle = EditorHandle::new(editor_id, stream, document_handle.clone());
     document_handle
         .send_message(DocMessage::NewEditorConnection(editor_handle))
         .await;
 }
 
 pub struct EditorHandle {
+    pub id: EditorId,
     editor_message_tx: EditorMessageSender,
     shutdown_token: CancellationToken,
 }
 
 impl EditorHandle {
-    pub fn new(stream: UnixStream, document_handle: DocumentActorHandle) -> Self {
+    pub fn new(id: EditorId, stream: UnixStream, document_handle: DocumentActorHandle) -> Self {
         // The document task will send messages intended for the socket connection on this channel.
-        let (socket_message_tx, socket_message_rx) =
-            mpsc::channel::<EditorProtocolMessageToEditor>(1);
+        let (socket_message_tx, socket_message_rx) = mpsc::channel::<EditorProtocolObject>(1);
         let (stream_read, stream_write) = tokio::io::split(stream);
         let shutdown_token = CancellationToken::new();
 
-        let mut reader = SocketReadActor::new(stream_read, shutdown_token.clone(), document_handle);
+        let mut reader =
+            SocketReadActor::new(stream_read, shutdown_token.clone(), document_handle, id);
         tokio::spawn(async move { reader.run().await });
 
         let mut writer =
             SocketWriteActor::new(stream_write, socket_message_rx, shutdown_token.clone());
         tokio::spawn(async move { writer.run().await });
         Self {
+            id,
             editor_message_tx: socket_message_tx,
             shutdown_token,
         }
     }
 
-    pub async fn send(&self, message: EditorProtocolMessageToEditor) -> Result<(), io::Error> {
+    pub async fn send(&self, message: EditorProtocolObject) -> Result<(), io::Error> {
         // Can fail during shutdown or editor disconnect, when Actors already have been killed/closed
         if self.editor_message_tx.send(message).await.is_err() {
             Err(io::Error::new(
@@ -70,6 +79,7 @@ pub struct SocketReadActor {
     reader: ReadHalf<UnixStream>,
     shutdown_token: CancellationToken,
     document_handle: DocumentActorHandle,
+    editor_id: EditorId,
 }
 
 impl SocketReadActor {
@@ -77,11 +87,13 @@ impl SocketReadActor {
         reader: ReadHalf<UnixStream>,
         shutdown_token: CancellationToken,
         document_handle: DocumentActorHandle,
+        editor_id: EditorId,
     ) -> Self {
         Self {
             reader,
             shutdown_token,
             document_handle,
+            editor_id,
         }
     }
 
@@ -93,10 +105,10 @@ impl SocketReadActor {
             match lines.next_line().await {
                 Ok(Some(line)) => {
                     trace!("Got a line from the client: {:#?}", line);
-                    let jsonrpc = EditorProtocolMessageFromEditor::from_jsonrpc(&line)
+                    let jsonrpc = JSONRPCFromEditor::from_jsonrpc(&line)
                         .expect("Failed to parse JSON-RPC message");
                     self.document_handle
-                        .send_message(DocMessage::FromEditor(jsonrpc))
+                        .send_message(DocMessage::FromEditor(self.editor_id, jsonrpc))
                         .await;
                 }
                 Ok(None) => {
@@ -109,7 +121,7 @@ impl SocketReadActor {
         }
         self.shutdown_token.cancel();
         self.document_handle
-            .send_message(DocMessage::CloseEditorConnection)
+            .send_message(DocMessage::CloseEditorConnection(self.editor_id))
             .await;
         info!("Client disconnected");
     }
@@ -134,7 +146,7 @@ impl SocketWriteActor {
         }
     }
 
-    async fn write_to_socket(&mut self, message: EditorProtocolMessageToEditor) {
+    async fn write_to_socket(&mut self, message: EditorProtocolObject) {
         let payload = message
             .to_jsonrpc()
             .expect("Failed to serialize JSON-RPC message");
