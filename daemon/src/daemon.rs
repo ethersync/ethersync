@@ -3,9 +3,9 @@ use crate::document::Document;
 use crate::editor::{EditorHandle, EditorId};
 use crate::ot::OTServer;
 use crate::types::{
-    CursorState, EditorProtocolMessageToEditor, EditorProtocolNotificationFromEditor,
-    EditorProtocolRequestFromEditor, EditorTextDelta, FileTextDelta, JSONRPCFromEditor,
-    PatchEffect, Range, RevisionedEditorTextDelta, TextDelta,
+    CursorState, EditorProtocolMessageError, EditorProtocolMessageFromEditor,
+    EditorProtocolMessageToEditor, EditorTextDelta, FileTextDelta, JSONRPCFromEditor, PatchEffect,
+    Range, RevisionedEditorTextDelta, TextDelta,
 };
 use anyhow::Result;
 use automerge::{
@@ -253,6 +253,50 @@ impl DocumentActor {
         format!("{}/{}", self.base_dir.display(), file_path)
     }
 
+    async fn react_to_message_from_editor(
+        &mut self,
+        message: EditorProtocolMessageFromEditor,
+    ) -> Result<(), EditorProtocolMessageError> {
+        match message {
+            EditorProtocolMessageFromEditor::Open { uri } => {
+                let file_path = self.file_path_for_uri(&uri);
+                debug!("Got an 'open' message for {file_path}");
+                self.open_file_path(file_path);
+            }
+            EditorProtocolMessageFromEditor::Edit {
+                delta: rev_delta,
+                uri,
+            } => {
+                debug!("Handling RevDelta from editor: {:#?}", rev_delta);
+                let file_path = self.file_path_for_uri(&uri);
+                if !self.crdt_doc.file_exists(&file_path) {
+                    return Err(EditorProtocolMessageError {
+                        code: -1,
+                        message: "File not found".into(),
+                        data: "Please stop sending edits for this file or 'open' it before.".into(),
+                    });
+                }
+                let (editor_delta_for_crdt, rev_deltas_for_editor) =
+                    self.apply_delta_to_ot(rev_delta, &file_path);
+
+                self.apply_delta_to_doc(&editor_delta_for_crdt, &file_path);
+                self.send_deltas_to_editor(rev_deltas_for_editor, &file_path)
+                    .await;
+            }
+            EditorProtocolMessageFromEditor::Close { uri } => {
+                let file_path = self.file_path_for_uri(&uri);
+                debug!("Got a 'close' message for {file_path}");
+                self.ot_servers.remove(&file_path);
+            }
+            EditorProtocolMessageFromEditor::Cursor { uri, ranges } => {
+                let file_path = self.file_path_for_uri(&uri);
+                let userid = self.crdt_doc.actor_id();
+                self.store_cursor_position(userid, file_path, ranges);
+            }
+        }
+        Ok(())
+    }
+
     async fn handle_message_from_editor(
         &mut self,
         editor_id: EditorId,
@@ -260,54 +304,23 @@ impl DocumentActor {
     ) {
         match message {
             JSONRPCFromEditor::Request { id, payload } => {
-                match payload {
-                    EditorProtocolRequestFromEditor::Open { uri } => {
-                        let file_path = self.file_path_for_uri(&uri);
-                        debug!("Got an 'open' message for {file_path}");
-                        self.open_file_path(file_path);
-                    }
-                    EditorProtocolRequestFromEditor::Edit {
-                        delta: rev_delta,
-                        uri,
-                    } => {
-                        debug!("Handling RevDelta from editor: {:#?}", rev_delta);
-                        let file_path = self.file_path_for_uri(&uri);
-                        if !self.crdt_doc.file_exists(&file_path) {
-                            let response = EditorProtocolMessageToEditor::RequestError {
-                                id,
-                                code: -1,
-                                message: "File not found".into(),
-                                data:
-                                    "Please stop sending edits for this file or 'open' it before."
-                                        .into(),
-                            };
-                            self.send_to_editor_client(&editor_id, response).await;
-                            return;
-                        }
-                        let (editor_delta_for_crdt, rev_deltas_for_editor) =
-                            self.apply_delta_to_ot(rev_delta, &file_path);
+                let result = self.react_to_message_from_editor(payload).await;
+                let response = match result {
+                    Err(error) => EditorProtocolMessageToEditor::RequestError {
+                        id,
+                        code: error.code,
+                        message: error.message,
+                        data: error.data,
+                    },
+                    Ok(_) => EditorProtocolMessageToEditor::RequestSuccess { id },
+                };
 
-                        self.apply_delta_to_doc(&editor_delta_for_crdt, &file_path);
-                        self.send_deltas_to_editor(rev_deltas_for_editor, &file_path)
-                            .await;
-                    }
-                }
-                let response = EditorProtocolMessageToEditor::RequestSuccess { id };
                 self.send_to_editor_client(&editor_id, response).await;
             }
-            JSONRPCFromEditor::Notification { payload } => match payload {
-                EditorProtocolNotificationFromEditor::Close { uri } => {
-                    let file_path = self.file_path_for_uri(&uri);
-                    debug!("Got a 'close' message for {file_path}");
-                    self.ot_servers.remove(&file_path);
-                }
-                EditorProtocolNotificationFromEditor::Cursor { uri, ranges } => {
-                    let file_path = self.file_path_for_uri(&uri);
-                    let userid = self.crdt_doc.actor_id();
-                    self.store_cursor_position(userid, file_path, ranges);
-                }
-            },
-        }
+            JSONRPCFromEditor::Notification { payload } => {
+                let _ = self.react_to_message_from_editor(payload).await;
+            }
+        };
     }
 
     fn open_file_path(&mut self, file_path: String) {

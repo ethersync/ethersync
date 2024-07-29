@@ -129,11 +129,11 @@ pub enum JSONRPCFromEditor {
     Request {
         id: usize,
         #[serde(flatten)]
-        payload: EditorProtocolRequestFromEditor,
+        payload: EditorProtocolMessageFromEditor,
     },
     Notification {
         #[serde(flatten)]
-        payload: EditorProtocolNotificationFromEditor,
+        payload: EditorProtocolMessageFromEditor,
     },
 }
 impl JSONRPCFromEditor {
@@ -146,26 +146,27 @@ impl JSONRPCFromEditor {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "method", content = "params", rename_all = "camelCase")]
-pub enum EditorProtocolRequestFromEditor {
+pub enum EditorProtocolMessageFromEditor {
     Open {
+        uri: DocumentUri,
+    },
+    Close {
         uri: DocumentUri,
     },
     Edit {
         uri: DocumentUri,
         delta: RevisionedEditorTextDelta,
     },
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(tag = "method", content = "params", rename_all = "camelCase")]
-pub enum EditorProtocolNotificationFromEditor {
-    Close {
-        uri: DocumentUri,
-    },
     Cursor {
         uri: DocumentUri,
         ranges: Vec<Range>,
     },
+}
+
+pub struct EditorProtocolMessageError {
+    pub code: i32,
+    pub message: String,
+    pub data: String,
 }
 
 #[cfg(test)]
@@ -183,7 +184,7 @@ mod test_serde {
             message.unwrap(),
             JSONRPCFromEditor::Request {
                 id: 1,
-                payload: EditorProtocolRequestFromEditor::Open {
+                payload: EditorProtocolMessageFromEditor::Open {
                     uri: "file:///tmp/file".into()
                 }
             }
@@ -235,7 +236,7 @@ pub enum EditorProtocolMessageToEditor {
     },
     RequestError {
         id: usize,
-        code: i64,
+        code: i32,
         message: String,
         // We could change this datatype, if we wanted to.
         data: String,
