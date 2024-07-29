@@ -369,21 +369,5 @@ mod tests {
             // Again, stop, until peers tell us if they want more information.
             assert!(document.generate_sync_message(&mut state).is_none());
         }
-
-        fn patches_when_syncing_with_peer(mut host: Document) -> Vec<Patch> {
-            let mut peer = Document::default();
-            let mut peer_state = SyncState::new();
-            let mut host_state = SyncState::new();
-
-            let mut patches = vec![];
-            while let Some(message) = host.generate_sync_message(&mut peer_state) {
-                // This is assuming the interesting patch to test is the *last* one.
-                patches = peer.receive_sync_message_log_patches(message, &mut host_state);
-                if let Some(response) = peer.generate_sync_message(&mut host_state) {
-                    host.receive_sync_message_log_patches(response, &mut peer_state);
-                }
-            }
-            patches
-        }
     }
 }
