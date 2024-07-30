@@ -1,10 +1,9 @@
-use std::io;
-use std::path::{Path, PathBuf};
-use tokio::net::UnixListener;
-
 use crate::daemon::DocumentActorHandle;
 use crate::editor::spawn_editor_connection;
 use crate::sandbox;
+use std::io;
+use std::path::{Path, PathBuf};
+use tokio::net::UnixListener;
 use tracing::info;
 
 /// # Panics
