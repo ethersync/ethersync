@@ -114,7 +114,8 @@ impl DocumentActor {
             Document::load(&bytes)
         } else {
             info!("Initializing a new CRDT document");
-            Document::default()
+            let init = !persistence_file_exists && is_host;
+            Document::new(init)
         };
         info!("Done.");
 

@@ -24,6 +24,17 @@ pub struct Document {
 }
 
 impl Document {
+    pub fn new(init: bool) -> Self {
+        let mut s = Self {
+            doc: AutoCommit::default(),
+        };
+
+        if init {
+            s.initialize_top_level_maps();
+        }
+
+        s
+    }
     pub fn load(bytes: &[u8]) -> Self {
         let doc =
             AutoCommit::load(&bytes).expect("Failed to load Automerge document from given bytes");
