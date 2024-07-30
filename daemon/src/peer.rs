@@ -72,7 +72,7 @@ impl P2PActor {
             .build();
 
         let listen_addr =
-            format!("/ip4/127.0.0.1/udp/{}/quic-v1", self.connection_info.port()).parse()?;
+            format!("/ip4/0.0.0.0/udp/{}/quic-v1", self.connection_info.port()).parse()?;
 
         swarm.listen_on(listen_addr)?;
 
