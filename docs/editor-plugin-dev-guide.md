@@ -115,7 +115,7 @@ Killing it shows the opposite: "Editor disconnected".
 Next, you could manually send some JSON-RPC. We included a Python script to help you create messages in the correct format: Run it to see what an open message could look like:
 
 ```bash
-python tools/dummy-jsonrpc.py playground/file | ethersync client
+python tools/dummy-jsonrpc.py playground/file
 ```
 
 You can send it to the daemon like this:
