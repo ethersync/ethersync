@@ -85,7 +85,7 @@ pub struct DocumentActor {
     doc_message_rx: mpsc::Receiver<DocMessage>,
     doc_changed_ping_tx: DocChangedSender,
     editor_clients: HashMap<EditorId, EditorHandle>,
-    /// If we have an ot_server for a given file, it means that editor has ownership.
+    /// If we have an `ot_server` for a given file, it means that editor has ownership.
     ot_servers: HashMap<String, OTServer>,
     /// The Document is the main I/O managed resource of this actor.
     crdt_doc: Document,
