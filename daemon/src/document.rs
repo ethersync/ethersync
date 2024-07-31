@@ -37,7 +37,7 @@ impl Document {
     }
     pub fn load(bytes: &[u8]) -> Self {
         let doc =
-            AutoCommit::load(&bytes).expect("Failed to load Automerge document from given bytes");
+            AutoCommit::load(bytes).expect("Failed to load Automerge document from given bytes");
         Self { doc }
     }
 
