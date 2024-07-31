@@ -337,7 +337,7 @@ impl DocumentActor {
             Ok(text) => text,
             Err(_) => {
                 // The file doesn't exist yet - create it in the Automerge document.
-                let text = "".to_string();
+                let text = String::new();
                 self.crdt_doc.initialize_text(&text, &file_path);
                 text
             }
