@@ -36,7 +36,7 @@ pub fn connection(socket_path: &Path) {
         data.push(byte);
 
         if reading_header {
-            if data.ends_with(&[b'\r', b'\n', b'\r', b'\n']) {
+            if data.ends_with(b"\r\n\r\n") {
                 let header_string = from_utf8(&data).expect("Failed to parse header as UTF-8");
                 content_length = 0;
                 for line in header_string.lines() {
