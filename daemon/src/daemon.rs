@@ -792,10 +792,11 @@ async fn spawn_persister(document_handle: DocumentActorHandle) {
             }
         }
 
-        // TODO: debounce / slow down?
-        // Alternatively, we could use a "back channel" in the Persist message,
-        // so that the daemon tells us when it's done persisting.
         document_handle.send_message(DocMessage::Persist).await;
+
+        // Alternatively to sleeping, we could use a "back channel" in the Persist
+        // message, so that the daemon tells us when it's done persisting.
+        tokio::time::sleep(Duration::from_secs(1)).await;
     }
 }
 
