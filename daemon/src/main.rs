@@ -1,7 +1,7 @@
 use clap::{Parser, Subcommand};
 use ethersync::{daemon::Daemon, logging, sandbox};
 use std::io;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use tokio::signal;
 use tracing::{error, info};
 
@@ -19,7 +19,7 @@ struct Cli {
     command: Commands,
     /// Path to the Unix domain socket to use for communication between daemon and editors.
     #[arg(short, long, global = true, default_value = DEFAULT_SOCKET_PATH)]
-    socket_path: Option<PathBuf>,
+    socket_path: PathBuf,
     /// Enable verbose debug output.
     #[arg(short, long, global = true, action)]
     debug: bool,
@@ -29,17 +29,16 @@ struct Cli {
 enum Commands {
     /// Launch Ethersync's background process that connects with clients and other nodes.
     Daemon {
-        // TODO: Move the default port definition to a constant.
         /// Port to listen on as a hosting peer.
         #[arg(short, long, default_value = DEFAULT_PORT)]
-        port: Option<u16>,
+        port: u16,
         /// The directory to sync. Defaults to current directory.
         directory: Option<PathBuf>,
         /// IP + port of a peer to connect to. Example: 192.168.1.42:1234
         #[arg(long)]
         peer: Option<String>,
         /// Initialize the current contents of the directory as a new Ethersync directory.
-        #[arg(long, default_value = "false")]
+        #[arg(long)]
         init: bool,
     },
     /// Open a JSON-RPC connection to the Ethersync daemon on stdin/stdout.
@@ -66,7 +65,7 @@ async fn main() -> io::Result<()> {
 
     logging::initialize(cli.debug);
 
-    let socket_path = cli.socket_path.unwrap_or(DEFAULT_SOCKET_PATH.into());
+    let socket_path = cli.socket_path;
 
     match cli.command {
         Commands::Daemon {
@@ -88,7 +87,7 @@ async fn main() -> io::Result<()> {
                 return Ok(());
             }
             info!("Starting Ethersync on {}", directory.display());
-            Daemon::new(port, peer, &socket_path, &directory, init);
+            Daemon::new(Some(port), peer, &socket_path, &directory, init);
             match signal::ctrl_c().await {
                 Ok(()) => {}
                 Err(err) => {
