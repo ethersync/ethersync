@@ -153,6 +153,7 @@ Our current convention is to have a subdirectory called `.ethersync` in an Ether
 
 ```bash
 mkdir -p playground/.ethersync
+touch playground/file
 ```
 
 ### 2. Start the daemon
