@@ -209,16 +209,16 @@ impl Document {
         self.text_obj(file_path).is_ok()
     }
 
-    pub fn store_cursor_position(&mut self, userid: String, file_path: String, ranges: Vec<Range>) {
+    pub fn store_cursor_position(&mut self, userid: &str, file_path: String, ranges: Vec<Range>) {
         let state_map = self
             .top_level_map_obj("states")
             .expect("Failed to get states Map object");
         let user_obj = self
             .doc
-            .put_object(state_map, &userid, ObjType::Text)
+            .put_object(state_map, userid, ObjType::Text)
             .expect("Failed to initialize user state Map object in Automerge document");
         let cursor_state = CursorState {
-            userid: userid.clone(),
+            userid: userid.to_owned(),
             name: env::var("USER").ok(),
             file_path,
             ranges,
@@ -230,11 +230,11 @@ impl Document {
         debug!("Stored user state for '{userid}': {data}");
     }
 
-    pub fn maybe_delete_cursor_position(&mut self, userid: String) {
+    pub fn maybe_delete_cursor_position(&mut self, userid: &str) {
         // We try to set an empty cursor position, but in case we don't have any file in the
         // project its not a big deal if it stays.
         if let Some(file_path) = self.get_valid_file_path() {
-            self.store_cursor_position(userid, file_path, vec![])
+            self.store_cursor_position(userid, file_path, vec![]);
         }
     }
 
