@@ -85,7 +85,7 @@ pub struct DocumentActor {
     doc_message_rx: mpsc::Receiver<DocMessage>,
     doc_changed_ping_tx: DocChangedSender,
     editor_clients: HashMap<EditorId, EditorHandle>,
-    /// If we have an ot_server for a given file, it means that editor has ownership.
+    /// If we have an `ot_server` for a given file, it means that editor has ownership.
     ot_servers: HashMap<String, OTServer>,
     /// The Document is the main I/O managed resource of this actor.
     crdt_doc: Document,
@@ -237,7 +237,7 @@ impl DocumentActor {
                 self.editor_clients.remove(&editor_id);
 
                 let userid = self.crdt_doc.actor_id();
-                self.maybe_delete_cursor_position(userid);
+                self.maybe_delete_cursor_position(&userid);
             }
         }
     }
@@ -301,7 +301,7 @@ impl DocumentActor {
             EditorProtocolMessageFromEditor::Cursor { uri, ranges } => {
                 let file_path = self.file_path_for_uri(&uri);
                 let userid = self.crdt_doc.actor_id();
-                self.store_cursor_position(userid, file_path, ranges);
+                self.store_cursor_position(&userid, file_path, ranges);
             }
         }
         Ok(())
@@ -337,7 +337,7 @@ impl DocumentActor {
             Ok(text) => text,
             Err(_) => {
                 // The file doesn't exist yet - create it in the Automerge document.
-                let text = "".to_string();
+                let text = String::new();
                 self.crdt_doc.initialize_text(&text, &file_path);
                 text
             }
@@ -597,13 +597,13 @@ impl DocumentActor {
         self.maybe_write_file(file_path);
     }
 
-    fn store_cursor_position(&mut self, userid: String, file_path: String, ranges: Vec<Range>) {
+    fn store_cursor_position(&mut self, userid: &str, file_path: String, ranges: Vec<Range>) {
         self.crdt_doc
             .store_cursor_position(userid, file_path, ranges);
         let _ = self.doc_changed_ping_tx.send(());
     }
 
-    fn maybe_delete_cursor_position(&mut self, userid: String) {
+    fn maybe_delete_cursor_position(&mut self, userid: &str) {
         self.crdt_doc.maybe_delete_cursor_position(userid);
         let _ = self.doc_changed_ping_tx.send(());
     }
@@ -695,14 +695,12 @@ pub struct Daemon {
 impl Daemon {
     // Launch the daemon. Optionally, connect to given peer.
     pub fn new(
-        port: Option<u16>,
-        peer: Option<String>,
+        peer_connection_info: connect::PeerConnectionInfo,
         socket_path: &Path,
         base_dir: &Path,
         init: bool,
     ) -> Self {
-        // If the peer address is empty, we're the host.
-        let is_host = peer.is_none();
+        let is_host = peer_connection_info.is_host();
 
         let document_handle = DocumentActorHandle::new(base_dir, init, is_host);
 
@@ -731,9 +729,8 @@ impl Daemon {
         });
 
         let connection_document_handle = document_handle.clone();
-        let peer_info = connect::PeerConnectionInfo::new(port, peer);
         tokio::spawn(async move {
-            connect::make_peer_connection(peer_info, connection_document_handle).await;
+            connect::make_peer_connection(peer_connection_info, connection_document_handle).await;
         });
 
         let editor_socket_path = socket_path.to_path_buf();

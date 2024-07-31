@@ -71,7 +71,7 @@ pub struct OTServer {
     editor_queue: Vec<OperationSeq>,
     current_content: String,
     /// That's the content we assume the editor has, where the operations it sends us apply.
-    /// (which is the content "in front" of the editor_queue)
+    /// (which is the content "in front" of the `editor_queue`)
     last_confirmed_editor_content: String,
 }
 

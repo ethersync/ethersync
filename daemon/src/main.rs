@@ -1,7 +1,8 @@
 use clap::{Parser, Subcommand};
+use ethersync::connect::PeerConnectionInfo;
 use ethersync::{daemon::Daemon, logging, sandbox};
 use std::io;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use tokio::signal;
 use tracing::{error, info};
 
@@ -19,7 +20,7 @@ struct Cli {
     command: Commands,
     /// Path to the Unix domain socket to use for communication between daemon and editors.
     #[arg(short, long, global = true, default_value = DEFAULT_SOCKET_PATH)]
-    socket_path: Option<PathBuf>,
+    socket_path: PathBuf,
     /// Enable verbose debug output.
     #[arg(short, long, global = true, action)]
     debug: bool,
@@ -29,29 +30,27 @@ struct Cli {
 enum Commands {
     /// Launch Ethersync's background process that connects with clients and other nodes.
     Daemon {
-        // TODO: Move the default port definition to a constant.
         /// Port to listen on as a hosting peer.
         #[arg(short, long, default_value = DEFAULT_PORT)]
-        port: Option<u16>,
+        port: u16,
         /// The directory to sync. Defaults to current directory.
         directory: Option<PathBuf>,
         /// IP + port of a peer to connect to. Example: 192.168.1.42:1234
         #[arg(long)]
         peer: Option<String>,
         /// Initialize the current contents of the directory as a new Ethersync directory.
-        #[arg(long, default_value = "false")]
+        #[arg(long)]
         init: bool,
     },
     /// Open a JSON-RPC connection to the Ethersync daemon on stdin/stdout.
     Client,
 }
 
-fn has_ethersync_directory(dir: PathBuf) -> bool {
-    let mut ethersync_dir = dir.clone();
-    ethersync_dir.push(ETHERSYNC_CONFIG_DIR);
+fn has_ethersync_directory(dir: &Path) -> bool {
+    let ethersync_dir = dir.join(ETHERSYNC_CONFIG_DIR);
     // Using the sandbox method here is technically unnecessary,
     // but we want to really run all path operations through the sandbox module.
-    sandbox::exists(&dir, &ethersync_dir).expect("Failed to check") && ethersync_dir.is_dir()
+    sandbox::exists(dir, &ethersync_dir).expect("Failed to check") && ethersync_dir.is_dir()
 }
 
 #[tokio::main]
@@ -66,7 +65,7 @@ async fn main() -> io::Result<()> {
 
     logging::initialize(cli.debug);
 
-    let socket_path = cli.socket_path.unwrap_or(DEFAULT_SOCKET_PATH.into());
+    let socket_path = cli.socket_path;
 
     match cli.command {
         Commands::Daemon {
@@ -76,10 +75,12 @@ async fn main() -> io::Result<()> {
             init,
         } => {
             let directory = directory
-                .unwrap_or(std::env::current_dir().expect("Could not access current directory"))
+                .unwrap_or_else(|| {
+                    std::env::current_dir().expect("Could not access current directory")
+                })
                 .canonicalize()
                 .expect("Could not access given directory");
-            if !has_ethersync_directory(directory.clone()) {
+            if !has_ethersync_directory(&directory) {
                 error!(
                     "No {} found in {} (create it to Ethersync-enable the directory)",
                     ETHERSYNC_CONFIG_DIR,
@@ -87,8 +88,13 @@ async fn main() -> io::Result<()> {
                 );
                 return Ok(());
             }
+            let peer_connection_info = if let Some(peer) = peer {
+                PeerConnectionInfo::Connect(peer)
+            } else {
+                PeerConnectionInfo::Accept(port)
+            };
             info!("Starting Ethersync on {}", directory.display());
-            Daemon::new(port, peer, &socket_path, &directory, init);
+            Daemon::new(peer_connection_info, &socket_path, &directory, init);
             match signal::ctrl_c().await {
                 Ok(()) => {}
                 Err(err) => {
