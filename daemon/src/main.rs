@@ -74,7 +74,9 @@ async fn main() -> io::Result<()> {
             init,
         } => {
             let directory = directory
-                .unwrap_or(std::env::current_dir().expect("Could not access current directory"))
+                .unwrap_or_else(|| {
+                    std::env::current_dir().expect("Could not access current directory")
+                })
                 .canonicalize()
                 .expect("Could not access given directory");
             if !has_ethersync_directory(&directory) {
