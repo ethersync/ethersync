@@ -68,7 +68,7 @@ You might be able to use one of the following packages, or you could try a manua
   One option to do this temporarily is to run this command in the terminal:
 
   ```bash
-  export PATH="$HOME/path/to/ethersync/daemon/target/release:$PATH"
+  export PATH="$PWD/target/release:$PATH"
   ```
 </details>
 
@@ -156,7 +156,7 @@ In a group, one person needs to "host" the session, while the others join it. (P
 - As the **host**, run:
 
     ```bash
-    ethersync daemon path/to/playground
+    ethersync daemon playground
     ```
 
     This will print an IP address and port (like `192.168.178.23:4242`), which others can use to connect to you. (It prints the local and public IP address. Right now, if you want others to be able to join you from outside your local network, you might need to configure your router to enable port forwarding to your computer. A more convenient way to do that is planned.)
@@ -164,7 +164,7 @@ In a group, one person needs to "host" the session, while the others join it. (P
 - As a **peer**, specify the IP address and port of the host:
 
     ```bash
-    ethersync daemon path/to/playground --peer 192.168.178.23:4242
+    ethersync daemon playground --peer 192.168.178.23:4242
     ```
 
 ### 3. Start collaborating in real-time!
@@ -172,7 +172,7 @@ In a group, one person needs to "host" the session, while the others join it. (P
 You can now open, edit, and delete files in the shared directory, and connected peers will get your changes! For example, open a new file:
 
 ```bash
-nvim path/to/playground/file
+nvim playground/file
 ```
 
 If everything went correctly, you should see `Ethersync activated!` in Neovim's messages and `Client connection established.` in the logs of the daemon.
