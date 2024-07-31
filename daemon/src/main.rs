@@ -45,12 +45,11 @@ enum Commands {
     Client,
 }
 
-fn has_ethersync_directory(dir: PathBuf) -> bool {
-    let mut ethersync_dir = dir.clone();
-    ethersync_dir.push(ETHERSYNC_CONFIG_DIR);
+fn has_ethersync_directory(dir: &Path) -> bool {
+    let ethersync_dir = dir.join(ETHERSYNC_CONFIG_DIR);
     // Using the sandbox method here is technically unnecessary,
     // but we want to really run all path operations through the sandbox module.
-    sandbox::exists(&dir, &ethersync_dir).expect("Failed to check") && ethersync_dir.is_dir()
+    sandbox::exists(dir, &ethersync_dir).expect("Failed to check") && ethersync_dir.is_dir()
 }
 
 #[tokio::main]
@@ -78,7 +77,7 @@ async fn main() -> io::Result<()> {
                 .unwrap_or(std::env::current_dir().expect("Could not access current directory"))
                 .canonicalize()
                 .expect("Could not access given directory");
-            if !has_ethersync_directory(directory.clone()) {
+            if !has_ethersync_directory(&directory) {
                 error!(
                     "No {} found in {} (create it to Ethersync-enable the directory)",
                     ETHERSYNC_CONFIG_DIR,
