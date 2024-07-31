@@ -4,7 +4,7 @@ from pathlib import Path
 
 parser = argparse.ArgumentParser(description="Generate JSON-RPC message.")
 parser.add_argument(
-    "--message_type",
+    "--message-type",
     choices=["open", "edit"],
     help='The type of message to generate: "open" or "edit".',
     default="open",
