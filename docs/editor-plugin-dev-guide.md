@@ -93,10 +93,6 @@ The protocol uses a couple of basic data types:
 
     This attaches a revision number to a delta. The semantics are that the delta *applies to* (is intended for) that specified revision.
 
-- `RevisionedRanges: {ranges: Range[], revision: number}`
-
-    This attaches a revision number to a list of ranges.
-
 # How the editor recognize Ethersync-enabled directories
 
 Similar how Git repositories have a `.git` directory at the top level, Ethersync-enabled directories have an `.ethersync` directory at the top level. The editor must only send messages for files inside Ethersync-enabled directories.
@@ -117,9 +113,9 @@ Similar how Git repositories have a `.git` directory at the top level, Ethersync
 - The `revision` attribute of `RevisionedDelta` is the last revision seen from the daemon.
 - After each user edit, the editor must increase its editor revision.
 
-## `"cursor" {uri: DocumentUri, ranges: RevisionedRanges}`
+## `"cursor" {uri: DocumentUri, ranges: Range[]}`
 
-- Sends current cursor position/selection(s). Replaces the "previous one".
+- Sends current cursor position/selection(s). Replaces the previous cursor ranges.
 
 # Daemon to editor
 
@@ -129,6 +125,6 @@ Similar how Git repositories have a `.git` directory at the top level, Ethersync
 - If this is not the editor revision stored in the editor, the editor must ignore the edit. The daemon will send an updated version later.
 - After applying the received edit, the editor must increase its daemon revision.
 
-## `"cursor" {userid: integer, name?: string, uri: DocumentUri, ranges: RevisionedRanges}`
+## `"cursor" {userid: integer, name?: string, uri: DocumentUri, ranges: Range[]}`
 
-- The daemon sends this regardless of whether the file has been opened in the editor. The editor can use this information to display in which files other people work.
+- The daemon sends this message when user's cursor positions or selections change, regardless of whether the file has been opened in the editor. The editor can use this information to display in which files other people work.
