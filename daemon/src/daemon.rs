@@ -714,18 +714,7 @@ impl Daemon {
         // Initialize persister.
         let persister_document_handle = document_handle.clone();
         tokio::spawn(async move {
-            let mut doc_changed_ping_rx = persister_document_handle.subscribe_document_changes();
-
-            persister_document_handle
-                .send_message(DocMessage::Persist)
-                .await;
-
-            // TODO: debounce / slow down?
-            while doc_changed_ping_rx.recv().await.is_ok() {
-                persister_document_handle
-                    .send_message(DocMessage::Persist)
-                    .await;
-            }
+            spawn_persister(persister_document_handle).await;
         });
 
         let connection_document_handle = document_handle.clone();
@@ -780,6 +769,33 @@ async fn spawn_file_watcher(base_dir: PathBuf, document_handle: DocumentActorHan
     // TODO: can this be event based?
     loop {
         tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+}
+
+async fn spawn_persister(document_handle: DocumentActorHandle) {
+    let mut doc_changed_ping_rx = document_handle.subscribe_document_changes();
+
+    document_handle.send_message(DocMessage::Persist).await;
+
+    loop {
+        match doc_changed_ping_rx.recv().await {
+            Ok(()) => {
+                // The document has changed.
+            }
+            Err(broadcast::error::RecvError::Closed) => {
+                panic!("Doc changed channel has been closed");
+            }
+            Err(broadcast::error::RecvError::Lagged(_)) => {
+                // This is fine, the messages in this channel are just pings.
+                // It's fine if we miss some.
+                debug!("Doc changed ping channel lagged (this is probably fine)");
+            }
+        }
+
+        // TODO: debounce / slow down?
+        // Alternatively, we could use a "back channel" in the Persist message,
+        // so that the daemon tells us when it's done persisting.
+        document_handle.send_message(DocMessage::Persist).await;
     }
 }
 
