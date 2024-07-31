@@ -10,14 +10,16 @@ use crate::editor::spawn_editor_connection;
 use crate::peer::spawn_peer_sync;
 use crate::sandbox;
 
-pub struct PeerConnectionInfo {
-    port: Option<u16>,
-    peer: Option<String>,
+pub enum PeerConnectionInfo {
+    /// Port
+    Accept(u16),
+    /// Peer
+    Connect(String),
 }
 impl PeerConnectionInfo {
     #[must_use]
-    pub fn new(port: Option<u16>, peer: Option<String>) -> Self {
-        Self { port, peer }
+    pub const fn is_host(&self) -> bool {
+        matches!(self, Self::Accept(_))
     }
 }
 
@@ -28,11 +30,9 @@ pub async fn make_peer_connection(
     connection_info: PeerConnectionInfo,
     document_handle: DocumentActorHandle,
 ) {
-    let result = if let Some(peer) = connection_info.peer {
-        connect_with_peer(peer, document_handle).await
-    } else {
-        let port = connection_info.port.unwrap_or(4242);
-        accept_peer_loop(port, document_handle).await
+    let result = match connection_info {
+        PeerConnectionInfo::Connect(peer) => connect_with_peer(peer, document_handle).await,
+        PeerConnectionInfo::Accept(port) => accept_peer_loop(port, document_handle).await,
     };
     match result {
         Ok(()) => { /* successfully connected/started accept loop */ }

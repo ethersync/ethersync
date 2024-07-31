@@ -1,4 +1,5 @@
 use clap::{Parser, Subcommand};
+use ethersync::connect::PeerConnectionInfo;
 use ethersync::{daemon::Daemon, logging, sandbox};
 use std::io;
 use std::path::{Path, PathBuf};
@@ -87,8 +88,13 @@ async fn main() -> io::Result<()> {
                 );
                 return Ok(());
             }
+            let peer_connection_info = if let Some(peer) = peer {
+                PeerConnectionInfo::Connect(peer)
+            } else {
+                PeerConnectionInfo::Accept(port)
+            };
             info!("Starting Ethersync on {}", directory.display());
-            Daemon::new(Some(port), peer, &socket_path, &directory, init);
+            Daemon::new(peer_connection_info, &socket_path, &directory, init);
             match signal::ctrl_c().await {
                 Ok(()) => {}
                 Err(err) => {
