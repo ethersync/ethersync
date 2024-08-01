@@ -114,6 +114,7 @@ local function on_buffer_open()
     }
 
     local uri = "file://" .. filename
+    -- TODO: If open fails, abort adding it to the changetracker (issue #88).
     send_request("open", { uri = uri })
 
     -- Vim enables eol for an empty file, but we do use this option values

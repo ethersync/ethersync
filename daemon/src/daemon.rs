@@ -13,7 +13,7 @@ use automerge::{
     sync::{Message as AutomergeSyncMessage, State as SyncState},
     Patch,
 };
-use ignore::WalkBuilder;
+use ignore::{Walk, WalkBuilder};
 use notify::{RecursiveMode, Result as NotifyResult, Watcher};
 use rand::Rng;
 use std::collections::{HashMap, HashSet};
@@ -285,7 +285,51 @@ impl DocumentActor {
                 let file_path = self
                     .file_path_for_uri(&uri)
                     .map_err(anyhow_err_to_protocol_err)?;
+
                 debug!("Got an 'open' message for {file_path}");
+                let absolute_file_path = self.absolute_path_for_file_path(&file_path);
+                let absolute_file_path = Path::new(&absolute_file_path);
+                if !sandbox::exists(&self.base_dir, absolute_file_path)
+                    .map_err(anyhow_err_to_protocol_err)?
+                {
+                    // Creating nonexisting files allows us to traverse this file for whether it's
+                    // ignored, which is needed to even be allowed to open it.
+                    sandbox::write_file(&self.base_dir, absolute_file_path, b"")
+                        .map_err(anyhow_err_to_protocol_err)?;
+                }
+
+                // We only want to process these messages for files that are not ignored.
+                // To use the same logic for which files are ignored, iterate through all files
+                // using ignore::Walk, and try to find this file.
+                // TODO: Request a better way to do this with the "ignore" crate.
+                if !self
+                    .build_walk()
+                    .filter_map(Result::ok)
+                    .filter(|dir_entry| {
+                        dir_entry
+                            .file_type()
+                            .expect("Couldn't get file type of dir entry.")
+                            .is_file()
+                    })
+                    .any(|dir_entry| {
+                        let walked_file_path = self
+                            .file_path_for_uri(
+                                dir_entry
+                                    .path()
+                                    .to_str()
+                                    .expect("Could not convert PathBuf to str"),
+                            )
+                            .expect("Could not convert URI to file path");
+                        walked_file_path == file_path
+                    })
+                {
+                    return Err(EditorProtocolMessageError {
+                        code: -1,
+                        message: "File is ignored".into(),
+                        data: "This file should not be shared with other peers".into(),
+                    });
+                }
+
                 self.open_file_path(file_path);
             }
             EditorProtocolMessageFromEditor::Edit {
@@ -296,7 +340,7 @@ impl DocumentActor {
                 let file_path = self
                     .file_path_for_uri(&uri)
                     .map_err(anyhow_err_to_protocol_err)?;
-                if !self.crdt_doc.file_exists(&file_path) {
+                if self.ot_servers.get_mut(&file_path).is_none() {
                     return Err(EditorProtocolMessageError {
                         code: -1,
                         message: "File not found".into(),
@@ -554,8 +598,7 @@ impl DocumentActor {
         }
     }
 
-    /// Reading in the file is a preparatory step, before kicking off the actor.
-    fn read_current_content_from_dir(&mut self, init: bool) {
+    fn build_walk(&mut self) -> Walk {
         let ignored_things = [".git", ".ethersync"];
         // TODO: How to deal with binary files?
         WalkBuilder::new(self.base_dir.clone())
@@ -572,6 +615,10 @@ impl DocumentActor {
                 !ignored_things.contains(&name)
             })
             .build()
+    }
+
+    fn read_current_content_from_dir(&mut self, init: bool) {
+        self.build_walk()
             .filter_map(Result::ok)
             .filter(|dir_entry| {
                 dir_entry
