@@ -16,7 +16,7 @@ local function send_request(method, params)
     client.request(method, params, function(err, _)
         if err then
             local error_msg = "[ethersync] Error for '" .. method .. "': " .. err.message
-            if err.data then
+            if err.data and err.data ~= "" then
                 error_msg = error_msg .. " (" .. err.data .. ")"
             end
             vim.api.nvim_err_writeln(error_msg)
@@ -69,9 +69,11 @@ local function connect()
         end,
         on_error = function(code, ...)
             print("Ethersync client connection error: ", code, vim.inspect({ ... }))
+            client = nil
         end,
         on_exit = function(...)
             print("Ethersync client connection exited: ", vim.inspect({ ... }))
+            client = nil
         end,
     }
 

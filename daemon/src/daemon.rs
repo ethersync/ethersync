@@ -8,7 +8,7 @@ use crate::types::{
     EditorProtocolMessageToEditor, EditorProtocolObject, EditorTextDelta, FileTextDelta,
     JSONRPCFromEditor, JSONRPCResponse, PatchEffect, Range, RevisionedEditorTextDelta, TextDelta,
 };
-use anyhow::Result;
+use anyhow::{bail, Context, Result};
 use automerge::{
     sync::{Message as AutomergeSyncMessage, State as SyncState},
     Patch,
@@ -165,7 +165,9 @@ impl DocumentActor {
                 // TODO: This is a workaround. Handle this case better by returning a Result in
                 // file_path_for_uri! The deletion happens when the fuzzer removes the temp dir.
                 if file_path.as_str() != self.base_dir.as_os_str() {
-                    let file_path = self.file_path_for_uri(&file_path);
+                    let file_path = self
+                        .file_path_for_uri(&file_path)
+                        .expect("Could not determine file path when trying to remove file");
                     self.crdt_doc.remove_text(&file_path);
                     let _ = self.doc_changed_ping_tx.send(());
                 }
@@ -242,21 +244,25 @@ impl DocumentActor {
         }
     }
 
-    fn file_path_for_uri(&self, uri: &str) -> String {
+    fn file_path_for_uri(&self, uri: &str) -> Result<String> {
         // If uri starts with "file://", we remove it.
         let absolute_path = uri.strip_prefix("file://").unwrap_or(uri);
 
         // Check that it's an absolute path.
-        assert!(absolute_path.starts_with('/'), "Path is not absolute");
+        if !absolute_path.starts_with('/') {
+            bail!("Path '{absolute_path}' is not absolute");
+        }
 
         // TODO: Instead of panicking, we should handle this in a way so we don't crash.
         // Once the editor protocol is based on requests, we can send back an error?
-        absolute_path
+        Ok(absolute_path
             .strip_prefix(&self.base_dir.display().to_string())
-            .unwrap_or_else(|| panic!("Path {absolute_path} is not within base dir"))
+            .with_context(|| format!("Path '{absolute_path}' is not within base dir"))?
             .strip_prefix('/')
-            .expect("Could not remove a '/' while computing file path")
-            .to_string()
+            .with_context(|| {
+                format!("Could not remove a '/' while computing file path for '{absolute_path}'")
+            })?
+            .to_string())
     }
 
     fn absolute_path_for_file_path(&self, file_path: &str) -> String {
@@ -267,9 +273,18 @@ impl DocumentActor {
         &mut self,
         message: EditorProtocolMessageFromEditor,
     ) -> Result<(), EditorProtocolMessageError> {
+        fn anyhow_err_to_protocol_err(error: anyhow::Error) -> EditorProtocolMessageError {
+            EditorProtocolMessageError {
+                code: -1,
+                message: error.to_string(),
+                data: String::new(),
+            }
+        }
         match message {
             EditorProtocolMessageFromEditor::Open { uri } => {
-                let file_path = self.file_path_for_uri(&uri);
+                let file_path = self
+                    .file_path_for_uri(&uri)
+                    .map_err(anyhow_err_to_protocol_err)?;
                 debug!("Got an 'open' message for {file_path}");
                 self.open_file_path(file_path);
             }
@@ -278,7 +293,9 @@ impl DocumentActor {
                 uri,
             } => {
                 debug!("Handling RevDelta from editor: {:#?}", rev_delta);
-                let file_path = self.file_path_for_uri(&uri);
+                let file_path = self
+                    .file_path_for_uri(&uri)
+                    .map_err(anyhow_err_to_protocol_err)?;
                 if !self.crdt_doc.file_exists(&file_path) {
                     return Err(EditorProtocolMessageError {
                         code: -1,
@@ -294,12 +311,16 @@ impl DocumentActor {
                     .await;
             }
             EditorProtocolMessageFromEditor::Close { uri } => {
-                let file_path = self.file_path_for_uri(&uri);
+                let file_path = self
+                    .file_path_for_uri(&uri)
+                    .map_err(anyhow_err_to_protocol_err)?;
                 debug!("Got a 'close' message for {file_path}");
                 self.ot_servers.remove(&file_path);
             }
             EditorProtocolMessageFromEditor::Cursor { uri, ranges } => {
-                let file_path = self.file_path_for_uri(&uri);
+                let file_path = self
+                    .file_path_for_uri(&uri)
+                    .map_err(anyhow_err_to_protocol_err)?;
                 let userid = self.crdt_doc.actor_id();
                 self.store_cursor_position(&userid, file_path, ranges);
             }
@@ -558,11 +579,13 @@ impl DocumentActor {
                 let file_path = dir_entry.path();
                 match sandbox::read_file(&self.base_dir, file_path) {
                     Ok(bytes) => {
-                        let relative_file_path = self.file_path_for_uri(
-                            file_path
-                                .to_str()
-                                .expect("Could not convert PathBuf to str"),
-                        );
+                        let relative_file_path = self
+                            .file_path_for_uri(
+                                file_path
+                                    .to_str()
+                                    .expect("Could not convert PathBuf to str"),
+                            )
+                            .expect("Could not convert uri to file path");
                         let text = String::from_utf8(bytes).expect("Could not read file as UTF-8");
                         if init {
                             self.crdt_doc.initialize_text(&text, &relative_file_path);
@@ -904,30 +927,33 @@ mod tests {
         }
 
         #[test]
-        #[should_panic]
         fn test_file_path_for_uri_fails_not_absolute() {
             let dir = setup_filesystem_for_testing();
             let actor = DocumentActor::setup_for_testing(dir.path().to_path_buf());
 
-            actor.file_path_for_uri("this/is/absolutely/not/absolute");
+            assert!(actor
+                .file_path_for_uri("this/is/absolutely/not/absolute")
+                .is_err());
         }
 
         #[test]
-        #[should_panic]
         fn test_file_path_for_uri_fails_not_within_base_dir() {
             let dir = setup_filesystem_for_testing();
             let actor = DocumentActor::setup_for_testing(dir.path().to_path_buf());
 
-            actor.file_path_for_uri("/this/is/not/the/base_dir/file");
+            assert!(actor
+                .file_path_for_uri("/this/is/not/the/base_dir/file")
+                .is_err());
         }
 
         #[test]
-        #[should_panic]
         fn test_file_path_for_uri_fails_only_base_dir() {
             let dir = setup_filesystem_for_testing();
             let actor = DocumentActor::setup_for_testing(dir.path().to_path_buf());
 
-            actor.file_path_for_uri(&format!("{}", dir.path().display()));
+            assert!(actor
+                .file_path_for_uri(&format!("{}", dir.path().display()))
+                .is_err());
         }
 
         #[test]
@@ -941,7 +967,8 @@ mod tests {
                 for &expected in &file_paths {
                     let uri = format!("{}{}/{}", prefix, dir.path().display(), expected);
 
-                    assert_eq!(actor.file_path_for_uri(&uri), expected);
+                    // unfortunately anyhow::Error doesn't implement PartialEq, so we'll rather unwrap.
+                    assert_eq!(actor.file_path_for_uri(&uri).unwrap(), expected);
                 }
             }
         }
