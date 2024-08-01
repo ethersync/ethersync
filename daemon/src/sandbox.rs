@@ -115,9 +115,6 @@ mod tests {
         // Not a file.
         assert!(read_file(&project_dir, &project_dir).is_err());
 
-        // Not within the base dir.
-        assert!(read_file(&project_dir, &project_dir.join("..").join("secret")).is_err());
-
         // Not a file *and* now within base dir.
         assert!(read_file(&project_dir, &project_dir.join("..")).is_err());
 
@@ -132,5 +129,25 @@ mod tests {
 
         // File not exist.
         assert!(read_file(&project_dir, &project_dir.join("nonexistant")).is_err());
+    }
+
+    #[test]
+    fn fail_check_inside_base_dir() {
+        let dir = temp_dir_setup();
+        let project_dir = dir.path().join("project");
+
+        // Not within the base dir.
+        assert!(read_file(&project_dir, &project_dir.join("..").join("secret")).is_err());
+
+        // It "starts" with the base dir, but it's not inside it.
+        assert!(check_inside_base_dir_and_canonicalize(
+            &project_dir,
+            Path::new(&format!(
+                "{}{}",
+                project_dir.as_path().to_str().unwrap(),
+                "2/file"
+            ))
+        )
+        .is_err());
     }
 }

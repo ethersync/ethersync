@@ -253,14 +253,14 @@ impl DocumentActor {
             bail!("Path '{absolute_path}' is not absolute");
         }
 
+        let base_dir_string = self.base_dir.display().to_string() + "/";
+
         // TODO: Instead of panicking, we should handle this in a way so we don't crash.
         // Once the editor protocol is based on requests, we can send back an error?
         Ok(absolute_path
-            .strip_prefix(&self.base_dir.display().to_string())
-            .with_context(|| format!("Path '{absolute_path}' is not within base dir"))?
-            .strip_prefix('/')
+            .strip_prefix(&base_dir_string)
             .with_context(|| {
-                format!("Could not remove a '/' while computing file path for '{absolute_path}'")
+                format!("Path '{absolute_path}' is not within base dir '{base_dir_string}'")
             })?
             .to_string())
     }
@@ -995,6 +995,15 @@ mod tests {
             assert!(actor
                 .file_path_for_uri("/this/is/not/the/base_dir/file")
                 .is_err());
+        }
+
+        #[test]
+        fn test_file_path_for_uri_fails_not_within_base_dir_suffix() {
+            let dir = setup_filesystem_for_testing();
+            let file_in_suffix_dir = dir.path().to_str().unwrap().to_string() + "2/file";
+            let actor = DocumentActor::setup_for_testing(dir.path().to_path_buf());
+
+            assert!(actor.file_path_for_uri(&file_in_suffix_dir).is_err());
         }
 
         #[test]
