@@ -69,11 +69,9 @@ local function connect()
         end,
         on_error = function(code, ...)
             print("Ethersync client connection error: ", code, vim.inspect({ ... }))
-            client = nil
         end,
         on_exit = function(...)
             print("Ethersync client connection exited: ", vim.inspect({ ... }))
-            client = nil
         end,
     }
 
