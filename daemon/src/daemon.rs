@@ -330,7 +330,7 @@ impl DocumentActor {
                 let file_path = self
                     .file_path_for_uri(&uri)
                     .map_err(anyhow_err_to_protocol_err)?;
-                if !self.crdt_doc.file_exists(&file_path) {
+                if self.ot_servers.get_mut(&file_path).is_none() {
                     return Err(EditorProtocolMessageError {
                         code: -1,
                         message: "File not found".into(),
