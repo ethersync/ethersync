@@ -39,10 +39,10 @@ impl TCPReadActor {
         }
     }
 
-    async fn forward_sync_message(&self, message: Vec<u8>) {
-        let message =
-            AutomergeSyncMessage::decode(&message).expect("Failed to decode automerge message");
+    async fn forward_sync_message(&self, message: Vec<u8>) -> Result<()> {
+        let message = AutomergeSyncMessage::decode(&message)?;
         self.sync_handle.send(message).await;
+        Ok(())
     }
 
     async fn read_message(&mut self) -> Result<Vec<u8>> {
@@ -56,7 +56,13 @@ impl TCPReadActor {
 
     async fn run(&mut self) {
         while let Ok(message) = self.read_message().await {
-            self.forward_sync_message(message).await;
+            if let Err(err) = self.forward_sync_message(message).await {
+                debug!(
+                    "Error while processing automerge sync message: {}",
+                    err.to_string()
+                );
+                break;
+            }
         }
         info!("Sync Receive loop stopped (peer disconnected)");
         self.shutdown_token.cancel();
