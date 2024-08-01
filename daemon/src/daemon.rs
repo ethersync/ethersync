@@ -253,14 +253,14 @@ impl DocumentActor {
             bail!("Path '{absolute_path}' is not absolute");
         }
 
+        let base_dir_string = self.base_dir.display().to_string() + "/";
+
         // TODO: Instead of panicking, we should handle this in a way so we don't crash.
         // Once the editor protocol is based on requests, we can send back an error?
         Ok(absolute_path
-            .strip_prefix(&self.base_dir.display().to_string())
-            .with_context(|| format!("Path '{absolute_path}' is not within base dir"))?
-            .strip_prefix('/')
+            .strip_prefix(&base_dir_string)
             .with_context(|| {
-                format!("Could not remove a '/' while computing file path for '{absolute_path}'")
+                format!("Path '{absolute_path}' is not within base dir '{base_dir_string}'")
             })?
             .to_string())
     }
