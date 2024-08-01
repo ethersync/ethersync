@@ -287,6 +287,16 @@ impl DocumentActor {
                     .map_err(anyhow_err_to_protocol_err)?;
 
                 debug!("Got an 'open' message for {file_path}");
+                let absolute_file_path = self.absolute_path_for_file_path(&file_path);
+                let absolute_file_path = Path::new(&absolute_file_path);
+                if !sandbox::exists(&self.base_dir, absolute_file_path)
+                    .map_err(anyhow_err_to_protocol_err)?
+                {
+                    // Creating nonexisting files allows us to traverse this file for whether it's
+                    // ignored, which is needed to even be allowed to open it.
+                    sandbox::write_file(&self.base_dir, absolute_file_path, b"")
+                        .map_err(anyhow_err_to_protocol_err)?;
+                }
 
                 // We only want to process these messages for files that are not ignored.
                 // To use the same logic for which files are ignored, iterate through all files
