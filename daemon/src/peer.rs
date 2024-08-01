@@ -48,7 +48,7 @@ impl TCPReadActor {
     async fn read_message(&mut self) -> Result<Vec<u8>> {
         let mut message_len_buf = [0; 4];
         self.reader.read_exact(&mut message_len_buf).await?;
-        let message_len = i32::from_be_bytes(message_len_buf);
+        let message_len = u32::from_be_bytes(message_len_buf);
         let mut message_buf = vec![0; message_len as usize];
         self.reader.read_exact(&mut message_buf).await?;
         Ok(message_buf)
@@ -89,7 +89,7 @@ impl TCPWriteActor {
         while let Some(message) = self.automerge_message_receiver.recv().await {
             // TODO: move encode to Syncer for symmetry?
             let message = message.encode();
-            let message_len = message.len() as i32;
+            let message_len = message.len() as u32;
             self.writer
                 .write_all(&message_len.to_be_bytes())
                 .await
