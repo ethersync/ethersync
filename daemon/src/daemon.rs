@@ -947,6 +947,15 @@ mod tests {
         }
 
         #[test]
+        fn test_file_path_for_uri_fails_not_within_base_dir_suffix() {
+            let dir = setup_filesystem_for_testing();
+            let file_in_suffix_dir = dir.path().to_str().unwrap().to_string() + "2/file";
+            let actor = DocumentActor::setup_for_testing(dir.path().to_path_buf());
+
+            assert!(actor.file_path_for_uri(&file_in_suffix_dir).is_err());
+        }
+
+        #[test]
         fn test_file_path_for_uri_fails_only_base_dir() {
             let dir = setup_filesystem_for_testing();
             let actor = DocumentActor::setup_for_testing(dir.path().to_path_buf());
