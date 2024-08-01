@@ -316,6 +316,10 @@ impl DocumentActor {
                     .map_err(anyhow_err_to_protocol_err)?;
                 debug!("Got a 'close' message for {file_path}");
                 self.ot_servers.remove(&file_path);
+
+                // TODO: As soon as we support multiple editor connections, only do this if no
+                // editor is connected anymore.
+                self.maybe_write_file(&file_path);
             }
             EditorProtocolMessageFromEditor::Cursor { uri, ranges } => {
                 let file_path = self
