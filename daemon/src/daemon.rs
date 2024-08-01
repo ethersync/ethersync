@@ -285,7 +285,41 @@ impl DocumentActor {
                 let file_path = self
                     .file_path_for_uri(&uri)
                     .map_err(anyhow_err_to_protocol_err)?;
+
                 debug!("Got an 'open' message for {file_path}");
+
+                // We only want to process these messages for files that are not ignored.
+                // To use the same logic for which files are ignored, iterate through all files
+                // using ignore::Walk, and try to find this file.
+                // TODO: Request a better way to do this with the "ignore" crate.
+                if !self
+                    .build_walk()
+                    .filter_map(Result::ok)
+                    .filter(|dir_entry| {
+                        dir_entry
+                            .file_type()
+                            .expect("Couldn't get file type of dir entry.")
+                            .is_file()
+                    })
+                    .any(|dir_entry| {
+                        let walked_file_path = self
+                            .file_path_for_uri(
+                                dir_entry
+                                    .path()
+                                    .to_str()
+                                    .expect("Could not convert PathBuf to str"),
+                            )
+                            .expect("Could not convert URI to file path");
+                        walked_file_path == file_path
+                    })
+                {
+                    return Err(EditorProtocolMessageError {
+                        code: -1,
+                        message: "File is ignored".into(),
+                        data: "This file should not be shared with other peers".into(),
+                    });
+                }
+
                 self.open_file_path(file_path);
             }
             EditorProtocolMessageFromEditor::Edit {
@@ -550,7 +584,6 @@ impl DocumentActor {
         }
     }
 
-    /// Reading in the file is a preparatory step, before kicking off the actor.
     fn build_walk(&mut self) -> Walk {
         let ignored_things = [".git", ".ethersync"];
         // TODO: How to deal with binary files?
