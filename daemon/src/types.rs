@@ -139,8 +139,7 @@ pub enum JSONRPCFromEditor {
 }
 impl JSONRPCFromEditor {
     pub fn from_jsonrpc(jsonrpc: &str) -> Result<Self, anyhow::Error> {
-        let error_message = format!("Failed to deserialize editor message: {jsonrpc}");
-        let message = serde_json::from_str(jsonrpc).expect(&error_message);
+        let message = serde_json::from_str(jsonrpc)?;
         Ok(message)
     }
 }
@@ -168,7 +167,7 @@ pub enum EditorProtocolMessageFromEditor {
 pub struct EditorProtocolMessageError {
     pub code: i32,
     pub message: String,
-    pub data: String,
+    pub data: Option<String>,
 }
 
 #[cfg(test)]
@@ -209,11 +208,11 @@ mod test_serde {
     #[test]
     fn error() {
         let message = EditorProtocolObject::Response(JSONRPCResponse::RequestError {
-            id: 1,
+            id: Some(1),
             error: EditorProtocolMessageError {
                 code: -1,
                 message: "title".into(),
-                data: "content".into(),
+                data: Some("content".into()),
             },
         });
         let jsonrpc = message.to_jsonrpc();
@@ -268,7 +267,8 @@ pub enum JSONRPCResponse {
         result: String,
     },
     RequestError {
-        id: usize,
+        // id must be Null if there was an error detecting the id in the Request Object.
+        id: Option<usize>,
         error: EditorProtocolMessageError,
     },
 }

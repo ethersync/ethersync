@@ -9,7 +9,7 @@ use tokio_util::sync::CancellationToken;
 use tracing::{debug, error, info, trace};
 
 use crate::daemon::{DocMessage, DocumentActorHandle};
-use crate::types::{EditorProtocolObject, JSONRPCFromEditor};
+use crate::types::EditorProtocolObject;
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
 pub struct EditorId(pub usize);
@@ -105,10 +105,8 @@ impl SocketReadActor {
             match lines.next_line().await {
                 Ok(Some(line)) => {
                     trace!("Got a line from the client: {:#?}", line);
-                    let jsonrpc = JSONRPCFromEditor::from_jsonrpc(&line)
-                        .expect("Failed to parse JSON-RPC message");
                     self.document_handle
-                        .send_message(DocMessage::FromEditor(self.editor_id, jsonrpc))
+                        .send_message(DocMessage::FromEditor(self.editor_id, line))
                         .await;
                 }
                 Ok(None) => {
