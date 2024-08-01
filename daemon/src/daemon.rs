@@ -13,7 +13,7 @@ use automerge::{
     sync::{Message as AutomergeSyncMessage, State as SyncState},
     Patch,
 };
-use ignore::WalkBuilder;
+use ignore::{Walk, WalkBuilder};
 use notify::{RecursiveMode, Result as NotifyResult, Watcher};
 use rand::Rng;
 use std::collections::{HashMap, HashSet};
@@ -551,7 +551,7 @@ impl DocumentActor {
     }
 
     /// Reading in the file is a preparatory step, before kicking off the actor.
-    fn read_current_content_from_dir(&mut self, init: bool) {
+    fn build_walk(&mut self) -> Walk {
         let ignored_things = [".git", ".ethersync"];
         // TODO: How to deal with binary files?
         WalkBuilder::new(self.base_dir.clone())
@@ -568,6 +568,10 @@ impl DocumentActor {
                 !ignored_things.contains(&name)
             })
             .build()
+    }
+
+    fn read_current_content_from_dir(&mut self, init: bool) {
+        self.build_walk()
             .filter_map(Result::ok)
             .filter(|dir_entry| {
                 dir_entry
