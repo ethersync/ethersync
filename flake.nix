@@ -8,50 +8,66 @@
   };
 
   outputs = {
+    self,
     nixpkgs,
     naersk,
     ...
   }: let
+    supportedSystems = [
+      "x86_64-linux"
+      "aarch64-linux"
+      "x86_64-darwin"
+      "aarch64-darwin"
+    ];
+    lib = nixpkgs.lib;
     forAllSystems = function:
-      nixpkgs.lib.genAttrs [
-        "x86_64-linux"
-        "aarch64-linux"
-        "x86_64-darwin"
-        "aarch64-darwin"
-      ] (system: function nixpkgs.legacyPackages.${system});
-    neovim-with-ethersync-plugin = pkgs:
-      pkgs.neovim.override
-      {
-        configure = {
-          packages.plugins = {
-            start = [
-              (pkgs.vimUtils.buildVimPlugin {
-                name = "ethersync";
-                src = ./vim-plugin;
-              })
-            ];
-          };
-          # In Nix' standard environment, we can't write to $HOME, so we need to
-          # disable swapfiles, and LSP log files.
-          customRC = ''
-            set noswapfile
-            lua vim.lsp.set_log_level("off")
-          '';
-        };
-      };
-    ethersync = pkgs:
-      (pkgs.callPackage naersk {}).buildPackage {
+      lib.genAttrs supportedSystems (system:
+        function (import nixpkgs {
+          inherit system;
+          overlays = [self.overlays.default];
+        }));
+  in {
+    overlays.default = final: prev: rec {
+      ethersync = (final.callPackage naersk {}).buildPackage {
         src = ./daemon;
       };
-  in {
-    packages = forAllSystems (pkgs: {
-      default = ethersync pkgs;
-      neovim = neovim-with-ethersync-plugin pkgs;
+      neovim-plugin = final.vimUtils.buildVimPlugin {
+        name = "ethersync";
+        src = ./vim-plugin;
+      };
+      neovim = let
+        nvim-custom = prev.neovim.override {
+          configure = {
+            packages.plugins = {
+              start = [
+                neovim-plugin
+              ];
+            };
+            # In Nix' standard environment, we can't write to $HOME, so we need to
+            # disable swapfiles, and LSP log files.
+            customRC = ''
+              set noswapfile
+              lua vim.lsp.set_log_level("off")
+            '';
+          };
+        };
+      in
+        final.writeShellScriptBin "nvim" ''
+          PATH=${lib.makeBinPath [ethersync]}:$PATH ${nvim-custom}/bin/nvim'';
+    };
+    packages = forAllSystems (pkgs: rec {
+      inherit
+        (pkgs)
+        ethersync
+        neovim-plugin
+        neovim
+        ;
+      default = ethersync;
     });
 
     devShells = forAllSystems (pkgs: {
       default = pkgs.mkShell {
-        nativeBuildInputs = [pkgs.cargo pkgs.rustc (ethersync pkgs) (neovim-with-ethersync-plugin pkgs)];
+        packages = with pkgs; [cargo rustc neovim];
       };
     });
   };
