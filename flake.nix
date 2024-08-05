@@ -67,7 +67,7 @@
 
     devShells = forAllSystems (pkgs: {
       default = pkgs.mkShell {
-        packages = with pkgs; [cargo rustc neovim];
+        packages = with pkgs; [cargo rustc neovim ethersync];
       };
     });
   };
