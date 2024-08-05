@@ -5,12 +5,19 @@ use anyhow::Context;
 use automerge::sync::{Message as AutomergeSyncMessage, State as SyncState};
 use futures::StreamExt;
 use futures::{AsyncReadExt, AsyncWriteExt};
+use libp2p::core::transport::upgrade::Version;
 use libp2p::core::ConnectedPoint;
 use libp2p::Multiaddr;
 use libp2p::Stream;
 use libp2p::StreamProtocol;
+use libp2p::Transport;
+use libp2p::{noise, tcp, yamux};
 use libp2p_identity::Keypair;
+use libp2p_pnet as pnet;
 use libp2p_stream as stream;
+use pbkdf2::pbkdf2_hmac;
+use rand::Rng;
+use sha2::Sha256;
 use std::mem;
 use std::path::{Path, PathBuf};
 use tokio::sync::{broadcast, mpsc, oneshot};
@@ -25,6 +32,7 @@ const ETHERSYNC_PROTOCOL: StreamProtocol = StreamProtocol::new("/ethersync");
 pub struct PeerConnectionInfo {
     pub port: Option<u16>,
     pub peer: Option<String>,
+    pub passphrase: Option<String>,
 }
 
 impl PeerConnectionInfo {
@@ -58,14 +66,34 @@ impl P2PActor {
         let keypair = self.get_keypair();
         let mut swarm = libp2p::SwarmBuilder::with_existing_identity(keypair)
             .with_tokio()
-            .with_quic()
+            .with_other_transport(|keypair| {
+                let passphrase = self.connection_info.passphrase.clone().unwrap_or_else(|| {
+                    let p = self.generate_passphrase();
+                    info!("Generated new passphrase: {}", p);
+                    p
+                });
+
+                let psk = pnet::PreSharedKey::new(self.passphrase_to_bytes(passphrase));
+
+                let transport = tcp::tokio::Transport::new(tcp::Config::new())
+                    .and_then(move |socket, _| pnet::PnetConfig::new(psk).handshake(socket));
+                let auth = noise::Config::new(keypair)?;
+                let mux = yamux::Config::default();
+
+                let tcp_transport = transport
+                    .upgrade(Version::V1Lazy)
+                    .authenticate(auth)
+                    .multiplex(mux);
+
+                Ok(tcp_transport)
+            })?
             .with_behaviour(|_| stream::Behaviour::new())?
             .with_swarm_config(|c| c.with_idle_connection_timeout(Duration::from_secs(10)))
             .build();
 
         // When the port is 0, libp2p randomly assigns a port.
         let listen_addr = format!(
-            "/ip4/0.0.0.0/udp/{}/quic-v1",
+            "/ip4/0.0.0.0/tcp/{}",
             self.connection_info.port.unwrap_or(0)
         )
         .parse()?;
@@ -141,6 +169,31 @@ impl P2PActor {
             std::fs::write(keyfile, bytes).expect("Failed to write key file");
             keypair
         }
+    }
+
+    fn generate_passphrase(&self) -> String {
+        let words = memorable_wordlist::WORDS
+            .iter()
+            .take(2048)
+            .collect::<Vec<_>>();
+        let number_of_words = 3;
+        let mut rng = rand::thread_rng();
+        (0..number_of_words)
+            .map(|_| words[rng.gen_range(0..words.len())].to_string())
+            .collect::<Vec<_>>()
+            .join("-")
+    }
+
+    // This "stretches" the passphrase to fill the 32 bytes required by the pnet crate.
+    fn passphrase_to_bytes(&self, passphrase: String) -> [u8; 32] {
+        let mut key = [0u8; 32];
+        pbkdf2_hmac::<Sha256>(
+            passphrase.as_bytes(),
+            b"ethersync", // TODO: Is it bad to re-use the salt here?
+            1000,         // TODO: How often should we iterate?
+            &mut key,
+        );
+        key
     }
 
     async fn spawn_peer_sync(&self, stream: Stream) {

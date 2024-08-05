@@ -37,6 +37,9 @@ enum Commands {
         /// Port to listen on as a hosting peer [default: assigned by OS].
         #[arg(long)]
         port: Option<u16>,
+        /// Shared secret passphrase to use for mutual authorization.
+        #[arg(long)]
+        secret: Option<String>,
         /// Initialize the current contents of the directory as a new Ethersync directory.
         #[arg(long)]
         init: bool,
@@ -71,6 +74,7 @@ async fn main() -> io::Result<()> {
             directory,
             peer,
             port,
+            secret,
             init,
         } => {
             let directory = directory
@@ -87,7 +91,11 @@ async fn main() -> io::Result<()> {
                 );
                 return Ok(());
             }
-            let peer_connection_info = PeerConnectionInfo { peer, port };
+            let peer_connection_info = PeerConnectionInfo {
+                peer,
+                port,
+                passphrase: secret,
+            };
             info!("Starting Ethersync on {}", directory.display());
             Daemon::new(peer_connection_info, &socket_path, &directory, init);
             match signal::ctrl_c().await {

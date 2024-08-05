@@ -53,6 +53,7 @@ async fn main() {
         PeerConnectionInfo {
             port: Some(4242),
             peer: None,
+            passphrase: Some("shared-secret".to_string()),
         },
         Path::new("/tmp/ethersync"),
         dir.path(),
@@ -63,8 +64,9 @@ async fn main() {
 
     let peer = Daemon::new(
         PeerConnectionInfo {
-            peer: Some("/ip4/127.0.0.1/udp/4242/quic-v1".to_string()),
+            peer: Some("/ip4/127.0.0.1/tcp/4242".to_string()),
             port: Some(0),
+            passphrase: Some("shared-secret".to_string()),
         },
         Path::new("/tmp/etherbonk"),
         dir2.path(),
