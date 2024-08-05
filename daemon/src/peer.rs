@@ -22,25 +22,15 @@ const ETHERSYNC_PROTOCOL: StreamProtocol = StreamProtocol::new("/ethersync");
 /// Responsible for offering peer-to-peer connectivity to the outside world. Uses libp2p.
 /// For every new connection, spawns and runs a SyncActor.
 #[derive(Clone)]
-pub enum PeerConnectionInfo {
-    /// Port
-    Listen(u16),
-    /// Peer, Port
-    Dial(String, u16),
+pub struct PeerConnectionInfo {
+    pub port: Option<u16>,
+    pub peer: Option<String>,
 }
 
 impl PeerConnectionInfo {
     #[must_use]
     pub const fn is_host(&self) -> bool {
-        matches!(self, Self::Listen(_))
-    }
-
-    #[must_use]
-    fn port(&self) -> &u16 {
-        match self {
-            Self::Listen(p) => p,
-            Self::Dial(_, p) => p,
-        }
+        self.peer.is_none()
     }
 }
 
@@ -73,8 +63,12 @@ impl P2PActor {
             .with_swarm_config(|c| c.with_idle_connection_timeout(Duration::from_secs(10)))
             .build();
 
-        let listen_addr =
-            format!("/ip4/0.0.0.0/udp/{}/quic-v1", self.connection_info.port()).parse()?;
+        // When the port is 0, libp2p randomly assigns a port.
+        let listen_addr = format!(
+            "/ip4/0.0.0.0/udp/{}/quic-v1",
+            self.connection_info.port.unwrap_or(0)
+        )
+        .parse()?;
 
         swarm.listen_on(listen_addr)?;
 
@@ -84,7 +78,7 @@ impl P2PActor {
             .accept(ETHERSYNC_PROTOCOL)
             .unwrap();
 
-        if let PeerConnectionInfo::Dial(ref address, _) = self.connection_info {
+        if let Some(ref address) = self.connection_info.peer {
             let multiaddr = address
                 .parse::<Multiaddr>()
                 .expect("Failed to parse argument as `Multiaddr`");

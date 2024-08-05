@@ -9,8 +9,6 @@ use tracing::{error, info};
 mod jsonrpc_forwarder;
 
 const DEFAULT_SOCKET_PATH: &str = "/tmp/ethersync";
-// libp2p will assign a random user-space port.
-const DEFAULT_PORT: &str = "0";
 const ETHERSYNC_CONFIG_DIR: &str = ".ethersync";
 
 #[derive(Parser)]
@@ -36,9 +34,9 @@ enum Commands {
         /// Multiaddr of a peer to connect to.
         #[arg(long)]
         peer: Option<String>,
-        /// Port to listen on as a hosting peer.
-        #[arg(long, default_value = DEFAULT_PORT)]
-        port: u16,
+        /// Port to listen on as a hosting peer [default: assigned by OS].
+        #[arg(long)]
+        port: Option<u16>,
         /// Initialize the current contents of the directory as a new Ethersync directory.
         #[arg(long)]
         init: bool,
@@ -89,11 +87,7 @@ async fn main() -> io::Result<()> {
                 );
                 return Ok(());
             }
-            let peer_connection_info = if let Some(peer) = peer {
-                PeerConnectionInfo::Dial(peer, port)
-            } else {
-                PeerConnectionInfo::Listen(port)
-            };
+            let peer_connection_info = PeerConnectionInfo { peer, port };
             info!("Starting Ethersync on {}", directory.display());
             Daemon::new(peer_connection_info, &socket_path, &directory, init);
             match signal::ctrl_c().await {
