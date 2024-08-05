@@ -50,7 +50,7 @@ async fn main() {
 
     // Set up the actors.
     let daemon = Daemon::new(
-        PeerConnectionInfo::Listen(0),
+        PeerConnectionInfo::Listen(4242),
         Path::new("/tmp/ethersync"),
         dir.path(),
         true,
@@ -59,10 +59,7 @@ async fn main() {
     let nvim = Neovim::new(file).await;
 
     let peer = Daemon::new(
-        PeerConnectionInfo::Dial(
-            "TODO: How to get the other peer's multiaddr here?".to_string(),
-            0,
-        ),
+        PeerConnectionInfo::Dial("/ip4/127.0.0.1/udp/4242/quic-v1".to_string(), 0),
         Path::new("/tmp/etherbonk"),
         dir2.path(),
         false,

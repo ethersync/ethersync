@@ -1,12 +1,14 @@
 //! A peer is another daemon. This module is all about daemon to daemon communication.
 
 use crate::daemon::{DocMessage, DocumentActorHandle};
+use anyhow::Context;
 use automerge::sync::{Message as AutomergeSyncMessage, State as SyncState};
 use futures::StreamExt;
 use futures::{AsyncReadExt, AsyncWriteExt};
+use libp2p::core::ConnectedPoint;
+use libp2p::Multiaddr;
 use libp2p::Stream;
 use libp2p::StreamProtocol;
-use libp2p::{multiaddr::Protocol, Multiaddr};
 use libp2p_identity::Keypair;
 use libp2p_stream as stream;
 use std::mem;
@@ -87,46 +89,7 @@ impl P2PActor {
                 .parse::<Multiaddr>()
                 .expect("Failed to parse argument as `Multiaddr`");
 
-            let Some(Protocol::P2p(peer_id)) = multiaddr.iter().last() else {
-                anyhow::bail!("Provided address does not end in `/p2p`");
-            };
-
-            tokio::spawn(async move {
-                while let Some((peer, _stream)) = incoming_streams.next().await {
-                    info!("Peer connected: {}", peer);
-                }
-            });
-
             swarm.dial(multiaddr)?;
-
-            let mut control = swarm.behaviour().new_control();
-
-            tokio::spawn(async move {
-                let stream = match control.open_stream(peer_id, ETHERSYNC_PROTOCOL).await {
-                    Ok(stream) => stream,
-                    Err(error @ stream::OpenStreamError::UnsupportedProtocol(_)) => {
-                        tracing::info!(%peer_id, %error);
-                        panic!("Unsupported protocol");
-                    }
-                    Err(error) => {
-                        // Other errors may be temporary.
-                        // In production, something like an exponential backoff / circuit-breaker may be more appropriate.
-                        tracing::debug!(%peer_id, %error);
-                        panic!("Maybe an temporary error? TODO");
-                    }
-                };
-
-                info!("Connected to peer {}", peer_id);
-
-                self.spawn_peer_sync(stream).await;
-            });
-        } else {
-            tokio::spawn(async move {
-                while let Some((peer, stream)) = incoming_streams.next().await {
-                    info!("Peer connected: {}", peer);
-                    self.spawn_peer_sync(stream).await;
-                }
-            });
         }
 
         // Poll the swarm to make progress.
@@ -138,7 +101,31 @@ impl P2PActor {
                     let listen_address = address.with_p2p(*swarm.local_peer_id()).unwrap();
                     tracing::info!(%listen_address);
                 }
-                event => tracing::trace!(?event),
+                libp2p::swarm::SwarmEvent::ConnectionEstablished {
+                    peer_id,
+                    endpoint: ConnectedPoint::Dialer { .. },
+                    ..
+                } => {
+                    let mut control = swarm.behaviour().new_control();
+                    let stream = control
+                        .open_stream(peer_id, ETHERSYNC_PROTOCOL)
+                        .await
+                        .context("Failed to open stream")?;
+
+                    info!("Connected to peer {}", peer_id);
+
+                    self.spawn_peer_sync(stream).await;
+                }
+                libp2p::swarm::SwarmEvent::ConnectionEstablished {
+                    endpoint: ConnectedPoint::Listener { .. },
+                    ..
+                } => {
+                    if let Some((peer, stream)) = incoming_streams.next().await {
+                        info!("Peer connected: {}", peer);
+                        self.spawn_peer_sync(stream).await;
+                    }
+                }
+                event => tracing::debug!(?event),
             }
         }
     }
