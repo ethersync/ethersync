@@ -22,6 +22,7 @@ use std::mem;
 use std::path::{Path, PathBuf};
 use tokio::sync::{broadcast, mpsc, oneshot};
 use tokio::time::Duration;
+use tokio_util::sync::CancellationToken;
 use tracing::{debug, error, info};
 
 const ETHERSYNC_PROTOCOL: StreamProtocol = StreamProtocol::new("/ethersync");
@@ -200,20 +201,25 @@ impl P2PActor {
         let (we_to_peer_tx, we_to_peer_rx) = mpsc::channel(16);
         let (peer_to_us_tx, peer_to_us_rx) = mpsc::channel(16);
 
-        let syncer = SyncActor::new(self.document_handle.clone(), peer_to_us_rx, we_to_peer_tx);
+        let shutdown_token = CancellationToken::new();
+
+        let syncer = SyncActor::new(
+            self.document_handle.clone(),
+            peer_to_us_rx,
+            we_to_peer_tx,
+            shutdown_token.clone(),
+        );
         tokio::spawn(async move {
             tokio::spawn(async move {
                 syncer.run().await;
             });
 
-            match Self::protocol_handler(stream, peer_to_us_tx, we_to_peer_rx).await {
-                Ok(()) => {
-                    info!("Sync successful! Do we ever get here?");
-                }
-                Err(e) => {
-                    error!("Sync failed or interrupted: {e}");
-                }
-            }
+            // This is a function that either runs forever, or errors.
+            // But errors just mean that the connection was closed/interrupted, so we ignore them.
+            let _ = Self::protocol_handler(stream, peer_to_us_tx, we_to_peer_rx).await;
+
+            info!("Peer disconnected");
+            shutdown_token.cancel();
         });
     }
 
@@ -267,6 +273,7 @@ struct SyncActor {
     document_handle: DocumentActorHandle,
     syncer_receiver: mpsc::Receiver<AutomergeSyncMessage>,
     syncer_sender: mpsc::Sender<AutomergeSyncMessage>,
+    shutdown_token: CancellationToken,
 }
 
 impl SyncActor {
@@ -274,12 +281,14 @@ impl SyncActor {
         document_handle: DocumentActorHandle,
         syncer_receiver: mpsc::Receiver<AutomergeSyncMessage>,
         syncer_sender: mpsc::Sender<AutomergeSyncMessage>,
+        shutdown_token: CancellationToken,
     ) -> Self {
         Self {
             peer_state: SyncState::new(),
             document_handle,
             syncer_receiver,
             syncer_sender,
+            shutdown_token,
         }
     }
 
@@ -325,6 +334,10 @@ impl SyncActor {
 
         loop {
             tokio::select! {
+                () = self.shutdown_token.cancelled() => {
+                    debug!("Shutting down main SyncActor loop");
+                    break;
+                }
                 // As doc_changed_ping_rx is a broadcast channel our understanding is,
                 // that this breaks a potential cyclic deadlock between SyncerActor
                 // and TCPActor (e.g. when TCPWriteActor.send blocks).
