@@ -7,10 +7,14 @@ on:
     paths:
       - 'daemon/**'
       - 'vim-plugin/**'
+      - 'flake.*'
+      - '.github/workflows/integration.yml'
   pull_request:
     paths:
       - 'daemon/**'
       - 'vim-plugin/**'
+      - 'flake.*'
+      - '.github/workflows/integration.yml'
 
 env:
   CARGO_TERM_COLOR: always
