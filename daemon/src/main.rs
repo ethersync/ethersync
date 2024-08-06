@@ -1,7 +1,8 @@
+use anyhow::Result;
 use clap::{Parser, Subcommand};
 use ethersync::peer::PeerConnectionInfo;
 use ethersync::{daemon::Daemon, logging, sandbox};
-use std::io;
+use ini::Ini;
 use std::path::{Path, PathBuf};
 use tokio::signal;
 use tracing::{error, info};
@@ -10,6 +11,7 @@ mod jsonrpc_forwarder;
 
 const DEFAULT_SOCKET_PATH: &str = "/tmp/ethersync";
 const ETHERSYNC_CONFIG_DIR: &str = ".ethersync";
+const ETHERSYNC_CONFIG_FILE: &str = "config";
 
 #[derive(Parser)]
 #[command(version, about, long_about = None)]
@@ -56,7 +58,7 @@ fn has_ethersync_directory(dir: &Path) -> bool {
 }
 
 #[tokio::main]
-async fn main() -> io::Result<()> {
+async fn main() -> Result<()> {
     let default_panic = std::panic::take_hook();
     std::panic::set_hook(Box::new(move |info| {
         default_panic(info);
@@ -72,9 +74,9 @@ async fn main() -> io::Result<()> {
     match cli.command {
         Commands::Daemon {
             directory,
-            peer,
-            port,
-            secret,
+            mut peer,
+            mut port,
+            mut secret,
             init,
         } => {
             let directory = directory
@@ -90,6 +92,29 @@ async fn main() -> io::Result<()> {
                     directory.display()
                 );
                 return Ok(());
+            }
+            let config_file = directory
+                .join(ETHERSYNC_CONFIG_DIR)
+                .join(ETHERSYNC_CONFIG_FILE);
+            if config_file.exists() {
+                let conf = Ini::load_from_file(&config_file)?;
+                let general_section = conf.general_section();
+                // TODO: Refactor this?
+                if let Some(conf_secret) = general_section.get("secret") {
+                    secret.get_or_insert(conf_secret.to_string());
+                }
+                if let Some(conf_peer) = general_section.get("peer") {
+                    peer.get_or_insert(conf_peer.to_string());
+                }
+                if let Some(conf_port) = general_section.get("port") {
+                    port.get_or_insert(
+                        conf_port
+                            .parse()
+                            .expect("Failed to parse port in config file as an integer"),
+                    );
+                }
+            } else {
+                info!("No config file found, please provide everything through CLI options");
             }
             let peer_connection_info = PeerConnectionInfo {
                 peer,
