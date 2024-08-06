@@ -6,9 +6,11 @@ on:
       - 'main'
     paths:
       - 'vim-plugin/**'
+      - '.github/workflows/vim-plugin.yml'
   pull_request:
     paths:
       - 'vim-plugin/**'
+      - '.github/workflows/vim-plugin.yml'
 
 jobs:
   check_lua:
