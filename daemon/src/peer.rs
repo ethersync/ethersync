@@ -1,127 +1,294 @@
-/// A peer is another daemon. This module is all about daemon to daemon communication.
-use anyhow::Result;
-use automerge::sync::{Message as AutomergeSyncMessage, State as SyncState};
-use std::mem;
-use tokio::{
-    io::{AsyncReadExt, AsyncWriteExt, ReadHalf, WriteHalf},
-    net::TcpStream,
-    sync::{broadcast, mpsc, oneshot},
-};
-use tokio_util::sync::CancellationToken;
-use tracing::{debug, info};
+//! A peer is another daemon. This module is all about daemon to daemon communication.
 
 use crate::daemon::{DocMessage, DocumentActorHandle};
+use anyhow::Context;
+use automerge::sync::{Message as AutomergeSyncMessage, State as SyncState};
+use futures::StreamExt;
+use futures::{AsyncReadExt, AsyncWriteExt};
+use libp2p::core::transport::upgrade::Version;
+use libp2p::core::ConnectedPoint;
+use libp2p::Multiaddr;
+use libp2p::Stream;
+use libp2p::StreamProtocol;
+use libp2p::Transport;
+use libp2p::{noise, tcp, yamux};
+use libp2p_identity::Keypair;
+use libp2p_pnet as pnet;
+use libp2p_stream as stream;
+use pbkdf2::pbkdf2_hmac;
+use rand::Rng;
+use sha2::Sha256;
+use std::mem;
+use std::path::{Path, PathBuf};
+use tokio::sync::{broadcast, mpsc, oneshot};
+use tokio::time::Duration;
+use tokio_util::sync::CancellationToken;
+use tracing::{debug, error, info};
 
-pub fn spawn_peer_sync(stream: TcpStream, document_handle: &DocumentActorHandle) {
-    let (my_send, my_recv) = oneshot::channel();
-    let tcp_handle = TCPActorHandle::new(stream, my_recv);
-    let sync_handle = SyncActorHandle::new(document_handle, &tcp_handle);
-    let _ = my_send.send(sync_handle);
+const ETHERSYNC_PROTOCOL: StreamProtocol = StreamProtocol::new("/ethersync");
+
+/// Responsible for offering peer-to-peer connectivity to the outside world. Uses libp2p.
+/// For every new connection, spawns and runs a SyncActor.
+#[derive(Clone)]
+pub struct PeerConnectionInfo {
+    pub port: Option<u16>,
+    pub peer: Option<String>,
+    pub passphrase: Option<String>,
 }
 
-/// Reads from a TCP stream and forwards it to the Syncer
-struct TCPReadActor {
-    sync_handle: SyncActorHandle,
-    reader: ReadHalf<TcpStream>,
-    shutdown_token: CancellationToken,
+impl PeerConnectionInfo {
+    #[must_use]
+    pub const fn is_host(&self) -> bool {
+        self.peer.is_none()
+    }
 }
 
-impl TCPReadActor {
-    fn new(
-        reader: ReadHalf<TcpStream>,
-        sync_handle: SyncActorHandle,
-        shutdown_token: CancellationToken,
+#[derive(Clone)]
+pub struct P2PActor {
+    connection_info: PeerConnectionInfo,
+    document_handle: DocumentActorHandle,
+    base_dir: PathBuf,
+}
+
+impl P2PActor {
+    pub fn new(
+        connection_info: PeerConnectionInfo,
+        document_handle: DocumentActorHandle,
+        base_dir: &Path,
     ) -> Self {
         Self {
-            sync_handle,
-            reader,
-            shutdown_token,
+            connection_info,
+            document_handle,
+            base_dir: base_dir.to_path_buf(),
         }
     }
 
-    async fn forward_sync_message(&self, message: Vec<u8>) -> Result<()> {
-        let message = AutomergeSyncMessage::decode(&message)?;
-        self.sync_handle.send(message).await;
-        Ok(())
-    }
+    pub async fn run(self) -> anyhow::Result<()> {
+        let keypair = self.get_keypair();
+        let mut swarm = libp2p::SwarmBuilder::with_existing_identity(keypair)
+            .with_tokio()
+            .with_other_transport(|keypair| {
+                let passphrase = self.connection_info.passphrase.clone().unwrap_or_else(|| {
+                    let p = self.generate_passphrase();
+                    info!("Generated new passphrase: {}", p);
+                    p
+                });
 
-    async fn read_message(&mut self) -> Result<Vec<u8>> {
-        let mut message_len_buf = [0; 4];
-        self.reader.read_exact(&mut message_len_buf).await?;
-        let message_len = u32::from_be_bytes(message_len_buf);
-        let mut message_buf = vec![0; message_len as usize];
-        self.reader.read_exact(&mut message_buf).await?;
-        Ok(message_buf)
-    }
+                let psk = pnet::PreSharedKey::new(self.passphrase_to_bytes(passphrase));
 
-    async fn run(&mut self) {
-        while let Ok(message) = self.read_message().await {
-            if let Err(err) = self.forward_sync_message(message).await {
-                debug!(
-                    "Error while processing automerge sync message: {}",
-                    err.to_string()
-                );
-                break;
+                let transport = tcp::tokio::Transport::new(tcp::Config::new())
+                    .and_then(move |socket, _| pnet::PnetConfig::new(psk).handshake(socket));
+                let auth = noise::Config::new(keypair)?;
+                let mux = yamux::Config::default();
+
+                let tcp_transport = transport
+                    .upgrade(Version::V1Lazy)
+                    .authenticate(auth)
+                    .multiplex(mux);
+
+                Ok(tcp_transport)
+            })?
+            .with_behaviour(|_| stream::Behaviour::new())?
+            .with_swarm_config(|c| c.with_idle_connection_timeout(Duration::from_secs(10)))
+            .build();
+
+        // When the port is 0, libp2p randomly assigns a port.
+        let listen_addr = format!(
+            "/ip4/0.0.0.0/tcp/{}",
+            self.connection_info.port.unwrap_or(0)
+        )
+        .parse()?;
+
+        swarm.listen_on(listen_addr)?;
+
+        let mut incoming_streams = swarm
+            .behaviour()
+            .new_control()
+            .accept(ETHERSYNC_PROTOCOL)
+            .unwrap();
+
+        if let Some(ref address) = self.connection_info.peer {
+            let multiaddr = address
+                .parse::<Multiaddr>()
+                .expect("Failed to parse argument as `Multiaddr`");
+
+            swarm.dial(multiaddr)?;
+        }
+
+        // Poll the swarm to make progress.
+        loop {
+            let event = swarm.next().await.expect("never terminates");
+
+            match event {
+                libp2p::swarm::SwarmEvent::NewListenAddr { address, .. } => {
+                    let listen_address = address.with_p2p(*swarm.local_peer_id()).unwrap();
+                    tracing::info!(%listen_address);
+                }
+                libp2p::swarm::SwarmEvent::ConnectionEstablished {
+                    peer_id,
+                    endpoint: ConnectedPoint::Dialer { .. },
+                    ..
+                } => {
+                    let mut control = swarm.behaviour().new_control();
+                    let stream = control
+                        .open_stream(peer_id, ETHERSYNC_PROTOCOL)
+                        .await
+                        .context("Failed to open stream")?;
+
+                    info!("Connected to peer {}", peer_id);
+
+                    self.spawn_peer_sync(stream).await;
+                }
+                libp2p::swarm::SwarmEvent::ConnectionEstablished {
+                    endpoint: ConnectedPoint::Listener { .. },
+                    ..
+                } => {
+                    if let Some((peer, stream)) = incoming_streams.next().await {
+                        info!("Peer connected: {}", peer);
+                        self.spawn_peer_sync(stream).await;
+                    }
+                }
+                event => tracing::debug!(?event),
             }
         }
-        info!("Sync Receive loop stopped (peer disconnected)");
-        self.shutdown_token.cancel();
     }
-}
 
-struct TCPWriteActor {
-    writer: WriteHalf<TcpStream>,
-    automerge_message_receiver: mpsc::Receiver<AutomergeSyncMessage>,
-}
-
-impl TCPWriteActor {
-    fn new(
-        writer: WriteHalf<TcpStream>,
-        automerge_message_receiver: mpsc::Receiver<AutomergeSyncMessage>,
-    ) -> Self {
-        Self {
-            writer,
-            automerge_message_receiver,
+    /// Returns an existing keypair, or generates a new one.
+    fn get_keypair(&self) -> Keypair {
+        let keyfile = self.base_dir.join(".ethersync").join("key");
+        if keyfile.exists() {
+            info!("Re-using existing keypair");
+            let bytes = std::fs::read(keyfile).expect("Failed to read key file");
+            Keypair::from_protobuf_encoding(&bytes).expect("Failed to deserialize key file")
+        } else {
+            info!("Generating new keypair");
+            // TODO: Is this the best algorithm?
+            let keypair = Keypair::generate_ed25519();
+            let bytes = keypair
+                .to_protobuf_encoding()
+                .expect("Failed to serialize keypair");
+            std::fs::write(keyfile, bytes).expect("Failed to write key file");
+            keypair
         }
     }
 
-    async fn run(&mut self) {
-        while let Some(message) = self.automerge_message_receiver.recv().await {
-            // TODO: move encode to Syncer for symmetry?
-            let message = message.encode();
-            let message_len = message.len() as u32;
-            self.writer
-                .write_all(&message_len.to_be_bytes())
-                .await
-                .expect("GenerateSyncMessage: write message len failed");
-            self.writer
-                .write_all(&message)
-                .await
-                .expect("GenerateSyncMessage: write message failed");
+    fn generate_passphrase(&self) -> String {
+        let words = memorable_wordlist::WORDS
+            .iter()
+            .take(2048)
+            .collect::<Vec<_>>();
+        let number_of_words = 3;
+        let mut rng = rand::thread_rng();
+        (0..number_of_words)
+            .map(|_| words[rng.gen_range(0..words.len())].to_string())
+            .collect::<Vec<_>>()
+            .join("-")
+    }
+
+    // This "stretches" the passphrase to fill the 32 bytes required by the pnet crate.
+    fn passphrase_to_bytes(&self, passphrase: String) -> [u8; 32] {
+        let mut key = [0u8; 32];
+        pbkdf2_hmac::<Sha256>(
+            passphrase.as_bytes(),
+            b"ethersync", // TODO: Is it bad to re-use the salt here?
+            1000,         // TODO: How often should we iterate?
+            &mut key,
+        );
+        key
+    }
+
+    async fn spawn_peer_sync(&self, stream: Stream) {
+        let (we_to_peer_tx, we_to_peer_rx) = mpsc::channel(16);
+        let (peer_to_us_tx, peer_to_us_rx) = mpsc::channel(16);
+
+        let shutdown_token = CancellationToken::new();
+
+        let syncer = SyncActor::new(
+            self.document_handle.clone(),
+            peer_to_us_rx,
+            we_to_peer_tx,
+            shutdown_token.clone(),
+        );
+        tokio::spawn(async move {
+            tokio::spawn(async move {
+                syncer.run().await;
+            });
+
+            // This is a function that either runs forever, or errors.
+            // But errors just mean that the connection was closed/interrupted, so we ignore them.
+            let _ = Self::protocol_handler(stream, peer_to_us_tx, we_to_peer_rx).await;
+
+            info!("Peer disconnected");
+            shutdown_token.cancel();
+        });
+    }
+
+    /// Core low-level syncing protocol.
+    async fn protocol_handler(
+        mut stream: Stream,
+        peer_to_us_tx: mpsc::Sender<AutomergeSyncMessage>,
+        mut we_to_peer_rx: mpsc::Receiver<AutomergeSyncMessage>,
+    ) -> anyhow::Result<()> {
+        loop {
+            let mut message_len_buf = [0; 4];
+
+            tokio::select! {
+                message_maybe = we_to_peer_rx.recv() => {
+                    match message_maybe {
+                        Some(message) => {
+                            let message = message.encode();
+                            let message_len = message.len() as u32;
+                            stream
+                                .write_all(&message_len.to_be_bytes())
+                                .await?;
+                            stream
+                                .write_all(&message)
+                                .await?;
+                            }
+                        None => {
+                            // TODO: What should we do?
+                            error!("None on we_to_peer_rx");
+                        }
+                    }
+                }
+                _ = stream.read_exact(&mut message_len_buf) => {
+                    let message_len = u32::from_be_bytes(message_len_buf);
+                    let mut message_buf = vec![0; message_len as usize];
+                    stream.read_exact(&mut message_buf).await?;
+
+                    let message =
+                        AutomergeSyncMessage::decode(&message_buf)?;
+                    peer_to_us_tx.send(message).await?;
+                }
+            }
         }
-        // At this point, our channel has been closed, which is the signal for us to stop.
-        debug!("TCPWriteActor stopped (channel closed)");
     }
 }
 
+/// Transport-agnostic logic of how to sync with another peer.
+/// Receives Automerge sync messages on one channel, and sends some out on another.
+/// Maintains the sync state, and communicates with the document.
 struct SyncActor {
-    syncer_receiver: mpsc::Receiver<AutomergeSyncMessage>,
-    document_handle: DocumentActorHandle,
-    tcp_handle: TCPActorHandle,
     peer_state: SyncState,
+    document_handle: DocumentActorHandle,
+    syncer_receiver: mpsc::Receiver<AutomergeSyncMessage>,
+    syncer_sender: mpsc::Sender<AutomergeSyncMessage>,
+    shutdown_token: CancellationToken,
 }
 
 impl SyncActor {
     fn new(
-        syncer_receiver: mpsc::Receiver<AutomergeSyncMessage>,
         document_handle: DocumentActorHandle,
-        tcp_handle: TCPActorHandle,
+        syncer_receiver: mpsc::Receiver<AutomergeSyncMessage>,
+        syncer_sender: mpsc::Sender<AutomergeSyncMessage>,
+        shutdown_token: CancellationToken,
     ) -> Self {
         Self {
-            syncer_receiver,
-            document_handle,
-            tcp_handle,
             peer_state: SyncState::new(),
+            document_handle,
+            syncer_receiver,
+            syncer_sender,
+            shutdown_token,
         }
     }
 
@@ -152,7 +319,10 @@ impl SyncActor {
             .expect("Could not read response from Document channel");
         self.peer_state = ps;
         if let Some(message) = message {
-            self.tcp_handle.send(message).await;
+            self.syncer_sender
+                .send(message)
+                .await
+                .expect("Failed to send on syncer_sender channel");
         }
     }
 
@@ -164,7 +334,7 @@ impl SyncActor {
 
         loop {
             tokio::select! {
-                () = self.tcp_handle.shutdown_token.cancelled() => {
+                () = self.shutdown_token.cancelled() => {
                     debug!("Shutting down main SyncActor loop");
                     break;
                 }
@@ -188,80 +358,6 @@ impl SyncActor {
                     self.receive_sync_message(message).await;
                 }
             }
-        }
-    }
-}
-
-#[derive(Clone)]
-pub struct SyncActorHandle {
-    syncer_message_tx: mpsc::Sender<AutomergeSyncMessage>,
-}
-
-impl SyncActorHandle {
-    pub fn new(document_handle: &DocumentActorHandle, tcp_handle: &TCPActorHandle) -> Self {
-        let (syncer_message_tx, syncer_message_rx) = mpsc::channel(16);
-
-        // Sync actor.
-        let syncer = SyncActor::new(
-            syncer_message_rx,
-            document_handle.clone(),
-            tcp_handle.clone(),
-        );
-        tokio::spawn(syncer.run());
-
-        Self { syncer_message_tx }
-    }
-
-    async fn send(&self, message: AutomergeSyncMessage) {
-        self.syncer_message_tx
-            .send(message)
-            .await
-            .expect("Channel closed (TODO)");
-    }
-}
-
-#[derive(Clone)]
-pub struct TCPActorHandle {
-    automerge_message_tx: mpsc::Sender<AutomergeSyncMessage>,
-    shutdown_token: CancellationToken,
-}
-
-/// The TCP statemachine works as follows:
-/// - if we're the host,
-/// - if we're a peer, we
-///
-/// How do other parts of the code communicate with TCP? Through this handle.
-/// What can be communicated?
-impl TCPActorHandle {
-    async fn send(&mut self, message: AutomergeSyncMessage) {
-        self.automerge_message_tx
-            .send(message)
-            .await
-            .expect("Channel to TCPActor(s) closed.");
-    }
-
-    pub fn new(stream: TcpStream, sync_handle: oneshot::Receiver<SyncActorHandle>) -> Self {
-        let shutdown_token = CancellationToken::new();
-
-        let read_shutdown_token = shutdown_token.clone();
-        let (tcp_read, tcp_write) = tokio::io::split(stream);
-        let (automerge_message_tx, automerge_message_rx) = mpsc::channel(16);
-        tokio::spawn(async move {
-            let Ok(sync_handle) = sync_handle.await else {
-                return;
-            };
-            let mut receiver = TCPReadActor::new(tcp_read, sync_handle, read_shutdown_token);
-            tokio::spawn(async move {
-                receiver.run().await;
-            });
-            let mut writer = TCPWriteActor::new(tcp_write, automerge_message_rx);
-            tokio::spawn(async move {
-                writer.run().await;
-            });
-        });
-        Self {
-            automerge_message_tx,
-            shutdown_token,
         }
     }
 }

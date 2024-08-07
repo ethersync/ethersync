@@ -2,6 +2,7 @@ use crate::connect;
 use crate::document::Document;
 use crate::editor::{EditorHandle, EditorId};
 use crate::ot::OTServer;
+use crate::peer;
 use crate::sandbox;
 use crate::types::{
     CursorState, EditorProtocolMessageError, EditorProtocolMessageFromEditor,
@@ -769,7 +770,7 @@ pub struct Daemon {
 impl Daemon {
     // Launch the daemon. Optionally, connect to given peer.
     pub fn new(
-        peer_connection_info: connect::PeerConnectionInfo,
+        peer_connection_info: peer::PeerConnectionInfo,
         socket_path: &Path,
         base_dir: &Path,
         init: bool,
@@ -792,8 +793,14 @@ impl Daemon {
         });
 
         let connection_document_handle = document_handle.clone();
+        let connection_base_dir = base_dir.to_path_buf();
         tokio::spawn(async move {
-            connect::make_peer_connection(peer_connection_info, connection_document_handle).await;
+            let p2p_actor = peer::P2PActor::new(
+                peer_connection_info,
+                connection_document_handle,
+                &connection_base_dir,
+            );
+            let _ = p2p_actor.run().await;
         });
 
         let editor_socket_path = socket_path.to_path_buf();
