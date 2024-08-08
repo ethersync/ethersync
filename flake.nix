@@ -64,10 +64,16 @@
         ;
       default = ethersync;
     });
-
     devShells = forAllSystems (pkgs: {
       default = pkgs.mkShell {
-        packages = with pkgs; [cargo rustc neovim];
+        packages =
+          (with pkgs; [cargo rustc neovim])
+          ++ (
+            # macOS systems seem to require these extra packages for building Rust code.
+            if (lib.strings.hasInfix "darwin" pkgs.system)
+            then (with pkgs; [darwin.apple_sdk.frameworks.CoreServices libiconv])
+            else []
+          );
       };
     });
   };
