@@ -28,7 +28,7 @@ use tracing::{debug, error, info};
 const ETHERSYNC_PROTOCOL: StreamProtocol = StreamProtocol::new("/ethersync");
 
 /// Responsible for offering peer-to-peer connectivity to the outside world. Uses libp2p.
-/// For every new connection, spawns and runs a SyncActor.
+/// For every new connection, spawns and runs a `SyncActor`.
 #[derive(Clone)]
 pub struct PeerConnectionInfo {
     pub port: Option<u16>,
@@ -180,7 +180,7 @@ impl P2PActor {
         let number_of_words = 3;
         let mut rng = rand::thread_rng();
         (0..number_of_words)
-            .map(|_| words[rng.gen_range(0..words.len())].to_string())
+            .map(|_| (*words[rng.gen_range(0..words.len())]).to_string())
             .collect::<Vec<_>>()
             .join("-")
     }
