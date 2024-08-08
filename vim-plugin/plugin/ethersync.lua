@@ -12,14 +12,21 @@ local function send_notification(method, params)
     client.notify(method, params)
 end
 
-local function send_request(method, params)
-    client.request(method, params, function(err, _)
+local function send_request(method, params, result_callback, err_callback)
+    err_callback = err_callback or function() end
+    result_callback = result_callback or function() end
+
+    client.request(method, params, function(err, result)
         if err then
             local error_msg = "[ethersync] Error for '" .. method .. "': " .. err.message
             if err.data and err.data ~= "" then
                 error_msg = error_msg .. " (" .. err.data .. ")"
             end
             vim.api.nvim_err_writeln(error_msg)
+            err_callback(err)
+        end
+        if result then
+            result_callback(result)
         end
     end)
 end
@@ -106,38 +113,37 @@ local function on_buffer_open()
         connect()
     end
 
-    files[filename] = {
-        -- Number of operations the daemon has made.
-        daemon_revision = 0,
-        -- Number of operations we have made.
-        editor_revision = 0,
-    }
-
     local uri = "file://" .. filename
-    -- TODO: If open fails, abort adding it to the changetracker (issue #88).
-    send_request("open", { uri = uri })
-
-    -- Vim enables eol for an empty file, but we do use this option values
-    -- assuming there's a trailing newline iff eol is true.
-    if vim.fn.getfsize(vim.api.nvim_buf_get_name(0)) == 0 then
-        vim.bo.eol = false
-    end
-
-    changetracker.track_changes(0, function(delta)
-        files[filename].editor_revision = files[filename].editor_revision + 1
-
-        local rev_delta = {
-            delta = delta,
-            revision = files[filename].daemon_revision,
+    send_request("open", { uri = uri }, function()
+        files[filename] = {
+            -- Number of operations the daemon has made.
+            daemon_revision = 0,
+            -- Number of operations we have made.
+            editor_revision = 0,
         }
 
-        local params = { uri = uri, delta = rev_delta }
+        -- Vim enables eol for an empty file, but we do use this option values
+        -- assuming there's a trailing newline iff eol is true.
+        if vim.fn.getfsize(vim.api.nvim_buf_get_name(0)) == 0 then
+            vim.bo.eol = false
+        end
 
-        send_request("edit", params)
-    end)
-    cursor.track_cursor(0, function(ranges)
-        local params = { uri = uri, ranges = ranges }
-        send_notification("cursor", params)
+        changetracker.track_changes(0, function(delta)
+            files[filename].editor_revision = files[filename].editor_revision + 1
+
+            local rev_delta = {
+                delta = delta,
+                revision = files[filename].daemon_revision,
+            }
+
+            local params = { uri = uri, delta = rev_delta }
+
+            send_request("edit", params)
+        end)
+        cursor.track_cursor(0, function(ranges)
+            local params = { uri = uri, ranges = ranges }
+            send_request("cursor", params)
+        end)
     end)
 end
 
