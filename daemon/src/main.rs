@@ -1,4 +1,4 @@
-use anyhow::Result;
+use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
 use ethersync::peer::PeerConnectionInfo;
 use ethersync::{daemon::Daemon, logging, sandbox};
@@ -132,7 +132,9 @@ async fn main() -> Result<()> {
             }
         }
         Commands::Client => {
-            jsonrpc_forwarder::connection(&socket_path);
+            jsonrpc_forwarder::connection(&socket_path)
+                .await
+                .context("JSON-RPC forwarder failed")?;
         }
     }
     Ok(())
