@@ -403,15 +403,12 @@ impl DocumentActor {
     }
 
     fn open_file_path(&mut self, file_path: String) {
-        let text = match self.current_file_content(&file_path) {
-            Ok(text) => text,
-            Err(_) => {
-                // The file doesn't exist yet - create it in the Automerge document.
-                let text = String::new();
-                self.crdt_doc.initialize_text(&text, &file_path);
-                text
-            }
-        };
+        let text = self.current_file_content(&file_path).unwrap_or_else(|_| {
+            // The file doesn't exist yet - create it in the Automerge document.
+            let text = String::new();
+            self.crdt_doc.initialize_text(&text, &file_path);
+            text
+        });
         let ot_server = OTServer::new(text);
         self.ot_servers.insert(file_path, ot_server);
     }
@@ -726,7 +723,7 @@ impl DocumentActorHandle {
         Self {
             doc_message_tx,
             doc_changed_ping_tx,
-            next_id: Default::default(),
+            next_id: Arc::default(),
         }
     }
     /// The TCP and socket connections will send messages through this when they receive something.
