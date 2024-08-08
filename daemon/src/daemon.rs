@@ -160,7 +160,7 @@ impl DocumentActor {
                 .await;
             }
             DocMessage::FromEditor(editor_id, message) => {
-                self.handle_message_from_editor(editor_id, message).await
+                self.handle_message_from_editor(editor_id, message).await;
             }
             DocMessage::RemoveFile { file_path } => {
                 // TODO: This is a workaround. Handle this case better by returning a Result in
@@ -206,7 +206,7 @@ impl DocumentActor {
                                 Path::new(&self.absolute_path_for_file_path(&file_path)),
                             )
                             .unwrap_or_else(|err| {
-                                warn!("Failed to remove file {file_path}: {err}")
+                                warn!("Failed to remove file {file_path}: {err}");
                             });
                         }
                         PatchEffect::NoEffect => {}
@@ -387,7 +387,7 @@ impl DocumentActor {
                 let result = self.react_to_message_from_editor(payload).await;
                 let response = match result {
                     Err(error) => JSONRPCResponse::RequestError { id, error },
-                    Ok(_) => JSONRPCResponse::RequestSuccess {
+                    Ok(()) => JSONRPCResponse::RequestSuccess {
                         id,
                         result: "success".into(),
                     },
@@ -403,15 +403,12 @@ impl DocumentActor {
     }
 
     fn open_file_path(&mut self, file_path: String) {
-        let text = match self.current_file_content(&file_path) {
-            Ok(text) => text,
-            Err(_) => {
-                // The file doesn't exist yet - create it in the Automerge document.
-                let text = String::new();
-                self.crdt_doc.initialize_text(&text, &file_path);
-                text
-            }
-        };
+        let text = self.current_file_content(&file_path).unwrap_or_else(|_| {
+            // The file doesn't exist yet - create it in the Automerge document.
+            let text = String::new();
+            self.crdt_doc.initialize_text(&text, &file_path);
+            text
+        });
         let ot_server = OTServer::new(text);
         self.ot_servers.insert(file_path, ot_server);
     }
@@ -726,7 +723,7 @@ impl DocumentActorHandle {
         Self {
             doc_message_tx,
             doc_changed_ping_tx,
-            next_id: Default::default(),
+            next_id: Arc::default(),
         }
     }
     /// The TCP and socket connections will send messages through this when they receive something.
@@ -835,9 +832,9 @@ async fn spawn_file_watcher(base_dir: PathBuf, document_handle: DocumentActorHan
                         }
                     }
                 }
-                Err(e) => panic!("watch error: {:?}", e),
+                Err(e) => panic!("watch error: {e:?}"),
             }
-        })
+        });
     })
     .expect("Failed to initialize file watcher");
 
