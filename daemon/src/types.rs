@@ -115,7 +115,7 @@ impl PatchEffect {
                     file_deltas.push(result);
                 }
                 Err(e) => {
-                    panic!("Failed to convert patch to delta: {:#?}", e);
+                    panic!("Failed to convert patch to delta: {e:#?}");
                 }
             }
         }
@@ -203,7 +203,7 @@ mod test_serde {
         assert_eq!(
             jsonrpc.unwrap(),
             r#"{"id":1,"jsonrpc":"2.0","result":"success"}"#
-        )
+        );
     }
 
     #[test]
@@ -220,7 +220,7 @@ mod test_serde {
         assert_eq!(
             jsonrpc.unwrap(),
             r#"{"error":{"code":-1,"data":"content","message":"title"},"id":1,"jsonrpc":"2.0"}"#
-        )
+        );
     }
 }
 
@@ -676,7 +676,10 @@ impl EditorTextDelta {
 }
 
 pub mod factories {
-    use super::*;
+    use super::{
+        EditorTextDelta, EditorTextOp, Position, Range, RevisionedEditorTextDelta,
+        RevisionedTextDelta, TextDelta,
+    };
 
     pub fn insert(at: usize, s: &str) -> TextDelta {
         let mut delta = TextDelta::default();
