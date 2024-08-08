@@ -101,6 +101,38 @@ local function is_ethersync_enabled(filename)
     return vim.fs.root(filename, ".ethersync") ~= nil
 end
 
+local function track_edits(filename, uri)
+    files[filename] = {
+        -- Number of operations the daemon has made.
+        daemon_revision = 0,
+        -- Number of operations we have made.
+        editor_revision = 0,
+    }
+
+    -- Vim enables eol for an empty file, but we do use this option values
+    -- assuming there's a trailing newline iff eol is true.
+    if vim.fn.getfsize(vim.api.nvim_buf_get_name(0)) == 0 then
+        vim.bo.eol = false
+    end
+
+    changetracker.track_changes(0, function(delta)
+        files[filename].editor_revision = files[filename].editor_revision + 1
+
+        local rev_delta = {
+            delta = delta,
+            revision = files[filename].daemon_revision,
+        }
+
+        local params = { uri = uri, delta = rev_delta }
+
+        send_request("edit", params)
+    end)
+    cursor.track_cursor(0, function(ranges)
+        local params = { uri = uri, ranges = ranges }
+        send_request("cursor", params)
+    end)
+end
+
 -- Forward buffer edits to daemon as well as subscribe to daemon events ("open").
 local function on_buffer_open()
     local filename = vim.fn.expand("%:p")
@@ -115,35 +147,7 @@ local function on_buffer_open()
 
     local uri = "file://" .. filename
     send_request("open", { uri = uri }, function()
-        files[filename] = {
-            -- Number of operations the daemon has made.
-            daemon_revision = 0,
-            -- Number of operations we have made.
-            editor_revision = 0,
-        }
-
-        -- Vim enables eol for an empty file, but we do use this option values
-        -- assuming there's a trailing newline iff eol is true.
-        if vim.fn.getfsize(vim.api.nvim_buf_get_name(0)) == 0 then
-            vim.bo.eol = false
-        end
-
-        changetracker.track_changes(0, function(delta)
-            files[filename].editor_revision = files[filename].editor_revision + 1
-
-            local rev_delta = {
-                delta = delta,
-                revision = files[filename].daemon_revision,
-            }
-
-            local params = { uri = uri, delta = rev_delta }
-
-            send_request("edit", params)
-        end)
-        cursor.track_cursor(0, function(ranges)
-            local params = { uri = uri, ranges = ranges }
-            send_request("cursor", params)
-        end)
+        track_edits(filename, uri)
     end)
 end
 
