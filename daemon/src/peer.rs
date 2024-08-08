@@ -1,10 +1,11 @@
 //! A peer is another daemon. This module is all about daemon to daemon communication.
 
 use crate::daemon::{DocMessage, DocumentActorHandle};
-use anyhow::Context;
+use anyhow::{bail, Context};
 use automerge::sync::{Message as AutomergeSyncMessage, State as SyncState};
 use futures::StreamExt;
 use futures::{AsyncReadExt, AsyncWriteExt};
+use ini::Ini;
 use libp2p::core::transport::upgrade::Version;
 use libp2p::core::ConnectedPoint;
 use libp2p::Multiaddr;
@@ -37,6 +38,33 @@ pub struct PeerConnectionInfo {
 }
 
 impl PeerConnectionInfo {
+    // TODO: It feels like this function would fit better into main.rs.
+    // Should the whole type live there?
+    pub fn from_config_file(config_file: &Path) -> anyhow::Result<Self> {
+        if config_file.exists() {
+            let conf = Ini::load_from_file(config_file)?;
+            let general_section = conf.general_section();
+            return Ok(Self {
+                port: general_section.get("port").map(|p| {
+                    p.parse()
+                        .expect("Failed to parse port in config file as an integer")
+                }),
+                peer: general_section.get("peer").map(|p| p.to_string()),
+                passphrase: general_section.get("secret").map(|p| p.to_string()),
+            });
+        } else {
+            bail!("No config file found, please provide everything through CLI options");
+        }
+    }
+
+    pub fn takes_precedence_over(self, other: Self) -> Self {
+        Self {
+            port: self.port.or(other.port),
+            peer: self.peer.or(other.peer),
+            passphrase: self.passphrase.or(other.passphrase),
+        }
+    }
+
     #[must_use]
     pub const fn is_host(&self) -> bool {
         self.peer.is_none()
