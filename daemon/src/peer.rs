@@ -69,12 +69,12 @@ impl P2PActor {
             .with_tokio()
             .with_other_transport(|keypair| {
                 let passphrase = self.connection_info.passphrase.clone().unwrap_or_else(|| {
-                    let p = self.generate_passphrase();
+                    let p = Self::generate_passphrase();
                     info!("Generated new passphrase: {}", p);
                     p
                 });
 
-                let psk = pnet::PreSharedKey::new(self.passphrase_to_bytes(passphrase));
+                let psk = pnet::PreSharedKey::new(Self::passphrase_to_bytes(&passphrase));
 
                 let transport = tcp::tokio::Transport::new(tcp::Config::new())
                     .and_then(move |socket, _| pnet::PnetConfig::new(psk).handshake(socket));
@@ -137,7 +137,7 @@ impl P2PActor {
 
                     info!("Connected to peer {}", peer_id);
 
-                    self.spawn_peer_sync(stream).await;
+                    self.spawn_peer_sync(stream);
                 }
                 libp2p::swarm::SwarmEvent::ConnectionEstablished {
                     endpoint: ConnectedPoint::Listener { .. },
@@ -145,7 +145,7 @@ impl P2PActor {
                 } => {
                     if let Some((peer, stream)) = incoming_streams.next().await {
                         info!("Peer connected: {}", peer);
-                        self.spawn_peer_sync(stream).await;
+                        self.spawn_peer_sync(stream);
                     }
                 }
                 event => tracing::debug!(?event),
@@ -172,7 +172,7 @@ impl P2PActor {
         }
     }
 
-    fn generate_passphrase(&self) -> String {
+    fn generate_passphrase() -> String {
         let words = memorable_wordlist::WORDS
             .iter()
             .take(2048)
@@ -186,7 +186,7 @@ impl P2PActor {
     }
 
     // This "stretches" the passphrase to fill the 32 bytes required by the pnet crate.
-    fn passphrase_to_bytes(&self, passphrase: String) -> [u8; 32] {
+    fn passphrase_to_bytes(passphrase: &str) -> [u8; 32] {
         let mut key = [0u8; 32];
         pbkdf2_hmac::<Sha256>(
             passphrase.as_bytes(),
@@ -197,7 +197,7 @@ impl P2PActor {
         key
     }
 
-    async fn spawn_peer_sync(&self, stream: Stream) {
+    fn spawn_peer_sync(&self, stream: Stream) {
         let (we_to_peer_tx, we_to_peer_rx) = mpsc::channel(16);
         let (peer_to_us_tx, peer_to_us_rx) = mpsc::channel(16);
 
@@ -237,9 +237,9 @@ impl P2PActor {
                     match message_maybe {
                         Some(message) => {
                             let message = message.encode();
-                            let message_len = message.len() as u32;
+                            let message_len = u32::try_from(message.len());
                             stream
-                                .write_all(&message_len.to_be_bytes())
+                                .write_all(&message_len?.to_be_bytes())
                                 .await?;
                             stream
                                 .write_all(&message)

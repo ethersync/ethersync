@@ -73,7 +73,7 @@ impl Document {
         let text_obj = self
             .text_obj(file_path)
             .expect("Couldn't get automerge text object, so not able to modify it");
-        let mut offset = 0i32;
+        let mut offset = 0isize;
         let text = self
             .current_file_content(file_path)
             .expect("Should have initialized text before applying delta to it");
@@ -82,13 +82,13 @@ impl Document {
             self.doc
                 .splice_text(
                     text_obj.clone(),
-                    (start as i32 + offset) as usize,
+                    ((start as isize) + offset) as usize,
                     length as isize,
                     &op.replacement,
                 )
                 .expect("Failed to splice Automerge text object");
-            offset -= length as i32;
-            offset += op.replacement.chars().count() as i32;
+            offset -= length as isize;
+            offset += op.replacement.chars().count() as isize;
         }
     }
 
