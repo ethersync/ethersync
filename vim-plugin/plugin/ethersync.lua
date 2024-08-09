@@ -12,14 +12,21 @@ local function send_notification(method, params)
     client.notify(method, params)
 end
 
-local function send_request(method, params)
-    client.request(method, params, function(err, _)
+local function send_request(method, params, result_callback, err_callback)
+    err_callback = err_callback or function() end
+    result_callback = result_callback or function() end
+
+    client.request(method, params, function(err, result)
         if err then
             local error_msg = "[ethersync] Error for '" .. method .. "': " .. err.message
             if err.data and err.data ~= "" then
                 error_msg = error_msg .. " (" .. err.data .. ")"
             end
             vim.api.nvim_err_writeln(error_msg)
+            err_callback(err)
+        end
+        if result then
+            result_callback(result)
         end
     end)
 end
@@ -94,28 +101,13 @@ local function is_ethersync_enabled(filename)
     return vim.fs.root(filename, ".ethersync") ~= nil
 end
 
--- Forward buffer edits to daemon as well as subscribe to daemon events ("open").
-local function on_buffer_open()
-    local filename = vim.fn.expand("%:p")
-
-    if not is_ethersync_enabled(filename) then
-        return
-    end
-
-    if not client then
-        connect()
-    end
-
+local function track_edits(filename, uri)
     files[filename] = {
         -- Number of operations the daemon has made.
         daemon_revision = 0,
         -- Number of operations we have made.
         editor_revision = 0,
     }
-
-    local uri = "file://" .. filename
-    -- TODO: If open fails, abort adding it to the changetracker (issue #88).
-    send_request("open", { uri = uri })
 
     -- Vim enables eol for an empty file, but we do use this option values
     -- assuming there's a trailing newline iff eol is true.
@@ -137,7 +129,27 @@ local function on_buffer_open()
     end)
     cursor.track_cursor(0, function(ranges)
         local params = { uri = uri, ranges = ranges }
-        send_notification("cursor", params)
+        -- Even though it's not "needed" we're sending requests in this case
+        -- to ensure we're processing/seeing potential errors.
+        send_request("cursor", params)
+    end)
+end
+
+-- Forward buffer edits to daemon as well as subscribe to daemon events ("open").
+local function on_buffer_open()
+    local filename = vim.fn.expand("%:p")
+
+    if not is_ethersync_enabled(filename) then
+        return
+    end
+
+    if not client then
+        connect()
+    end
+
+    local uri = "file://" .. filename
+    send_request("open", { uri = uri }, function()
+        track_edits(filename, uri)
     end)
 end
 
