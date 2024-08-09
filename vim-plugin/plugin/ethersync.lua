@@ -129,6 +129,8 @@ local function track_edits(filename, uri)
     end)
     cursor.track_cursor(0, function(ranges)
         local params = { uri = uri, ranges = ranges }
+        -- Even though it's not "needed" we're sending requests in this case
+        -- to ensure we're processing/seeing potential errors.
         send_request("cursor", params)
     end)
 end
