@@ -42,16 +42,20 @@
 
 (require 'cl-lib)
 (require 'dash)
+(require 'files)
 (require 'jsonrpc)
 (require 'pcase)
 (require 'rx)
-(require 'subr-rx)
+(require 'subr-x)
 
 
 ;; Customization Helpers
 (defun ethersync--always-safe-local (_)
   "Use as a :safe predicate in a `defcustom' form to accept any local override."
   t)
+
+(defconst ethersync--default-socket-name "ethersync"
+  "Name of socket file.")
 
 
 ;; Public error types
@@ -68,7 +72,8 @@
   :group 'files
   :group 'shadow)
 
-(defcustom ethersync-socket-location "/tmp/ethersync"
+(defcustom ethersync-socket-location
+  (expand-file-name ethersync--default-socket-name (temporary-file-directory))
   "File path to the unix domain socket used by ethersync."
   :type 'file
   :safe #'ethersync--always-safe-local
@@ -119,7 +124,7 @@ reading and writing JSONRPC messages with basic HTTP-style enveloping headers su
 \"Content-Length:\".")
 
 (cl-defmethod initialize-instance :after ((client ethersync-client)
-                                          &key process &allow-other-keys)
+                                          (&key process &allow-other-keys))
   (process-put process 'jsonrpc-connection client))
 
 (cl-defmethod ethersync--client-socket-path ((client ethersync-client))
@@ -163,7 +168,7 @@ reading and writing JSONRPC messages with basic HTTP-style enveloping headers su
   (unless (file-exists-p socket-location)
     (signal 'ethersync-client-connect-error
             `("[ethersync] socket path does not exist" ,socket-location)))
-  (unless (ethersync--file-is-socket path)
+  (unless (ethersync--file-is-socket socket-location)
     (signal 'ethersync-client-connect-error
             `("[ethersync] path is not a socket" ,socket-location))))
 
@@ -178,7 +183,7 @@ reading and writing JSONRPC messages with basic HTTP-style enveloping headers su
 ;; Logic
 (defun ethersync--create-client-process (socket-location)
   (ethersync--assert-socket-path socket-location)
-  (let* ((new-buffer-name (generate-new-buffer ethersync--process-buffer-name t))
+  (let* ((new-buffer-name (generate-new-buffer ethersync--process-buffer-name-base t))
          (socket-proc (make-network-process
                        :name ethersync--process-name
                        :buffer new-buffer-name
@@ -197,8 +202,37 @@ reading and writing JSONRPC messages with basic HTTP-style enveloping headers su
 
 (defun ethersync--process-sentinel (proc change))
 
+(defun ethersync--scan-for-matching-socket-path (socket-path)
+  "See if a client has already been initialized to SOCKET-PATH, and return it if so."
+  (cl-loop for client in ethersync--active-clients
+           for prev-path = (ethersync--client-socket-path client)
+           if (file-equal-p socket-path prev-path)
+           return client))
+
+(defun ethersync--completing-read-socket-path (socket-filename)
+  "Read in the file path for the ethersync socket."
+  (let ((base-dir (temporary-file-directory)))
+    (expand-file-name
+     (read-file-name "ethersync socket path: "
+                     base-dir socket-filename
+                     t socket-filename
+                     #'ethersync--file-is-socket)
+     base-dir)))
+
 
 ;; Autoloaded functions
+;;;###autoload
+(defun ethersync-connect (&optional socket-location)
+  "Connect to a socket at SOCKET-LOCATION, or return the existing client for that socket."
+  (interactive "P")
+  (let ((socket-location
+          (pcase-exhaustive socket-location
+            (`nil ethersync-socket-location)
+            ((and (pred stringp) s) s)
+            ('(4) (ethersync--completing-read-socket-path ethersync--default-socket-name)))))
+    (or (ethersync--scan-for-matching-socket-path socket-location)
+        (push (ethersync--create-client-process socket-location) ethersync--active-clients))))
+
 
 (provide 'ethersync)
 ;;; ethersync.el ends here
