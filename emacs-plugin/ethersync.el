@@ -233,6 +233,16 @@ reading and writing JSONRPC messages with basic HTTP-style enveloping headers su
     (or (ethersync--scan-for-matching-socket-path socket-location)
         (push (ethersync--create-client-process socket-location) ethersync--active-clients))))
 
+;;;###autoload
+(defun ethersync-clear-all-clients ()
+  "Iterate through every attached client and kill its process."
+  (interactive)
+  (cl-loop for client = (pop ethersync--active-clients)
+           while client
+           for sock-proc = (ethersync--client-process client)
+           for proc-buf = (process-buffer sock-proc)
+           do (kill-buffer proc-buf)))
+
 
 (provide 'ethersync)
 ;;; ethersync.el ends here
