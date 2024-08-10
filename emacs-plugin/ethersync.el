@@ -209,9 +209,15 @@ connection object, called when the process dies.")
          (client (make-instance
                   'ethersync-client
                   :name ethersync--connection-name
+                  :notification-dispatcher #'ethersync--notification-dispatcher
                   :process socket-proc)))
     (process-put socket-proc 'jsonrpc-connection client)
     client))
+
+(defun ethersync--notification-dispatcher (client method params)
+  (message "received method=%s, params=%S"
+           (symbol-name method)
+           params))
 
 (defun ethersync--process-filter (proc string)
   "Called when new data STRING has arrived for PROC."
