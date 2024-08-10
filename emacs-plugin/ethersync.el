@@ -115,17 +115,30 @@ An initial space is used to hide the buffer from the buffer list.")
 (defclass ethersync-client (jsonrpc-connection)
   ((-process
     :initarg :process :type process :accessor ethersync--client-process
-    :documentation "Process object wrapped by this client."))
+    :documentation "Process object wrapped by this client.")
+   (-expected-bytes
+    :initform nil
+    :accessor jsonrpc--expected-bytes
+    :documentation "How many bytes declared by server.")
+   (-on-shutdown
+    :accessor jsonrpc--on-shutdown
+    :initform #'ignore
+    :initarg :on-shutdown
+    :documentation "Function run when the process dies.")
+   (-autoport-inferior
+    :initform nil
+    :documentation "Unused.
+This is a hack to take advantage of the sentinel and filter methods for
+`jsonrpc-process-connection'."))
   :documentation "An ethersync JSONRPC connection over a socket.
 The following initargs are accepted:
 
 :PROCESS (mandatory), a live network process object to a unix domain socket. The socket will be
 reading and writing JSONRPC messages with basic HTTP-style enveloping headers such as
-\"Content-Length:\".")
+\"Content-Length:\".
 
-(cl-defmethod initialize-instance :after ((client ethersync-client)
-                                          (&key process &allow-other-keys))
-  (process-put process 'jsonrpc-connection client))
+:ON-SHUTDOWN (optional), a function of one argument, the
+connection object, called when the process dies.")
 
 (cl-defmethod ethersync--client-socket-path ((client ethersync-client))
   "Retrieve the path to the unix domain socket being used by CLIENT."
@@ -192,15 +205,21 @@ reading and writing JSONRPC messages with basic HTTP-style enveloping headers su
                        :coding 'no-conversion
                        :noquery t
                        :filter #'ethersync--process-filter
-                       :sentinel #'ethersync--process-sentinel)))
-    (make-instance
-     'ethersync-client
-     :name ethersync--connection-name
-     :process socket-proc)))
+                       :sentinel #'ethersync--process-sentinel))
+         (client (make-instance
+                  'ethersync-client
+                  :name ethersync--connection-name
+                  :process socket-proc)))
+    (process-put socket-proc 'jsonrpc-connection client)
+    client))
 
-(defun ethersync--process-filter (proc string))
+(defun ethersync--process-filter (proc string)
+  "Called when new data STRING has arrived for PROC."
+  (jsonrpc--process-filter proc string))
 
-(defun ethersync--process-sentinel (proc change))
+(defun ethersync--process-sentinel (proc change)
+  "Called when PROC undergoes CHANGE."
+  (jsonrpc--process-sentinel proc change))
 
 (defun ethersync--scan-for-matching-socket-path (socket-path)
   "See if a client has already been initialized to SOCKET-PATH, and return it if so."
