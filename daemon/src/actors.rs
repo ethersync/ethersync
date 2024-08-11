@@ -280,7 +280,7 @@ pub mod tests {
     }
 
     #[test]
-    #[ignore] // TODO: enable as soon as we have figured out how to install plugin on gh actions
+    #[ignore] // Run only on the CI (faster local `cargo test`).
     fn plugin_loaded() {
         let runtime = Runtime::new().unwrap();
         runtime.block_on(async {
@@ -295,7 +295,7 @@ pub mod tests {
     }
 
     #[test]
-    #[ignore]
+    #[ignore] // Run only on the CI (faster local `cargo test`).
     fn ethersync_executable_from_vim() {
         let runtime = Runtime::new().unwrap();
         runtime.block_on(async {
@@ -355,7 +355,7 @@ pub mod tests {
     }
 
     #[test]
-    #[ignore]
+    #[ignore] // Run only on the CI (faster local `cargo test`).
     #[serial]
     fn vim_processes_deltas_correctly() {
         assert_vim_deltas_yield_content("", vec![replace_ed((0, 0), (0, 0), "a")], "a");
@@ -423,7 +423,7 @@ pub mod tests {
         });
     }
 
-    #[ignore]
+    #[ignore] // Run only on the CI (faster local `cargo test`).
     #[test]
     #[serial]
     fn vim_sends_correct_delta() {
