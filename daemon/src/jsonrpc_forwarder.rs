@@ -1,3 +1,13 @@
+//! Provides a way to write / read a socket through stdin, (un)packing content-length encoding.
+//!
+//! The idea is that a daemon process communicates through newline separated jsonrpc messages,
+//! whereas LSP expects an HTTP-like Base Protocol:
+//! https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#baseProtocol
+//!
+//! This forwarder thus
+//! - takes jsonrpc from a socket (usually a daemon) and wraps it content-length encoded data to stdout
+//! - takes content-length encoded data from stdin (as sent by an LSP client) and writes it
+//!   "unpacked" to the socket
 use futures::{SinkExt, StreamExt};
 use std::path::Path;
 use tokio::io::{BufReader, BufWriter};
