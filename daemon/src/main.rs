@@ -93,7 +93,7 @@ async fn main() -> Result<()> {
                 return Ok(());
             }
 
-            let config_from_options = PeerConnectionInfo {
+            let mut peer_connection_info = PeerConnectionInfo {
                 peer: peer.take(),
                 port: port.take(),
                 passphrase: secret.take(),
@@ -102,9 +102,10 @@ async fn main() -> Result<()> {
             let config_file = directory
                 .join(ETHERSYNC_CONFIG_DIR)
                 .join(ETHERSYNC_CONFIG_FILE);
-            let config_from_file = PeerConnectionInfo::from_config_file(&config_file)?;
 
-            let peer_connection_info = config_from_options.takes_precedence_over(config_from_file);
+            if let Some(config_from_file) = PeerConnectionInfo::from_config_file(&config_file) {
+                peer_connection_info = peer_connection_info.takes_precedence_over(config_from_file);
+            }
 
             info!("Starting Ethersync on {}", directory.display());
             Daemon::new(peer_connection_info, &socket_path, &directory, init);
