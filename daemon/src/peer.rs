@@ -5,6 +5,7 @@ use anyhow::Context;
 use automerge::sync::{Message as AutomergeSyncMessage, State as SyncState};
 use futures::StreamExt;
 use futures::{AsyncReadExt, AsyncWriteExt};
+use ini::Ini;
 use libp2p::core::transport::upgrade::Version;
 use libp2p::core::ConnectedPoint;
 use libp2p::Multiaddr;
@@ -28,7 +29,7 @@ use tracing::{debug, error, info};
 const ETHERSYNC_PROTOCOL: StreamProtocol = StreamProtocol::new("/ethersync");
 
 /// Responsible for offering peer-to-peer connectivity to the outside world. Uses libp2p.
-/// For every new connection, spawns and runs a SyncActor.
+/// For every new connection, spawns and runs a `SyncActor`.
 #[derive(Clone)]
 pub struct PeerConnectionInfo {
     pub port: Option<u16>,
@@ -37,6 +38,35 @@ pub struct PeerConnectionInfo {
 }
 
 impl PeerConnectionInfo {
+    // TODO: It feels like this function would fit better into main.rs.
+    // Should the whole type live there?
+    pub fn from_config_file(config_file: &Path) -> Option<Self> {
+        if config_file.exists() {
+            let conf = Ini::load_from_file(config_file)
+                .expect("Could not access config file, even though it exists");
+            let general_section = conf.general_section();
+            return Some(Self {
+                port: general_section.get("port").map(|p| {
+                    p.parse()
+                        .expect("Failed to parse port in config file as an integer")
+                }),
+                peer: general_section.get("peer").map(|p| p.to_string()),
+                passphrase: general_section.get("secret").map(|p| p.to_string()),
+            });
+        } else {
+            info!("No config file found, please provide everything through CLI options");
+            None
+        }
+    }
+
+    pub fn takes_precedence_over(self, other: Self) -> Self {
+        Self {
+            port: self.port.or(other.port),
+            peer: self.peer.or(other.peer),
+            passphrase: self.passphrase.or(other.passphrase),
+        }
+    }
+
     #[must_use]
     pub const fn is_host(&self) -> bool {
         self.peer.is_none()
@@ -69,12 +99,12 @@ impl P2PActor {
             .with_tokio()
             .with_other_transport(|keypair| {
                 let passphrase = self.connection_info.passphrase.clone().unwrap_or_else(|| {
-                    let p = self.generate_passphrase();
+                    let p = Self::generate_passphrase();
                     info!("Generated new passphrase: {}", p);
                     p
                 });
 
-                let psk = pnet::PreSharedKey::new(self.passphrase_to_bytes(passphrase));
+                let psk = pnet::PreSharedKey::new(Self::passphrase_to_bytes(&passphrase));
 
                 let transport = tcp::tokio::Transport::new(tcp::Config::new())
                     .and_then(move |socket, _| pnet::PnetConfig::new(psk).handshake(socket));
@@ -137,7 +167,7 @@ impl P2PActor {
 
                     info!("Connected to peer {}", peer_id);
 
-                    self.spawn_peer_sync(stream).await;
+                    self.spawn_peer_sync(stream);
                 }
                 libp2p::swarm::SwarmEvent::ConnectionEstablished {
                     endpoint: ConnectedPoint::Listener { .. },
@@ -145,7 +175,7 @@ impl P2PActor {
                 } => {
                     if let Some((peer, stream)) = incoming_streams.next().await {
                         info!("Peer connected: {}", peer);
-                        self.spawn_peer_sync(stream).await;
+                        self.spawn_peer_sync(stream);
                     }
                 }
                 event => tracing::debug!(?event),
@@ -172,7 +202,7 @@ impl P2PActor {
         }
     }
 
-    fn generate_passphrase(&self) -> String {
+    fn generate_passphrase() -> String {
         let words = memorable_wordlist::WORDS
             .iter()
             .take(2048)
@@ -180,13 +210,13 @@ impl P2PActor {
         let number_of_words = 3;
         let mut rng = rand::thread_rng();
         (0..number_of_words)
-            .map(|_| words[rng.gen_range(0..words.len())].to_string())
+            .map(|_| (*words[rng.gen_range(0..words.len())]).to_string())
             .collect::<Vec<_>>()
             .join("-")
     }
 
     // This "stretches" the passphrase to fill the 32 bytes required by the pnet crate.
-    fn passphrase_to_bytes(&self, passphrase: String) -> [u8; 32] {
+    fn passphrase_to_bytes(passphrase: &str) -> [u8; 32] {
         let mut key = [0u8; 32];
         pbkdf2_hmac::<Sha256>(
             passphrase.as_bytes(),
@@ -197,7 +227,7 @@ impl P2PActor {
         key
     }
 
-    async fn spawn_peer_sync(&self, stream: Stream) {
+    fn spawn_peer_sync(&self, stream: Stream) {
         let (we_to_peer_tx, we_to_peer_rx) = mpsc::channel(16);
         let (peer_to_us_tx, peer_to_us_rx) = mpsc::channel(16);
 
@@ -237,9 +267,9 @@ impl P2PActor {
                     match message_maybe {
                         Some(message) => {
                             let message = message.encode();
-                            let message_len = message.len() as u32;
+                            let message_len = u32::try_from(message.len());
                             stream
-                                .write_all(&message_len.to_be_bytes())
+                                .write_all(&message_len?.to_be_bytes())
                                 .await?;
                             stream
                                 .write_all(&message)

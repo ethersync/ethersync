@@ -1,60 +1,101 @@
-use std::io;
-use std::io::BufRead;
-use std::io::BufReader;
-use std::io::Read;
-use std::io::Write;
-use std::os::unix::net::UnixStream;
+//! Provides a way to write / read a socket through stdin, (un)packing content-length encoding.
+//!
+//! The idea is that a daemon process communicates through newline separated jsonrpc messages,
+//! whereas LSP expects an HTTP-like Base Protocol:
+//! https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#baseProtocol
+//!
+//! This forwarder thus
+//! - takes jsonrpc from a socket (usually a daemon) and wraps it content-length encoded data to stdout
+//! - takes content-length encoded data from stdin (as sent by an LSP client) and writes it
+//!   "unpacked" to the socket
+use futures::{SinkExt, StreamExt};
 use std::path::Path;
-use std::str::from_utf8;
-use std::thread;
+use tokio::io::{BufReader, BufWriter};
+use tokio::net::UnixStream;
+use tokio_util::bytes::{Buf, BytesMut};
+use tokio_util::codec::{Decoder, Encoder, FramedRead, FramedWrite, LinesCodec};
 
-// Read/write JSON-RPC requests that have a Content-Length header from/to stdin/stdout.
-// Read/write newline-delimited JSON-RPC from/to the Unix socket.
-pub fn connection(socket_path: &Path) {
-    let mut stream = UnixStream::connect(socket_path).expect("Failed to connect to socket");
+pub async fn connection(socket_path: &Path) -> anyhow::Result<()> {
+    // Construct socket object, which send/receive newline-delimited messages.
+    let stream = UnixStream::connect(socket_path).await?;
+    let (socket_read, socket_write) = stream.into_split();
+    let mut socket_read = FramedRead::new(socket_read, LinesCodec::new());
+    let mut socket_write = FramedWrite::new(socket_write, LinesCodec::new());
 
-    let stream2 = stream.try_clone().expect("Failed to clone socket stream");
-    let reader = BufReader::new(stream2);
+    // Construct stdin/stdout objects, which send/receive messages with a Content-Length header.
+    let mut stdin = FramedRead::new(BufReader::new(tokio::io::stdin()), ContentLengthCodec);
+    let mut stdout = FramedWrite::new(BufWriter::new(tokio::io::stdout()), ContentLengthCodec);
 
-    thread::spawn(|| {
-        for line in reader.lines() {
-            let line = line.expect("Failed to read line");
-            let length = line.len();
-            print!("Content-Length: {length}\r\n\r\n{line}");
-            std::io::stdout().flush().expect("Failed to flush stdout");
+    tokio::spawn(async move {
+        while let Some(Ok(message)) = socket_read.next().await {
+            stdout
+                .send(message)
+                .await
+                .expect("Failed to write to stdout");
         }
-        // Socket has been closed, so exit the process.
-        std::process::exit(1);
+        // Socket was closed.
+        std::process::exit(0);
     });
 
-    let mut data = vec![];
-    let mut reading_header = true;
-    let mut content_length = 0;
-
-    for byte in io::stdin().lock().bytes() {
-        let byte = byte.expect("Failed to read byte");
-        data.push(byte);
-
-        if reading_header {
-            if data.ends_with(b"\r\n\r\n") {
-                let header_string = from_utf8(&data).expect("Failed to parse header as UTF-8");
-                content_length = 0;
-                for line in header_string.lines() {
-                    if let Some(line) = line.strip_prefix("Content-Length: ") {
-                        content_length = line
-                            .parse()
-                            .expect("Failed to parse Content-Length as integer");
-                    }
-                }
-                data.clear();
-                reading_header = false;
-            }
-        } else if data.len() == content_length {
-            stream.write_all(&data).expect("Failed to write to socket");
-            stream.write_all(b"\n").expect("Failed to write to socket");
-            data.clear();
-            reading_header = true;
-        }
+    while let Some(Ok(message)) = stdin.next().await {
+        socket_write.send(message).await?;
     }
-    // Stdin has been closed, so exit the process.
+    // Stdin was closed.
+    std::process::exit(0);
+}
+
+struct ContentLengthCodec;
+
+impl Encoder<String> for ContentLengthCodec {
+    type Error = std::io::Error;
+
+    fn encode(&mut self, item: String, dst: &mut BytesMut) -> Result<(), Self::Error> {
+        let content_length = item.len();
+        dst.extend_from_slice(format!("Content-Length: {}\r\n\r\n", content_length).as_bytes());
+        dst.extend_from_slice(item.as_bytes());
+        Ok(())
+    }
+}
+
+impl Decoder for ContentLengthCodec {
+    type Item = String;
+    type Error = anyhow::Error;
+
+    fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
+        // Find the position of the Content-Length header.
+        let c = b"Content-Length: ";
+        let start_of_header = match src.windows(c.len()).position(|window| window == c) {
+            Some(pos) => pos,
+            None => return Ok(None),
+        };
+
+        // Find the end of the line after that.
+        let end_of_line = match src[start_of_header + c.len()..]
+            .windows(4)
+            .position(|window| window == b"\r\n\r\n")
+        {
+            Some(pos) => pos,
+            None => return Ok(None),
+        };
+
+        // Parse the content length.
+        let content_length = std::str::from_utf8(
+            &src[start_of_header + c.len()..start_of_header + c.len() + end_of_line],
+        )?
+        .parse()?;
+        let content_start = start_of_header + c.len() + end_of_line + 4;
+
+        // Recommended optimization, in anticipation for future calls to `decode`.
+        src.reserve(content_start + content_length);
+
+        // Check if we have enough content.
+        if src.len() < content_start + content_length {
+            return Ok(None);
+        }
+
+        // Return the body of the message.
+        src.advance(content_start);
+        let content = src.split_to(content_length);
+        Ok(Some(std::str::from_utf8(&content)?.to_string()))
+    }
 }
