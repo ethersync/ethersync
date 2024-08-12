@@ -6,11 +6,13 @@ on:
       - 'main'
     paths:
       - 'daemon/**'
+      - 'vim-plugin/**'
       - 'flake.*'
       - '.github/workflows/rust.yml'
   pull_request:
     paths:
       - 'daemon/**'
+      - 'vim-plugin/**'
       - 'flake.*'
       - '.github/workflows/rust.yml'
 

@@ -33,4 +33,4 @@ jobs:
         - name: Install Magic Nix Cache
           uses: DeterminateSystems/magic-nix-cache-action@main
         - name: Run fuzzer
-          run: nix develop --command cargo run --bin=fuzzer
+          run: nix develop --command cargo run --release --bin=fuzzer
