@@ -44,9 +44,6 @@ function M.apply_text_edits(text_edits, bufnr, offset_encoding)
         return
     end
 
-    if not vim.api.nvim_buf_is_loaded(bufnr) then
-        vim.fn.bufload(bufnr)
-    end
     vim.bo[bufnr].buflisted = true
 
     -- Fix reversed range and indexing each text_edits

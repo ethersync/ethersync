@@ -1,17 +1,9 @@
 use crate::daemon::Daemon;
-use crate::sandbox;
 use async_trait::async_trait;
 use nvim_rs::{compat::tokio::Compat, create::tokio::new_child_cmd, rpc::handler::Dummy};
 use rand::Rng;
-use serde_json::Value as JSONValue;
-use std::path::{Path, PathBuf};
-use temp_dir::TempDir;
-use tokio::{
-    io::{split, AsyncBufReadExt, AsyncWriteExt, BufReader, BufWriter},
-    net::UnixListener,
-    process::ChildStdin,
-    sync::mpsc,
-};
+use std::path::PathBuf;
+use tokio::process::ChildStdin;
 
 // TODO: Consider renaming this, to avoid confusion with tokio "actors".
 #[async_trait]
@@ -53,18 +45,6 @@ impl Neovim {
             .input(input)
             .await
             .expect("Failed to send input to Neovim");
-    }
-
-    #[allow(dead_code)]
-    async fn new_ethersync_enabled(initial_content: &str) -> (Self, PathBuf) {
-        let dir = TempDir::new().unwrap();
-        let ethersync_dir = dir.child(".ethersync");
-        sandbox::create_dir(dir.path(), &ethersync_dir).unwrap();
-        let file_path = dir.child("test");
-        sandbox::write_file(dir.path(), &file_path, initial_content.as_bytes())
-            .expect("Failed to write initial file content");
-
-        (Self::new(file_path.clone()).await, file_path)
     }
 }
 
@@ -168,97 +148,136 @@ fn rand_usize_inclusive(start: usize, end: usize) -> usize {
     }
 }
 
-#[allow(dead_code)]
-struct MockSocket {
-    writer_tx: tokio::sync::mpsc::Sender<String>,
-    reader_rx: tokio::sync::mpsc::Receiver<String>,
-}
-
-#[allow(dead_code)]
-impl MockSocket {
-    fn new(socket_path: &str, ignore_reads: bool) -> Self {
-        if sandbox::exists(Path::new("/tmp"), Path::new(socket_path))
-            .expect("Could not check for socket existence")
-        {
-            sandbox::remove_file(Path::new("/tmp"), Path::new(socket_path))
-                .expect("Could not remove socket");
-        }
-
-        let listener = UnixListener::bind(socket_path).expect("Could not bind to socket");
-        let (writer_tx, mut writer_rx) = mpsc::channel::<String>(1);
-        let (reader_tx, reader_rx) = mpsc::channel::<String>(1);
-
-        tokio::spawn(async move {
-            let (socket, _) = listener
-                .accept()
-                .await
-                .expect("Could not accept connection");
-
-            let (reader, writer) = split(socket);
-            let mut writer = BufWriter::new(writer);
-            let mut reader = BufReader::new(reader);
-
-            tokio::spawn(async move {
-                while let Some(message) = writer_rx.recv().await {
-                    writer
-                        .write_all(message.as_bytes())
-                        .await
-                        .expect("Could not write to socket");
-                    writer.flush().await.expect("Could not flush socket");
-                }
-            });
-
-            if !ignore_reads {
-                tokio::spawn(async move {
-                    let mut buffer = String::new();
-                    while reader.read_line(&mut buffer).await.is_ok() {
-                        reader_tx
-                            .send(buffer.clone())
-                            .await
-                            .expect("Could not send message to reader channel");
-                        buffer.clear();
-                    }
-                });
-            }
-        });
-
-        Self {
-            writer_tx,
-            reader_rx,
-        }
-    }
-
-    async fn send(&mut self, message: &str) {
-        self.writer_tx
-            .send(message.to_string())
-            .await
-            .expect("Could not send message");
-    }
-
-    async fn recv(&mut self) -> JSONValue {
-        let line = self
-            .reader_rx
-            .recv()
-            .await
-            .expect("Could not receive message");
-        serde_json::from_str(&line).expect("Could not parse JSON")
-    }
-}
-
 #[cfg(test)]
 pub mod tests {
     use super::*;
+    use crate::sandbox;
     use crate::types::{
         factories::*, EditorProtocolMessageFromEditor, EditorProtocolMessageToEditor,
         EditorProtocolObject, EditorTextDelta, EditorTextOp, JSONRPCFromEditor,
         RevisionedEditorTextDelta,
     };
     use pretty_assertions::assert_eq;
+    use serde_json::Value as JSONValue;
     use serial_test::serial;
+    use std::fs;
+    use std::path::Path;
+    use temp_dir::TempDir;
+    use tokio::{
+        io::{split, AsyncBufReadExt, AsyncWriteExt, BufReader, BufWriter},
+        net::UnixListener,
+        sync::mpsc,
+    };
     use tokio::{
         runtime::Runtime,
         time::{timeout, Duration},
     };
+
+    impl Neovim {
+        async fn new_ethersync_enabled(initial_content: &str) -> (Self, PathBuf) {
+            let dir = TempDir::new().unwrap();
+            let ethersync_dir = dir.child(".ethersync");
+            sandbox::create_dir(dir.path(), &ethersync_dir).unwrap();
+            let mut file_path = dir.child("test");
+            sandbox::write_file(dir.path(), &file_path, initial_content.as_bytes())
+                .expect("Failed to write initial file content");
+            file_path = fs::canonicalize(file_path).expect("Could not canonicalize");
+
+            (Self::new(file_path.clone()).await, file_path)
+        }
+    }
+
+    struct MockSocket {
+        writer_tx: tokio::sync::mpsc::Sender<String>,
+        reader_rx: tokio::sync::mpsc::Receiver<String>,
+    }
+
+    impl MockSocket {
+        fn new(socket_path: &str, ignore_reads: bool) -> Self {
+            if sandbox::exists(Path::new("/tmp"), Path::new(socket_path))
+                .expect("Could not check for socket existence")
+            {
+                sandbox::remove_file(Path::new("/tmp"), Path::new(socket_path))
+                    .expect("Could not remove socket");
+            }
+
+            let listener = UnixListener::bind(socket_path).expect("Could not bind to socket");
+            let (writer_tx, mut writer_rx) = mpsc::channel::<String>(1);
+            let (reader_tx, reader_rx) = mpsc::channel::<String>(1);
+
+            tokio::spawn(async move {
+                let (socket, _) = listener
+                    .accept()
+                    .await
+                    .expect("Could not accept connection");
+
+                let (reader, writer) = split(socket);
+                let mut writer = BufWriter::new(writer);
+                let mut reader = BufReader::new(reader);
+
+                tokio::spawn(async move {
+                    while let Some(message) = writer_rx.recv().await {
+                        writer
+                            .write_all(message.as_bytes())
+                            .await
+                            .expect("Could not write to socket");
+                        writer.flush().await.expect("Could not flush socket");
+                    }
+                });
+
+                if !ignore_reads {
+                    tokio::spawn(async move {
+                        let mut buffer = String::new();
+                        while reader.read_line(&mut buffer).await.is_ok() {
+                            reader_tx
+                                .send(buffer.clone())
+                                .await
+                                .expect("Could not send message to reader channel");
+                            buffer.clear();
+                        }
+                    });
+                }
+            });
+
+            Self {
+                writer_tx,
+                reader_rx,
+            }
+        }
+
+        async fn send(&mut self, message: &str) {
+            self.writer_tx
+                .send(message.to_string())
+                .await
+                .expect("Could not send message");
+        }
+
+        async fn recv(&mut self) -> JSONValue {
+            let line = self
+                .reader_rx
+                .recv()
+                .await
+                .expect("Could not receive message");
+            serde_json::from_str(&line).expect("Could not parse JSON")
+        }
+
+        async fn acknowledge_open(&mut self) -> JSONValue {
+            let json = self.recv().await;
+            if json.get("method").unwrap() == "open" {
+                let id = json.get("id").unwrap();
+                let response = serde_json::json!({
+                    "jsonrpc": "2.0",
+                    "id": id,
+                    "result": "success"
+                });
+                self.send(&response.to_string()).await;
+                self.send("\n").await;
+                // Wait a bit so that Neovim can boot up its change tracking.
+                tokio::time::sleep(Duration::from_millis(100)).await;
+            }
+            json
+        }
+    }
 
     #[test]
     #[ignore] // TODO: enable as soon as we have figured out how to install plugin on gh actions
@@ -301,8 +320,10 @@ pub mod tests {
     ) {
         let runtime = Runtime::new().expect("Could not create Tokio runtime");
         runtime.block_on(async {
-            let mut socket = MockSocket::new("/tmp/ethersync", true);
+            let mut socket = MockSocket::new("/tmp/ethersync", false);
+
             let (nvim, file_path) = Neovim::new_ethersync_enabled(initial_content).await;
+            socket.acknowledge_open().await;
 
             for op in &deltas {
                 let rev_editor_delta = RevisionedEditorTextDelta {
@@ -371,9 +392,7 @@ pub mod tests {
             timeout(Duration::from_millis(5000), async {
                 let mut socket = MockSocket::new("/tmp/ethersync", false);
                 let (mut nvim, _file_path) = Neovim::new_ethersync_enabled(initial_content).await;
-
-                let msg = socket.recv().await;
-                assert_eq!(msg["method"], "open");
+                socket.acknowledge_open().await;
 
                 let input_clone = input.to_string();
                 tokio::spawn(async move {

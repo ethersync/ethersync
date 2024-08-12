@@ -1,5 +1,6 @@
 local changetracker = require("changetracker")
 local cursor = require("cursor")
+local debug = require("logging").debug
 
 -- JSON-RPC connection.
 local client
@@ -109,12 +110,6 @@ local function track_edits(filename, uri)
         editor_revision = 0,
     }
 
-    -- Vim enables eol for an empty file, but we do use this option values
-    -- assuming there's a trailing newline iff eol is true.
-    if vim.fn.getfsize(vim.api.nvim_buf_get_name(0)) == 0 then
-        vim.bo.eol = false
-    end
-
     changetracker.track_changes(0, function(delta)
         files[filename].editor_revision = files[filename].editor_revision + 1
 
@@ -138,6 +133,7 @@ end
 -- Forward buffer edits to daemon as well as subscribe to daemon events ("open").
 local function on_buffer_open()
     local filename = vim.fn.expand("%:p")
+    debug("on_buffer_open: " .. filename)
 
     if not is_ethersync_enabled(filename) then
         return
@@ -148,13 +144,22 @@ local function on_buffer_open()
     end
 
     local uri = "file://" .. filename
+
+    -- Vim enables eol for an empty file, but we do use this option values
+    -- assuming there's a trailing newline iff eol is true.
+    if vim.fn.getfsize(vim.api.nvim_buf_get_name(0)) == 0 then
+        vim.bo.eol = false
+    end
+
     send_request("open", { uri = uri }, function()
+        debug("Tracking Edits")
         track_edits(filename, uri)
     end)
 end
 
 local function on_buffer_close()
     local closed_file = vim.fn.expand("<afile>:p")
+    debug("on_buffer_close: " .. closed_file)
 
     if not is_ethersync_enabled(closed_file) then
         return
