@@ -1,0 +1,66 @@
+name: General tests
+
+on:
+  push:
+    branches:
+      - 'main'
+    paths:
+      - 'daemon/**'
+      - 'vim-plugin/**'
+      - 'flake.*'
+      - '.github/workflows/integration.yml'
+  pull_request:
+    paths:
+      - 'daemon/**'
+      - 'vim-plugin/**'
+      - 'flake.*'
+      - '.github/workflows/integration.yml'
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: 0 # See https://corrode.dev/blog/tips-for-faster-rust-compile-times/
+
+jobs:
+  build_and_test:
+    name: Run tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./daemon
+    steps:
+        - uses: actions/checkout@v4
+        - name: Set up Rust toolchain
+          run: rustup toolchain install stable --profile minimal
+        - uses: Swatinem/rust-cache@v2
+          with:
+            workspaces: "daemon"
+        - name: Build Ethersync
+          run: cargo build --release
+        - name: Add ethersync binary to PATH
+          run: echo "$PWD/target/release" >> $GITHUB_PATH
+        - run: ethersync --version
+        - name: Install Neovim
+          run: |
+            wget -nv https://github.com/neovim/neovim/releases/download/v0.10.1/nvim-linux64.tar.gz -P /tmp
+            tar xzf /tmp/nvim-linux64.tar.gz -C /tmp
+            echo "/tmp/nvim-linux64/bin" >> $GITHUB_PATH
+        - run: nvim --version
+        - name: Install Neovim plugin
+          run: |
+            mkdir -p $HOME/.local/share/nvim/site/pack/plugins/start
+            ln -s $PWD/../vim-plugin $HOME/.local/share/nvim/site/pack/plugins/start/ethersync
+        - name: Compile tests
+          run: cargo test --release --no-run --locked
+        - name: Run tests
+          run: cargo test --release -- --include-ignored
+        - name: Run fuzzer
+          run: cargo run --release --bin=fuzzer
+  check_formatting:
+    name: Check Rust formatting
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./daemon
+    steps:
+      - uses: actions/checkout@v4
+      - run: cargo fmt --check
