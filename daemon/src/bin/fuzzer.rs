@@ -60,6 +60,9 @@ async fn main() {
         true,
     );
 
+    // Give the daemon time to boot.
+    sleep(std::time::Duration::from_millis(5000)).await;
+
     let nvim = Neovim::new(file).await;
 
     let peer = Daemon::new(
@@ -74,18 +77,19 @@ async fn main() {
     );
     // Make sure peer has synced with the other daemon before connecting Vim!
     // Otherwise, peer might not have a document yet.
-    sleep(std::time::Duration::from_millis(2000)).await;
+    sleep(std::time::Duration::from_millis(5000)).await;
 
     std::env::set_var("ETHERSYNC_SOCKET", "/tmp/etherbonk");
     let nvim2 = Neovim::new(file2).await;
+
+    // Give the second Neovim time to process the "open" call.
+    sleep(std::time::Duration::from_millis(5000)).await;
 
     let mut actors: HashMap<String, Box<dyn Actor>> = HashMap::new();
     actors.insert("daemon".to_string(), Box::new(daemon));
     actors.insert("nvim".to_string(), Box::new(nvim));
     actors.insert("peer".to_string(), Box::new(peer));
     actors.insert("nvim2".to_string(), Box::new(nvim2));
-
-    sleep(std::time::Duration::from_millis(100)).await;
 
     info!("Performing edits");
 
@@ -98,7 +102,7 @@ async fn main() {
 
     info!("Waiting for all contents to be equal");
 
-    timeout(Duration::from_secs(120), async {
+    timeout(Duration::from_secs(60), async {
         loop {
             // Get all contents.
             for (name, actor) in &mut actors {
