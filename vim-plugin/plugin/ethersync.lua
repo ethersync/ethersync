@@ -109,12 +109,6 @@ local function track_edits(filename, uri)
         editor_revision = 0,
     }
 
-    -- Vim enables eol for an empty file, but we do use this option values
-    -- assuming there's a trailing newline iff eol is true.
-    if vim.fn.getfsize(vim.api.nvim_buf_get_name(0)) == 0 then
-        vim.bo.eol = false
-    end
-
     changetracker.track_changes(0, function(delta)
         files[filename].editor_revision = files[filename].editor_revision + 1
 
@@ -148,6 +142,13 @@ local function on_buffer_open()
     end
 
     local uri = "file://" .. filename
+
+    -- Vim enables eol for an empty file, but we do use this option values
+    -- assuming there's a trailing newline iff eol is true.
+    if vim.fn.getfsize(vim.api.nvim_buf_get_name(0)) == 0 then
+        vim.bo.eol = false
+    end
+
     send_request("open", { uri = uri }, function()
         track_edits(filename, uri)
     end)
