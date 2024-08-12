@@ -190,7 +190,7 @@ pub mod tests {
     }
 
     impl MockSocket {
-        fn new(socket_path: &str, ignore_reads: bool) -> Self {
+        fn new(socket_path: &str) -> Self {
             if sandbox::exists(Path::new("/tmp"), Path::new(socket_path))
                 .expect("Could not check for socket existence")
             {
@@ -222,18 +222,16 @@ pub mod tests {
                     }
                 });
 
-                if !ignore_reads {
-                    tokio::spawn(async move {
-                        let mut buffer = String::new();
-                        while reader.read_line(&mut buffer).await.is_ok() {
-                            reader_tx
-                                .send(buffer.clone())
-                                .await
-                                .expect("Could not send message to reader channel");
-                            buffer.clear();
-                        }
-                    });
-                }
+                tokio::spawn(async move {
+                    let mut buffer = String::new();
+                    while reader.read_line(&mut buffer).await.is_ok() {
+                        reader_tx
+                            .send(buffer.clone())
+                            .await
+                            .expect("Could not send message to reader channel");
+                        buffer.clear();
+                    }
+                });
             });
 
             Self {
@@ -309,7 +307,7 @@ pub mod tests {
         deltas: Vec<EditorTextOp>,
         expected_content: &str,
     ) {
-        let mut socket = MockSocket::new("/tmp/ethersync", true);
+        let mut socket = MockSocket::new("/tmp/ethersync");
         let (nvim, file_path) = Neovim::new_ethersync_enabled(initial_content).await;
         socket.acknowledge_open().await;
 
@@ -380,7 +378,7 @@ pub mod tests {
         mut expected_replacements: Vec<EditorTextOp>,
     ) {
         timeout(Duration::from_millis(5000), async {
-                let mut socket = MockSocket::new("/tmp/ethersync", false);
+                let mut socket = MockSocket::new("/tmp/ethersync");
                 let (mut nvim, _file_path) = Neovim::new_ethersync_enabled(initial_content).await;
                 socket.acknowledge_open().await;
 
