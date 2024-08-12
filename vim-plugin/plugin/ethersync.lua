@@ -1,5 +1,6 @@
 local changetracker = require("changetracker")
 local cursor = require("cursor")
+local debug = require("logging").debug
 
 -- JSON-RPC connection.
 local client
@@ -132,6 +133,7 @@ end
 -- Forward buffer edits to daemon as well as subscribe to daemon events ("open").
 local function on_buffer_open()
     local filename = vim.fn.expand("%:p")
+    debug("on_buffer_open: " .. filename)
 
     if not is_ethersync_enabled(filename) then
         return
@@ -150,12 +152,14 @@ local function on_buffer_open()
     end
 
     send_request("open", { uri = uri }, function()
+        debug("Tracking Edits")
         track_edits(filename, uri)
     end)
 end
 
 local function on_buffer_close()
     local closed_file = vim.fn.expand("<afile>:p")
+    debug("on_buffer_close: " .. closed_file)
 
     if not is_ethersync_enabled(closed_file) then
         return
