@@ -28,7 +28,7 @@ use tokio::{
     sync::{broadcast, mpsc, oneshot},
     time::Duration,
 };
-use tracing::{debug, info, warn};
+use tracing::{debug, error, info, warn};
 
 pub const TEST_FILE_PATH: &str = "text";
 
@@ -37,7 +37,7 @@ pub enum DocMessage {
     GetContent {
         response_tx: oneshot::Sender<Result<String>>,
     },
-    FromEditor(EditorId, JSONRPCFromEditor),
+    FromEditor(EditorId, String),
     RemoveFile {
         file_path: String,
     },
@@ -251,13 +251,11 @@ impl DocumentActor {
 
         // Check that it's an absolute path.
         if !absolute_path.starts_with('/') {
-            bail!("Path '{absolute_path}' is not absolute");
+            bail!("Path '{absolute_path}' is not an absolute file:// URI");
         }
 
         let base_dir_string = self.base_dir.display().to_string() + "/";
 
-        // TODO: Instead of panicking, we should handle this in a way so we don't crash.
-        // Once the editor protocol is based on requests, we can send back an error?
         Ok(absolute_path
             .strip_prefix(&base_dir_string)
             .with_context(|| {
@@ -276,9 +274,9 @@ impl DocumentActor {
     ) -> Result<(), EditorProtocolMessageError> {
         fn anyhow_err_to_protocol_err(error: anyhow::Error) -> EditorProtocolMessageError {
             EditorProtocolMessageError {
-                code: -1,
+                code: -1, // TODO: Should the error codes differ per error?
                 message: error.to_string(),
-                data: String::new(),
+                data: None,
             }
         }
         match message {
@@ -327,7 +325,7 @@ impl DocumentActor {
                     return Err(EditorProtocolMessageError {
                         code: -1,
                         message: "File is ignored".into(),
-                        data: "This file should not be shared with other peers".into(),
+                        data: Some("This file should not be shared with other peers".into()),
                     });
                 }
 
@@ -345,7 +343,9 @@ impl DocumentActor {
                     return Err(EditorProtocolMessageError {
                         code: -1,
                         message: "File not found".into(),
-                        data: "Please stop sending edits for this file or 'open' it before.".into(),
+                        data: Some(
+                            "Please stop sending edits for this file or 'open' it before.".into(),
+                        ),
                     });
                 }
                 let (editor_delta_for_crdt, rev_deltas_for_editor) =
@@ -377,29 +377,48 @@ impl DocumentActor {
         Ok(())
     }
 
-    async fn handle_message_from_editor(
-        &mut self,
-        editor_id: EditorId,
-        message: JSONRPCFromEditor,
-    ) {
-        match message {
-            JSONRPCFromEditor::Request { id, payload } => {
-                let result = self.react_to_message_from_editor(payload).await;
-                let response = match result {
-                    Err(error) => JSONRPCResponse::RequestError { id, error },
-                    Ok(()) => JSONRPCResponse::RequestSuccess {
-                        id,
-                        result: "success".into(),
+    async fn handle_message_from_editor(&mut self, editor_id: EditorId, message: String) {
+        match JSONRPCFromEditor::from_jsonrpc(&message) {
+            Ok(parsed_message) => match parsed_message {
+                JSONRPCFromEditor::Request { id, payload } => {
+                    let result = self.react_to_message_from_editor(payload).await;
+                    let response = match result {
+                        Err(error) => {
+                            error!("Error for JSON-RPC request: {:?}", error);
+                            JSONRPCResponse::RequestError {
+                                id: Some(id),
+                                error,
+                            }
+                        }
+                        Ok(_) => JSONRPCResponse::RequestSuccess {
+                            id,
+                            result: "success".into(),
+                        },
+                    };
+                    self.send_to_editor_client(
+                        &editor_id,
+                        EditorProtocolObject::Response(response),
+                    )
+                    .await;
+                }
+                JSONRPCFromEditor::Notification { payload } => {
+                    let _ = self.react_to_message_from_editor(payload).await;
+                }
+            },
+            Err(e) => {
+                let response = JSONRPCResponse::RequestError {
+                    id: None,
+                    error: EditorProtocolMessageError {
+                        code: -32700,
+                        message: format!("Invalid request: {}", e),
+                        data: None,
                     },
                 };
-
+                error!("Error for JSON-RPC request: {:?}", response);
                 self.send_to_editor_client(&editor_id, EditorProtocolObject::Response(response))
                     .await;
             }
-            JSONRPCFromEditor::Notification { payload } => {
-                let _ = self.react_to_message_from_editor(payload).await;
-            }
-        };
+        }
     }
 
     fn open_file_path(&mut self, file_path: String) {
