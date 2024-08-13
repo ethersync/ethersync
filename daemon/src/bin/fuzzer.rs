@@ -13,7 +13,7 @@ use tokio::time::{sleep, timeout, Duration};
 use tracing::{error, info};
 
 async fn perform_random_edits(actor: &mut (impl Actor + ?Sized)) {
-    for _ in 1..100 {
+    for _ in 1..500 {
         actor.apply_random_delta().await;
 
         let random_millis = rand::thread_rng().gen_range(0..5);
@@ -64,6 +64,8 @@ async fn main() {
     sleep(std::time::Duration::from_millis(5000)).await;
 
     let nvim = Neovim::new(file).await;
+    // Give the editor time to process the open.
+    sleep(std::time::Duration::from_millis(5000)).await;
 
     let peer = Daemon::new(
         PeerConnectionInfo {
@@ -102,7 +104,7 @@ async fn main() {
 
     info!("Waiting for all contents to be equal");
 
-    timeout(Duration::from_secs(60), async {
+    timeout(Duration::from_secs(5 * 60), async {
         loop {
             // Get all contents.
             for (name, actor) in &mut actors {
@@ -121,7 +123,7 @@ async fn main() {
             if all_equal {
                 break;
             }
-            sleep(Duration::from_millis(100)).await;
+            sleep(Duration::from_millis(1000)).await;
         }
     })
     .await
