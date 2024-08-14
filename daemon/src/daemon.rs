@@ -41,6 +41,10 @@ pub enum DocMessage {
     RemoveFile {
         file_path: String,
     },
+    CreateFile {
+        file_path: String,
+        content: String,
+    },
     Persist,
     RandomEdit,
     ReceiveSyncMessage {
@@ -64,6 +68,7 @@ impl fmt::Debug for DocMessage {
                 format!("open/close/edit/... message from editor #{id}")
             }
             DocMessage::RemoveFile { .. } => "delete file".to_string(),
+            DocMessage::CreateFile { .. } => "create file".to_string(),
             DocMessage::Persist => "persist".to_string(),
             DocMessage::RandomEdit => "random edit".to_string(),
             DocMessage::ReceiveSyncMessage { .. } => "<automerge internal sync rcv>".to_string(),
@@ -179,6 +184,13 @@ impl DocumentActor {
                     self.crdt_doc.remove_text(&file_path);
                     let _ = self.doc_changed_ping_tx.send(());
                 }
+            }
+            DocMessage::CreateFile { file_path, content } => {
+                let file_path = self
+                    .file_path_for_uri(&file_path)
+                    .expect("Could not determine file path when trying to create file");
+                self.crdt_doc.initialize_text(&content, &file_path);
+                let _ = self.doc_changed_ping_tx.send(());
             }
             DocMessage::Persist => {
                 debug!("Persisting!");
@@ -900,24 +912,46 @@ impl Daemon {
 }
 
 async fn spawn_file_watcher(base_dir: PathBuf, document_handle: DocumentActorHandle) {
-    // Beware of the file watching spaghetti triangle monster.
+    let base_dir_cloned = base_dir.clone();
     let mut watcher = notify::recommended_watcher(move |res: NotifyResult<notify::Event>| {
         futures::executor::block_on(async {
             match res {
                 Ok(event) => {
                     // TODO: On Linux, even a directory deletion seems to yield a Remove(File)?
-                    if let notify::event::EventKind::Remove(notify::event::RemoveKind::File) =
-                        event.kind
-                    {
-                        for path in event.paths {
-                            document_handle
-                                .send_message(DocMessage::RemoveFile {
-                                    file_path: path
-                                        .to_str()
-                                        .expect("Failed to convert path to string")
-                                        .into(),
-                                })
-                                .await;
+
+                    match event.kind {
+                        notify::event::EventKind::Remove(notify::event::RemoveKind::File) => {
+                            for path in event.paths {
+                                document_handle
+                                    .send_message(DocMessage::RemoveFile {
+                                        file_path: path
+                                            .to_str()
+                                            .expect("Failed to convert path to string")
+                                            .into(),
+                                    })
+                                    .await;
+                            }
+                        }
+                        notify::event::EventKind::Create(notify::event::CreateKind::File) => {
+                            for path in event.paths {
+                                let bytes = sandbox::read_file(&base_dir_cloned, &path)
+                                    .expect("Failed to read created file");
+                                let content =
+                                    String::from_utf8(bytes).expect("Could not read file as UTF-8");
+
+                                document_handle
+                                    .send_message(DocMessage::CreateFile {
+                                        file_path: path
+                                            .to_str()
+                                            .expect("Failed to convert path to string")
+                                            .into(),
+                                        content,
+                                    })
+                                    .await;
+                            }
+                        }
+                        _ => {
+                            // Don't handle other events.
                         }
                     }
                 }
