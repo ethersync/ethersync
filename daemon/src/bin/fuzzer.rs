@@ -1,8 +1,8 @@
-#![allow(dead_code)]
-
-// SPDX-FileCopyrightText: 2024 Blinry
+// SPDX-FileCopyrightText: 2024 blinry
+// SPDX-FileCopyrightText: 2024 zormit
 //
 // SPDX-License-Identifier: AGPL-3.0-or-later
+#![allow(dead_code)]
 
 use ethersync::actors::{Actor, Neovim};
 use ethersync::daemon::{Daemon, TEST_FILE_PATH};
