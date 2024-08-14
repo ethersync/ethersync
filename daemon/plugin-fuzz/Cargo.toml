@@ -1,0 +1,38 @@
+[package]
+name = "ethersync-plugin-fuzz"
+description = "Fuzzing the daemon via simulated plugin input over the socket."
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[[test]]
+name = "random-input-nvim"
+# We set process-global state in this test, so we want to run our own main method.
+harness = false
+
+[dependencies]
+async-trait = "0.1.79"
+nvim-rs = { version = "0.7.0", features = ["use_tokio"] }
+rand = "0.8.5"
+temp-dir = "0.1.13"
+tokio = { version = "1", default-features = false, features = ["process"] }
+
+[dependencies.ethersync]
+path = ".."
+default-features = false
+
+[dev-dependencies]
+futures = { version = "0.3.30", default-features = false }
+pretty_assertions = "1.4.0"
+serde_json = "1"
+serial_test = "3.1.1"
+tracing = "0.1.40"
+
+# This crate needs to define specific optimization settings, so we can't put it in the
+# same workspace.
+[workspace]
+members = ["."]
+
+# The tests in this module time out without optimizations enabled.
+[profile.test]
+opt-level = 3

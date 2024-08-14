@@ -1,16 +1,18 @@
-#![allow(dead_code)]
-use ethersync::actors::{Actor, Neovim};
+use ethersync_plugin_fuzz::actors::{Actor, Neovim};
+
 use ethersync::daemon::{Daemon, TEST_FILE_PATH};
 use ethersync::logging;
 use ethersync::peer::PeerConnectionInfo;
 use ethersync::sandbox;
+
 use futures::future::join_all;
 use pretty_assertions::assert_eq;
 use rand::Rng;
-use std::collections::HashMap;
-use std::path::{Path, PathBuf};
 use tokio::time::{sleep, timeout, Duration};
 use tracing::{error, info};
+
+use std::collections::HashMap;
+use std::path::{Path, PathBuf};
 
 async fn perform_random_edits(actor: &mut (impl Actor + ?Sized)) {
     for _ in 1..500 {
