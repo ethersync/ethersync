@@ -44,3 +44,22 @@ rust-ini = "0.21.1"
 assert_matches = "1.5"
 serial_test = "3.1.1"
 tracing-test = "0.2.4"
+
+[profile.release]
+# Stripping symbols (not debuginfo) reduces binary size by ~1.5x.
+strip = true
+opt-level = 3
+
+# 2-3x slower to compile, but produces a ~1.2x smaller binary.
+# TODO: benchmark this!
+[profile.release-lto]
+inherits = "release"
+lto = true
+codegen-units = 1
+
+# Also quite slow to compile, but produces a ~1.6x smaller binary.
+[profile.release-size]
+inherits = "release"
+lto = true
+codegen-units = 1
+opt-level = "s"
