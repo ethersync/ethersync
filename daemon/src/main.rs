@@ -1,5 +1,5 @@
 use anyhow::{Context, Result};
-use clap::{Parser, Subcommand};
+use clap::{parser::ValueSource, CommandFactory, FromArgMatches, Parser, Subcommand};
 use ethersync::peer::PeerConnectionInfo;
 use ethersync::{daemon::Daemon, logging, sandbox};
 use std::path::{Path, PathBuf};
@@ -11,6 +11,7 @@ mod jsonrpc_forwarder;
 const DEFAULT_SOCKET_PATH: &str = "/tmp/ethersync";
 const ETHERSYNC_CONFIG_DIR: &str = ".ethersync";
 const ETHERSYNC_CONFIG_FILE: &str = "config";
+const ETHERSYNC_SOCKET_ENV_VAR: &str = "ETHERSYNC_SOCKET";
 
 #[derive(Parser)]
 #[command(version, about, long_about = None)]
@@ -19,10 +20,14 @@ struct Cli {
     #[command(subcommand)]
     command: Commands,
     /// Path to the Unix domain socket to use for communication between daemon and editors.
-    #[arg(short, long, global = true, default_value = DEFAULT_SOCKET_PATH)]
+    #[arg(
+      short, long, global = true,
+      default_value = DEFAULT_SOCKET_PATH,
+      env = ETHERSYNC_SOCKET_ENV_VAR,
+    )]
     socket_path: PathBuf,
     /// Enable verbose debug output.
-    #[arg(short, long, global = true, action)]
+    #[arg(short, long, global = true)]
     debug: bool,
 }
 
@@ -64,7 +69,11 @@ async fn main() -> Result<()> {
         std::process::exit(1);
     }));
 
-    let cli = Cli::parse();
+    let matches = Cli::command().get_matches();
+    let cli = match Cli::from_arg_matches(&matches) {
+        Ok(cli) => cli,
+        Err(e) => e.exit(),
+    };
 
     logging::initialize(cli.debug);
 
@@ -78,6 +87,14 @@ async fn main() -> Result<()> {
             mut secret,
             init,
         } => {
+            if matches.value_source("socket_path").unwrap() == ValueSource::EnvVariable {
+                info!(
+                    "Using socket path {} from env var {}",
+                    socket_path.display(),
+                    ETHERSYNC_SOCKET_ENV_VAR
+                );
+            }
+
             let directory = directory
                 .unwrap_or_else(|| {
                     std::env::current_dir().expect("Could not access current directory")

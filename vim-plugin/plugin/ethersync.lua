@@ -66,11 +66,6 @@ local function connect()
 
     local params = { "client" }
 
-    local socket_path = os.getenv("ETHERSYNC_SOCKET")
-    if socket_path then
-        table.insert(params, "--socket-path=" .. socket_path)
-    end
-
     local dispatchers = {
         notification = function(method, notification_params)
             process_operation_for_editor(method, notification_params)
