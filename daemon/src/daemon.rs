@@ -189,8 +189,10 @@ impl DocumentActor {
                 let file_path = self
                     .file_path_for_uri(&file_path)
                     .expect("Could not determine file path when trying to create file");
-                self.crdt_doc.initialize_text(&content, &file_path);
-                let _ = self.doc_changed_ping_tx.send(());
+                if !self.is_ignored(&file_path) {
+                    self.crdt_doc.initialize_text(&content, &file_path);
+                    let _ = self.doc_changed_ping_tx.send(());
+                }
             }
             DocMessage::Persist => {
                 debug!("Persisting!");
@@ -320,30 +322,7 @@ impl DocumentActor {
                 }
 
                 // We only want to process these messages for files that are not ignored.
-                // To use the same logic for which files are ignored, iterate through all files
-                // using ignore::Walk, and try to find this file.
-                // TODO: Request a better way to do this with the "ignore" crate.
-                if !self
-                    .build_walk()
-                    .filter_map(Result::ok)
-                    .filter(|dir_entry| {
-                        dir_entry
-                            .file_type()
-                            .expect("Couldn't get file type of dir entry.")
-                            .is_file()
-                    })
-                    .any(|dir_entry| {
-                        let walked_file_path = self
-                            .file_path_for_uri(
-                                dir_entry
-                                    .path()
-                                    .to_str()
-                                    .expect("Could not convert PathBuf to str"),
-                            )
-                            .expect("Could not convert URI to file path");
-                        walked_file_path == file_path
-                    })
-                {
+                if !self.is_ignored(&file_path) {
                     return Err(EditorProtocolMessageError {
                         code: -1,
                         message: "File is ignored".into(),
@@ -691,6 +670,32 @@ impl DocumentActor {
                 !ignored_things.contains(&name)
             })
             .build()
+    }
+
+    // To use the same logic for which files are ignored, iterate through all files
+    // using ignore::Walk, and try to find this file.
+    // This has the downside that the file must already exist.
+    fn is_ignored(&mut self, file_path: &str) -> bool {
+        !self
+            .build_walk()
+            .filter_map(Result::ok)
+            .filter(|dir_entry| {
+                dir_entry
+                    .file_type()
+                    .expect("Couldn't get file type of dir entry.")
+                    .is_file()
+            })
+            .any(|dir_entry| {
+                let walked_file_path = self
+                    .file_path_for_uri(
+                        dir_entry
+                            .path()
+                            .to_str()
+                            .expect("Could not convert PathBuf to str"),
+                    )
+                    .expect("Could not convert URI to file path");
+                walked_file_path == file_path
+            })
     }
 
     fn read_current_content_from_dir(&mut self, init: bool) {
