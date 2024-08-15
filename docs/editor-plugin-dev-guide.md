@@ -137,3 +137,21 @@ In the client console, start nvim on a file, move the cursor and edit something:
 ```bash
 nvim playground/file
 ```
+
+### Starting two local daemons
+
+For testing purposes, it can be useful to simulate having two peers connecting to each other.
+
+Do do that on a single machine, follow these steps:
+
+1. Start one daemon regularly, we will call its directory the "first directory".
+2. Create a new, empty shared directory (with an `.ethersync` directory in it) for the second daemon.
+3. Start the second daemon:
+    - The directory should be the additional directory you created.
+    - Set the `--peer` option to the address of the first daemon.
+    - Set `--socket-path` to a new value like `/tmp/ethertwo`.
+4. Connect an editor to the first daemon by opening a file in the first directory.
+5. Connect an editor to the second daemon by setting the environment variable `ETHERSYNC_SOCKET` to the new value before opening a file in the second directory.
+    - Example: `ETHERSYNC_SOCKET=/tmp/ethertwo nvim directory2/file`
+
+Things you type into the first editor should now appear in the second editor, and vice versa.
