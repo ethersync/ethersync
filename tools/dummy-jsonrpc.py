@@ -16,6 +16,7 @@ uri = "file://{}".format(Path(args.file).resolve())
 messages = {
     "open": {
         "jsonrpc": "2.0",
+        "id": 1,
         "method": "open",
         "params": {
             "uri": uri,
@@ -24,6 +25,7 @@ messages = {
     "edit": {
         "jsonrpc": "2.0",
         "method": "edit",
+        "id": 2,
         "params": {
             "uri": uri,
             "delta": {

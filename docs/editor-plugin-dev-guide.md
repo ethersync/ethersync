@@ -19,8 +19,9 @@ The editor plugin will need to spawn the command `ethersync client` (which is ou
 
 ## File ownership
 
-By default, files in an Ethersync directory are owned by the daemon. The daemon can directly write updates to them.
-When an editor sends an "open" message, it takes ownership; all changes to the file by other sources will now be sent through it.
+Ethersync has the concept of file ownership. By default, the daemon has ownership, which means that, as connected peers make changes to files, it will write the changes directly to the disk.
+
+But when an editor sends an "open" message, it takes ownership; all changes to the file by other sources will now be sent through the editor plugin. This is because text editor usually don't like it if you change to files they have opened.
 
 When the last editor gives up ownership by sending a "close" message, the daemon takes ownership again.
 
@@ -65,9 +66,12 @@ The protocol uses a couple of basic data types (we're using the same syntax to s
 
 ### Messages sent by the editor to the daemon
 
+These should be sent as JSON-RPC requests, so that the daemon can send back errors.
+
 #### `"open" {uri: DocumentUri}`
 
-- Sent when the editor opens a document. By sending this message, the editor takes ownership of the file, and tells the daemon that it is interested in receiving updates for it.
+- Sent when the editor opens a document. The daemon will respond either with a success, or with an error describing why the file could not be opened (for example, because it is an ignored file, or if it's not part of the daemons shared project).
+- When an open succeeds, the editor gets ownership of the file, and the daemon will start sending updates for it as they come in.
 - The editor has to initialize its editor revision and daemon revision for that document to 0.
 
 #### `"close" {uri: DocumentUri}`
@@ -84,6 +88,8 @@ The protocol uses a couple of basic data types (we're using the same syntax to s
 - Sends current cursor position/selection(s). Replaces the previous cursor ranges.
 
 ### Messages sent by the daemon to the editor
+
+These should be sent as notifications, there is no need to reply to them.
 
 #### `"edit" {uri: DocumentUri, delta: RevisionedDelta}`
 
@@ -137,3 +143,21 @@ In the client console, start nvim on a file, move the cursor and edit something:
 ```bash
 nvim playground/file
 ```
+
+### Starting two local daemons
+
+For testing purposes, it can be useful to simulate having two peers connecting to each other.
+
+Do do that on a single machine, follow these steps:
+
+1. Start one daemon regularly, we will call its directory the "first directory".
+2. Create a new, empty shared directory (with an `.ethersync` directory in it) for the second daemon.
+3. Start the second daemon:
+    - The directory should be the additional directory you created.
+    - Set the `--peer` option to the address of the first daemon.
+    - Set `--socket-path` to a new value like `/tmp/ethertwo`.
+4. Connect an editor to the first daemon by opening a file in the first directory.
+5. Connect an editor to the second daemon by setting the environment variable `ETHERSYNC_SOCKET` to the new value before opening a file in the second directory.
+    - Example: `ETHERSYNC_SOCKET=/tmp/ethertwo nvim directory2/file`
+
+Things you type into the first editor should now appear in the second editor, and vice versa.
