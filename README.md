@@ -13,13 +13,13 @@ Ethersync enables real-time co-editing of local text files. You can use it for p
 - ✒️ Local-first: You always have full access, even offline
 - 🇳 Fully-featured Neovim plugin
 - 🧩 Simple protocol for writing new editor plugins
+- 🌐 Peer-to-peer connections, no need for a server
+- 🔒 Encrypted connections secured by a shared password
 
 ## Planned features
 
 - 🪟 VS Code plugin
-- 🔒 Basic authentication
 - 🔄 Individual undo/redo (we probably won't work on this soon)
-- 🌐 Peer-to-peer connections, no need for a server
 
 ## Installation
 
@@ -153,25 +153,26 @@ Our current convention is to have a subdirectory called `.ethersync` in an Ether
 
 ```bash
 mkdir -p playground/.ethersync
-touch playground/file
+cd playground
+touch file
 ```
 
 ### 2. Start the daemon
 
-In a group, one person needs to "host" the session, while the others join it. (Peer-to-peer support is planned.)
+In a group, one person needs to start the session, and the others connect to it.
 
-- As the **host**, run:
+- As the **starting peer**, run:
 
     ```bash
-    ethersync daemon playground
+    ethersync daemon
     ```
 
-    This will print an IP address and port (like `192.168.178.23:4242`), which others can use to connect to you. (It prints the local and public IP address. Right now, if you want others to be able to join you from outside your local network, you might need to configure your router to enable port forwarding to your computer. A more convenient way to do that is planned.)
+    This will print a connection address (like `/ip4/192.168.23.42/tcp/4242/p2p/12D3KooWPNj7mom3X2D6NiSyxbFa5hHfzxDFP98ZL52yYnkEVmDv`) which others in the same local network can use to connect to you. (See the FAQ below on how to connect from another local network.)
 
-- As a **peer**, specify the IP address and port of the host:
+- As a **joining peer**, specify the address of the starting peer:
 
     ```bash
-    ethersync daemon playground --peer 192.168.178.23:4242
+    ethersync daemon --peer /ip4/192.168.23.42/tcp/4242/p2p/12D3KooWPNj7mom3X2D6NiSyxbFa5hHfzxDFP98ZL52yYnkEVmDv
     ```
 
 ### 3. Start collaborating in real-time!
@@ -179,7 +180,7 @@ In a group, one person needs to "host" the session, while the others join it. (P
 You can now open, edit, create and delete files in the shared directory, and connected peers will get your changes! For example, open a new file:
 
 ```bash
-nvim playground/file
+nvim file
 ```
 
 If everything went correctly, you should see `Ethersync activated!` in Neovim's messages and `Client connection established.` in the logs of the daemon.
