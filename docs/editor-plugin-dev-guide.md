@@ -19,8 +19,9 @@ The editor plugin will need to spawn the command `ethersync client` (which is ou
 
 ## File ownership
 
-By default, files in an Ethersync directory are owned by the daemon. The daemon can directly write updates to them.
-When an editor sends an "open" message, it takes ownership; all changes to the file by other sources will now be sent through it.
+Ethersync has the concept of file ownership. By default, the daemon has ownership, which means that, as connected peers make changes to files, it will write the changes directly to the disk.
+
+But when an editor sends an "open" message, it takes ownership; all changes to the file by other sources will now be sent through the editor plugin. This is because text editor usually don't like it if you change to files they have opened.
 
 When the last editor gives up ownership by sending a "close" message, the daemon takes ownership again.
 
