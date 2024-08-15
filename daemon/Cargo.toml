@@ -44,3 +44,25 @@ rust-ini = "0.21.1"
 assert_matches = "1.5"
 serial_test = "3.1.1"
 tracing-test = "0.2.4"
+
+# Stripping symbols (not debuginfo) reduces binary size by ~1.5x.
+# This is the default profile for `cargo install`:
+# https://doc.rust-lang.org/cargo/reference/profiles.html#profile-selection.
+# TODO: We may want to make [profile.release-size] the default
+# once we're out of the fast iteration development phase.
+[profile.release]
+strip = true
+opt-level = 3
+
+# 2-3x slower to compile, but produces a ~1.2x smaller binary.
+[profile.release-lto]
+inherits = "release"
+lto = true
+codegen-units = 1
+
+# Also quite slow to compile, but produces a ~1.6x smaller binary.
+[profile.release-size]
+inherits = "release"
+lto = true
+codegen-units = 1
+opt-level = "s"
