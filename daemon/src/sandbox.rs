@@ -73,7 +73,7 @@ pub fn ignored(absolute_base_dir: &Path, absolute_file_path: &Path) -> Result<bo
                 .expect("Failed to get file name from path.")
                 .to_str()
                 .expect("Failed to convert OsStr to str");
-            !ignored_things.contains(&name)
+            !ignored_things.contains(&name) && !name.ends_with('~')
         })
         .build();
 
