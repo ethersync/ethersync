@@ -198,11 +198,13 @@ impl DocumentActor {
                 let _ = self.doc_changed_ping_tx.send(());
             }
             DocMessage::UpdateFile { file_path, content } => {
-                let file_path = self
-                    .file_path_for_uri(&file_path)
-                    .expect("Could not determine file path when trying to create file");
-                self.crdt_doc.update_text(&content, &file_path);
-                let _ = self.doc_changed_ping_tx.send(());
+                if self.owns(&file_path) {
+                    let file_path = self
+                        .file_path_for_uri(&file_path)
+                        .expect("Could not determine file path when trying to create file");
+                    self.crdt_doc.update_text(&content, &file_path);
+                    let _ = self.doc_changed_ping_tx.send(());
+                }
             }
             DocMessage::Persist => {
                 debug!("Persisting!");
