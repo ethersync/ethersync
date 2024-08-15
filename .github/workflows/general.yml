@@ -56,11 +56,11 @@ jobs:
         run: cargo test --no-default-features --no-run --locked
       - name: Run unit tests
         run: cargo test --no-default-features
-      - name: Compile plugin fuzz tests
-        working-directory: ./daemon/plugin-fuzz
+      - name: Compile integration tests
+        working-directory: ./daemon/integration-tests
         run: cargo test --no-run --locked
       - name: Run integration tests
-        working-directory: ./daemon/plugin-fuzz
+        working-directory: ./daemon/integration-tests
         run: cargo test
   check_formatting:
     name: Check Rust formatting

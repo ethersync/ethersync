@@ -1,4 +1,4 @@
-use ethersync_plugin_fuzz::actors::*;
+use ethersync_integration_tests::actors::*;
 
 use ethersync::sandbox;
 use ethersync::types::{

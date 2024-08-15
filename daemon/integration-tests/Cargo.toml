@@ -1,12 +1,12 @@
 [package]
-name = "ethersync-plugin-fuzz"
-description = "Fuzzing the daemon via simulated plugin input over the socket."
+name = "ethersync-integration-tests"
+description = "End-to-end testing for supported ethersync clients."
 version = "0.0.0"
 edition = "2021"
 publish = false
 
 [[test]]
-name = "random-input-nvim"
+name = "fuzzer"
 # We set process-global state in this test, so we want to run our own main method.
 harness = false
 

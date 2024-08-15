@@ -747,7 +747,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "ethersync-plugin-fuzz"
+name = "ethersync-integration-tests"
 version = "0.0.0"
 dependencies = [
  "async-trait",

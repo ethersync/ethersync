@@ -1,4 +1,4 @@
-use ethersync_plugin_fuzz::actors::{Actor, Neovim};
+use ethersync_integration_tests::actors::{Actor, Neovim};
 
 use ethersync::daemon::{Daemon, TEST_FILE_PATH};
 use ethersync::logging;
