@@ -970,6 +970,43 @@ async fn spawn_file_watcher(base_dir: PathBuf, document_handle: DocumentActorHan
                                 }
                             }
                         }
+                        notify::event::EventKind::Modify(notify::event::ModifyKind::Name(
+                            notify::event::RenameMode::Both,
+                        )) => {
+                            let from_path = &event.paths[0];
+                            let to_path = &event.paths[1];
+
+                            // TODO: Avoid repeating the effects here.
+                            // TODO: Is there a cleverer way to do renames in the CRDT?
+
+                            document_handle
+                                .send_message(DocMessage::RemoveFile {
+                                    file_path: from_path
+                                        .to_str()
+                                        .expect("Failed to convert path to string")
+                                        .into(),
+                                })
+                                .await;
+
+                            if !sandbox::ignored(&base_dir_cloned, to_path)
+                                .expect("Could not determine ignored status of file")
+                            {
+                                let bytes = sandbox::read_file(&base_dir_cloned, to_path)
+                                    .expect("Failed to read created file");
+                                let content =
+                                    String::from_utf8(bytes).expect("Could not read file as UTF-8");
+
+                                document_handle
+                                    .send_message(DocMessage::CreateFile {
+                                        file_path: to_path
+                                            .to_str()
+                                            .expect("Failed to convert path to string")
+                                            .into(),
+                                        content,
+                                    })
+                                    .await;
+                            }
+                        }
                         e => {
                             // Don't handle other events.
                             // But log them! I'm curious what they are!
