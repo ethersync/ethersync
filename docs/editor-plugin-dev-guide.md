@@ -65,9 +65,12 @@ The protocol uses a couple of basic data types (we're using the same syntax to s
 
 ### Messages sent by the editor to the daemon
 
+These should be sent as JSON-RPC requests, so that the daemon can send back errors.
+
 #### `"open" {uri: DocumentUri}`
 
-- Sent when the editor opens a document. By sending this message, the editor takes ownership of the file, and tells the daemon that it is interested in receiving updates for it.
+- Sent when the editor opens a document. The daemon will respond either with a success, or with an error describing why the file could not be opened (for example, because it is an ignored file, or if it's not part of the daemons shared project).
+- When an open succeeds, the editor gets ownership of the file, and the daemon will start sending updates for it as they come in.
 - The editor has to initialize its editor revision and daemon revision for that document to 0.
 
 #### `"close" {uri: DocumentUri}`
@@ -84,6 +87,8 @@ The protocol uses a couple of basic data types (we're using the same syntax to s
 - Sends current cursor position/selection(s). Replaces the previous cursor ranges.
 
 ### Messages sent by the daemon to the editor
+
+These should be sent as notifications, there is no need to reply to them.
 
 #### `"edit" {uri: DocumentUri, delta: RevisionedDelta}`
 
