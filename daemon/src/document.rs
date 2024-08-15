@@ -148,7 +148,7 @@ impl Document {
             }
 
             let text_delta: TextDelta = chunks.into();
-            warn!("File {file_path} has changed while the daemon was offline. Applying delta: {text_delta:?}");
+            warn!("File {file_path} has been changed. Applying delta: {text_delta:?}");
             self.apply_delta_to_doc(&text_delta, file_path);
         } else {
             // The file doesn't exist in the CRDT yet, so we need to initialize it.

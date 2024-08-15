@@ -45,6 +45,10 @@ pub enum DocMessage {
         file_path: String,
         content: String,
     },
+    UpdateFile {
+        file_path: String,
+        content: String,
+    },
     Persist,
     RandomEdit,
     ReceiveSyncMessage {
@@ -69,6 +73,7 @@ impl fmt::Debug for DocMessage {
             }
             DocMessage::RemoveFile { .. } => "delete file".to_string(),
             DocMessage::CreateFile { .. } => "create file".to_string(),
+            DocMessage::UpdateFile { .. } => "update file".to_string(),
             DocMessage::Persist => "persist".to_string(),
             DocMessage::RandomEdit => "random edit".to_string(),
             DocMessage::ReceiveSyncMessage { .. } => "<automerge internal sync rcv>".to_string(),
@@ -189,10 +194,15 @@ impl DocumentActor {
                 let file_path = self
                     .file_path_for_uri(&file_path)
                     .expect("Could not determine file path when trying to create file");
-                if !self.is_ignored(&file_path) {
-                    self.crdt_doc.initialize_text(&content, &file_path);
-                    let _ = self.doc_changed_ping_tx.send(());
-                }
+                self.crdt_doc.initialize_text(&content, &file_path);
+                let _ = self.doc_changed_ping_tx.send(());
+            }
+            DocMessage::UpdateFile { file_path, content } => {
+                let file_path = self
+                    .file_path_for_uri(&file_path)
+                    .expect("Could not determine file path when trying to create file");
+                self.crdt_doc.update_text(&content, &file_path);
+                let _ = self.doc_changed_ping_tx.send(());
             }
             DocMessage::Persist => {
                 debug!("Persisting!");
@@ -322,7 +332,9 @@ impl DocumentActor {
                 }
 
                 // We only want to process these messages for files that are not ignored.
-                if !self.is_ignored(&file_path) {
+                if sandbox::ignored(&self.base_dir, Path::new(&absolute_file_path))
+                    .expect("Could not determine ignored status of file")
+                {
                     return Err(EditorProtocolMessageError {
                         code: -1,
                         message: "File is ignored".into(),
@@ -653,6 +665,7 @@ impl DocumentActor {
         }
     }
 
+    // TODO: Should this also go to the sandbox module?
     fn build_walk(&mut self) -> Walk {
         let ignored_things = [".git", ".ethersync"];
         // TODO: How to deal with binary files?
@@ -670,32 +683,6 @@ impl DocumentActor {
                 !ignored_things.contains(&name)
             })
             .build()
-    }
-
-    // To use the same logic for which files are ignored, iterate through all files
-    // using ignore::Walk, and try to find this file.
-    // This has the downside that the file must already exist.
-    fn is_ignored(&mut self, file_path: &str) -> bool {
-        !self
-            .build_walk()
-            .filter_map(Result::ok)
-            .filter(|dir_entry| {
-                dir_entry
-                    .file_type()
-                    .expect("Couldn't get file type of dir entry.")
-                    .is_file()
-            })
-            .any(|dir_entry| {
-                let walked_file_path = self
-                    .file_path_for_uri(
-                        dir_entry
-                            .path()
-                            .to_str()
-                            .expect("Could not convert PathBuf to str"),
-                    )
-                    .expect("Could not convert URI to file path");
-                walked_file_path == file_path
-            })
     }
 
     fn read_current_content_from_dir(&mut self, init: bool) {
@@ -939,24 +926,52 @@ async fn spawn_file_watcher(base_dir: PathBuf, document_handle: DocumentActorHan
                         }
                         notify::event::EventKind::Create(notify::event::CreateKind::File) => {
                             for path in event.paths {
-                                let bytes = sandbox::read_file(&base_dir_cloned, &path)
-                                    .expect("Failed to read created file");
-                                let content =
-                                    String::from_utf8(bytes).expect("Could not read file as UTF-8");
+                                if !sandbox::ignored(&base_dir_cloned, &path)
+                                    .expect("Could not determine ignored status of file")
+                                {
+                                    let bytes = sandbox::read_file(&base_dir_cloned, &path)
+                                        .expect("Failed to read created file");
+                                    let content = String::from_utf8(bytes)
+                                        .expect("Could not read file as UTF-8");
 
-                                document_handle
-                                    .send_message(DocMessage::CreateFile {
-                                        file_path: path
-                                            .to_str()
-                                            .expect("Failed to convert path to string")
-                                            .into(),
-                                        content,
-                                    })
-                                    .await;
+                                    document_handle
+                                        .send_message(DocMessage::CreateFile {
+                                            file_path: path
+                                                .to_str()
+                                                .expect("Failed to convert path to string")
+                                                .into(),
+                                            content,
+                                        })
+                                        .await;
+                                }
                             }
                         }
-                        _ => {
+                        notify::event::EventKind::Modify(notify::event::ModifyKind::Data(_)) => {
+                            for path in event.paths {
+                                if !sandbox::ignored(&base_dir_cloned, &path)
+                                    .expect("Could not determine ignored status of file")
+                                {
+                                    let bytes = sandbox::read_file(&base_dir_cloned, &path)
+                                        .expect("Failed to read created file");
+                                    let content = String::from_utf8(bytes)
+                                        .expect("Could not read file as UTF-8");
+
+                                    document_handle
+                                        .send_message(DocMessage::UpdateFile {
+                                            file_path: path
+                                                .to_str()
+                                                .expect("Failed to convert path to string")
+                                                .into(),
+                                            content,
+                                        })
+                                        .await;
+                                }
+                            }
+                        }
+                        e => {
                             // Don't handle other events.
+                            // But log them! I'm curious what they are!
+                            info!("{:?}: {e:?}", event.paths);
                         }
                     }
                 }

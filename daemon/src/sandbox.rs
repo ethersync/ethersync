@@ -3,6 +3,7 @@
 //! All our file I/O should go through them.
 
 use anyhow::{bail, Result};
+use ignore::WalkBuilder;
 use path_clean::PathClean;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -50,6 +51,41 @@ pub fn exists(absolute_base_dir: &Path, absolute_file_path: &Path) -> Result<boo
     let canonical_file_path =
         check_inside_base_dir_and_canonicalize(absolute_base_dir, absolute_file_path)?;
     Ok(canonical_file_path.exists())
+}
+
+pub fn ignored(absolute_base_dir: &Path, absolute_file_path: &Path) -> Result<bool> {
+    let canonical_file_path =
+        check_inside_base_dir_and_canonicalize(absolute_base_dir, absolute_file_path)?;
+
+    let ignored_things = [".git", ".ethersync"];
+
+    // To use the same logic for which files are ignored, iterate through all files
+    // using ignore::Walk, and try to find this file.
+    // This has the downside that the file must already exist.
+    let walk = WalkBuilder::new(absolute_base_dir)
+        .standard_filters(true)
+        .hidden(false)
+        // Interestingly, the standard filters don't seem to ignore .git.
+        .filter_entry(move |dir_entry| {
+            let name = dir_entry
+                .path()
+                .file_name()
+                .expect("Failed to get file name from path.")
+                .to_str()
+                .expect("Failed to convert OsStr to str");
+            !ignored_things.contains(&name)
+        })
+        .build();
+
+    return Ok(!walk
+        .filter_map(Result::ok)
+        .filter(|dir_entry| {
+            dir_entry
+                .file_type()
+                .expect("Couldn't get file type of dir entry")
+                .is_file()
+        })
+        .any(|dir_entry| dir_entry.path() == canonical_file_path));
 }
 
 fn check_inside_base_dir_and_canonicalize(base_dir: &Path, path: &Path) -> Result<PathBuf> {
