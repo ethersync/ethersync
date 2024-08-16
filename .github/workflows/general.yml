@@ -57,6 +57,17 @@ jobs:
         run: cargo test --release -- --include-ignored
       - name: Run fuzzer
         run: cargo run --release --bin=fuzzer
+          check_nix:
+  name: Check nix code
+    strategy: 
+      matrix: 
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+        - uses: actions/checkout@v4
+        - uses: actions/install-nix-action@v27
+        - name: Evaluate nix code
+          run: nix -Lv flake check
   check_formatting:
     name: Check Rust formatting
     runs-on: ubuntu-latest
