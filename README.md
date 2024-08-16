@@ -1,3 +1,10 @@
+<!--
+SPDX-FileCopyrightText: 2024 blinry <mail@blinry.org>
+SPDX-FileCopyrightText: 2024 zormit <nt4u@kpvn.de>
+
+SPDX-License-Identifier: AGPL-3.0-or-later
+-->
+
 # 🍃 Ethersync
 
 Ethersync enables real-time co-editing of local text files. You can use it for pair programming or note-taking, for example! Think Google Docs, but from the comfort of your favorite text editor!
@@ -35,3 +42,5 @@ Thanks to [NLNet](https://nlnet.nl) for funding this project through the [NGI0 C
 ## License
 
 This program is free software: you can redistribute it and/or modify it under the terms of the GNU Affero General Public License as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.
+
+This project is [REUSE](https://reuse.software) compliant, see the headers of each file for licensing information.
