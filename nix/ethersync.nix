@@ -11,7 +11,7 @@
 
   cargoLock.lockFile = "${src}/Cargo.lock";
 
-  nativeBuildInputs = lib.optionals stdenv.isDarwin [
+  buildInputs = lib.optionals stdenv.isDarwin [
     darwin.apple_sdk.frameworks.SystemConfiguration
   ];
 
