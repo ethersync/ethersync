@@ -141,11 +141,11 @@ impl DocumentActor {
 
     fn owns(&mut self, file_path: &str) -> bool {
         for (_, ot_servers) in self.ot_servers.iter_mut() {
-            if let Some(_) = ot_servers.get_mut(file_path) {
-                return true;
+            if ot_servers.get_mut(file_path).is_some() {
+                return false;
             }
         }
-        return false;
+        true
     }
 
     async fn handle_message(&mut self, message: DocMessage) {
@@ -649,7 +649,7 @@ impl DocumentActor {
 
     fn maybe_write_file(&mut self, file_path: &str) {
         // Only write to the file if editor *doesn't* have the file open.
-        if !self.owns(file_path) {
+        if self.owns(file_path) {
             if let Ok(text) = self.current_file_content(file_path) {
                 let abs_path = self.absolute_path_for_file_path(file_path);
                 debug!("Writing to {abs_path}.");
@@ -1041,15 +1041,14 @@ mod tests {
             actor.read_current_content_from_dir(true);
 
             // One change to rule them all.
-            let ed_delta = ed_delta_single((0, 0), (0, 0), "foobar");
+            let delta = insert(0, "foobar");
 
             // "manually" apply the deltas, as we want to test
             // "maybe_write_files_changed_in_file_deltas" independently.
-            actor.crdt_doc.apply_delta_to_doc(&ed_delta, "file1");
-            actor.crdt_doc.apply_delta_to_doc(&ed_delta, "file2");
-            actor.crdt_doc.apply_delta_to_doc(&ed_delta, "sub/file3");
+            actor.crdt_doc.apply_delta_to_doc(&delta, "file1");
+            actor.crdt_doc.apply_delta_to_doc(&delta, "file2");
+            actor.crdt_doc.apply_delta_to_doc(&delta, "sub/file3");
 
-            let delta = TextDelta::from_ed_delta(ed_delta, "content1");
             let file_deltas = vec![
                 FileTextDelta::new("file1".to_string(), delta.clone()),
                 FileTextDelta::new("file2".to_string(), delta.clone()),
@@ -1057,8 +1056,8 @@ mod tests {
             ];
 
             // The editor has file2 and sub/file3 open.
-            actor.open_file_path("file2".into());
-            actor.open_file_path("sub/file3".into());
+            actor.open_file_path(0, "file2".into());
+            actor.open_file_path(0, "sub/file3".into());
             actor.maybe_write_files_changed_in_file_deltas(&file_deltas);
 
             // Thus, we only expect file1 to be changed on disk.
@@ -1132,20 +1131,22 @@ mod tests {
             }
         }
 
-        #[test]
-        fn test_simulate_editor_edits() {
+        #[tokio::test]
+        async fn test_simulate_editor_edits() {
             let dir = setup_filesystem_for_testing();
             let mut actor = DocumentActor::setup_for_testing(dir.path().to_path_buf());
             actor.read_current_content_from_dir(true);
 
             let file_path = "file1".to_string();
 
-            actor.open_file_path(file_path.clone());
+            actor.open_file_path(0, file_path.clone());
 
             let delta = rev_ed_delta_single(0, (0, 0), (0, 0), "foobar");
             let (editor_delta_for_crdt, rev_ed_text_deltas) =
-                actor.apply_delta_to_ot(delta, "file1");
-            actor.apply_delta_to_doc(&editor_delta_for_crdt, &file_path);
+                actor.apply_delta_to_ot(&0, delta, "file1");
+            actor
+                .apply_delta_to_doc(Some(0), &editor_delta_for_crdt, &file_path)
+                .await;
 
             // Confirm nothing transformed needs to go to editor.
             assert_eq!(rev_ed_text_deltas, vec![]);

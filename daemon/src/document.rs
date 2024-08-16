@@ -292,30 +292,30 @@ mod tests {
             .expect_err("File shouldn't exist");
     }
 
-    fn apply_delta_to_doc_works(initial: &str, ed_delta: &EditorTextDelta, expected: &str) {
+    fn apply_delta_to_doc_works(initial: &str, delta: &TextDelta, expected: &str) {
         let mut document = Document::default();
         document.initialize_text(initial, "text");
-        document.apply_delta_to_doc(ed_delta, "text");
+        document.apply_delta_to_doc(delta, "text");
 
         document.assert_file_content("text", expected);
     }
 
     #[test]
     fn can_apply_delta_basic_insertion() {
-        let ed_delta = ed_delta_single((0, 0), (0, 0), "foobar");
-        apply_delta_to_doc_works("", &ed_delta, "foobar");
+        let delta = insert(0, "foobar");
+        apply_delta_to_doc_works("", &delta, "foobar");
     }
 
     #[test]
     fn can_apply_delta_basic_deletion() {
-        let ed_delta = ed_delta_single((0, 3), (0, 6), "");
-        apply_delta_to_doc_works("foobar", &ed_delta, "foo");
+        let delta = delete(3, 3);
+        apply_delta_to_doc_works("foobar", &delta, "foo");
     }
 
     #[test]
     fn can_apply_delta_basic_replacement() {
-        let ed_delta = ed_delta_single((0, 1), (0, 3), "uu");
-        apply_delta_to_doc_works("foobar", &ed_delta, "fuubar");
+        let delta = replace(1, 2, "uu");
+        apply_delta_to_doc_works("foobar", &delta, "fuubar");
     }
 
     #[test]
@@ -332,21 +332,9 @@ mod tests {
 
         apply_delta_to_doc_works(
             initial_text,
-            &EditorTextDelta::from_delta(delta, initial_text),
+            &delta,
             "To me or to you, that is the question",
         );
-    }
-
-    #[test]
-    fn can_apply_delta_multiple_ops_bug() {
-        let content = "xeins\nzwei\ndrei\n";
-
-        let ed_delta = EditorTextDelta(vec![
-            replace_ed((1, 0), (1, 0), "xzwei\nx"),
-            replace_ed((1, 0), (2, 0), ""),
-        ]);
-
-        apply_delta_to_doc_works(content, &ed_delta, "xeins\nxzwei\nxdrei\n");
     }
 
     #[test]
@@ -355,8 +343,8 @@ mod tests {
         document.initialize_text("", "text");
         document.initialize_text("", "text2");
 
-        let ed_delta = ed_delta_single((0, 0), (0, 0), "foobar");
-        document.apply_delta_to_doc(&ed_delta, "text");
+        let delta = insert(0, "foobar");
+        document.apply_delta_to_doc(&delta, "text");
 
         document.assert_file_content("text", "foobar");
         document.assert_file_content("text2", "");
