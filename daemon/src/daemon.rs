@@ -159,11 +159,6 @@ impl DocumentActor {
             DocMessage::RandomEdit => {
                 let delta = self.random_delta();
                 self.apply_delta_to_doc(None, &delta, TEST_FILE_PATH).await;
-                self.process_crdt_file_deltas_in_ot_servers(
-                    None,
-                    vec![FileTextDelta::new(TEST_FILE_PATH.to_string(), delta)],
-                )
-                .await;
             }
             DocMessage::FromEditor(editor_id, message) => {
                 self.handle_message_from_editor(editor_id, message).await;
@@ -477,18 +472,6 @@ impl DocumentActor {
         patches
     }
 
-    //async fn send_deltas_to_editor(
-    //    &mut self,
-    //    rev_deltas: Vec<RevisionedEditorTextDelta>,
-    //    file_path: &str,
-    //) {
-    //    for rev_delta in rev_deltas {
-    //        debug!("Sending RevDelta to socket: {:#?}", rev_delta);
-
-    //        self.send_to_editors(rev_delta, file_path).await;
-    //    }
-    //}
-
     fn get_ot_server(&mut self, editor_id: &EditorId, file_path: &str) -> &mut OTServer {
         // TODO: Once we are able to send responses to the client,
         // fail in a nicer way, if Edit for unknown OTServer (client messed up).
@@ -569,7 +552,7 @@ impl DocumentActor {
                 {
                     debug!("Applying incoming CRDT patch for {file_path}");
                     let rev_text_delta_for_editor = ot_server.apply_crdt_change(delta);
-                    self.send_to_editor(&editor_id, rev_text_delta_for_editor, &file_path)
+                    self.send_to_editor(&editor_id, rev_text_delta_for_editor, file_path)
                         .await;
                 }
             }
