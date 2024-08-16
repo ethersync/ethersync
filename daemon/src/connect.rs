@@ -37,7 +37,6 @@ async fn accept_editor_loop(
         let (stream, _addr) = listener.accept().await?;
 
         let id = document_handle.next_editor_id();
-        info!("Editor connection established (#{})", id.0);
 
         spawn_editor_connection(stream, document_handle.clone(), id).await;
     }
