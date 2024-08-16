@@ -1,3 +1,8 @@
+// SPDX-FileCopyrightText: 2024 blinry
+// SPDX-FileCopyrightText: 2024 zormit
+//
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 //! 👮🚨🚓
 //! The functions in this module are supposed to prevent file I/O outside the base directory.
 //! All our file I/O should go through them.
