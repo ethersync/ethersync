@@ -65,9 +65,12 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
         - uses: actions/checkout@v4
-        - uses: actions/install-nix-action@v27
+        - uses: cachix/install-nix-action@v27
         - name: Evaluate nix code
           run: nix -Lv flake check
+        - name: build neovim with ethersync
+          run: nix -Lv build .#neovim-with-ethersync
+        - run: result/bin/nvim --version
   check_formatting:
     name: Check Rust formatting
     runs-on: ubuntu-latest
