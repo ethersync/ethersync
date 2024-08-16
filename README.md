@@ -117,7 +117,7 @@ Again, we have several options of how to install it:
   For testing purposes, you can run an Ethersync-enabled Neovim like this:
 
   ```bash
-  nix run github:ethersync/ethersync#neovim
+  nix run github:ethersync/ethersync#neovim-with-ethersync
   ```
 </details>
 
