@@ -1,7 +1,6 @@
-{naersk, ...}: (final: prev: rec {
-  ethersync = final.callPackage ./ethersync.nix { naersk-lib = final.callPackage naersk {}; };
-  vimPlugins = prev.vimPlugins // { 
-    nvim-ethersync = final.callPackage ./nvim-ethersync.nix { };
-  };
-  neovim-with-ethersync = final.callPackage ./neovim-with-ethersync.nix {};
+(final: prev: let 
+  packages = import ./default.nix { pkgs = final; }; 
+in {
+  inherit (packages) ethersync neovim-with-ethersync;
+  vimPlugins = prev.vimPlugins // { inherit (packages) nvim-ethersync; };
 })
