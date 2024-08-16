@@ -1,3 +1,8 @@
+-- SPDX-FileCopyrightText: 2024 blinry
+-- SPDX-FileCopyrightText: 2024 zormit
+--
+-- SPDX-License-Identifier: AGPL-3.0-or-later
+
 local sync = require("vim.lsp.sync")
 local utils = require("utils")
 local debug = require("logging").debug

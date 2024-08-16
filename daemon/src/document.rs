@@ -1,3 +1,8 @@
+// SPDX-FileCopyrightText: 2024 blinry
+// SPDX-FileCopyrightText: 2024 zormit
+//
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 use crate::types::{CursorState, EditorTextDelta, Range, TextDelta};
 use anyhow::Result;
 use automerge::{

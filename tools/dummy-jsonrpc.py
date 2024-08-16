@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2024 NONE
+#
+# SPDX-License-Identifier: CC0-1.0
+
 import json
 import argparse
 from pathlib import Path

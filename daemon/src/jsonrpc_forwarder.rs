@@ -1,3 +1,8 @@
+// SPDX-FileCopyrightText: 2024 blinry
+// SPDX-FileCopyrightText: 2024 zormit
+//
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 //! Provides a way to write / read a socket through stdin, (un)packing content-length encoding.
 //!
 //! The idea is that a daemon process communicates through newline separated jsonrpc messages,

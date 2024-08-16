@@ -1,3 +1,8 @@
+// SPDX-FileCopyrightText: 2024 blinry
+// SPDX-FileCopyrightText: 2024 zormit
+//
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 use crate::daemon::Daemon;
 use async_trait::async_trait;
 use nvim_rs::{compat::tokio::Compat, create::tokio::new_child_cmd, rpc::handler::Dummy};

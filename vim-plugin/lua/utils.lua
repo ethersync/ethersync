@@ -1,3 +1,7 @@
+-- SPDX-FileCopyrightText: 2019 Neovim contributors
+--
+-- SPDX-License-Identifier: Apache-2.0
+
 local M = {}
 
 -- The following functions are taken from the Neovim source code:

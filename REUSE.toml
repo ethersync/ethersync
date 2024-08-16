@@ -1,0 +1,11 @@
+# SPDX-FileCopyrightText: 2024 NONE
+#
+# SPDX-License-Identifier: CC0-1.0
+
+version = 1
+
+# Computer-generated files.
+[[annotations]]
+path = ["flake.lock", "daemon/Cargo.lock"]
+SPDX-FileCopyrightText = "NONE"
+SPDX-License-Identifier = "CC0-1.0"

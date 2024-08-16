@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2024 blinry
+# SPDX-FileCopyrightText: 2024 sohalt
+#
+# SPDX-License-Identifier: AGPL-3.0-or-later
 {
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
