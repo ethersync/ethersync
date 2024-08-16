@@ -69,7 +69,7 @@ impl Document {
         self.doc.sync().generate_sync_message(peer_state)
     }
 
-    pub fn apply_delta_to_doc(&mut self, delta: &EditorTextDelta, file_path: &str) {
+    pub fn apply_delta_to_doc(&mut self, delta: &TextDelta, file_path: &str) {
         let text_obj = self
             .text_obj(file_path)
             .expect("Couldn't get automerge text object, so not able to modify it");
@@ -77,7 +77,9 @@ impl Document {
         let text = self
             .current_file_content(file_path)
             .expect("Should have initialized text before applying delta to it");
-        for op in &delta.0 {
+        let ed_delta = EditorTextDelta::from_delta(delta.clone(), &text);
+
+        for op in &ed_delta.0 {
             let (start, length) = op.range.as_relative(&text);
             self.doc
                 .splice_text(
@@ -146,9 +148,8 @@ impl Document {
             }
 
             let text_delta: TextDelta = chunks.into();
-            let editor_delta = EditorTextDelta::from_delta(text_delta, &current_text);
-            warn!("File {file_path} has changed while the daemon was offline. Applying delta: {editor_delta:?}");
-            self.apply_delta_to_doc(&editor_delta, file_path);
+            warn!("File {file_path} has changed while the daemon was offline. Applying delta: {text_delta:?}");
+            self.apply_delta_to_doc(&text_delta, file_path);
         } else {
             // The file doesn't exist in the CRDT yet, so we need to initialize it.
             info!("File {file_path} doesn't exist in CRDT yet. Initializing it.");

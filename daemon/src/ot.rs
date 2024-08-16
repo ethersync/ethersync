@@ -85,14 +85,14 @@ impl OTServer {
     }
 
     /// Called when the CRDT world makes a change to the document.
-    pub fn apply_crdt_change(&mut self, delta: TextDelta) -> RevisionedEditorTextDelta {
+    pub fn apply_crdt_change(&mut self, delta: &TextDelta) -> RevisionedEditorTextDelta {
         // We can apply the change immediately.
         self.operations.push(delta.clone().into());
         self.editor_queue.push(delta.clone().into());
         self.daemon_revision += 1;
         // Use "previous" content to transform into editor text delta.
         let editor_delta = EditorTextDelta::from_delta(delta.clone(), &self.current_content);
-        self.current_content = Self::force_apply(&self.current_content, delta.into());
+        self.current_content = Self::force_apply(&self.current_content, delta.clone().into());
 
         // We assume that the editor is up-to-date, and send the operation to it.
         // If it can't accept it, we will transform and send it later.
