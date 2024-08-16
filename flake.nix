@@ -31,16 +31,20 @@
       ethersync = (final.callPackage naersk {}).buildPackage {
         src = ./daemon;
       };
-      neovim-plugin = final.vimUtils.buildVimPlugin {
-        name = "ethersync";
-        src = ./vim-plugin;
-      };
-      neovim = let
+      vimPlugins =
+        prev.vimPlugins
+        // {
+          nvim-ethersync = final.vimUtils.buildVimPlugin {
+            name = "ethersync";
+            src = ./vim-plugin;
+          };
+        };
+      neovim-with-ethersync = let
         nvim-custom = prev.neovim.override {
           configure = {
             packages.plugins = {
               start = [
-                neovim-plugin
+                vimPlugins.nvim-ethersync
               ];
             };
             # In Nix' standard environment, we can't write to $HOME, so we need to
@@ -59,8 +63,8 @@
       inherit
         (pkgs)
         ethersync
-        neovim-plugin
-        neovim
+        nvim-ethersync
+        neovim-with-ethersync
         ;
       default = ethersync;
     });
