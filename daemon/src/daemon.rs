@@ -60,8 +60,8 @@ impl fmt::Debug for DocMessage {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let repr = match self {
             DocMessage::GetContent { .. } => "get content".to_string(),
-            DocMessage::FromEditor(EditorId(i), _) => {
-                format!("open/close/edit/... message from editor #{i}")
+            DocMessage::FromEditor(id, _) => {
+                format!("open/close/edit/... message from editor #{id}")
             }
             DocMessage::RemoveFile { .. } => "delete file".to_string(),
             DocMessage::Persist => "persist".to_string(),
@@ -69,7 +69,7 @@ impl fmt::Debug for DocMessage {
             DocMessage::ReceiveSyncMessage { .. } => "<automerge internal sync rcv>".to_string(),
             DocMessage::GenerateSyncMessage { .. } => "<automerge internal sync gen>".to_string(),
             DocMessage::NewEditorConnection(..) => "editor connected".to_string(),
-            DocMessage::CloseEditorConnection(EditorId(i)) => format!("editor #{i} disconnected"),
+            DocMessage::CloseEditorConnection(id) => format!("editor #{id} disconnected"),
         };
         write!(f, "{repr}")
     }
@@ -245,8 +245,9 @@ impl DocumentActor {
             DocMessage::CloseEditorConnection(editor_id) => {
                 self.editor_clients.remove(&editor_id);
 
-                let userid = self.crdt_doc.actor_id();
-                self.maybe_delete_cursor_position(&userid);
+                let userid = self.crdt_doc.actor_id() + "-" + editor_id.to_string().as_str();
+                debug!("Deleting cursor {userid}");
+                self.maybe_delete_cursor_position(&userid).await;
             }
         }
     }
@@ -388,11 +389,12 @@ impl DocumentActor {
                 let file_path = self
                     .file_path_for_uri(&uri)
                     .map_err(anyhow_err_to_protocol_err)?;
-                let userid = self.crdt_doc.actor_id();
+                let userid = self.crdt_doc.actor_id() + "-" + editor_id.to_string().as_str();
                 self.store_cursor_position(&userid, file_path.clone(), ranges.clone());
 
                 let cursor_state = CursorState {
                     userid,
+                    // TODO: "you" is a bit lazy, should we also look at $USER here?
                     name: Some("you".to_string()),
                     file_path,
                     ranges,
@@ -757,9 +759,21 @@ impl DocumentActor {
         let _ = self.doc_changed_ping_tx.send(());
     }
 
-    fn maybe_delete_cursor_position(&mut self, userid: &str) {
+    async fn maybe_delete_cursor_position(&mut self, userid: &str) {
         self.crdt_doc.maybe_delete_cursor_position(userid);
         let _ = self.doc_changed_ping_tx.send(());
+
+        // Send cursor delete to local peers.
+        if let Some(file_path) = self.crdt_doc.files().first() {
+            let cursor_states = vec![CursorState {
+                userid: userid.to_string(),
+                name: None,
+                file_path: file_path.to_string(),
+                ranges: vec![],
+            }];
+            self.send_cursor_states_to_editors(None, cursor_states)
+                .await;
+        }
     }
 
     async fn run(&mut self) {
@@ -837,8 +851,7 @@ impl DocumentActorHandle {
     }
 
     pub fn next_editor_id(&self) -> EditorId {
-        let id = self.next_id.fetch_add(1, Ordering::Relaxed);
-        EditorId(id)
+        self.next_id.fetch_add(1, Ordering::Relaxed)
     }
 }
 

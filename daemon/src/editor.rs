@@ -17,8 +17,7 @@ use tokio_util::{
 };
 use tracing::info;
 
-#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
-pub struct EditorId(pub usize);
+pub type EditorId = usize;
 
 pub type EditorHandle = FramedWrite<WriteHalf<UnixStream>, EditorProtocolCodec>;
 
@@ -87,7 +86,7 @@ fn spawn_editor_connection(
         document_handle
             .send_message(DocMessage::NewEditorConnection(editor_id, writer))
             .await;
-        info!("Client #{} connected", editor_id.0);
+        info!("Client #{editor_id} connected");
 
         while let Some(Ok(line)) = reader.next().await {
             document_handle
@@ -98,6 +97,6 @@ fn spawn_editor_connection(
         document_handle
             .send_message(DocMessage::CloseEditorConnection(editor_id))
             .await;
-        info!("Client #{} disconnected", editor_id.0);
+        info!("Client #{editor_id} disconnected");
     });
 }
