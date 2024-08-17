@@ -872,11 +872,11 @@ impl Daemon {
         let document_handle = DocumentActorHandle::new(base_dir, init, is_host);
 
         // Initialize file watcher.
-        let watcher_document_handle = document_handle.clone();
-        let watcher_base_dir = base_dir.to_path_buf();
-        tokio::spawn(async move {
-            watcher::spawn_file_watcher(watcher_base_dir, watcher_document_handle).await;
-        });
+        //let watcher_document_handle = document_handle.clone();
+        //let watcher_base_dir = base_dir.to_path_buf();
+        //tokio::spawn(async move {
+        //    watcher::spawn_file_watcher(watcher_base_dir, watcher_document_handle).await;
+        //});
 
         // Initialize persister.
         let persister_document_handle = document_handle.clone();
