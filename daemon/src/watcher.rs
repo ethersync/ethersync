@@ -11,7 +11,7 @@ use tokio::sync::mpsc::{self, Receiver};
 use tracing::info;
 
 #[derive(Debug, PartialEq)]
-enum WatcherEvent {
+pub enum WatcherEvent {
     Created {
         file_path: PathBuf,
         content: Vec<u8>,
@@ -25,15 +25,15 @@ enum WatcherEvent {
     },
 }
 
-struct Watcher {
-    watcher: RecommendedWatcher,
+pub struct Watcher {
+    _watcher: RecommendedWatcher,
     base_dir: PathBuf,
     notify_receiver: Receiver<NotifyResult<notify::Event>>,
     out_queue: VecDeque<WatcherEvent>,
 }
 
 impl Watcher {
-    fn new(dir: &Path) -> Self {
+    pub fn new(dir: &Path) -> Self {
         let (tx, rx) = mpsc::channel(1);
         let mut watcher = notify::recommended_watcher(move |res: NotifyResult<notify::Event>| {
             futures::executor::block_on(async {
@@ -48,14 +48,14 @@ impl Watcher {
 
         Self {
             // Keep the watcher, so that it's not dropped.
-            watcher,
+            _watcher: watcher,
             base_dir: dir.to_path_buf(),
             notify_receiver: rx,
             out_queue: VecDeque::new(),
         }
     }
 
-    async fn next(&mut self) -> Option<WatcherEvent> {
+    pub async fn next(&mut self) -> Option<WatcherEvent> {
         loop {
             // If there's an event in the queue, return the oldest one.
             if let Some(event) = self.out_queue.pop_front() {

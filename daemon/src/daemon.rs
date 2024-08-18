@@ -8,7 +8,8 @@ use crate::types::{
     EditorProtocolMessageToEditor, EditorProtocolObject, FileTextDelta, JSONRPCFromEditor,
     JSONRPCResponse, PatchEffect, Range, RevisionedEditorTextDelta, TextDelta,
 };
-use crate::{connect, watcher};
+use crate::watcher::Watcher;
+use crate::watcher::WatcherEvent;
 use anyhow::{bail, Context, Result};
 use automerge::{
     sync::{Message as AutomergeSyncMessage, State as SyncState},
@@ -38,17 +39,7 @@ pub enum DocMessage {
         response_tx: oneshot::Sender<Result<String>>,
     },
     FromEditor(EditorId, String),
-    RemoveFile {
-        file_path: String,
-    },
-    CreateFile {
-        file_path: String,
-        content: String,
-    },
-    UpdateFile {
-        file_path: String,
-        content: String,
-    },
+    FromWatcher(WatcherEvent),
     Persist,
     RandomEdit,
     ReceiveSyncMessage {
@@ -71,9 +62,7 @@ impl fmt::Debug for DocMessage {
             DocMessage::FromEditor(id, _) => {
                 format!("open/close/edit/... message from editor #{id}")
             }
-            DocMessage::RemoveFile { .. } => "delete file".to_string(),
-            DocMessage::CreateFile { .. } => "create file".to_string(),
-            DocMessage::UpdateFile { .. } => "update file".to_string(),
+            DocMessage::FromWatcher(_) => "watcher event".to_string(),
             DocMessage::Persist => "persist".to_string(),
             DocMessage::RandomEdit => "random edit".to_string(),
             DocMessage::ReceiveSyncMessage { .. } => "<automerge internal sync rcv>".to_string(),
@@ -179,32 +168,8 @@ impl DocumentActor {
             DocMessage::FromEditor(editor_id, message) => {
                 self.handle_message_from_editor(editor_id, message).await;
             }
-            DocMessage::RemoveFile { file_path } => {
-                // TODO: This is a workaround. Handle this case better by returning a Result in
-                // file_path_for_uri! The deletion happens when the fuzzer removes the temp dir.
-                if file_path.as_str() != self.base_dir.as_os_str() {
-                    let file_path = self
-                        .file_path_for_uri(&file_path)
-                        .expect("Could not determine file path when trying to remove file");
-                    self.crdt_doc.remove_text(&file_path);
-                    let _ = self.doc_changed_ping_tx.send(());
-                }
-            }
-            DocMessage::CreateFile { file_path, content } => {
-                let file_path = self
-                    .file_path_for_uri(&file_path)
-                    .expect("Could not determine file path when trying to create file");
-                self.crdt_doc.initialize_text(&content, &file_path);
-                let _ = self.doc_changed_ping_tx.send(());
-            }
-            DocMessage::UpdateFile { file_path, content } => {
-                if self.owns(&file_path) {
-                    let file_path = self
-                        .file_path_for_uri(&file_path)
-                        .expect("Could not determine file path when trying to create file");
-                    self.crdt_doc.update_text(&content, &file_path);
-                    let _ = self.doc_changed_ping_tx.send(());
-                }
+            DocMessage::FromWatcher(watcher_event) => {
+                self.handle_watcher_event(watcher_event).await;
             }
             DocMessage::Persist => {
                 debug!("Persisting!");
@@ -457,6 +422,53 @@ impl DocumentActor {
                 error!("Error for JSON-RPC request: {:?}", response);
                 self.send_to_editor_client(&editor_id, EditorProtocolObject::Response(response))
                     .await;
+            }
+        }
+    }
+
+    async fn handle_watcher_event(&mut self, watcher_event: WatcherEvent) {
+        match watcher_event {
+            WatcherEvent::Created { file_path, content } => {
+                let file_path = self
+                    .file_path_for_uri(
+                        &file_path
+                            .to_str()
+                            .expect("Failed to convert watcher path to str"),
+                    )
+                    .expect("Could not determine file path when trying to create file");
+                let content =
+                    String::from_utf8(content).expect("Failed to convert file content to UTF-8");
+                self.crdt_doc.initialize_text(&content, &file_path);
+                let _ = self.doc_changed_ping_tx.send(());
+            }
+            WatcherEvent::Removed { file_path } => {
+                let file_path = self
+                    .file_path_for_uri(
+                        &file_path
+                            .to_str()
+                            .expect("Failed to convert watcher path to str"),
+                    )
+                    .expect("Could not determine file path when trying to remove file");
+                self.crdt_doc.remove_text(&file_path);
+                let _ = self.doc_changed_ping_tx.send(());
+            }
+            WatcherEvent::Changed {
+                file_path,
+                new_content,
+            } => {
+                // Only update if we own the file.
+                let file_path = file_path
+                    .to_str()
+                    .expect("Failed to convert watcher path to str");
+                if self.owns(file_path) {
+                    let file_path = self
+                        .file_path_for_uri(file_path)
+                        .expect("Could not determine file path when trying to create file");
+                    let new_content = String::from_utf8(new_content)
+                        .expect("Failed to convert file content to UTF-8");
+                    self.crdt_doc.update_text(&new_content, &file_path);
+                    let _ = self.doc_changed_ping_tx.send(());
+                }
             }
         }
     }
@@ -872,11 +884,11 @@ impl Daemon {
         let document_handle = DocumentActorHandle::new(base_dir, init, is_host);
 
         // Initialize file watcher.
-        //let watcher_document_handle = document_handle.clone();
-        //let watcher_base_dir = base_dir.to_path_buf();
-        //tokio::spawn(async move {
-        //    watcher::spawn_file_watcher(watcher_base_dir, watcher_document_handle).await;
-        //});
+        let watcher_document_handle = document_handle.clone();
+        let watcher_base_dir = base_dir.to_path_buf();
+        tokio::spawn(async move {
+            spawn_file_watcher(&watcher_base_dir, watcher_document_handle).await;
+        });
 
         // Initialize persister.
         let persister_document_handle = document_handle.clone();
@@ -902,6 +914,15 @@ impl Daemon {
         });
 
         Self { document_handle }
+    }
+}
+
+async fn spawn_file_watcher(base_dir: &Path, document_handle: DocumentActorHandle) {
+    let mut watcher = Watcher::new(base_dir);
+    while let Some(watcher_event) = watcher.next().await {
+        document_handle
+            .send_message(DocMessage::FromWatcher(watcher_event))
+            .await;
     }
 }
 
