@@ -26,6 +26,19 @@ pub fn write_file(
     Ok(())
 }
 
+pub fn rename_file(
+    absolute_base_dir: &Path,
+    absolute_file_path_old: &Path,
+    absolute_file_path_new: &Path,
+) -> Result<()> {
+    let canonical_file_path_old =
+        check_inside_base_dir_and_canonicalize(absolute_base_dir, absolute_file_path_old)?;
+    let canonical_file_path_new =
+        check_inside_base_dir_and_canonicalize(absolute_base_dir, absolute_file_path_new)?;
+    fs::rename(canonical_file_path_old, canonical_file_path_new)?;
+    Ok(())
+}
+
 pub fn remove_file(absolute_base_dir: &Path, absolute_file_path: &Path) -> Result<()> {
     let canonical_file_path =
         check_inside_base_dir_and_canonicalize(absolute_base_dir, absolute_file_path)?;
