@@ -1,0 +1,3 @@
+# Why Ethersync?
+
+Why not?

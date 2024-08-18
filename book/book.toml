@@ -1,0 +1,6 @@
+[book]
+authors = ["blinry", "zormit"]
+language = "en"
+multilingual = false
+src = "src"
+title = "Ethersync Documentation"
