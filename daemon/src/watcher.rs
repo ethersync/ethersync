@@ -8,7 +8,7 @@ use std::{
     path::{Path, PathBuf},
 };
 use tokio::sync::mpsc::{self, Receiver};
-use tracing::info;
+use tracing::debug;
 
 #[derive(Debug, PartialEq)]
 pub enum WatcherEvent {
@@ -25,6 +25,7 @@ pub enum WatcherEvent {
     },
 }
 
+/// Returns events among the files in base_dir that are not ignored.
 pub struct Watcher {
     _watcher: RecommendedWatcher,
     base_dir: PathBuf,
@@ -68,61 +69,85 @@ impl Watcher {
             match event.kind {
                 EventKind::Create(notify::event::CreateKind::File) => {
                     assert!(event.paths.len() == 1);
-                    let file_path = event.paths[0].clone();
-
-                    let content = sandbox::read_file(&self.base_dir, &event.paths[0])
-                        .expect("Failed to read created file");
-
-                    return Some(WatcherEvent::Created { file_path, content });
+                    if let Some(e) = self.maybe_created(&event.paths[0]) {
+                        return Some(e);
+                    }
                 }
                 EventKind::Remove(notify::event::RemoveKind::File) => {
                     assert!(event.paths.len() == 1);
-                    let file_path = event.paths[0].clone();
-
-                    return Some(WatcherEvent::Removed { file_path });
+                    if let Some(e) = self.maybe_removed(&event.paths[0]) {
+                        return Some(e);
+                    }
                 }
                 EventKind::Modify(notify::event::ModifyKind::Data(_)) => {
                     assert!(event.paths.len() == 1);
-                    let file_path = event.paths[0].clone();
-
-                    let content = sandbox::read_file(&self.base_dir, &event.paths[0])
-                        .expect("Failed to read created file");
-
-                    return Some(WatcherEvent::Changed {
-                        file_path,
-                        new_content: content,
-                    });
+                    if let Some(e) = self.maybe_modified(&event.paths[0]) {
+                        return Some(e);
+                    }
                 }
                 EventKind::Modify(notify::event::ModifyKind::Name(
                     notify::event::RenameMode::Both,
                 )) => {
                     assert!(event.paths.len() == 2);
-                    let from_path = event.paths[0].clone();
-                    let to_path = event.paths[1].clone();
-
-                    let remove_event = WatcherEvent::Removed {
-                        file_path: from_path,
-                    };
-
-                    let content = sandbox::read_file(&self.base_dir, &event.paths[1])
-                        .expect("Failed to read created file");
-                    let create_event = WatcherEvent::Created {
-                        file_path: to_path,
-                        content,
-                    };
+                    let removed = self.maybe_removed(&event.paths[0]);
+                    let created = self.maybe_created(&event.paths[1]);
 
                     // Queue the create event for later, return the remove event.
-                    self.out_queue.push_back(create_event);
-                    return Some(remove_event);
+                    if let Some(e) = created {
+                        self.out_queue.push_back(e);
+                    }
+
+                    if let Some(e) = removed {
+                        return Some(e);
+                    }
                 }
                 e => {
                     // Don't handle other events.
                     // But log them! I'm curious what they are!
-                    info!("{:?}: {e:?}", event.paths);
+                    debug!("Unhandled event in {:?}: {e:?}", event.paths);
                     continue;
                 }
             };
         }
+    }
+
+    fn maybe_created(&self, file_path: &Path) -> Option<WatcherEvent> {
+        if sandbox::ignored(&self.base_dir, file_path)
+            .expect("Could not check ignore state of file")
+        {
+            return None;
+        }
+
+        let content =
+            sandbox::read_file(&self.base_dir, file_path).expect("Failed to read created file");
+
+        Some(WatcherEvent::Created {
+            file_path: file_path.to_path_buf(),
+            content,
+        })
+    }
+
+    fn maybe_removed(&self, file_path: &Path) -> Option<WatcherEvent> {
+        // TODO: We should check whether the file was ignored here. But how?
+        Some(WatcherEvent::Removed {
+            file_path: file_path.to_path_buf(),
+        })
+    }
+
+    fn maybe_modified(&self, file_path: &Path) -> Option<WatcherEvent> {
+        if sandbox::ignored(&self.base_dir, file_path)
+            .expect("Could not check ignore state of file")
+        {
+            return None;
+        }
+
+        let content =
+            sandbox::read_file(&self.base_dir, file_path).expect("Failed to read created file");
+
+        Some(WatcherEvent::Changed {
+            file_path: file_path.to_path_buf(),
+            new_content: content,
+        })
     }
 }
 
@@ -209,6 +234,30 @@ mod tests {
             Some(WatcherEvent::Created {
                 file_path: file_new,
                 content: b"hi".to_vec(),
+            })
+        );
+    }
+
+    #[tokio::test]
+    async fn ignore() {
+        let dir = TempDir::new().expect("Failed to create temp directory");
+        let gitignore = dir.child(".ignore");
+
+        sandbox::write_file(dir.path(), &gitignore, b"file").unwrap();
+
+        let mut watcher = Watcher::new(dir.path());
+
+        let file = dir.child("file");
+        let file2 = dir.child("file2");
+
+        sandbox::write_file(dir.path(), &file, b"hi").unwrap();
+        sandbox::write_file(dir.path(), &file2, b"ho").unwrap();
+
+        assert_eq!(
+            watcher.next().await,
+            Some(WatcherEvent::Created {
+                file_path: file2,
+                content: b"ho".to_vec()
             })
         );
     }
