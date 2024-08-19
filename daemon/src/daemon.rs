@@ -911,34 +911,39 @@ impl Daemon {
         let document_handle = DocumentActorHandle::new(base_dir, init, is_host);
 
         // Initialize file watcher.
-        let watcher_document_handle = document_handle.clone();
-        let watcher_base_dir = base_dir.to_path_buf();
-        tokio::spawn(async move {
-            spawn_file_watcher(&watcher_base_dir, watcher_document_handle).await;
-        });
+        {
+            let document_handle = document_handle.clone();
+            let base_dir = base_dir.to_path_buf();
+            tokio::spawn(async move {
+                spawn_file_watcher(&base_dir, document_handle).await;
+            });
+        }
 
         // Initialize persister.
-        let persister_document_handle = document_handle.clone();
-        tokio::spawn(async move {
-            spawn_persister(persister_document_handle).await;
-        });
+        {
+            let document_handle = document_handle.clone();
+            tokio::spawn(async move {
+                spawn_persister(document_handle).await;
+            });
+        }
 
-        let connection_document_handle = document_handle.clone();
-        let connection_base_dir = base_dir.to_path_buf();
-        tokio::spawn(async move {
-            let p2p_actor = peer::P2PActor::new(
-                peer_connection_info,
-                connection_document_handle,
-                &connection_base_dir,
-            );
-            let _ = p2p_actor.run().await;
-        });
+        {
+            let document_handle = document_handle.clone();
+            let base_dir = base_dir.to_path_buf();
+            tokio::spawn(async move {
+                let p2p_actor =
+                    peer::P2PActor::new(peer_connection_info, document_handle, &base_dir);
+                let _ = p2p_actor.run().await;
+            });
+        }
 
-        let editor_socket_path = socket_path.to_path_buf();
-        let editor_document_handle = document_handle.clone();
-        tokio::spawn(async move {
-            editor::make_editor_connection(editor_socket_path, editor_document_handle).await;
-        });
+        {
+            let socket_path = socket_path.to_path_buf();
+            let document_handle = document_handle.clone();
+            tokio::spawn(async move {
+                editor::make_editor_connection(socket_path, document_handle).await;
+            });
+        }
 
         if random {
             let random_document_handle = document_handle.clone();

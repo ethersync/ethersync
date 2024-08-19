@@ -225,10 +225,12 @@ async fn assert_vim_input_yields_replacements(
                 let (mut nvim, _file_path) = Neovim::new_ethersync_enabled(initial_content).await;
                 socket.acknowledge_open().await;
 
-                let input_clone = input.to_string();
-                tokio::spawn(async move {
-                    nvim.input(&input_clone).await;
-                });
+                {
+                    let input = input.to_string();
+                    tokio::spawn(async move {
+                        nvim.input(&input).await;
+                    });
+                }
 
                 // Note: This doesn't check whether there are more replacements pending than the
                 // expected ones.
