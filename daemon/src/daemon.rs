@@ -241,7 +241,7 @@ impl DocumentActor {
             DocMessage::CloseEditorConnection(editor_id) => {
                 self.editor_clients.remove(&editor_id);
 
-                let userid = self.crdt_doc.actor_id() + "-" + editor_id.to_string().as_str();
+                let userid = self.cursor_id(editor_id);
                 debug!("Deleting cursor {userid}");
                 self.maybe_delete_cursor_position(&userid).await;
             }
@@ -385,7 +385,7 @@ impl DocumentActor {
                 let file_path = self
                     .file_path_for_uri(&uri)
                     .map_err(anyhow_err_to_protocol_err)?;
-                let userid = self.crdt_doc.actor_id() + "-" + editor_id.to_string().as_str();
+                let userid = self.cursor_id(editor_id);
                 self.store_cursor_position(&userid, file_path.clone(), ranges.clone());
 
                 let cursor_state = CursorState {
@@ -400,6 +400,10 @@ impl DocumentActor {
             }
         }
         Ok(())
+    }
+
+    fn cursor_id(&self, editor_id: EditorId) -> String {
+        self.crdt_doc.actor_id() + "-" + editor_id.to_string().as_str()
     }
 
     async fn handle_message_from_editor(&mut self, editor_id: EditorId, message: String) {
