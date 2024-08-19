@@ -141,8 +141,8 @@ impl DocumentActor {
     /// If any editor has an `ot_server` for a given file,
     /// it means that the daemon doesn't have ownership.
     fn owns(&mut self, file_path: &str) -> bool {
-        for (_, ot_servers) in self.ot_servers.iter_mut() {
-            if ot_servers.get_mut(file_path).is_some() {
+        for (_, ot_servers) in self.ot_servers.iter() {
+            if ot_servers.get(file_path).is_some() {
                 return false;
             }
         }
