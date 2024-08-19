@@ -1,6 +1,5 @@
-use crate::connect;
 use crate::document::Document;
-use crate::editor::{EditorHandle, EditorId};
+use crate::editor::{self, EditorHandle, EditorId};
 use crate::ot::OTServer;
 use crate::peer;
 use crate::sandbox;
@@ -14,6 +13,7 @@ use automerge::{
     sync::{Message as AutomergeSyncMessage, State as SyncState},
     Patch,
 };
+use futures::SinkExt;
 use ignore::{Walk, WalkBuilder};
 use notify::{RecursiveMode, Result as NotifyResult, Watcher};
 use rand::Rng;
@@ -52,7 +52,7 @@ pub enum DocMessage {
         state: SyncState,
         response_tx: oneshot::Sender<(SyncState, Option<AutomergeSyncMessage>)>,
     },
-    NewEditorConnection(EditorHandle),
+    NewEditorConnection(EditorId, EditorHandle),
     CloseEditorConnection(EditorId),
 }
 
@@ -68,7 +68,7 @@ impl fmt::Debug for DocMessage {
             DocMessage::RandomEdit => "random edit".to_string(),
             DocMessage::ReceiveSyncMessage { .. } => "<automerge internal sync rcv>".to_string(),
             DocMessage::GenerateSyncMessage { .. } => "<automerge internal sync gen>".to_string(),
-            DocMessage::NewEditorConnection(_) => "editor connected".to_string(),
+            DocMessage::NewEditorConnection(..) => "editor connected".to_string(),
             DocMessage::CloseEditorConnection(EditorId(i)) => format!("editor #{i} disconnected"),
         };
         write!(f, "{repr}")
@@ -231,10 +231,10 @@ impl DocumentActor {
                     warn!("Failed to send peer state and sync message in response to GenerateSyncMessage.");
                 }
             }
-            DocMessage::NewEditorConnection(editor_handle) => {
+            DocMessage::NewEditorConnection(id, editor_handle) => {
                 // TODO: if we use more than one ID, we should now easily have multiple editors.
                 // Modulo managing the OT server for each of them per file...
-                self.editor_clients.insert(editor_handle.id, editor_handle);
+                self.editor_clients.insert(id, editor_handle);
             }
             DocMessage::CloseEditorConnection(editor_id) => {
                 self.editor_clients.remove(&editor_id);
@@ -548,7 +548,7 @@ impl DocumentActor {
     }
 
     async fn send_to_editor_client(&mut self, editor_id: &EditorId, message: EditorProtocolObject) {
-        if let Some(handle) = self.editor_clients.get(editor_id) {
+        if let Some(handle) = self.editor_clients.get_mut(editor_id) {
             if handle.send(message).await.is_err() {
                 info!("Removing EditorHandle from client list.");
                 self.editor_clients.remove(editor_id);
@@ -822,7 +822,7 @@ impl Daemon {
         let editor_socket_path = socket_path.to_path_buf();
         let editor_document_handle = document_handle.clone();
         tokio::spawn(async move {
-            connect::make_editor_connection(editor_socket_path, editor_document_handle).await;
+            editor::make_editor_connection(editor_socket_path, editor_document_handle).await;
         });
 
         Self { document_handle }
