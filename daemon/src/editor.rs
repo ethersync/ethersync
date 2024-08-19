@@ -70,11 +70,11 @@ async fn accept_editor_loop(
 
         let id = document_handle.next_editor_id();
 
-        spawn_editor_connection(stream, document_handle.clone(), id).await;
+        spawn_editor_connection(stream, document_handle.clone(), id);
     }
 }
 
-async fn spawn_editor_connection(
+fn spawn_editor_connection(
     stream: UnixStream,
     document_handle: DocumentActorHandle,
     editor_id: EditorId,
