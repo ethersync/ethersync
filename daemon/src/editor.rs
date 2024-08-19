@@ -74,7 +74,7 @@ async fn accept_editor_loop(
     }
 }
 
-pub async fn spawn_editor_connection(
+async fn spawn_editor_connection(
     stream: UnixStream,
     document_handle: DocumentActorHandle,
     editor_id: EditorId,
