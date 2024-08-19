@@ -86,8 +86,7 @@ pub struct DocumentActor {
     doc_message_rx: mpsc::Receiver<DocMessage>,
     doc_changed_ping_tx: DocChangedSender,
     editor_clients: HashMap<EditorId, EditorHandle>,
-    /// If any editor has an `ot_server` for a given file, it means that the daemon doesn't have
-    /// ownership.
+    /// There's one OTServer per buffer. Same file in a different editor is a different buffer.
     ot_servers: HashMap<EditorId, HashMap<String, OTServer>>,
     /// The Document is the main I/O managed resource of this actor.
     crdt_doc: Document,
@@ -139,6 +138,8 @@ impl DocumentActor {
         s
     }
 
+    /// If any editor has an `ot_server` for a given file,
+    /// it means that the daemon doesn't have ownership.
     fn owns(&mut self, file_path: &str) -> bool {
         for (_, ot_servers) in self.ot_servers.iter_mut() {
             if ot_servers.get_mut(file_path).is_some() {
