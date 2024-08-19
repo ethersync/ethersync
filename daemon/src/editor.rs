@@ -1,8 +1,16 @@
 //! This module is all about daemon to editor communication.
 use crate::daemon::{DocMessage, DocumentActorHandle};
+use crate::sandbox;
 use crate::types::EditorProtocolObject;
 use futures::StreamExt;
-use tokio::{io::WriteHalf, net::UnixStream};
+use std::{
+    io,
+    path::{Path, PathBuf},
+};
+use tokio::{
+    io::WriteHalf,
+    net::{UnixListener, UnixStream},
+};
 use tokio_util::{
     bytes::BytesMut,
     codec::{Encoder, FramedRead, FramedWrite, LinesCodec},
@@ -27,6 +35,42 @@ impl Encoder<EditorProtocolObject> for EditorProtocolCodec {
         let payload = item.to_jsonrpc()?;
         dst.extend_from_slice(format!("{payload}\n").as_bytes());
         Ok(())
+    }
+}
+
+/// # Panics
+///
+/// Will panic if we fail to listen on the socket, or if we fail to accept an incoming connection.
+pub async fn make_editor_connection(socket_path: PathBuf, document_handle: DocumentActorHandle) {
+    // Using the sandbox method here is technically unnecessary,
+    // but we want to really run all path operations through the sandbox module.
+    if sandbox::exists(Path::new("/"), Path::new(&socket_path))
+        .expect("Failed to check existence of path")
+    {
+        sandbox::remove_file(Path::new("/"), &socket_path).expect("Could not remove socket");
+    }
+    let result = accept_editor_loop(&socket_path, document_handle).await;
+    match result {
+        Ok(()) => {}
+        Err(err) => {
+            panic!("Failed to make editor connection: {err}");
+        }
+    }
+}
+
+async fn accept_editor_loop(
+    socket_path: &Path,
+    document_handle: DocumentActorHandle,
+) -> Result<(), io::Error> {
+    let listener = UnixListener::bind(socket_path)?;
+    info!("Listening on UNIX socket: {}", socket_path.display());
+
+    loop {
+        let (stream, _addr) = listener.accept().await?;
+
+        let id = document_handle.next_editor_id();
+
+        spawn_editor_connection(stream, document_handle.clone(), id).await;
     }
 }
 

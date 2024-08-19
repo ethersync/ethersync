@@ -1,6 +1,5 @@
-use crate::connect;
 use crate::document::Document;
-use crate::editor::{EditorHandle, EditorId};
+use crate::editor::{self, EditorHandle, EditorId};
 use crate::ot::OTServer;
 use crate::peer;
 use crate::sandbox;
@@ -823,7 +822,7 @@ impl Daemon {
         let editor_socket_path = socket_path.to_path_buf();
         let editor_document_handle = document_handle.clone();
         tokio::spawn(async move {
-            connect::make_editor_connection(editor_socket_path, editor_document_handle).await;
+            editor::make_editor_connection(editor_socket_path, editor_document_handle).await;
         });
 
         Self { document_handle }
