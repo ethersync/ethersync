@@ -4,18 +4,19 @@
 
 # Usage Guide
 
-- [Installation]()
-    - [Daemon]()
-    - [Neovim plugin]()
+- [Installation](./installation/README.md)
+    - [Daemon](installation/daemon.md)
+    - [Neovim plugin](installation/neovim.md)
     - [VS Code plugin]()
-- [Quickstart]()
+- [Quickstart](./quickstart.md)
 - [Concepts]()
     - [Overall architecture]()
-    - [File ownership]()
+    - [File ownership](./file-ownership.md)
+    - [FAQ](./faq.md)
 - [Features]()
     - [File events]()
     - [Offline support]()
-    - [Configuration files]()
+    - [Configuration files](./features/configuration.md)
     - [Things that are still annoying]()
 - [Use cases]()
     - [Peer programming]()
@@ -24,7 +25,7 @@
     - [Git integration]()
 - [Related projects]()
 
-# Developer Documenation
+# Developer Documentation
 
 - [Writing new editor plugins](./editor-plugin-dev-guide.md)
 - [Contributing to Ethersync]()
