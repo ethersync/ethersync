@@ -25,8 +25,8 @@ interface Position {
 }
 
 interface Range {
-    anchor: Position
-    head: Position
+    start: Position
+    end: Position
 }
 
 interface Delta {
@@ -44,10 +44,23 @@ interface Edit {
     delta: RevisionedDelta
 }
 
+class Revision {
+    daemon = 0
+    editor = 0
+}
+
+let revisions: {[filename: string]: Revision} = {}
+
 let ignoreEdits = false
-let daemonRevision = 0
-let editorRevision = 0
 let t0 = Date.now()
+
+function uri_to_fname(uri: string): string {
+    const prefix = "file://"
+    if (!uri.startsWith(prefix)) {
+        console.error(`expected URI prefix for '${uri}'`)
+    }
+    return uri.slice(prefix.length)
+}
 
 export function activate(context: vscode.ExtensionContext) {
     debug("Ethersync extension activated!")
@@ -71,12 +84,14 @@ export function activate(context: vscode.ExtensionContext) {
     const edit = new rpc.NotificationType<Edit>("edit")
 
     connection.onNotification("edit", async (edit: Edit) => {
-        if (edit.delta.revision !== editorRevision) {
-            debug(`Received edit for revision ${edit.delta.revision} (!= ${editorRevision}), ignoring`)
+        const filename = uri_to_fname(edit.uri)
+        let revision = revisions[filename]
+        if (edit.delta.revision !== revision.editor) {
+            debug(`Received edit for revision ${edit.delta.revision} (!= ${revision.editor}), ignoring`)
             return
         }
 
-        daemonRevision += 1
+        revision.daemon += 1
 
         debug(`Received edit ${edit.delta.revision}`)
         const uri = edit.uri
@@ -87,9 +102,10 @@ export function activate(context: vscode.ExtensionContext) {
         if (openEditor) {
             ignoreEdits = true
             for (const delta of edit.delta.delta) {
+                // TODO: make this nicer / use the vscode interface already
                 const range = new vscode.Range(
-                    new vscode.Position(delta.range.anchor.line, delta.range.anchor.character),
-                    new vscode.Position(delta.range.head.line, delta.range.head.character)
+                    new vscode.Position(delta.range.start.line, delta.range.start.character),
+                    new vscode.Position(delta.range.end.line, delta.range.end.character)
                 )
                 if (openEditor) {
                     // Apply the edit if the document is open
@@ -136,40 +152,47 @@ export function activate(context: vscode.ExtensionContext) {
             return
         }
 
+        let revision = revisions[filename]
+
         // debug("event.document.version: " + event.document.version)
         // debug("event.document.isDirty: " + event.document.isDirty)
         // if (event.contentChanges.length == 0) { console.log(event.document) }
         for (const change of event.contentChanges) {
             let delta = {
-                range: {
-                    anchor: {line: change.range.start.line, character: change.range.start.character},
-                    head: {line: change.range.end.line, character: change.range.end.character},
-                },
+                range: change.range,
                 replacement: change.text,
             }
-            let revDelta: RevisionedDelta = {delta: [delta], revision: daemonRevision}
+            let revDelta: RevisionedDelta = {delta: [delta], revision: revision.daemon}
             let uri = event.document.uri.toString()
             let theEdit: Edit = {uri, delta: revDelta}
             // console.log(edit)
+            // interestingly this seems to block when it can't send
             connection.sendNotification(edit, theEdit)
-            editorRevision += 1
-            debug(`sent edit for dR ${daemonRevision} (having edR ${editorRevision})`)
+            revision.editor += 1
+            debug(`sent edit for dR ${revision.daemon} (having edR ${revision.editor})`)
         }
     })
 
     context.subscriptions.push(disposable)
 
+    // TODO: check if belongs to project.
     let openDisposable = vscode.workspace.onDidOpenTextDocument((document) => {
         const fileUri = document.uri.toString()
         debug("OPEN " + fileUri)
         connection.sendNotification(open, {uri: fileUri})
+        revisions[document.fileName] = new Revision()
     })
 
     context.subscriptions.push(openDisposable)
 
     let closeDisposable = vscode.workspace.onDidCloseTextDocument((document) => {
+        if (!(document.fileName in revisions)) {
+            return
+        }
         const fileUri = document.uri.toString()
         connection.sendNotification(close, {uri: fileUri})
+
+        delete revisions[document.fileName]
     })
 
     context.subscriptions.push(closeDisposable)
