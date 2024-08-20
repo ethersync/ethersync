@@ -94,6 +94,7 @@ export function activate(context: vscode.ExtensionContext) {
         revision.daemon += 1
 
         debug(`Received edit ${edit.delta.revision}`)
+        console.log(revisions)
         const uri = edit.uri
 
         const openEditor = vscode.window.visibleTextEditors.find(
@@ -170,6 +171,7 @@ export function activate(context: vscode.ExtensionContext) {
             connection.sendNotification(edit, theEdit)
             revision.editor += 1
             debug(`sent edit for dR ${revision.daemon} (having edR ${revision.editor})`)
+            console.log(revisions)
         }
     })
 
@@ -181,6 +183,7 @@ export function activate(context: vscode.ExtensionContext) {
         debug("OPEN " + fileUri)
         connection.sendNotification(open, {uri: fileUri})
         revisions[document.fileName] = new Revision()
+        console.log(revisions)
     })
 
     context.subscriptions.push(openDisposable)
