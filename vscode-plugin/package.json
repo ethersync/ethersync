@@ -17,7 +17,7 @@
         "commands": [
             {
                 "command": "ethersync.helloWorld",
-                "title": "Hello World"
+                "title": "Ethersync Hello World"
             }
         ]
     },
