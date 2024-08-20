@@ -1,51 +1,45 @@
-# 😈 Daemon
+# Daemon
 
-Every participant needs a **daemon**, that runs on their local machine, and connects to other peers.
 You might be able to use one of the following packages, or you could try a manual installation.
 
-> [!TIP]
+## Arch Linux
+
+Install the [ethersync-git](https://aur.archlinux.org/packages/ethersync-git) package from the AUR.
+
+## Nix
+
+This repository provides a Nix flake. You can put it in your PATH like this:
+
+```bash
+nix shell github:ethersync/ethersync
+```
+
+If you want to install it permanently, you probably know what your favorite approach is.
+
+> 💡 Tip:  
+>
 > You can use the Nix package on any Linux or MacOS system!
 
-<details>
-  <summary>Arch Linux</summary>
-  <br>
+## Manual installation
 
-  Install the [ethersync-git](https://aur.archlinux.org/packages/ethersync-git) package from the AUR.
-</details>
+You will need a [Rust](https://www.rust-lang.org) installation. You can then compile the daemon like this:
 
-<details>
-  <summary>Nix</summary>
-  <br>
-  This repository provides a Nix flake. You can put it in your PATH like this:
+```bash
+git clone git@github.com:ethersync/ethersync
+cd ethersync/daemon
+cargo build --release
+```
 
-  ```bash
-  nix shell github:ethersync/ethersync
-  ```
+This should download all dependencies, and successfully compile the project.
 
-  If you want to install it permanently, you probably know what your favorite approach is.
-</details>
+For the next steps to succeed you need to make sure that the resulting `ethersync` binary is in your shell PATH.
+One option to do this temporarily is to run this command in the terminal:
 
-<details>
-  <summary>Manual installation</summary>
-  <br>
+```bash
+export PATH="$PWD/target/release:$PATH"
+```
 
-  You will need a [Rust](https://www.rust-lang.org) installation. You can then compile the daemon like this:
-
-  ```bash
-  git clone git@github.com:ethersync/ethersync
-  cd ethersync/daemon
-  cargo build --release
-  ```
-
-  This should download all dependencies, and successfully compile the project.
-
-  For the next steps to succeed you need to make sure that the resulting `ethersync` binary is in your shell PATH.
-  One option to do this temporarily is to run this command in the terminal:
-
-  ```bash
-  export PATH="$PWD/target/release:$PATH"
-  ```
-</details>
+## Confirm the installation
 
 To confirm that the installation worked, try running:
 

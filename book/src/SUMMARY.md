@@ -12,18 +12,18 @@
 - [Concepts]()
     - [Overall architecture]()
     - [File ownership](./file-ownership.md)
-    - [FAQ](./faq.md)
 - [Features]()
     - [File events]()
     - [Offline support]()
     - [Configuration files](./features/configuration.md)
     - [Things that are still annoying]()
 - [Use cases]()
-    - [Peer programming]()
-    - [Note-taking]()
+    - [Pair programming](./use-cases/pair-programming.md)
+    - [Shared Notes](./use-cases/shared-notes.md)
 - [Advanced topics]()
     - [Git integration]()
 - [Related projects]()
+- [FAQ](./faq.md)
 
 # Developer Documentation
 

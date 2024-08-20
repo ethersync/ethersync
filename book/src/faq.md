@@ -31,13 +31,3 @@ You can also open a file in an editor without Ethersync plugin – if you change
 ## Can one daemon share multiple directories at the same time?
 
 [Not yet.](https://github.com/ethersync/ethersync/issues/134)
-
-## How can I connect to someone in another local network?
-
-For two people in the same network (for example, in the same wi-fi), the connection will just work. For other cases, you'll currenly need to enable port forwarding from your router to your local machine, so that peers can directly connect to you. The easiest option.
-
-## How should I set up Ethersync for a "shared notes" use case?
-
-While in a "pair-programming" use case, all peers will be online at the same time, for shared notes, it is often desirable to allow peers to go offline, and other peers will still get their changes once they connect.
-
-To enable that, our currently proposed solution is to set up a "cloud peer" – an Ethersync daemon running on a public server, which all users connect to. This resembles a server-client architecture, but all peers are essentially equal. Just the topology of the connections is star-shaped.

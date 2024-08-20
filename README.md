@@ -23,7 +23,7 @@ Ethersync enables real-time co-editing of local text files. You can use it for p
 
 ## Documentation
 
-The main resource to install, understand and use Ethersync is [this book](https://ethersync.github.io/ethersync).
+**Learn how to install, use, and understand Ethersync in [the documentation](https://ethersync.github.io/ethersync).**
 
 ## Development
 
