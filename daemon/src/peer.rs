@@ -1,7 +1,7 @@
 //! A peer is another daemon. This module is all about daemon to daemon communication.
 
 use crate::daemon::{DocMessage, DocumentActorHandle};
-use anyhow::Context;
+use anyhow::{Context, Result};
 use automerge::sync::{Message as AutomergeSyncMessage, State as SyncState};
 use futures::StreamExt;
 use futures::{AsyncReadExt, AsyncWriteExt};
@@ -92,7 +92,7 @@ impl P2PActor {
         }
     }
 
-    pub async fn run(self) -> anyhow::Result<()> {
+    pub async fn run(self) -> Result<()> {
         let keypair = self.get_keypair();
         let mut swarm = libp2p::SwarmBuilder::with_existing_identity(keypair)
             .with_tokio()
@@ -233,7 +233,10 @@ impl P2PActor {
         let syncer = SyncActor::new(self.document_handle.clone(), peer_to_us_rx, we_to_peer_tx);
         tokio::spawn(async move {
             let syncer_handle = tokio::spawn(async move {
-                syncer.run().await;
+                // The syncer can fail when the protocol_handler below has
+                // stopped. But in that case, both components will stop, so we can
+                // ignore the error.
+                let _ = syncer.run().await;
             });
 
             // This is a function that either runs forever, or errors.
@@ -241,6 +244,8 @@ impl P2PActor {
             let _ = Self::protocol_handler(stream, peer_to_us_tx, we_to_peer_rx).await;
 
             info!("Peer disconnected");
+            // TODO: Do we still this abort? The syncer should stop anyway once it cannot use its
+            // we_to_peer_tx anymore.
             syncer_handle.abort_handle().abort();
         });
     }
@@ -250,7 +255,7 @@ impl P2PActor {
         mut stream: Stream,
         peer_to_us_tx: mpsc::Sender<AutomergeSyncMessage>,
         mut we_to_peer_rx: mpsc::Receiver<AutomergeSyncMessage>,
-    ) -> anyhow::Result<()> {
+    ) -> Result<()> {
         loop {
             let mut message_len_buf = [0; 4];
 
@@ -325,7 +330,7 @@ impl SyncActor {
             .expect("Couldn't read response from Document channel");
     }
 
-    async fn generate_sync_message(&mut self) {
+    async fn generate_sync_message(&mut self) -> Result<()> {
         let (reponse_tx, response_rx) = oneshot::channel();
         self.document_handle
             .send_message(DocMessage::GenerateSyncMessage {
@@ -335,21 +340,22 @@ impl SyncActor {
             .await;
         let (ps, message) = response_rx
             .await
-            .expect("Could not read response from Document channel");
+            .context("Could not read response from Document channel")?;
         self.peer_state = ps;
         if let Some(message) = message {
             self.syncer_sender
                 .send(message)
                 .await
-                .expect("Failed to send on syncer_sender channel");
+                .context("Failed to send on syncer_sender channel")?;
         }
+        Ok(())
     }
 
-    async fn run(mut self) {
+    async fn run(mut self) -> Result<()> {
         let mut doc_changed_ping_rx = self.document_handle.subscribe_document_changes();
 
         // Kick off initial synchronization with peer.
-        self.generate_sync_message().await;
+        self.generate_sync_message().await?;
 
         loop {
             tokio::select! {
@@ -358,7 +364,7 @@ impl SyncActor {
                 // and TCPActor (e.g. when TCPWriteActor.send blocks).
                 doc_ping = doc_changed_ping_rx.recv() => {
                     match doc_ping {
-                        Ok(()) => { self.generate_sync_message().await; }
+                        Ok(()) => { self.generate_sync_message().await?; }
                         Err(broadcast::error::RecvError::Closed) => {
                             panic!("Doc changed channel has been closed");
                         }
