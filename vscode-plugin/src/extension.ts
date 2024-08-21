@@ -3,6 +3,7 @@ import * as cp from "child_process"
 import * as rpc from "vscode-jsonrpc/node"
 import * as path from "path"
 import * as fs from "fs"
+var Mutex = require("async-mutex").Mutex
 
 function isEthersyncEnabled(dir: string) {
     if (fs.existsSync(path.join(dir, ".ethersync"))) {
@@ -51,8 +52,10 @@ class Revision {
 
 let revisions: {[filename: string]: Revision} = {}
 
+// TODO: if we load from disk, this will also cause edits :-/
 let ignoreEdits = false
 let t0 = Date.now()
+const mutex = new Mutex()
 
 function uri_to_fname(uri: string): string {
     const prefix = "file://"
@@ -60,6 +63,28 @@ function uri_to_fname(uri: string): string {
         console.error(`expected URI prefix for '${uri}'`)
     }
     return uri.slice(prefix.length)
+}
+
+// helpful: https://stackoverflow.com/a/54369605
+function UTF16CodeUnitOffsetToCharOffset(utf16CodeUnitOffset: number, content: string): number {
+    if (utf16CodeUnitOffset > content.length) {
+        throw new Error(
+            `Could not convert UTF-16 code unit offset ${utf16CodeUnitOffset} to char offset in string '${content}'`
+        )
+    }
+    return [...content.slice(0, utf16CodeUnitOffset)].length
+}
+
+function charOffsetToUTF16CodeUnitOffset(charOffset: number, content: string): number {
+    let utf16Offset = 0
+    let chars = [...content]
+    if (charOffset > chars.length) {
+        throw new Error(`Could not convert char offset ${charOffset} to UTF-16 code unit offset in string '${content}'`)
+    }
+    for (const char of [...content].slice(0, charOffset)) {
+        utf16Offset += char.length
+    }
+    return utf16Offset
 }
 
 export function activate(context: vscode.ExtensionContext) {
@@ -101,24 +126,47 @@ export function activate(context: vscode.ExtensionContext) {
             (editor) => editor.document.uri.toString() === uri.toString()
         )
         if (openEditor) {
-            ignoreEdits = true
-            for (const delta of edit.delta.delta) {
-                // TODO: make this nicer / use the vscode interface already
-                const range = new vscode.Range(
-                    new vscode.Position(delta.range.start.line, delta.range.start.character),
-                    new vscode.Position(delta.range.end.line, delta.range.end.character)
-                )
-                if (openEditor) {
-                    // Apply the edit if the document is open
-                    await openEditor.edit((editBuilder) => {
-                        editBuilder.replace(range, delta.replacement)
-                    })
-                    debug(`Edit applied to open document: ${uri.toString()}`)
-                } else {
-                    debug(`Document not open: ${uri.toString()}`)
-                }
+            try {
+                await mutex.runExclusive(async () => {
+                    ignoreEdits = true
+                    for (const delta of edit.delta.delta) {
+                        // TODO: make this nicer / use the vscode interface already
+                        console.log(delta)
+                        let startLineText = openEditor.document.lineAt(delta.range.start.line).text
+                        let endLineText
+                        if (delta.range.start.line == delta.range.end.line) {
+                            endLineText = startLineText
+                        } else {
+                            endLineText = openEditor.document.lineAt(delta.range.end.line).text
+                        }
+                        const range = new vscode.Range(
+                            new vscode.Position(
+                                delta.range.start.line,
+                                charOffsetToUTF16CodeUnitOffset(delta.range.start.character, startLineText)
+                            ),
+                            new vscode.Position(
+                                delta.range.end.line,
+                                charOffsetToUTF16CodeUnitOffset(delta.range.end.character, endLineText)
+                            )
+                        )
+                        console.log(range)
+                        // TODO: this logic seems redundant and `else` will never happen. Fix later.
+                        if (openEditor) {
+                            // Apply the edit if the document is open
+                            await openEditor.edit((editBuilder) => {
+                                editBuilder.replace(range, delta.replacement)
+                            })
+                            debug(`Edit applied to open document: ${uri.toString()}`)
+                        } else {
+                            debug(`Document not open: ${uri.toString()}`)
+                        }
+                    }
+                    ignoreEdits = false
+                })
+            } catch (e) {
+                debug("promise failed")
+                console.error(e)
             }
-            ignoreEdits = false
         }
     })
 
@@ -159,19 +207,46 @@ export function activate(context: vscode.ExtensionContext) {
         // debug("event.document.isDirty: " + event.document.isDirty)
         // if (event.contentChanges.length == 0) { console.log(event.document) }
         for (const change of event.contentChanges) {
-            let delta = {
-                range: change.range,
-                replacement: change.text,
-            }
-            let revDelta: RevisionedDelta = {delta: [delta], revision: revision.daemon}
-            let uri = event.document.uri.toString()
-            let theEdit: Edit = {uri, delta: revDelta}
-            // console.log(edit)
-            // interestingly this seems to block when it can't send
-            connection.sendNotification(edit, theEdit)
-            revision.editor += 1
-            debug(`sent edit for dR ${revision.daemon} (having edR ${revision.editor})`)
-            console.log(revisions)
+            mutex
+                .runExclusive(() => {
+                    console.log(change)
+                    let startLineText = event.document.lineAt(change.range.start.line).text
+                    let endLineText
+                    if (change.range.start.line == change.range.end.line) {
+                        endLineText = startLineText
+                    } else {
+                        endLineText = event.document.lineAt(change.range.end.line).text
+                    }
+                    const range = new vscode.Range(
+                        new vscode.Position(
+                            change.range.start.line,
+                            UTF16CodeUnitOffsetToCharOffset(change.range.start.character, startLineText)
+                        ),
+                        new vscode.Position(
+                            change.range.end.line,
+                            UTF16CodeUnitOffsetToCharOffset(change.range.end.character, endLineText)
+                        )
+                    )
+                    console.log(change.range)
+                    console.log(range)
+                    let delta = {
+                        range,
+                        replacement: change.text,
+                    }
+                    let revDelta: RevisionedDelta = {delta: [delta], revision: revision.daemon}
+                    let uri = event.document.uri.toString()
+                    let theEdit: Edit = {uri, delta: revDelta}
+                    console.log(theEdit)
+                    // interestingly this seems to block when it can't send
+                    connection.sendNotification(edit, theEdit)
+                    revision.editor += 1
+                    debug(`sent edit for dR ${revision.daemon} (having edR ${revision.editor})`)
+                    console.log(revisions)
+                })
+                .catch((e: Error) => {
+                    debug("promise failed!")
+                    console.error(e)
+                })
         }
     })
 
