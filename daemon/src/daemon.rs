@@ -611,12 +611,14 @@ impl DocumentActor {
     async fn send_to_editor_client(&mut self, editor_id: &EditorId, message: EditorProtocolObject) {
         if let Some(handle) = self.editor_clients.get_mut(editor_id) {
             if handle.send(message).await.is_err() {
-                warn!(
-                    "Sending to editor client failed: We don't have a client registered with id #{editor_id:?}"
+                info!(
+                    "Sending to editor #{editor_id:?} failed. It probably has disconnected, removing it from the list of known editor clients."
                 );
                 // Remove this client.
                 self.editor_clients.remove(editor_id);
             }
+        } else {
+            warn!("Sending to editor client failed: We don't have a client registered with id #{editor_id:?}");
         }
     }
 
