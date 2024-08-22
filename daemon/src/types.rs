@@ -252,7 +252,7 @@ pub enum EditorProtocolMessageToEditor {
         delta: RevisionedEditorTextDelta,
     },
     Cursor {
-        cursor_id: CursorId,
+        userid: CursorId,
         name: Option<String>,
         uri: DocumentUri,
         ranges: Vec<Range>,

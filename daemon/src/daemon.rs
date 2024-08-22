@@ -575,7 +575,7 @@ impl DocumentActor {
         } in cursor_states
         {
             let message = EditorProtocolObject::Request(EditorProtocolMessageToEditor::Cursor {
-                cursor_id,
+                userid: cursor_id,
                 name,
                 uri: format!("file://{}", self.absolute_path_for_file_path(&file_path)),
                 ranges,
