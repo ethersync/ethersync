@@ -1,8 +1,8 @@
-# 🇳 Neovim Plugin
+# Neovim Plugin
 
-> ❗ Important  
+> ❗ **Important**
 >
-> **The plugin currently requires Neovim v0.10.**
+> The plugin currently requires Neovim v0.10.
 
 Again, we have several options of how to install the Neovim plugin:
 
@@ -35,7 +35,7 @@ nix run github:ethersync/ethersync#neovim
 
 If you're not using a plugin manager, here's a "quick and dirty" way to install the plugin:
 
-If you don't already have the repo (i.e you choose a packaged option above):
+If you don't already have the repo (because you chose a _packaged_ option above):
 
 ```bash
 git clone git@github.com:ethersync/ethersync

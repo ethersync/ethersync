@@ -41,6 +41,6 @@ nvim file
 
 If everything went correctly, you should see `Ethersync activated!` in Neovim's messages and `Client connection established.` in the logs of the daemon.
 
-> 💡 Tip  
+> 💡 **Tip**
 >
-> If that doesn't work, make sure that there's an `.ethersync` directory in the `playground`, and that the `ethersync` command is in the PATH in the terminal where you run Neovim.
+> If that doesn't work, make sure that there's an `.ethersync` directory in the `playground`, and that the `ethersync` command is in the `PATH` in the terminal where you run Neovim.

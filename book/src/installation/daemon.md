@@ -8,7 +8,7 @@ Install the [ethersync-git](https://aur.archlinux.org/packages/ethersync-git) pa
 
 ## Nix
 
-This repository provides a Nix flake. You can put it in your PATH like this:
+This repository provides a Nix flake. You can put it in your `PATH` like this:
 
 ```bash
 nix shell github:ethersync/ethersync
@@ -16,7 +16,7 @@ nix shell github:ethersync/ethersync
 
 If you want to install it permanently, you probably know what your favorite approach is.
 
-> 💡 Tip:  
+> 💡 **Tip**
 >
 > You can use the Nix package on any Linux or MacOS system!
 
@@ -32,7 +32,7 @@ cargo build --release
 
 This should download all dependencies, and successfully compile the project.
 
-For the next steps to succeed you need to make sure that the resulting `ethersync` binary is in your shell PATH.
+For the next steps to succeed you need to make sure that the resulting `ethersync` binary is in your shell `PATH`.
 One option to do this temporarily is to run this command in the terminal:
 
 ```bash
