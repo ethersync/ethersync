@@ -1,6 +1,6 @@
 ---
-status: draft
-date: 2024-08-20
+status: accepted
+date: 2024-08-22
 ---
 # How to prevent unauthorized access?
 
@@ -8,12 +8,18 @@ date: 2024-08-20
 
 In many situations, we don't want shared directories to be publicly readable & writable. How can we make sure that only the people we want can get access?
 
-Our "attack surface" for an Ethersync daemon is connections from the Internet. We explicitly don't guard against misbehaving editor plugins, as they'd run on the local machine anyway.
+Our "attack surface" for an Ethersync daemon is connections from the Internet. We explicitly don't guard against misbehaving editor plugins, as they'd run on the local machine anyway (and as such could do damage more directly than going through the deamon, which is assumed to only run with user privileges).
 
 We need two things:
 
-- **Transport encryption**, so that nobody can spy on ongoing connections.
-- An **authorization mechanism**, so that only certain people can start speaking the Automerge sync protocol with existing peers. Exactly those people should be able to read/change/delete all content in the shared directory.
+* **Transport encryption**, so that nobody can spy on ongoing connections.
+* An **authorization mechanism**, so that only certain people can start speaking the Automerge sync protocol with existing peers. Exactly those people should be able to read/change/delete all content in the shared directory.
+
+The session lifetime is up to the users and can, in the ["note-taking use-case"](https://ethersync.github.io/ethersync/use-cases/shared-notes.html)
+be for an indefinite amount of time.
+A scenario where we're probably most vulnerable is when someone is leaving a "cloud peer" open and accessible by everyone.
+We probably won't be able to solve this problem ourselves, but users might need to add other solutions, e.g. a VPN,
+if they want to limit the risk.
 
 ## Decision Drivers
 
@@ -49,7 +55,7 @@ Additional properties of our chosen solution:
 - libp2p automatically gives us [*authentication* of peers through the Peer ID](https://docs.libp2p.io/concepts/security/security-considerations/#identity-and-trust)
     - Like with Signal, you have to verify the ID via an already trusted channel.
     - It's part of the multiaddr, so you can be sure there's no person-in-the-middle when given the multiaddr over a trusted channel.
-- Access is irrevokable, peers get the entire document history on first sync.
+- Access is irrevocable, peers get the entire document history on first sync.
 - In order to kick someone out (prevent syncs from that point on), others have to agree on a new shared password.
 
 ## Pros and Cons of the Options
@@ -94,11 +100,13 @@ This could use the [libp2p_allow_block_list](https://docs.rs/libp2p-allow-block-
 
 #### (for libp2p) private network with pre-shared key
 
-This approach is specified [here](https://github.com/libp2p/specs/blob/master/pnet/Private-Networks-PSK-V1.md), with a code snippet demonstrating its use [here](https://github.com/libp2p/rust-libp2p/discussions/5135#discussioncomment-8308069).
+This approach is specified [here](https://github.com/libp2p/specs/blob/master/pnet/Private-Networks-PSK-V1.md),
+with a code snippet demonstrating its use [here](https://github.com/libp2p/rust-libp2p/discussions/5135#discussioncomment-8308069).
 
 * Good, because it requires very little code
 * Good, because it is simple to give access to a group of people (communicating the server's multiaddr + the secret over an established confidential channel)
 * Bad, because we might not be able to use this approach with relays (to be investigated)
+* Bad, because the PSK might be susceptible to brute-force attacks (especially when a session is running for longer)
 
 #### (for all transports) password-authenticated key agreement
 
