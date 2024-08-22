@@ -241,9 +241,9 @@ impl DocumentActor {
             DocMessage::CloseEditorConnection(editor_id) => {
                 self.editor_clients.remove(&editor_id);
 
-                let userid = self.cursor_id(editor_id);
-                debug!("Deleting cursor {userid}");
-                self.maybe_delete_cursor_position(&userid).await;
+                let cursor_id = self.cursor_id(editor_id);
+                debug!("Deleting cursor {cursor_id}");
+                self.maybe_delete_cursor_position(&cursor_id).await;
             }
         }
     }
@@ -385,11 +385,11 @@ impl DocumentActor {
                 let file_path = self
                     .file_path_for_uri(&uri)
                     .map_err(anyhow_err_to_protocol_err)?;
-                let userid = self.cursor_id(editor_id);
-                self.store_cursor_position(&userid, file_path.clone(), ranges.clone());
+                let cursor_id = self.cursor_id(editor_id);
+                self.store_cursor_position(&cursor_id, file_path.clone(), ranges.clone());
 
                 let cursor_state = CursorState {
-                    userid,
+                    cursor_id,
                     // TODO: "you" is a bit lazy, should we also look at $USER here?
                     name: Some("you".to_string()),
                     file_path,
@@ -570,14 +570,14 @@ impl DocumentActor {
         cursor_states: Vec<CursorState>,
     ) {
         for CursorState {
-            userid,
+            cursor_id,
             name,
             file_path,
             ranges,
         } in cursor_states
         {
             let message = EditorProtocolObject::Request(EditorProtocolMessageToEditor::Cursor {
-                userid,
+                cursor_id,
                 name,
                 uri: format!("file://{}", self.absolute_path_for_file_path(&file_path)),
                 ranges,
@@ -741,20 +741,20 @@ impl DocumentActor {
         .await;
     }
 
-    fn store_cursor_position(&mut self, userid: &str, file_path: String, ranges: Vec<Range>) {
+    fn store_cursor_position(&mut self, cursor_id: &str, file_path: String, ranges: Vec<Range>) {
         self.crdt_doc
-            .store_cursor_position(userid, file_path, ranges);
+            .store_cursor_position(cursor_id, file_path, ranges);
         let _ = self.doc_changed_ping_tx.send(());
     }
 
-    async fn maybe_delete_cursor_position(&mut self, userid: &str) {
-        self.crdt_doc.maybe_delete_cursor_position(userid);
+    async fn maybe_delete_cursor_position(&mut self, cursor_id: &str) {
+        self.crdt_doc.maybe_delete_cursor_position(cursor_id);
         let _ = self.doc_changed_ping_tx.send(());
 
         // Send cursor delete to local peers.
         if let Some(file_path) = self.crdt_doc.files().first() {
             let cursor_states = vec![CursorState {
-                userid: userid.to_string(),
+                cursor_id: cursor_id.to_string(),
                 name: None,
                 file_path: file_path.to_string(),
                 ranges: vec![],

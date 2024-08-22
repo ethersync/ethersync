@@ -88,11 +88,11 @@ impl FileTextDelta {
 }
 
 type DocumentUri = String;
-type UserId = String;
+type CursorId = String;
 
 #[derive(Serialize, Deserialize)]
 pub struct CursorState {
-    pub userid: UserId,
+    pub cursor_id: CursorId,
     pub name: Option<String>,
     pub file_path: String,
     pub ranges: Vec<Range>,
@@ -252,7 +252,7 @@ pub enum EditorProtocolMessageToEditor {
         delta: RevisionedEditorTextDelta,
     },
     Cursor {
-        userid: UserId,
+        cursor_id: CursorId,
         name: Option<String>,
         uri: DocumentUri,
         ranges: Vec<Range>,
