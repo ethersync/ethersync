@@ -538,10 +538,8 @@ impl DocumentActor {
     ) {
         let editor_ids: Vec<EditorId> = self.ot_servers.keys().cloned().collect();
         for editor_id in editor_ids {
-            if let Some(exclude_id) = exclude_id {
-                if editor_id == exclude_id {
-                    continue;
-                }
+            if Some(editor_id) == exclude_id {
+                continue;
             }
 
             for FileTextDelta {
