@@ -240,6 +240,7 @@ impl DocumentActor {
             }
             DocMessage::CloseEditorConnection(editor_id) => {
                 self.editor_clients.remove(&editor_id);
+                self.ot_servers.remove(&editor_id);
 
                 let cursor_id = self.cursor_id(editor_id);
                 debug!("Deleting cursor {cursor_id}");
