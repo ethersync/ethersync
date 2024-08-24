@@ -11,6 +11,6 @@
       '';
     };
   };
-in writeShellScriptBin "nvim" ''
+in writeShellScriptBin "neovim-with-ethersync" ''
   PATH=${lib.makeBinPath [ethersync]}:$PATH ${nvim-custom}/bin/nvim $@
 ''
