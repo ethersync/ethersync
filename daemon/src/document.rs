@@ -24,12 +24,12 @@ pub struct Document {
 }
 
 impl Document {
-    pub fn new(init: bool) -> Self {
+    pub fn new(init_structure: bool) -> Self {
         let mut s = Self {
             doc: AutoCommit::default(),
         };
 
-        if init {
+        if init_structure {
             s.initialize_top_level_maps();
         }
 
