@@ -1,5 +1,5 @@
 {rustPlatform, lib, stdenv, darwin, ...}: rustPlatform.buildRustPackage rec {
-  # when upstreaming this to nixpkgs, 
+  # when upstreaming this to nixpkgs,
   # - change the version to the version you plan to pin
   # - replace src with a fetchFromGitHub derivation that fetches ethersync at the specified, released version
   # - replace the cargoLock.lockFile attribute with the cargoHash attribute

@@ -1,4 +1,4 @@
-{neovim, writeShellScriptBin, lib, ethersync, nvim-ethersync, ...}: let 
+{neovim, writeShellScriptBin, lib, ethersync, nvim-ethersync, ...}: let
   nvim-custom = neovim.override {
     configure = {
       packages.plugins.start = [ nvim-ethersync ];
