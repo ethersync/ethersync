@@ -69,7 +69,7 @@ jobs:
         - name: Evaluate nix code
           run: nix -Lv flake check
         - name: build neovim with ethersync
-          run: nix -Lv build .#neovim-with-ethersync
+          run: nix -Lv build .#neovim
         - run: result/bin/nvim --version
   check_formatting:
     name: Check Rust formatting
