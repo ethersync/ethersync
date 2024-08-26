@@ -199,10 +199,11 @@ impl Document {
     }
 
     pub fn files(&self) -> Vec<String> {
-        let file_map = self
-            .top_level_map_obj("files")
-            .expect("Failed to get files store from document");
-        self.doc.keys(file_map).collect()
+        if let Ok(file_map) = self.top_level_map_obj("files") {
+            self.doc.keys(file_map).collect()
+        } else {
+            vec![]
+        }
     }
 
     pub fn file_exists(&self, file_path: &str) -> bool {
