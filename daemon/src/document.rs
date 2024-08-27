@@ -69,7 +69,7 @@ impl Document {
         self.doc.sync().generate_sync_message(peer_state)
     }
 
-    pub fn apply_delta_to_doc(&mut self, delta: &EditorTextDelta, file_path: &str) {
+    pub fn apply_delta_to_doc(&mut self, delta: &TextDelta, file_path: &str) {
         let text_obj = self
             .text_obj(file_path)
             .expect("Couldn't get automerge text object, so not able to modify it");
@@ -77,7 +77,9 @@ impl Document {
         let text = self
             .current_file_content(file_path)
             .expect("Should have initialized text before applying delta to it");
-        for op in &delta.0 {
+        let ed_delta = EditorTextDelta::from_delta(delta.clone(), &text);
+
+        for op in &ed_delta.0 {
             let (start, length) = op.range.as_relative(&text);
             self.doc
                 .splice_text(
@@ -146,9 +148,8 @@ impl Document {
             }
 
             let text_delta: TextDelta = chunks.into();
-            let editor_delta = EditorTextDelta::from_delta(text_delta, &current_text);
-            warn!("File {file_path} has changed while the daemon was offline. Applying delta: {editor_delta:?}");
-            self.apply_delta_to_doc(&editor_delta, file_path);
+            warn!("File {file_path} has changed while the daemon was offline. Applying delta: {text_delta:?}");
+            self.apply_delta_to_doc(&text_delta, file_path);
         } else {
             // The file doesn't exist in the CRDT yet, so we need to initialize it.
             info!("File {file_path} doesn't exist in CRDT yet. Initializing it.");
@@ -210,16 +211,21 @@ impl Document {
         self.text_obj(file_path).is_ok()
     }
 
-    pub fn store_cursor_position(&mut self, userid: &str, file_path: String, ranges: Vec<Range>) {
+    pub fn store_cursor_position(
+        &mut self,
+        cursor_id: &str,
+        file_path: String,
+        ranges: Vec<Range>,
+    ) {
         let state_map = self
             .top_level_map_obj("states")
             .expect("Failed to get states Map object");
         let user_obj = self
             .doc
-            .put_object(state_map, userid, ObjType::Text)
+            .put_object(state_map, cursor_id, ObjType::Text)
             .expect("Failed to initialize user state Map object in Automerge document");
         let cursor_state = CursorState {
-            userid: userid.to_owned(),
+            cursor_id: cursor_id.to_owned(),
             name: env::var("USER").ok(),
             file_path,
             ranges,
@@ -228,14 +234,14 @@ impl Document {
         self.doc
             .splice_text(user_obj, 0, 0, &data)
             .expect("Failed to splice text into Automerge text object");
-        debug!("Stored user state for '{userid}': {data}");
+        debug!("Stored user state for '{cursor_id}': {data}");
     }
 
-    pub fn maybe_delete_cursor_position(&mut self, userid: &str) {
+    pub fn maybe_delete_cursor_position(&mut self, cursor_id: &str) {
         // We try to set an empty cursor position, but in case we don't have any file in the
         // project its not a big deal if it stays.
         if let Some(file_path) = self.get_valid_file_path() {
-            self.store_cursor_position(userid, file_path, vec![]);
+            self.store_cursor_position(cursor_id, file_path, vec![]);
         }
     }
 
@@ -292,30 +298,30 @@ mod tests {
             .expect_err("File shouldn't exist");
     }
 
-    fn apply_delta_to_doc_works(initial: &str, ed_delta: &EditorTextDelta, expected: &str) {
+    fn apply_delta_to_doc_works(initial: &str, delta: &TextDelta, expected: &str) {
         let mut document = Document::default();
         document.initialize_text(initial, "text");
-        document.apply_delta_to_doc(ed_delta, "text");
+        document.apply_delta_to_doc(delta, "text");
 
         document.assert_file_content("text", expected);
     }
 
     #[test]
     fn can_apply_delta_basic_insertion() {
-        let ed_delta = ed_delta_single((0, 0), (0, 0), "foobar");
-        apply_delta_to_doc_works("", &ed_delta, "foobar");
+        let delta = insert(0, "foobar");
+        apply_delta_to_doc_works("", &delta, "foobar");
     }
 
     #[test]
     fn can_apply_delta_basic_deletion() {
-        let ed_delta = ed_delta_single((0, 3), (0, 6), "");
-        apply_delta_to_doc_works("foobar", &ed_delta, "foo");
+        let delta = delete(3, 3);
+        apply_delta_to_doc_works("foobar", &delta, "foo");
     }
 
     #[test]
     fn can_apply_delta_basic_replacement() {
-        let ed_delta = ed_delta_single((0, 1), (0, 3), "uu");
-        apply_delta_to_doc_works("foobar", &ed_delta, "fuubar");
+        let delta = replace(1, 2, "uu");
+        apply_delta_to_doc_works("foobar", &delta, "fuubar");
     }
 
     #[test]
@@ -332,21 +338,9 @@ mod tests {
 
         apply_delta_to_doc_works(
             initial_text,
-            &EditorTextDelta::from_delta(delta, initial_text),
+            &delta,
             "To me or to you, that is the question",
         );
-    }
-
-    #[test]
-    fn can_apply_delta_multiple_ops_bug() {
-        let content = "xeins\nzwei\ndrei\n";
-
-        let ed_delta = EditorTextDelta(vec![
-            replace_ed((1, 0), (1, 0), "xzwei\nx"),
-            replace_ed((1, 0), (2, 0), ""),
-        ]);
-
-        apply_delta_to_doc_works(content, &ed_delta, "xeins\nxzwei\nxdrei\n");
     }
 
     #[test]
@@ -355,8 +349,8 @@ mod tests {
         document.initialize_text("", "text");
         document.initialize_text("", "text2");
 
-        let ed_delta = ed_delta_single((0, 0), (0, 0), "foobar");
-        document.apply_delta_to_doc(&ed_delta, "text");
+        let delta = insert(0, "foobar");
+        document.apply_delta_to_doc(&delta, "text");
 
         document.assert_file_content("text", "foobar");
         document.assert_file_content("text2", "");

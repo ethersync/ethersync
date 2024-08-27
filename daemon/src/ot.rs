@@ -85,14 +85,14 @@ impl OTServer {
     }
 
     /// Called when the CRDT world makes a change to the document.
-    pub fn apply_crdt_change(&mut self, delta: TextDelta) -> RevisionedEditorTextDelta {
+    pub fn apply_crdt_change(&mut self, delta: &TextDelta) -> RevisionedEditorTextDelta {
         // We can apply the change immediately.
         self.operations.push(delta.clone().into());
         self.editor_queue.push(delta.clone().into());
         self.daemon_revision += 1;
         // Use "previous" content to transform into editor text delta.
         let editor_delta = EditorTextDelta::from_delta(delta.clone(), &self.current_content);
-        self.current_content = Self::force_apply(&self.current_content, delta.into());
+        self.current_content = Self::force_apply(&self.current_content, delta.clone().into());
 
         // We assume that the editor is up-to-date, and send the operation to it.
         // If it can't accept it, we will transform and send it later.
@@ -266,7 +266,7 @@ mod tests {
         fn routes_operations_through_server() {
             let mut ot_server: OTServer = OTServer::new("hello".into());
 
-            let to_editor = ot_server.apply_crdt_change(insert(1, "x"));
+            let to_editor = ot_server.apply_crdt_change(&insert(1, "x"));
             let expected = EditorTextDelta::from_delta(insert(1, "x"), "hello");
             assert_eq!(to_editor, rev_ed_delta(0, expected));
 
@@ -282,7 +282,7 @@ mod tests {
             );
             assert_eq!(ot_server.current_content(), "hxeyllo");
 
-            let to_editor = ot_server.apply_crdt_change(insert(3, "z"));
+            let to_editor = ot_server.apply_crdt_change(&insert(3, "z"));
             let expected = EditorTextDelta::from_delta(insert(3, "z"), "TODO");
             assert_eq!(to_editor, rev_ed_delta(1, expected));
 
@@ -316,8 +316,8 @@ mod tests {
             assert_eq!(ot_server.editor_queue, vec![]);
             assert_eq!(ot_server.last_confirmed_editor_content, "hzlo!");
 
-            let _to_editor = ot_server.apply_crdt_change(insert(1, "o"));
-            let _to_editor = ot_server.apply_crdt_change(insert(2, "\n"));
+            let _to_editor = ot_server.apply_crdt_change(&insert(1, "o"));
+            let _to_editor = ot_server.apply_crdt_change(&insert(2, "\n"));
             let (_to_crdt, _to_editor) =
                 ot_server.apply_editor_operation(rev_ed_delta_single(2, (0, 5), (0, 5), "\nblubb"));
 
@@ -329,7 +329,7 @@ mod tests {
         #[test]
         fn can_do_newline_stuff() {
             let mut ot_server: OTServer = OTServer::default();
-            ot_server.apply_crdt_change(insert(0, "Let's say\nthis could be\na poem."));
+            ot_server.apply_crdt_change(&insert(0, "Let's say\nthis could be\na poem."));
             ot_server.apply_editor_operation(rev_ed_delta_single(
                 ot_server.daemon_revision,
                 (0, 0),
@@ -345,7 +345,7 @@ mod tests {
             // both do a replacemenet at the "same time", but not overlapping.
 
             // Note: using len because all is ascii and .chars().count() is more noise.
-            ot_server.apply_crdt_change(replace(
+            ot_server.apply_crdt_change(&replace(
                 "THE POEM\nLet's say\n".len(), // skip
                 "this could".len(),            // replace
                 "I want to",                   // by
@@ -378,8 +378,8 @@ mod tests {
             assert_eq!(to_crdt_2, delete(12, 6));
 
             let mut ot_server2: OTServer = OTServer::new(content.to_string());
-            let to_2nd_editor = ot_server2.apply_crdt_change(to_crdt_1);
-            let to_2nd_editor_2 = ot_server2.apply_crdt_change(to_crdt_2);
+            let to_2nd_editor = ot_server2.apply_crdt_change(&to_crdt_1);
+            let to_2nd_editor_2 = ot_server2.apply_crdt_change(&to_crdt_2);
 
             assert_eq!(
                 to_2nd_editor,
@@ -403,7 +403,7 @@ mod tests {
         #[test]
         fn crdt_change_increases_revision() {
             let mut ot_server: OTServer = OTServer::new("foobar".to_string());
-            ot_server.apply_crdt_change(dummy_insert(2));
+            ot_server.apply_crdt_change(&dummy_insert(2));
             assert_eq!(ot_server.daemon_revision, 1);
             assert_eq!(ot_server.editor_revision, 0);
         }
@@ -419,7 +419,7 @@ mod tests {
         #[test]
         fn crdt_change_tracks_in_queue() {
             let mut ot_server: OTServer = OTServer::new("foobar".to_string());
-            ot_server.apply_crdt_change(dummy_insert(2));
+            ot_server.apply_crdt_change(&dummy_insert(2));
             assert_eq!(ot_server.editor_queue, vec![dummy_insert(2).into()]);
         }
 
@@ -427,9 +427,9 @@ mod tests {
         fn editor_operation_reduces_editor_queue() {
             let mut ot_server: OTServer = OTServer::new("xx".to_string());
 
-            ot_server.apply_crdt_change(dummy_insert(2));
-            ot_server.apply_crdt_change(dummy_insert(5));
-            ot_server.apply_crdt_change(dummy_insert(8));
+            ot_server.apply_crdt_change(&dummy_insert(2));
+            ot_server.apply_crdt_change(&dummy_insert(5));
+            ot_server.apply_crdt_change(&dummy_insert(8));
             assert_eq!(ot_server.editor_queue.len(), 3);
 
             ot_server.apply_editor_operation(rev_ed_delta_single(1, (0, 2), (0, 2), "foo"));

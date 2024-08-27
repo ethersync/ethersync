@@ -5,8 +5,8 @@ use crate::peer;
 use crate::sandbox;
 use crate::types::{
     CursorState, EditorProtocolMessageError, EditorProtocolMessageFromEditor,
-    EditorProtocolMessageToEditor, EditorProtocolObject, EditorTextDelta, FileTextDelta,
-    JSONRPCFromEditor, JSONRPCResponse, PatchEffect, Range, RevisionedEditorTextDelta, TextDelta,
+    EditorProtocolMessageToEditor, EditorProtocolObject, FileTextDelta, JSONRPCFromEditor,
+    JSONRPCResponse, PatchEffect, Range, RevisionedEditorTextDelta, TextDelta,
 };
 use anyhow::{bail, Context, Result};
 use automerge::{
@@ -60,8 +60,8 @@ impl fmt::Debug for DocMessage {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let repr = match self {
             DocMessage::GetContent { .. } => "get content".to_string(),
-            DocMessage::FromEditor(EditorId(i), _) => {
-                format!("open/close/edit/... message from editor #{i}")
+            DocMessage::FromEditor(id, _) => {
+                format!("open/close/edit/... message from editor #{id}")
             }
             DocMessage::RemoveFile { .. } => "delete file".to_string(),
             DocMessage::Persist => "persist".to_string(),
@@ -69,7 +69,7 @@ impl fmt::Debug for DocMessage {
             DocMessage::ReceiveSyncMessage { .. } => "<automerge internal sync rcv>".to_string(),
             DocMessage::GenerateSyncMessage { .. } => "<automerge internal sync gen>".to_string(),
             DocMessage::NewEditorConnection(..) => "editor connected".to_string(),
-            DocMessage::CloseEditorConnection(EditorId(i)) => format!("editor #{i} disconnected"),
+            DocMessage::CloseEditorConnection(id) => format!("editor #{id} disconnected"),
         };
         write!(f, "{repr}")
     }
@@ -86,8 +86,8 @@ pub struct DocumentActor {
     doc_message_rx: mpsc::Receiver<DocMessage>,
     doc_changed_ping_tx: DocChangedSender,
     editor_clients: HashMap<EditorId, EditorHandle>,
-    /// If we have an `ot_server` for a given file, it means that editor has ownership.
-    ot_servers: HashMap<String, OTServer>,
+    /// There's one OTServer per buffer. Same file in a different editor is a different buffer.
+    ot_servers: HashMap<EditorId, HashMap<String, OTServer>>,
     /// The Document is the main I/O managed resource of this actor.
     crdt_doc: Document,
     base_dir: PathBuf,
@@ -143,6 +143,17 @@ impl DocumentActor {
         s
     }
 
+    /// If any editor has an `ot_server` for a given file,
+    /// it means that the daemon doesn't have ownership.
+    fn owns(&mut self, file_path: &str) -> bool {
+        for (_, ot_servers) in self.ot_servers.iter() {
+            if ot_servers.get(file_path).is_some() {
+                return false;
+            }
+        }
+        true
+    }
+
     async fn handle_message(&mut self, message: DocMessage) {
         debug!("Handling doc message: {message:?}");
         match message {
@@ -153,16 +164,7 @@ impl DocumentActor {
             }
             DocMessage::RandomEdit => {
                 let delta = self.random_delta();
-                let text = self
-                    .current_file_content(TEST_FILE_PATH)
-                    .expect("Should have initialized text before performing random edit");
-                let ed_delta = EditorTextDelta::from_delta(delta.clone(), &text);
-                self.apply_delta_to_doc(&ed_delta, TEST_FILE_PATH);
-                self.maybe_process_crdt_file_deltas_in_ot(vec![FileTextDelta::new(
-                    TEST_FILE_PATH.to_string(),
-                    delta,
-                )])
-                .await;
+                self.apply_delta_to_doc(None, &delta, TEST_FILE_PATH).await;
             }
             DocMessage::FromEditor(editor_id, message) => {
                 self.handle_message_from_editor(editor_id, message).await;
@@ -219,8 +221,10 @@ impl DocumentActor {
                 }
 
                 self.maybe_write_files_changed_in_file_deltas(&file_deltas);
-                self.maybe_process_crdt_file_deltas_in_ot(file_deltas).await;
-                self.process_cursor_states(cursor_states).await;
+                self.process_crdt_file_deltas_in_ot_servers(None, file_deltas)
+                    .await;
+                self.send_cursor_states_to_editors(None, cursor_states)
+                    .await;
 
                 if response_tx.send(peer_state).is_err() {
                     warn!("Failed to send peer state in response to ReceiveSyncMessage.");
@@ -237,15 +241,15 @@ impl DocumentActor {
                 }
             }
             DocMessage::NewEditorConnection(id, editor_handle) => {
-                // TODO: if we use more than one ID, we should now easily have multiple editors.
-                // Modulo managing the OT server for each of them per file...
                 self.editor_clients.insert(id, editor_handle);
             }
             DocMessage::CloseEditorConnection(editor_id) => {
                 self.editor_clients.remove(&editor_id);
+                self.ot_servers.remove(&editor_id);
 
-                let userid = self.crdt_doc.actor_id();
-                self.maybe_delete_cursor_position(&userid);
+                let cursor_id = self.cursor_id(editor_id);
+                debug!("Deleting cursor {cursor_id}");
+                self.maybe_delete_cursor_position(&cursor_id).await;
             }
         }
     }
@@ -275,6 +279,7 @@ impl DocumentActor {
 
     async fn react_to_message_from_editor(
         &mut self,
+        editor_id: EditorId,
         message: EditorProtocolMessageFromEditor,
     ) -> Result<(), EditorProtocolMessageError> {
         fn anyhow_err_to_protocol_err(error: anyhow::Error) -> EditorProtocolMessageError {
@@ -334,7 +339,7 @@ impl DocumentActor {
                     });
                 }
 
-                self.open_file_path(file_path);
+                self.open_file_path(editor_id, file_path);
             }
             EditorProtocolMessageFromEditor::Edit {
                 delta: rev_delta,
@@ -344,7 +349,13 @@ impl DocumentActor {
                 let file_path = self
                     .file_path_for_uri(&uri)
                     .map_err(anyhow_err_to_protocol_err)?;
-                if self.ot_servers.get_mut(&file_path).is_none() {
+                if self
+                    .ot_servers
+                    .get_mut(&editor_id)
+                    .expect("No entry for editor ID found")
+                    .get_mut(&file_path)
+                    .is_none()
+                {
                     return Err(EditorProtocolMessageError {
                         code: -1,
                         message: "File not found".into(),
@@ -353,40 +364,59 @@ impl DocumentActor {
                         ),
                     });
                 }
-                let (editor_delta_for_crdt, rev_deltas_for_editor) =
-                    self.apply_delta_to_ot(rev_delta, &file_path);
+                let (delta_for_crdt, rev_deltas_for_editor) =
+                    self.apply_delta_to_ot(&editor_id, rev_delta, &file_path);
 
-                self.apply_delta_to_doc(&editor_delta_for_crdt, &file_path);
-                self.send_deltas_to_editor(rev_deltas_for_editor, &file_path)
+                self.apply_delta_to_doc(Some(editor_id), &delta_for_crdt, &file_path)
                     .await;
+
+                for rev_delta_for_editor in rev_deltas_for_editor {
+                    self.send_to_editor(&editor_id, rev_delta_for_editor, &file_path)
+                        .await;
+                }
             }
             EditorProtocolMessageFromEditor::Close { uri } => {
                 let file_path = self
                     .file_path_for_uri(&uri)
                     .map_err(anyhow_err_to_protocol_err)?;
                 debug!("Got a 'close' message for {file_path}");
-                self.ot_servers.remove(&file_path);
+                self.ot_servers
+                    .get_mut(&editor_id)
+                    .expect("Could not get OTServers for Editor ID")
+                    .remove(&file_path);
 
-                // TODO: As soon as we support multiple editor connections, only do this if no
-                // editor is connected anymore.
                 self.maybe_write_file(&file_path);
             }
             EditorProtocolMessageFromEditor::Cursor { uri, ranges } => {
                 let file_path = self
                     .file_path_for_uri(&uri)
                     .map_err(anyhow_err_to_protocol_err)?;
-                let userid = self.crdt_doc.actor_id();
-                self.store_cursor_position(&userid, file_path, ranges);
+                let cursor_id = self.cursor_id(editor_id);
+                self.store_cursor_position(&cursor_id, file_path.clone(), ranges.clone());
+
+                let cursor_state = CursorState {
+                    cursor_id,
+                    // TODO: "you" is a bit lazy, should we also look at $USER here?
+                    name: Some("you".to_string()),
+                    file_path,
+                    ranges,
+                };
+                self.send_cursor_states_to_editors(Some(editor_id), vec![cursor_state])
+                    .await;
             }
         }
         Ok(())
+    }
+
+    fn cursor_id(&self, editor_id: EditorId) -> String {
+        self.crdt_doc.actor_id() + "-" + editor_id.to_string().as_str()
     }
 
     async fn handle_message_from_editor(&mut self, editor_id: EditorId, message: String) {
         match JSONRPCFromEditor::from_jsonrpc(&message) {
             Ok(parsed_message) => match parsed_message {
                 JSONRPCFromEditor::Request { id, payload } => {
-                    let result = self.react_to_message_from_editor(payload).await;
+                    let result = self.react_to_message_from_editor(editor_id, payload).await;
                     let response = match result {
                         Err(error) => {
                             error!("Error for JSON-RPC request: {:?}", error);
@@ -407,7 +437,7 @@ impl DocumentActor {
                     .await;
                 }
                 JSONRPCFromEditor::Notification { payload } => {
-                    let _ = self.react_to_message_from_editor(payload).await;
+                    let _ = self.react_to_message_from_editor(editor_id, payload).await;
                 }
             },
             Err(e) => {
@@ -426,7 +456,7 @@ impl DocumentActor {
         }
     }
 
-    fn open_file_path(&mut self, file_path: String) {
+    fn open_file_path(&mut self, editor_id: EditorId, file_path: String) {
         let text = self.current_file_content(&file_path).unwrap_or_else(|_| {
             // The file doesn't exist yet - create it in the Automerge document.
             let text = String::new();
@@ -434,7 +464,11 @@ impl DocumentActor {
             text
         });
         let ot_server = OTServer::new(text);
-        self.ot_servers.insert(file_path, ot_server);
+
+        self.ot_servers
+            .entry(editor_id)
+            .or_default()
+            .insert(file_path, ot_server);
     }
 
     fn apply_sync_message_to_doc(
@@ -449,39 +483,28 @@ impl DocumentActor {
         patches
     }
 
-    async fn send_deltas_to_editor(
-        &mut self,
-        rev_deltas: Vec<RevisionedEditorTextDelta>,
-        file_path: &str,
-    ) {
-        for rev_delta in rev_deltas {
-            debug!("Sending RevDelta to socket: {:#?}", rev_delta);
-
-            self.send_to_editors(rev_delta, file_path).await;
-        }
-    }
-
-    fn get_ot_server(&mut self, file_path: &str) -> &mut OTServer {
+    fn get_ot_server(&mut self, editor_id: &EditorId, file_path: &str) -> &mut OTServer {
         // TODO: Once we are able to send responses to the client,
         // fail in a nicer way, if Edit for unknown OTServer (client messed up).
         let error_message = format!("Could not get OTServer for {file_path}.");
-        self.ot_servers.get_mut(file_path).expect(&error_message)
+        self.ot_servers
+            .get_mut(editor_id)
+            .expect("Could not get OT Server for EditorID")
+            .get_mut(file_path)
+            .expect(&error_message)
     }
 
     fn apply_delta_to_ot(
         &mut self,
+        editor_id: &EditorId,
         rev_editor_delta: RevisionedEditorTextDelta,
         file_path: &str,
-    ) -> (EditorTextDelta, Vec<RevisionedEditorTextDelta>) {
-        let text = self
-            .current_file_content(file_path)
-            .expect("Should have initialized text before performing edit");
-        let ot_server = self.get_ot_server(file_path);
+    ) -> (TextDelta, Vec<RevisionedEditorTextDelta>) {
+        let ot_server = self.get_ot_server(editor_id, file_path);
         let (delta_for_crdt, rev_deltas_for_editor) =
             ot_server.apply_editor_operation(rev_editor_delta);
 
-        let editor_delta_for_crdt = EditorTextDelta::from_delta(delta_for_crdt, &text);
-        (editor_delta_for_crdt, rev_deltas_for_editor)
+        (delta_for_crdt, rev_deltas_for_editor)
     }
 
     fn random_delta(&self) -> TextDelta {
@@ -514,75 +537,94 @@ impl DocumentActor {
         delta
     }
 
-    async fn maybe_process_crdt_file_deltas_in_ot(&mut self, file_deltas: Vec<FileTextDelta>) {
-        for FileTextDelta { file_path, delta } in file_deltas {
-            // Only process the CRDT delta, if editor has the file open.
-            if let Some(ot_server) = self.ot_servers.get_mut(&file_path) {
-                debug!("Applying incoming CRDT patch for {file_path}");
-                let rev_text_delta_for_editor = ot_server.apply_crdt_change(delta);
-                self.send_to_editors(rev_text_delta_for_editor, &file_path)
-                    .await;
+    async fn process_crdt_file_deltas_in_ot_servers(
+        &mut self,
+        exclude_id: Option<EditorId>,
+        file_deltas: Vec<FileTextDelta>,
+    ) {
+        let editor_ids: Vec<EditorId> = self.ot_servers.keys().cloned().collect();
+        for editor_id in editor_ids {
+            if Some(editor_id) == exclude_id {
+                continue;
+            }
+
+            for FileTextDelta {
+                ref file_path,
+                ref delta,
+            } in &file_deltas
+            {
+                if let Some(&mut ref mut ot_server) = self
+                    .ot_servers
+                    .get_mut(&editor_id)
+                    .unwrap()
+                    .get_mut(file_path)
+                {
+                    debug!("Applying incoming CRDT patch for {file_path}");
+                    let rev_text_delta_for_editor = ot_server.apply_crdt_change(delta);
+                    self.send_to_editor(&editor_id, rev_text_delta_for_editor, file_path)
+                        .await;
+                }
             }
         }
     }
 
-    async fn process_cursor_states(&mut self, cursor_states: Vec<CursorState>) {
+    async fn send_cursor_states_to_editors(
+        &mut self,
+        exclude_id: Option<EditorId>,
+        cursor_states: Vec<CursorState>,
+    ) {
         for CursorState {
-            userid,
+            cursor_id,
             name,
             file_path,
             ranges,
         } in cursor_states
         {
-            let message = EditorProtocolMessageToEditor::Cursor {
-                userid,
+            let message = EditorProtocolObject::Request(EditorProtocolMessageToEditor::Cursor {
+                userid: cursor_id,
                 name,
                 uri: format!("file://{}", self.absolute_path_for_file_path(&file_path)),
                 ranges,
-            };
-            self.send_to_editor_clients(message).await;
+            });
+            let editor_ids: Vec<EditorId> = self.ot_servers.keys().cloned().collect();
+            for editor_id in editor_ids {
+                if let Some(exclude_id) = exclude_id {
+                    if editor_id == exclude_id {
+                        continue;
+                    }
+                }
+
+                self.send_to_editor_client(&editor_id, message.clone())
+                    .await;
+            }
         }
     }
 
-    async fn send_to_editors(&mut self, rev_delta: RevisionedEditorTextDelta, file_path: &str) {
+    async fn send_to_editor(
+        &mut self,
+        editor_id: &EditorId,
+        rev_delta: RevisionedEditorTextDelta,
+        file_path: &str,
+    ) {
         let message = EditorProtocolMessageToEditor::Edit {
             uri: format!("file://{}", self.absolute_path_for_file_path(file_path)),
             delta: rev_delta,
         };
-        self.send_to_editor_clients(message).await;
+        self.send_to_editor_client(editor_id, EditorProtocolObject::Request(message))
+            .await;
     }
 
     async fn send_to_editor_client(&mut self, editor_id: &EditorId, message: EditorProtocolObject) {
         if let Some(handle) = self.editor_clients.get_mut(editor_id) {
             if handle.send(message).await.is_err() {
-                info!("Removing EditorHandle from client list.");
+                info!(
+                    "Sending to editor #{editor_id:?} failed. It probably has disconnected, removing it from the list of known editor clients."
+                );
+                // Remove this client.
                 self.editor_clients.remove(editor_id);
             }
         } else {
-            warn!(
-                "Sending to editor client failed: We don't have a client registered with id #{}.",
-                editor_id.0
-            );
-        }
-    }
-
-    async fn send_to_editor_clients(&mut self, message: EditorProtocolMessageToEditor) {
-        let mut to_remove = Vec::new();
-        for (id, handle) in &mut self.editor_clients.iter_mut() {
-            if handle
-                .send(EditorProtocolObject::Request(message.clone()))
-                .await
-                .is_err()
-            {
-                // Remove this client.
-                to_remove.push(*id);
-            }
-        }
-        for id in to_remove {
-            // The destructor of EditorHandle will shut down the actors when
-            // we remove it from the HashMap.
-            info!("Removing EditorHandle from client list.");
-            self.editor_clients.remove(&id);
+            warn!("Sending to editor client failed: We don't have a client registered with id #{editor_id:?}");
         }
     }
 
@@ -601,7 +643,7 @@ impl DocumentActor {
 
     fn maybe_write_file(&mut self, file_path: &str) {
         // Only write to the file if editor *doesn't* have the file open.
-        if !self.ot_servers.contains_key(file_path) {
+        if self.owns(file_path) {
             if let Ok(text) = self.current_file_content(file_path) {
                 let abs_path = self.absolute_path_for_file_path(file_path);
                 debug!("Writing to {abs_path}.");
@@ -687,21 +729,45 @@ impl DocumentActor {
         self.crdt_doc.current_file_content(file_path)
     }
 
-    fn apply_delta_to_doc(&mut self, delta: &EditorTextDelta, file_path: &str) {
+    async fn apply_delta_to_doc(
+        &mut self,
+        source_editor_id: Option<EditorId>,
+        delta: &TextDelta,
+        file_path: &str,
+    ) {
         self.crdt_doc.apply_delta_to_doc(delta, file_path);
         let _ = self.doc_changed_ping_tx.send(());
         self.maybe_write_file(file_path);
+
+        // Forward delta to all editors except the source.
+        self.process_crdt_file_deltas_in_ot_servers(
+            source_editor_id,
+            vec![FileTextDelta::new(file_path.to_string(), delta.clone())],
+        )
+        .await;
     }
 
-    fn store_cursor_position(&mut self, userid: &str, file_path: String, ranges: Vec<Range>) {
+    fn store_cursor_position(&mut self, cursor_id: &str, file_path: String, ranges: Vec<Range>) {
         self.crdt_doc
-            .store_cursor_position(userid, file_path, ranges);
+            .store_cursor_position(cursor_id, file_path, ranges);
         let _ = self.doc_changed_ping_tx.send(());
     }
 
-    fn maybe_delete_cursor_position(&mut self, userid: &str) {
-        self.crdt_doc.maybe_delete_cursor_position(userid);
+    async fn maybe_delete_cursor_position(&mut self, cursor_id: &str) {
+        self.crdt_doc.maybe_delete_cursor_position(cursor_id);
         let _ = self.doc_changed_ping_tx.send(());
+
+        // Send cursor delete to local peers.
+        if let Some(file_path) = self.crdt_doc.files().first() {
+            let cursor_states = vec![CursorState {
+                cursor_id: cursor_id.to_string(),
+                name: None,
+                file_path: file_path.to_string(),
+                ranges: vec![],
+            }];
+            self.send_cursor_states_to_editors(None, cursor_states)
+                .await;
+        }
     }
 
     async fn run(&mut self) {
@@ -779,8 +845,7 @@ impl DocumentActorHandle {
     }
 
     pub fn next_editor_id(&self) -> EditorId {
-        let id = self.next_id.fetch_add(1, Ordering::Relaxed);
-        EditorId(id)
+        self.next_id.fetch_add(1, Ordering::Relaxed)
     }
 }
 
@@ -970,15 +1035,14 @@ mod tests {
             actor.read_current_content_from_dir(true);
 
             // One change to rule them all.
-            let ed_delta = ed_delta_single((0, 0), (0, 0), "foobar");
+            let delta = insert(0, "foobar");
 
             // "manually" apply the deltas, as we want to test
             // "maybe_write_files_changed_in_file_deltas" independently.
-            actor.crdt_doc.apply_delta_to_doc(&ed_delta, "file1");
-            actor.crdt_doc.apply_delta_to_doc(&ed_delta, "file2");
-            actor.crdt_doc.apply_delta_to_doc(&ed_delta, "sub/file3");
+            actor.crdt_doc.apply_delta_to_doc(&delta, "file1");
+            actor.crdt_doc.apply_delta_to_doc(&delta, "file2");
+            actor.crdt_doc.apply_delta_to_doc(&delta, "sub/file3");
 
-            let delta = TextDelta::from_ed_delta(ed_delta, "content1");
             let file_deltas = vec![
                 FileTextDelta::new("file1".to_string(), delta.clone()),
                 FileTextDelta::new("file2".to_string(), delta.clone()),
@@ -986,8 +1050,8 @@ mod tests {
             ];
 
             // The editor has file2 and sub/file3 open.
-            actor.open_file_path("file2".into());
-            actor.open_file_path("sub/file3".into());
+            actor.open_file_path(0, "file2".into());
+            actor.open_file_path(0, "sub/file3".into());
             actor.maybe_write_files_changed_in_file_deltas(&file_deltas);
 
             // Thus, we only expect file1 to be changed on disk.
@@ -1061,20 +1125,22 @@ mod tests {
             }
         }
 
-        #[test]
-        fn test_simulate_editor_edits() {
+        #[tokio::test]
+        async fn test_simulate_editor_edits() {
             let dir = setup_filesystem_for_testing();
             let mut actor = DocumentActor::setup_for_testing(dir.path().to_path_buf());
             actor.read_current_content_from_dir(true);
 
             let file_path = "file1".to_string();
 
-            actor.open_file_path(file_path.clone());
+            actor.open_file_path(0, file_path.clone());
 
             let delta = rev_ed_delta_single(0, (0, 0), (0, 0), "foobar");
             let (editor_delta_for_crdt, rev_ed_text_deltas) =
-                actor.apply_delta_to_ot(delta, "file1");
-            actor.apply_delta_to_doc(&editor_delta_for_crdt, &file_path);
+                actor.apply_delta_to_ot(&0, delta, "file1");
+            actor
+                .apply_delta_to_doc(Some(0), &editor_delta_for_crdt, &file_path)
+                .await;
 
             // Confirm nothing transformed needs to go to editor.
             assert_eq!(rev_ed_text_deltas, vec![]);
