@@ -24,12 +24,12 @@ pub struct Document {
 }
 
 impl Document {
-    pub fn new(init: bool) -> Self {
+    pub fn new(init_structure: bool) -> Self {
         let mut s = Self {
             doc: AutoCommit::default(),
         };
 
-        if init {
+        if init_structure {
             s.initialize_top_level_maps();
         }
 
@@ -199,10 +199,11 @@ impl Document {
     }
 
     pub fn files(&self) -> Vec<String> {
-        let file_map = self
-            .top_level_map_obj("files")
-            .expect("Failed to get files store from document");
-        self.doc.keys(file_map).collect()
+        if let Ok(file_map) = self.top_level_map_obj("files") {
+            self.doc.keys(file_map).collect()
+        } else {
+            vec![]
+        }
     }
 
     pub fn file_exists(&self, file_path: &str) -> bool {
