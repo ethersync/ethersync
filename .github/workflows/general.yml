@@ -23,7 +23,10 @@ env:
 jobs:
   build_and_test:
     name: Run tests
-    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
     defaults:
       run:
         working-directory: ./daemon
