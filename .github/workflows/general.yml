@@ -8,13 +8,13 @@ on:
       - 'daemon/**'
       - 'vim-plugin/**'
       - 'flake.*'
-      - '.github/workflows/integration.yml'
+      - '.github/workflows/general.yml'
   pull_request:
     paths:
       - 'daemon/**'
       - 'vim-plugin/**'
       - 'flake.*'
-      - '.github/workflows/integration.yml'
+      - '.github/workflows/general.yml'
 
 env:
   CARGO_TERM_COLOR: always
