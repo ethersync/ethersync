@@ -42,11 +42,10 @@ jobs:
         - name: Add ethersync binary to PATH
           run: echo "$PWD/target/release" >> $GITHUB_PATH
         - run: ethersync --version
-        - name: Install Neovim
-          run: |
-            wget -nv https://github.com/neovim/neovim/releases/download/v0.10.1/nvim-linux64.tar.gz -P /tmp
-            tar xzf /tmp/nvim-linux64.tar.gz -C /tmp
-            echo "/tmp/nvim-linux64/bin" >> $GITHUB_PATH
+        - uses: rhysd/action-setup-vim@v1
+          with:
+            neovim: true
+            version: v0.10.1
         - run: nvim --version
         - name: Install Neovim plugin
           run: |
