@@ -1,6 +1,14 @@
-# Unreleased features
+# Next release
 
-(None yet)
+- Documentation moved to an mdBook at <https://ethersync.github.io/ethersync/>.
+
+New features:
+
+- #127
+
+Bug fixes:
+
+- #152
 
 # 0.3.0 (2024-08-13)
 
@@ -9,7 +17,6 @@ New features:
 - Integrated libp2p for transport encryption and authentication of peers.
 - Added a password protection – peers must specify the same `--secret` to connect.
 - You can now provide default startup arguments in `.ethersync/config`.
-- When editors send
 
 Bug fixes:
 
@@ -24,6 +31,7 @@ New features:
 - Dynamically create files when they are opened.
 - When files are deleted, delete them for all peers.
 - Sandbox file I/O to be restricted into the shared project folder.
+- The editor plugin can now send JSON-RPC requests and get feedback on whether the intended operation worked or not.
 
 # 0.2.1 (2024-07-26)
 
@@ -31,6 +39,8 @@ New features:
 
 - Share multiple files per directory.
 - Transmit cursor positions, and display them in the Neovim plugin.
+- Add a Nix flake to the project for simplified installation.
+- The "cursor" messages in the editor protocol are no longer revisioned. In practice, this seems to work well enough.
 
 # 0.2.0 (2024-05-02)
 
