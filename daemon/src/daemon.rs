@@ -19,6 +19,7 @@ use futures::SinkExt;
 use ignore::{Walk, WalkBuilder};
 use rand::Rng;
 use std::collections::{HashMap, HashSet};
+use std::env;
 use std::fmt;
 use std::path::{Path, PathBuf};
 use std::sync::{
@@ -793,7 +794,7 @@ impl DocumentActor {
 
     fn store_cursor_position(&mut self, cursor_id: &str, file_path: String, ranges: Vec<Range>) {
         self.crdt_doc
-            .store_cursor_position(cursor_id, file_path, ranges);
+            .store_cursor_position(cursor_id, env::var("USER").ok(), file_path, ranges);
         let _ = self.doc_changed_ping_tx.send(());
     }
 

@@ -7,7 +7,6 @@ use automerge::{
     AutoCommit, ObjType, Patch, PatchLog, ReadDoc,
 };
 use dissimilar::Chunk;
-use std::env;
 use tracing::{debug, info};
 
 /// Encapsulates the Automerge `AutoCommit` and provides a generic interface,
@@ -214,6 +213,7 @@ impl Document {
     pub fn store_cursor_position(
         &mut self,
         cursor_id: &str,
+        name: Option<String>,
         file_path: String,
         ranges: Vec<Range>,
     ) {
@@ -226,7 +226,7 @@ impl Document {
             .expect("Failed to initialize user state Map object in Automerge document");
         let cursor_state = CursorState {
             cursor_id: cursor_id.to_owned(),
-            name: env::var("USER").ok(),
+            name,
             file_path,
             ranges,
         };
@@ -241,7 +241,7 @@ impl Document {
         // We try to set an empty cursor position, but in case we don't have any file in the
         // project its not a big deal if it stays.
         if let Some(file_path) = self.get_valid_file_path() {
-            self.store_cursor_position(cursor_id, file_path, vec![]);
+            self.store_cursor_position(cursor_id, None, file_path, vec![]);
         }
     }
 
