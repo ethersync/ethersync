@@ -51,6 +51,7 @@ class Revision {
 }
 
 let revisions: {[filename: string]: Revision} = {}
+let contents: {[filename: string]: string[]} = {}
 
 // TODO: if we load from disk, this will also cause edits :-/
 let ignoreEdits = false
@@ -161,6 +162,10 @@ export function activate(context: vscode.ExtensionContext) {
                             debug(`Document not open: ${uri.toString()}`)
                         }
                     }
+                    // TODO: Make this more efficient by replacing only the changed lines.
+                    // The challenge with that is that we need to compute how many lines are
+                    // left after the edit.
+                    updateContents(openEditor.document)
                     ignoreEdits = false
                 })
             } catch (e) {
@@ -186,44 +191,52 @@ export function activate(context: vscode.ExtensionContext) {
             debug("ack")
             return
         }
+        let document = event.document
 
         // For some reason we get multipe events per edit caused by us.
         // Let's actively skip the empty ones to make debugging output below less noisy.
         if (event.contentChanges.length == 0) {
-            if (event.document.isDirty == false) {
+            if (document.isDirty == false) {
                 debug("ignoring empty docChange. (probably saving...)")
             }
             return
         }
 
-        const filename = event.document.fileName
+        const filename = document.fileName
         if (!isEthersyncEnabled(path.dirname(filename))) {
             return
         }
 
         let revision = revisions[filename]
-
-        // debug("event.document.version: " + event.document.version)
-        // debug("event.document.isDirty: " + event.document.isDirty)
-        // if (event.contentChanges.length == 0) { console.log(event.document) }
+        // debug("document.version: " + document.version)
+        // debug("document.isDirty: " + document.isDirty)
+        // if (event.contentChanges.length == 0) { console.log(document) }
         for (const change of event.contentChanges) {
             mutex
                 .runExclusive(() => {
                     console.log(change)
-                    let startLineText = event.document.lineAt(change.range.start.line).text
+                    let content = contents[filename]
+                    console.log(content)
+                    console.log(content[0])
+                    let startLine = change.range.start.line
+                    let endLine = change.range.end.line
+
+                    debug("startLineText")
+                    console.log(content[startLine])
+                    let startLineText = content[startLine]
                     let endLineText
-                    if (change.range.start.line == change.range.end.line) {
+                    if (startLine == endLine) {
                         endLineText = startLineText
                     } else {
-                        endLineText = event.document.lineAt(change.range.end.line).text
+                        endLineText = content[endLine]
                     }
                     const range = new vscode.Range(
                         new vscode.Position(
-                            change.range.start.line,
+                            startLine,
                             UTF16CodeUnitOffsetToCharOffset(change.range.start.character, startLineText)
                         ),
                         new vscode.Position(
-                            change.range.end.line,
+                            endLine,
                             UTF16CodeUnitOffsetToCharOffset(change.range.end.character, endLineText)
                         )
                     )
@@ -234,7 +247,7 @@ export function activate(context: vscode.ExtensionContext) {
                         replacement: change.text,
                     }
                     let revDelta: RevisionedDelta = {delta: [delta], revision: revision.daemon}
-                    let uri = event.document.uri.toString()
+                    let uri = document.uri.toString()
                     let theEdit: Edit = {uri, delta: revDelta}
                     console.log(theEdit)
                     // interestingly this seems to block when it can't send
@@ -242,6 +255,11 @@ export function activate(context: vscode.ExtensionContext) {
                     revision.editor += 1
                     debug(`sent edit for dR ${revision.daemon} (having edR ${revision.editor})`)
                     console.log(revisions)
+
+                    // TODO: Make this more efficient by replacing only the changed lines.
+                    // The challenge with that is that we need to compute how many lines are
+                    // left after the edit.
+                    updateContents(document)
                 })
                 .catch((e: Error) => {
                     debug("promise failed!")
@@ -256,8 +274,9 @@ export function activate(context: vscode.ExtensionContext) {
     let openDisposable = vscode.workspace.onDidOpenTextDocument((document) => {
         const fileUri = document.uri.toString()
         debug("OPEN " + fileUri)
-        connection.sendNotification(open, {uri: fileUri})
         revisions[document.fileName] = new Revision()
+        updateContents(document)
+        connection.sendNotification(open, {uri: fileUri})
         console.log(revisions)
     })
 
@@ -281,4 +300,12 @@ export function deactivate() {}
 
 function debug(text: String) {
     console.log(Date.now() - t0 + " " + text)
+}
+
+function updateContents(document: vscode.TextDocument) {
+    contents[document.fileName] = new Array(document.lineCount)
+    for (let line = 0; line < document.lineCount; line++) {
+        // TODO: text does not contain the newline character yet.
+        contents[document.fileName][line] = document.lineAt(line).text
+    }
 }
