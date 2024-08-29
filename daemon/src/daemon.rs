@@ -1,12 +1,11 @@
 use crate::document::Document;
 use crate::editor::{self, EditorHandle, EditorId};
-use crate::ot::OTServer;
+use crate::editor_connection::EditorConnection;
 use crate::peer;
 use crate::sandbox;
 use crate::types::{
-    EditorProtocolMessageError, EditorProtocolMessageFromEditor, EditorProtocolMessageToEditor,
-    EditorProtocolObject, FileTextDelta, InsideMessage, JSONRPCFromEditor, JSONRPCResponse,
-    PatchEffect, TextDelta,
+    EditorProtocolMessageError, EditorProtocolMessageFromEditor, EditorProtocolObject,
+    FileTextDelta, InsideMessage, JSONRPCFromEditor, JSONRPCResponse, PatchEffect, TextDelta,
 };
 use crate::watcher::Watcher;
 use crate::watcher::WatcherEvent;
@@ -19,7 +18,6 @@ use futures::SinkExt;
 use ignore::{Walk, WalkBuilder};
 use rand::Rng;
 use std::collections::{HashMap, HashSet};
-use std::env;
 use std::fmt;
 use std::path::{Path, PathBuf};
 use std::sync::{
@@ -86,8 +84,7 @@ pub struct DocumentActor {
     doc_message_rx: mpsc::Receiver<DocMessage>,
     doc_changed_ping_tx: DocChangedSender,
     editor_handles: HashMap<EditorId, EditorHandle>,
-    /// There's one OTServer per buffer. Same file in a different editor is a different buffer.
-    ot_servers: HashMap<EditorId, HashMap<String, OTServer>>,
+    editor_connections: HashMap<EditorId, EditorConnection>,
     /// The Document is the main I/O managed resource of this actor.
     crdt_doc: Document,
     base_dir: PathBuf,
@@ -129,8 +126,8 @@ impl DocumentActor {
             doc_message_rx,
             doc_changed_ping_tx,
             editor_handles: HashMap::default(),
+            editor_connections: HashMap::default(),
             base_dir,
-            ot_servers: HashMap::default(),
             crdt_doc,
         };
 
@@ -143,15 +140,12 @@ impl DocumentActor {
         s
     }
 
-    /// If any editor has an `ot_server` for a given file,
-    /// it means that the daemon doesn't have ownership.
+    /// If any editor owns the file, it means that the daemon doesn't have ownership.
     fn owns(&mut self, file_path: &str) -> bool {
-        for (_, ot_servers) in self.ot_servers.iter() {
-            if ot_servers.get(file_path).is_some() {
-                return false;
-            }
-        }
-        true
+        !self
+            .editor_connections
+            .values()
+            .any(|connection| connection.owns(file_path))
     }
 
     async fn handle_message(&mut self, message: DocMessage) {
@@ -251,15 +245,22 @@ impl DocumentActor {
                 }
             }
             DocMessage::NewEditorConnection(id, editor_handle) => {
+                let editor_connection_id = self.cursor_id(id);
+                self.editor_connections.insert(
+                    id,
+                    EditorConnection::new(editor_connection_id, &self.base_dir),
+                );
+
                 self.editor_handles.insert(id, editor_handle);
             }
             DocMessage::CloseEditorConnection(editor_id) => {
-                self.editor_handles.remove(&editor_id);
-                self.ot_servers.remove(&editor_id);
+                self.editor_connections.remove(&editor_id);
 
                 let cursor_id = self.cursor_id(editor_id);
                 debug!("Deleting cursor {cursor_id}");
                 self.maybe_delete_cursor_position(&cursor_id).await;
+
+                self.editor_handles.remove(&editor_id);
             }
         }
     }
@@ -292,7 +293,12 @@ impl DocumentActor {
         editor_id: EditorId,
         message: &EditorProtocolMessageFromEditor,
     ) -> Result<(), EditorProtocolMessageError> {
-        let (inside_message, messages_to_editor) = self.message_from_outside(editor_id, message)?;
+        let (inside_message, messages_to_editor) = self
+            .editor_connections
+            .get_mut(&editor_id)
+            .expect("Could not get editor connection")
+            .message_from_outside(message)?;
+
         self.inside_message_to_doc(&inside_message).await;
         self.broadcast_to_editors(Some(editor_id), &inside_message)
             .await;
@@ -426,185 +432,6 @@ impl DocumentActor {
             .receive_sync_message_log_patches(message, peer_state);
         let _ = self.doc_changed_ping_tx.send(());
         patches
-    }
-
-    pub fn message_from_inside(
-        &mut self,
-        editor_id: EditorId,
-        message: &InsideMessage,
-    ) -> Vec<EditorProtocolMessageToEditor> {
-        match message {
-            InsideMessage::Edit { file_path, delta } => {
-                if let Some(ot_server) = self
-                    .ot_servers
-                    .get_mut(&editor_id)
-                    .unwrap()
-                    .get_mut(file_path)
-                {
-                    debug!("Applying incoming CRDT patch for {file_path}");
-                    let rev_text_delta_for_editor = ot_server.apply_crdt_change(delta);
-
-                    vec![EditorProtocolMessageToEditor::Edit {
-                        uri: format!("file://{}", self.absolute_path_for_file_path(file_path)),
-                        delta: rev_text_delta_for_editor,
-                    }]
-                } else {
-                    // We don't have the file open, just do nothing.
-                    vec![]
-                }
-            }
-            InsideMessage::Cursor {
-                file_path,
-                ranges,
-                name,
-                cursor_id,
-            } => {
-                let uri = format!("file://{}", self.absolute_path_for_file_path(file_path));
-                vec![EditorProtocolMessageToEditor::Cursor {
-                    name: name.clone(),
-                    userid: cursor_id.clone(),
-                    uri,
-                    ranges: ranges.clone(),
-                }]
-            }
-            _ => {
-                debug!("Ignoring message from inside: {:#?}", message);
-                vec![]
-            }
-        }
-    }
-
-    pub fn message_from_outside(
-        &mut self,
-        editor_id: EditorId,
-        message: &EditorProtocolMessageFromEditor,
-    ) -> Result<(InsideMessage, Vec<EditorProtocolMessageToEditor>), EditorProtocolMessageError>
-    {
-        fn anyhow_err_to_protocol_err(error: anyhow::Error) -> EditorProtocolMessageError {
-            EditorProtocolMessageError {
-                code: -1, // TODO: Should the error codes differ per error?
-                message: error.to_string(),
-                data: None,
-            }
-        }
-
-        match message {
-            EditorProtocolMessageFromEditor::Open { uri } => {
-                let file_path = self
-                    .file_path_for_uri(uri)
-                    .map_err(anyhow_err_to_protocol_err)?;
-
-                debug!("Got an 'open' message for {file_path}");
-                let absolute_file_path = self.absolute_path_for_file_path(&file_path);
-                let absolute_file_path = Path::new(&absolute_file_path);
-                if !sandbox::exists(&self.base_dir, absolute_file_path)
-                    .map_err(anyhow_err_to_protocol_err)?
-                {
-                    // Creating nonexisting files allows us to traverse this file for whether it's
-                    // ignored, which is needed to even be allowed to open it.
-                    sandbox::write_file(&self.base_dir, absolute_file_path, b"")
-                        .map_err(anyhow_err_to_protocol_err)?;
-                }
-
-                // We only want to process these messages for files that are not ignored.
-                if crate::ignore::is_ignored(&self.base_dir, absolute_file_path) {
-                    return Err(EditorProtocolMessageError {
-                        code: -1,
-                        message: format!("File '{absolute_file_path:?}' is ignored"),
-                        data: Some("This file should not be shared with other peers".into()),
-                    });
-                }
-
-                let bytes = sandbox::read_file(&self.base_dir, absolute_file_path)
-                    .map_err(anyhow_err_to_protocol_err)?;
-                let text = String::from_utf8(bytes)
-                    .context("Failed to convert bytes to string")
-                    .map_err(anyhow_err_to_protocol_err)?;
-
-                let ot_server = OTServer::new(text);
-                self.ot_servers
-                    .entry(editor_id)
-                    .or_default()
-                    .insert(file_path.clone(), ot_server);
-
-                Ok((InsideMessage::Open { file_path }, vec![]))
-            }
-            EditorProtocolMessageFromEditor::Close { uri } => {
-                let file_path = self
-                    .file_path_for_uri(uri)
-                    .map_err(anyhow_err_to_protocol_err)?;
-                debug!("Got a 'close' message for {file_path}");
-                self.ot_servers
-                    .get_mut(&editor_id)
-                    .unwrap()
-                    .remove(&file_path);
-
-                Ok((InsideMessage::Close { file_path }, vec![]))
-            }
-            EditorProtocolMessageFromEditor::Edit {
-                delta: rev_delta,
-                uri,
-            } => {
-                debug!("Handling RevDelta from editor: {:#?}", rev_delta);
-                let file_path = self
-                    .file_path_for_uri(uri)
-                    .map_err(anyhow_err_to_protocol_err)?;
-                if self
-                    .ot_servers
-                    .get_mut(&editor_id)
-                    .unwrap()
-                    .get_mut(&file_path)
-                    .is_none()
-                {
-                    return Err(EditorProtocolMessageError {
-                        code: -1,
-                        message: "File not found".into(),
-                        data: Some(
-                            "Please stop sending edits for this file or 'open' it before.".into(),
-                        ),
-                    });
-                }
-
-                let ot_server = self
-                    .ot_servers
-                    .get_mut(&editor_id)
-                    .unwrap()
-                    .get_mut(&file_path)
-                    .expect("Could not find OT server.");
-                let (delta_for_crdt, rev_deltas_for_editor) =
-                    ot_server.apply_editor_operation(rev_delta.clone());
-
-                let messages_to_editor = rev_deltas_for_editor
-                    .into_iter()
-                    .map(|rev_delta_for_editor| EditorProtocolMessageToEditor::Edit {
-                        uri: format!("file://{}", self.absolute_path_for_file_path(&file_path)),
-                        delta: rev_delta_for_editor,
-                    })
-                    .collect();
-
-                Ok((
-                    InsideMessage::Edit {
-                        file_path,
-                        delta: delta_for_crdt,
-                    },
-                    messages_to_editor,
-                ))
-            }
-            EditorProtocolMessageFromEditor::Cursor { uri, ranges } => {
-                let file_path = self
-                    .file_path_for_uri(uri)
-                    .map_err(anyhow_err_to_protocol_err)?;
-                Ok((
-                    InsideMessage::Cursor {
-                        cursor_id: self.cursor_id(editor_id),
-                        name: env::var("USER").ok(),
-                        file_path,
-                        ranges: ranges.clone(),
-                    },
-                    vec![],
-                ))
-            }
-        }
     }
 
     fn random_delta(&self) -> TextDelta {
@@ -804,13 +631,17 @@ impl DocumentActor {
         exclude_id: Option<EditorId>,
         message: &InsideMessage,
     ) {
-        let editor_ids: Vec<EditorId> = self.ot_servers.keys().cloned().collect();
+        let editor_ids: Vec<EditorId> = self.editor_connections.keys().cloned().collect();
         for editor_id in editor_ids {
             if Some(editor_id) == exclude_id {
                 continue;
             }
 
-            let messages_to_editor = self.message_from_inside(editor_id, message);
+            let messages_to_editor = self
+                .editor_connections
+                .get_mut(&editor_id)
+                .expect("Could not get editor connection")
+                .message_from_inside(message);
 
             for message_to_editor in messages_to_editor {
                 self.send_to_editor_client(
