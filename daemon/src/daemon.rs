@@ -466,17 +466,15 @@ impl DocumentActor {
     }
 
     async fn send_to_editor_client(&mut self, editor_id: &EditorId, message: EditorProtocolObject) {
-        if let Some(handle) = self.editor_handles.get_mut(editor_id) {
-            if handle.send(message).await.is_err() {
-                info!(
-                    "Sending to editor #{editor_id:?} failed. It probably has disconnected, removing it from the list of known editor clients."
-                );
-                // Remove this client.
-                self.editor_handles.remove(editor_id);
-            }
-        } else {
-            warn!("Sending to editor client failed: We don't have a client registered with id #{editor_id:?}");
-        }
+        let handle = self
+            .editor_handles
+            .get_mut(editor_id)
+            .expect("Could not get editor handle");
+
+        handle.send(message).await.unwrap_or_else(|err| {
+            error!("Failed to send message to editor: {err} Removing editor.");
+            self.editor_connections.remove(editor_id);
+        });
     }
 
     fn maybe_write_files_changed_in_file_deltas(&mut self, file_deltas: &Vec<FileTextDelta>) {
