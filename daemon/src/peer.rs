@@ -227,10 +227,10 @@ impl P2PActor {
     }
 
     fn spawn_peer_sync(&self, stream: Stream) {
-        let (we_to_peer_tx, we_to_peer_rx) = mpsc::channel(16);
-        let (peer_to_us_tx, peer_to_us_rx) = mpsc::channel(16);
+        let (to_peer_tx, to_peer_rx) = mpsc::channel(16);
+        let (from_peer_tx, from_peer_rx) = mpsc::channel(16);
 
-        let syncer = SyncActor::new(self.document_handle.clone(), peer_to_us_rx, we_to_peer_tx);
+        let syncer = SyncActor::new(self.document_handle.clone(), from_peer_rx, to_peer_tx);
         tokio::spawn(async move {
             let syncer_handle = tokio::spawn(async move {
                 // The syncer can fail when the protocol_handler below has
@@ -241,11 +241,11 @@ impl P2PActor {
 
             // This is a function that either runs forever, or errors.
             // But errors just mean that the connection was closed/interrupted, so we ignore them.
-            let _ = Self::protocol_handler(stream, peer_to_us_tx, we_to_peer_rx).await;
+            let _ = Self::protocol_handler(stream, from_peer_tx, to_peer_rx).await;
 
             info!("Peer disconnected");
             // TODO: Do we still this abort? The syncer should stop anyway once it cannot use its
-            // we_to_peer_tx anymore.
+            // to_peer_tx anymore.
             syncer_handle.abort_handle().abort();
         });
     }
@@ -253,14 +253,14 @@ impl P2PActor {
     /// Core low-level syncing protocol.
     async fn protocol_handler(
         mut stream: Stream,
-        peer_to_us_tx: mpsc::Sender<AutomergeSyncMessage>,
-        mut we_to_peer_rx: mpsc::Receiver<AutomergeSyncMessage>,
+        from_peer_tx: mpsc::Sender<AutomergeSyncMessage>,
+        mut to_peer_rx: mpsc::Receiver<AutomergeSyncMessage>,
     ) -> Result<()> {
         loop {
             let mut message_len_buf = [0; 4];
 
             tokio::select! {
-                message_maybe = we_to_peer_rx.recv() => {
+                message_maybe = to_peer_rx.recv() => {
                     match message_maybe {
                         Some(message) => {
                             let message = message.encode();
@@ -274,7 +274,7 @@ impl P2PActor {
                             }
                         None => {
                             // TODO: What should we do?
-                            error!("None on we_to_peer_rx");
+                            error!("None on to_peer_rx");
                         }
                     }
                 }
@@ -285,7 +285,7 @@ impl P2PActor {
 
                     let message =
                         AutomergeSyncMessage::decode(&message_buf)?;
-                    peer_to_us_tx.send(message).await?;
+                    from_peer_tx.send(message).await?;
                 }
             }
         }
