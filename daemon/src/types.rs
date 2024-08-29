@@ -5,7 +5,7 @@ use dissimilar::Chunk;
 use operational_transform::{Operation as OTOperation, OperationSeq};
 use ropey::Rope;
 use serde::{Deserialize, Serialize};
-use tracing::{debug, warn};
+use tracing::{debug, error, warn};
 
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct TextDelta(pub Vec<TextOp>);
@@ -488,8 +488,18 @@ impl TryFrom<Patch> for PatchEffect {
                     match patch.action {
                         PatchAction::SpliceText { index, value, .. } => {
                             assert_eq!(index, 0);
-                            let cursor_state = serde_json::from_str(&value.make_string())?;
-                            Ok(PatchEffect::CursorChange(cursor_state))
+                            if let Ok(cursor_state) = serde_json::from_str(&value.make_string()) {
+                                Ok(PatchEffect::CursorChange(cursor_state))
+                            } else {
+                                // Reasoning why we're not returning an error here:
+                                // The content of the "states" entries is unstructured text not
+                                // under our control. If peers don't put valid JSON for a
+                                // CursorState there, we don't want to crash.
+                                error!(
+                                    "Failed to parse cursor state from Automerge patch, ignoring"
+                                );
+                                Ok(PatchEffect::NoEffect)
+                            }
                         }
                         other_action => Err(anyhow::anyhow!(
                             "Unsupported patch action for path 'states/*': {}",
