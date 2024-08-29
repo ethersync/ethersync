@@ -251,6 +251,7 @@ export function activate(context: vscode.ExtensionContext) {
                     let theEdit: Edit = {uri, delta: revDelta}
                     console.log(theEdit)
                     // interestingly this seems to block when it can't send
+                    // TODO: Catch exceptions, for example when daemon disconnects/crashes.
                     connection.sendNotification(edit, theEdit)
                     revision.editor += 1
                     debug(`sent edit for dR ${revision.daemon} (having edR ${revision.editor})`)
