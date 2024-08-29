@@ -163,6 +163,28 @@ pub enum EditorProtocolMessageFromEditor {
     },
 }
 
+/// These messages are "internally" passed between the components that the daemon consists of -
+/// namely, the connected editors and the CRDT document.
+#[derive(Debug, Clone, PartialEq)]
+pub enum InsideMessage {
+    Open {
+        file_path: String,
+    },
+    Close {
+        file_path: String,
+    },
+    Edit {
+        file_path: String,
+        delta: TextDelta,
+    },
+    Cursor {
+        cursor_id: CursorId,
+        name: Option<String>,
+        file_path: String,
+        ranges: Vec<Range>,
+    },
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct EditorProtocolMessageError {
     pub code: i32,
