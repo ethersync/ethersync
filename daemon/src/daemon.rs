@@ -85,7 +85,7 @@ type DocChangedReceiver = broadcast::Receiver<()>;
 pub struct DocumentActor {
     doc_message_rx: mpsc::Receiver<DocMessage>,
     doc_changed_ping_tx: DocChangedSender,
-    editor_clients: HashMap<EditorId, EditorHandle>,
+    editor_handles: HashMap<EditorId, EditorHandle>,
     /// There's one OTServer per buffer. Same file in a different editor is a different buffer.
     ot_servers: HashMap<EditorId, HashMap<String, OTServer>>,
     /// The Document is the main I/O managed resource of this actor.
@@ -128,7 +128,7 @@ impl DocumentActor {
         let mut s = Self {
             doc_message_rx,
             doc_changed_ping_tx,
-            editor_clients: HashMap::default(),
+            editor_handles: HashMap::default(),
             base_dir,
             ot_servers: HashMap::default(),
             crdt_doc,
@@ -234,10 +234,10 @@ impl DocumentActor {
                 }
             }
             DocMessage::NewEditorConnection(id, editor_handle) => {
-                self.editor_clients.insert(id, editor_handle);
+                self.editor_handles.insert(id, editor_handle);
             }
             DocMessage::CloseEditorConnection(editor_id) => {
-                self.editor_clients.remove(&editor_id);
+                self.editor_handles.remove(&editor_id);
                 self.ot_servers.remove(&editor_id);
 
                 let cursor_id = self.cursor_id(editor_id);
@@ -649,13 +649,13 @@ impl DocumentActor {
     }
 
     async fn send_to_editor_client(&mut self, editor_id: &EditorId, message: EditorProtocolObject) {
-        if let Some(handle) = self.editor_clients.get_mut(editor_id) {
+        if let Some(handle) = self.editor_handles.get_mut(editor_id) {
             if handle.send(message).await.is_err() {
                 info!(
                     "Sending to editor #{editor_id:?} failed. It probably has disconnected, removing it from the list of known editor clients."
                 );
                 // Remove this client.
-                self.editor_clients.remove(editor_id);
+                self.editor_handles.remove(editor_id);
             }
         } else {
             warn!("Sending to editor client failed: We don't have a client registered with id #{editor_id:?}");
