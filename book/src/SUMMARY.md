@@ -21,7 +21,7 @@
     - [Pair programming](./use-cases/pair-programming.md)
     - [Shared Notes](./use-cases/shared-notes.md)
 - [Advanced topics]()
-    - [Git integration](./advanced/git-integration.md)
+    - [Working with Git](./advanced/git-integration.md)
 - [Related projects](./related-projects.md)
 - [FAQ](./faq.md)
 
