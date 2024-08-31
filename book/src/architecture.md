@@ -69,7 +69,7 @@ If you leave it out, the current directory is selected.
 
 ### Ignored files
 
-While we stay above, everything in the project is synchronized, this was not fully correct.
+While we stated above that everything in the project is synchronized, this was not fully correct.
 You have the option to specify files that should be ignored.
 Files that might contain sensitive information, like secrets, that should not be shared with your peers.
 
