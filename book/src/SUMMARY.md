@@ -29,3 +29,4 @@
 
 - [Writing new editor plugins](./editor-plugin-dev-guide.md)
 - [Contributing to Ethersync]()
+- [Our most important learnings](./learn-from-us.md)
