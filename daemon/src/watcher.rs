@@ -101,6 +101,20 @@ impl Watcher {
                         return Some(e);
                     }
                 }
+                EventKind::Modify(notify::event::ModifyKind::Name(
+                    notify::event::RenameMode::Any,
+                )) => {
+                    assert!(event.paths.len() == 1);
+                    if sandbox::exists(&self.base_dir, &event.paths[0])
+                        .expect("Could not check existence of file")
+                    {
+                        if let Some(e) = self.maybe_created(&event.paths[0]) {
+                            return Some(e);
+                        }
+                    } else if let Some(e) = self.maybe_removed(&event.paths[0]) {
+                        return Some(e);
+                    }
+                }
                 e => {
                     // Don't handle other events.
                     // But log them! I'm curious what they are!
@@ -115,6 +129,7 @@ impl Watcher {
         if sandbox::ignored(&self.base_dir, file_path)
             .expect("Could not check ignore state of file")
         {
+            debug!("Ignoring creation of '{file_path:?}'");
             return None;
         }
 
@@ -138,6 +153,7 @@ impl Watcher {
         if sandbox::ignored(&self.base_dir, file_path)
             .expect("Could not check ignore state of file")
         {
+            debug!("Ignoring modification of '{file_path:?}'");
             return None;
         }
 
@@ -160,10 +176,16 @@ mod tests {
     #[tokio::test]
     async fn create() {
         let dir = TempDir::new().expect("Failed to create temp directory");
-        let mut watcher = Watcher::new(dir.path());
 
-        let file = dir.child("file");
-        sandbox::write_file(dir.path(), &file, b"hi").unwrap();
+        // We canonicalize the path here, because on macOS, TempDir gives us paths in /var/, which
+        // symlinks to /private/var/. But the paths in the file events are always in /private/var/.
+        // If we wouldn't canonicalize, the watcher would ignore basically all events.
+        let dir_path = dir.path().canonicalize().unwrap();
+        let mut file = dir_path.clone();
+        file.push("file");
+
+        let mut watcher = Watcher::new(&dir_path);
+        sandbox::write_file(&dir_path, &file, b"hi").unwrap();
 
         assert_eq!(
             watcher.next().await,
@@ -179,12 +201,14 @@ mod tests {
     async fn change() {
         let dir = TempDir::new().expect("Failed to create temp directory");
 
-        let file = dir.child("file");
-        sandbox::write_file(dir.path(), &file, b"hi").unwrap();
+        let dir_path = dir.path().canonicalize().unwrap();
+        let mut file = dir_path.clone();
+        file.push("file");
+        sandbox::write_file(&dir_path, &file, b"hi").unwrap();
 
-        let mut watcher = Watcher::new(dir.path());
+        let mut watcher = Watcher::new(&dir_path);
 
-        sandbox::write_file(dir.path(), &file, b"yo").unwrap();
+        sandbox::write_file(&dir_path, &file, b"yo").unwrap();
 
         assert_eq!(
             watcher.next().await,
@@ -199,12 +223,14 @@ mod tests {
     async fn remove() {
         let dir = TempDir::new().expect("Failed to create temp directory");
 
-        let file = dir.child("file");
-        sandbox::write_file(dir.path(), &file, b"hi").unwrap();
+        let dir_path = dir.path().canonicalize().unwrap();
+        let mut file = dir_path.clone();
+        file.push("file");
+        sandbox::write_file(&dir_path, &file, b"hi").unwrap();
 
-        let mut watcher = Watcher::new(dir.path());
+        let mut watcher = Watcher::new(&dir_path);
 
-        sandbox::remove_file(dir.path(), &file).unwrap();
+        sandbox::remove_file(&dir_path, &file).unwrap();
 
         assert_eq!(
             watcher.next().await,
@@ -216,13 +242,16 @@ mod tests {
     async fn rename() {
         let dir = TempDir::new().expect("Failed to create temp directory");
 
-        let file = dir.child("file");
-        let file_new = dir.child("file2");
-        sandbox::write_file(dir.path(), &file, b"hi").unwrap();
+        let dir_path = dir.path().canonicalize().unwrap();
+        let mut file = dir_path.clone();
+        file.push("file");
+        let mut file_new = dir_path.clone();
+        file_new.push("file2");
+        sandbox::write_file(&dir_path, &file, b"hi").unwrap();
 
-        let mut watcher = Watcher::new(dir.path());
+        let mut watcher = Watcher::new(&dir_path);
 
-        sandbox::rename_file(dir.path(), &file, &file_new).unwrap();
+        sandbox::rename_file(&dir_path, &file, &file_new).unwrap();
 
         assert_eq!(
             watcher.next().await,
@@ -241,17 +270,21 @@ mod tests {
     #[tokio::test]
     async fn ignore() {
         let dir = TempDir::new().expect("Failed to create temp directory");
-        let gitignore = dir.child(".ignore");
+        let dir_path = dir.path().canonicalize().unwrap();
 
-        sandbox::write_file(dir.path(), &gitignore, b"file").unwrap();
+        let mut gitignore = dir_path.clone();
+        gitignore.push(".ignore");
+        sandbox::write_file(&dir_path, &gitignore, b"file").unwrap();
 
-        let mut watcher = Watcher::new(dir.path());
+        let mut watcher = Watcher::new(&dir_path);
 
-        let file = dir.child("file");
-        let file2 = dir.child("file2");
+        let mut file = dir_path.clone();
+        file.push("file");
+        let mut file2 = dir_path.clone();
+        file2.push("file2");
 
-        sandbox::write_file(dir.path(), &file, b"hi").unwrap();
-        sandbox::write_file(dir.path(), &file2, b"ho").unwrap();
+        sandbox::write_file(&dir_path, &file, b"hi").unwrap();
+        sandbox::write_file(&dir_path, &file2, b"ho").unwrap();
 
         assert_eq!(
             watcher.next().await,
