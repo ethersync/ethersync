@@ -50,6 +50,8 @@ class Revision {
     editor = 0
 }
 
+let connection: rpc.MessageConnection
+
 let revisions: {[filename: string]: Revision} = {}
 let contents: {[filename: string]: string[]} = {}
 
@@ -57,6 +59,10 @@ let contents: {[filename: string]: string[]} = {}
 let ignoreEdits = false
 let t0 = Date.now()
 const mutex = new Mutex()
+
+const open = new rpc.NotificationType<{uri: string}>("open")
+const close = new rpc.NotificationType<{uri: string}>("close")
+const edit = new rpc.NotificationType<Edit>("edit")
 
 function uri_to_fname(uri: string): string {
     const prefix = "file://"
@@ -88,8 +94,7 @@ function charOffsetToUTF16CodeUnitOffset(charOffset: number, content: string): n
     return utf16Offset
 }
 
-export function activate(context: vscode.ExtensionContext) {
-    debug("Ethersync extension activated!")
+function connect() {
     const ethersyncClient = cp.spawn("ethersync", ["client"])
 
     ethersyncClient.on("error", (err) => {
@@ -100,201 +105,202 @@ export function activate(context: vscode.ExtensionContext) {
         vscode.window.showErrorMessage("Connection to Ethersync daemon lost.")
     })
 
-    const connection = rpc.createMessageConnection(
+    connection = rpc.createMessageConnection(
         new rpc.StreamMessageReader(ethersyncClient.stdout),
         new rpc.StreamMessageWriter(ethersyncClient.stdin)
     )
 
-    const open = new rpc.NotificationType<{uri: string}>("open")
-    const close = new rpc.NotificationType<{uri: string}>("close")
-    const edit = new rpc.NotificationType<Edit>("edit")
-
-    connection.onNotification("edit", async (edit: Edit) => {
-        try {
-            await mutex.runExclusive(async () => {
-                const filename = uri_to_fname(edit.uri)
-                let revision = revisions[filename]
-                if (edit.delta.revision !== revision.editor) {
-                    debug(`Received edit for revision ${edit.delta.revision} (!= ${revision.editor}), ignoring`)
-                    return
-                }
-
-                revision.daemon += 1
-
-                debug(`Received edit ${edit.delta.revision}`)
-                console.log(revisions)
-                const uri = edit.uri
-
-                const openEditor = vscode.window.visibleTextEditors.find(
-                    (editor) => editor.document.uri.toString() === uri.toString()
-                )
-                if (openEditor) {
-                    ignoreEdits = true
-                    for (const delta of edit.delta.delta) {
-                        // TODO: make this nicer / use the vscode interface already
-                        console.log(delta)
-                        let startLineText = openEditor.document.lineAt(delta.range.start.line).text
-                        let endLineText
-                        if (delta.range.start.line == delta.range.end.line) {
-                            endLineText = startLineText
-                        } else {
-                            endLineText = openEditor.document.lineAt(delta.range.end.line).text
-                        }
-                        const range = new vscode.Range(
-                            new vscode.Position(
-                                delta.range.start.line,
-                                charOffsetToUTF16CodeUnitOffset(delta.range.start.character, startLineText)
-                            ),
-                            new vscode.Position(
-                                delta.range.end.line,
-                                charOffsetToUTF16CodeUnitOffset(delta.range.end.character, endLineText)
-                            )
-                        )
-                        console.log(range)
-                        // TODO: this logic seems redundant and `else` will never happen. Fix later.
-                        if (openEditor) {
-                            // Apply the edit if the document is open
-                            await openEditor.edit((editBuilder) => {
-                                editBuilder.replace(range, delta.replacement)
-                            })
-                            debug(`Edit applied to open document: ${uri.toString()}`)
-                        } else {
-                            debug(`Document not open: ${uri.toString()}`)
-                        }
-                    }
-                    // TODO: Make this more efficient by replacing only the changed lines.
-                    // The challenge with that is that we need to compute how many lines are
-                    // left after the edit.
-                    updateContents(openEditor.document)
-                    ignoreEdits = false
-                }
-            })
-        } catch (e) {
-            debug("promise failed")
-            console.error(e)
-        }
-    })
+    connection.onNotification("edit", processEditFromDaemon)
 
     // Start the connection
     connection.listen()
+}
 
-    let disposable = vscode.commands.registerCommand("ethersync.helloWorld", () => {
-        vscode.window.showInformationMessage("Ethersync activated!")
-    })
+async function processEditFromDaemon(edit: Edit) {
+    try {
+        await mutex.runExclusive(async () => {
+            const filename = uri_to_fname(edit.uri)
+            let revision = revisions[filename]
+            if (edit.delta.revision !== revision.editor) {
+                debug(`Received edit for revision ${edit.delta.revision} (!= ${revision.editor}), ignoring`)
+                return
+            }
 
-    context.subscriptions.push(disposable)
+            revision.daemon += 1
 
-    // NOTE: We might get multiple events per document.version,
-    // as the _state_ of the document might change (like isDirty).
-    disposable = vscode.workspace.onDidChangeTextDocument((event) => {
-        if (ignoreEdits) {
-            debug("ack")
-            return
+            debug(`Received edit ${edit.delta.revision}`)
+            console.log(revisions)
+            const uri = edit.uri
+
+            const openEditor = vscode.window.visibleTextEditors.find(
+                (editor) => editor.document.uri.toString() === uri.toString()
+            )
+            if (openEditor) {
+                ignoreEdits = true
+                applyEdit(openEditor, edit)
+                ignoreEdits = false
+            } else {
+                throw new Error(`No open editor for URI ${uri}`)
+            }
+        })
+    } catch (e) {
+        debug("promise failed")
+        console.error(e)
+    }
+}
+
+async function applyEdit(editor: vscode.TextEditor, edit: Edit) {
+    for (const delta of edit.delta.delta) {
+        // TODO: make this nicer / use the vscode interface already
+        console.log(delta)
+        let startLineText = editor.document.lineAt(delta.range.start.line).text
+        let endLineText
+        if (delta.range.start.line == delta.range.end.line) {
+            endLineText = startLineText
+        } else {
+            endLineText = editor.document.lineAt(delta.range.end.line).text
         }
-        mutex
-            .runExclusive(() => {
-                let document = event.document
+        const range = new vscode.Range(
+            new vscode.Position(
+                delta.range.start.line,
+                charOffsetToUTF16CodeUnitOffset(delta.range.start.character, startLineText)
+            ),
+            new vscode.Position(
+                delta.range.end.line,
+                charOffsetToUTF16CodeUnitOffset(delta.range.end.character, endLineText)
+            )
+        )
+        console.log(range)
 
-                // For some reason we get multipe events per edit caused by us.
-                // Let's actively skip the empty ones to make debugging output below less noisy.
-                if (event.contentChanges.length == 0) {
-                    if (document.isDirty == false) {
-                        debug("ignoring empty docChange. (probably saving...)")
-                    }
-                    return
+        // Apply the edit
+        await editor.edit((editBuilder) => {
+            editBuilder.replace(range, delta.replacement)
+        })
+        debug(`Edit applied to open document ${editor.document.uri.toString()}`)
+    }
+    // TODO: Make this more efficient by replacing only the changed lines.
+    // The challenge with that is that we need to compute how many lines are
+    // left after the edit.
+    updateContents(editor.document)
+}
+
+// TODO: check if belongs to project.
+function processUserOpen(document: vscode.TextDocument) {
+    const fileUri = document.uri.toString()
+    debug("OPEN " + fileUri)
+    revisions[document.fileName] = new Revision()
+    updateContents(document)
+    connection.sendNotification(open, {uri: fileUri})
+    console.log(revisions)
+}
+
+function processUserClose(document: vscode.TextDocument) {
+    if (!(document.fileName in revisions)) {
+        return
+    }
+    const fileUri = document.uri.toString()
+    connection.sendNotification(close, {uri: fileUri})
+
+    delete revisions[document.fileName]
+}
+
+// NOTE: We might get multiple events per document.version,
+// as the _state_ of the document might change (like isDirty).
+function processUserEdit(event: vscode.TextDocumentChangeEvent) {
+    if (ignoreEdits) {
+        debug("ack")
+        return
+    }
+    mutex
+        .runExclusive(() => {
+            let document = event.document
+
+            // For some reason we get multipe events per edit caused by us.
+            // Let's actively skip the empty ones to make debugging output below less noisy.
+            if (event.contentChanges.length == 0) {
+                if (document.isDirty == false) {
+                    debug("ignoring empty docChange. (probably saving...)")
                 }
+                return
+            }
 
-                const filename = document.fileName
-                if (!isEthersyncEnabled(path.dirname(filename))) {
-                    return
+            const filename = document.fileName
+            if (!isEthersyncEnabled(path.dirname(filename))) {
+                return
+            }
+
+            let revision = revisions[filename]
+            // debug("document.version: " + document.version)
+            // debug("document.isDirty: " + document.isDirty)
+            // if (event.contentChanges.length == 0) { console.log(document) }
+            for (const change of event.contentChanges) {
+                console.log(change)
+                let content = contents[filename]
+                console.log(content)
+                console.log(content[0])
+                let startLine = change.range.start.line
+                let endLine = change.range.end.line
+
+                debug("startLineText")
+                console.log(content[startLine])
+                let startLineText = content[startLine]
+                let endLineText
+                if (startLine == endLine) {
+                    endLineText = startLineText
+                } else {
+                    endLineText = content[endLine]
                 }
-
-                let revision = revisions[filename]
-                // debug("document.version: " + document.version)
-                // debug("document.isDirty: " + document.isDirty)
-                // if (event.contentChanges.length == 0) { console.log(document) }
-                for (const change of event.contentChanges) {
-                    console.log(change)
-                    let content = contents[filename]
-                    console.log(content)
-                    console.log(content[0])
-                    let startLine = change.range.start.line
-                    let endLine = change.range.end.line
-
-                    debug("startLineText")
-                    console.log(content[startLine])
-                    let startLineText = content[startLine]
-                    let endLineText
-                    if (startLine == endLine) {
-                        endLineText = startLineText
-                    } else {
-                        endLineText = content[endLine]
-                    }
-                    const range = new vscode.Range(
-                        new vscode.Position(
-                            startLine,
-                            UTF16CodeUnitOffsetToCharOffset(change.range.start.character, startLineText)
-                        ),
-                        new vscode.Position(
-                            endLine,
-                            UTF16CodeUnitOffsetToCharOffset(change.range.end.character, endLineText)
-                        )
+                const range = new vscode.Range(
+                    new vscode.Position(
+                        startLine,
+                        UTF16CodeUnitOffsetToCharOffset(change.range.start.character, startLineText)
+                    ),
+                    new vscode.Position(
+                        endLine,
+                        UTF16CodeUnitOffsetToCharOffset(change.range.end.character, endLineText)
                     )
-                    console.log(change.range)
-                    console.log(range)
-                    let delta = {
-                        range,
-                        replacement: change.text
-                    }
-                    let revDelta: RevisionedDelta = {delta: [delta], revision: revision.daemon}
-                    let uri = document.uri.toString()
-                    let theEdit: Edit = {uri, delta: revDelta}
-                    console.log(theEdit)
-                    // interestingly this seems to block when it can't send
-                    // TODO: Catch exceptions, for example when daemon disconnects/crashes.
-                    connection.sendNotification(edit, theEdit)
-                    revision.editor += 1
-                    debug(`sent edit for dR ${revision.daemon} (having edR ${revision.editor})`)
-                    console.log(revisions)
-
-                    // TODO: Make this more efficient by replacing only the changed lines.
-                    // The challenge with that is that we need to compute how many lines are
-                    // left after the edit.
-                    updateContents(document)
+                )
+                console.log(change.range)
+                console.log(range)
+                let delta = {
+                    range,
+                    replacement: change.text
                 }
-            })
-            .catch((e: Error) => {
-                debug("promise failed!")
-                console.error(e)
-            })
-    })
+                let revDelta: RevisionedDelta = {delta: [delta], revision: revision.daemon}
+                let uri = document.uri.toString()
+                let theEdit: Edit = {uri, delta: revDelta}
+                console.log(theEdit)
+                // interestingly this seems to block when it can't send
+                // TODO: Catch exceptions, for example when daemon disconnects/crashes.
+                connection.sendNotification(edit, theEdit)
+                revision.editor += 1
+                debug(`sent edit for dR ${revision.daemon} (having edR ${revision.editor})`)
+                console.log(revisions)
 
-    context.subscriptions.push(disposable)
+                // TODO: Make this more efficient by replacing only the changed lines.
+                // The challenge with that is that we need to compute how many lines are
+                // left after the edit.
+                updateContents(document)
+            }
+        })
+        .catch((e: Error) => {
+            debug("promise failed!")
+            console.error(e)
+        })
+}
 
-    // TODO: check if belongs to project.
-    let openDisposable = vscode.workspace.onDidOpenTextDocument((document) => {
-        const fileUri = document.uri.toString()
-        debug("OPEN " + fileUri)
-        revisions[document.fileName] = new Revision()
-        updateContents(document)
-        connection.sendNotification(open, {uri: fileUri})
-        console.log(revisions)
-    })
+export function activate(context: vscode.ExtensionContext) {
+    debug("Ethersync extension activated!")
 
-    context.subscriptions.push(openDisposable)
+    connect()
 
-    let closeDisposable = vscode.workspace.onDidCloseTextDocument((document) => {
-        if (!(document.fileName in revisions)) {
-            return
-        }
-        const fileUri = document.uri.toString()
-        connection.sendNotification(close, {uri: fileUri})
+    context.subscriptions.push(
+        vscode.workspace.onDidChangeTextDocument(processUserEdit),
+        vscode.workspace.onDidOpenTextDocument(processUserOpen),
+        vscode.workspace.onDidCloseTextDocument(processUserClose)
+    )
 
-        delete revisions[document.fileName]
-    })
-
-    context.subscriptions.push(closeDisposable)
-    debug("end of activation")
+    debug("End of activation")
 }
 
 export function deactivate() {}
