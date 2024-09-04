@@ -110,25 +110,25 @@ export function activate(context: vscode.ExtensionContext) {
     const edit = new rpc.NotificationType<Edit>("edit")
 
     connection.onNotification("edit", async (edit: Edit) => {
-        const filename = uri_to_fname(edit.uri)
-        let revision = revisions[filename]
-        if (edit.delta.revision !== revision.editor) {
-            debug(`Received edit for revision ${edit.delta.revision} (!= ${revision.editor}), ignoring`)
-            return
-        }
+        try {
+            await mutex.runExclusive(async () => {
+                const filename = uri_to_fname(edit.uri)
+                let revision = revisions[filename]
+                if (edit.delta.revision !== revision.editor) {
+                    debug(`Received edit for revision ${edit.delta.revision} (!= ${revision.editor}), ignoring`)
+                    return
+                }
 
-        revision.daemon += 1
+                revision.daemon += 1
 
-        debug(`Received edit ${edit.delta.revision}`)
-        console.log(revisions)
-        const uri = edit.uri
+                debug(`Received edit ${edit.delta.revision}`)
+                console.log(revisions)
+                const uri = edit.uri
 
-        const openEditor = vscode.window.visibleTextEditors.find(
-            (editor) => editor.document.uri.toString() === uri.toString()
-        )
-        if (openEditor) {
-            try {
-                await mutex.runExclusive(async () => {
+                const openEditor = vscode.window.visibleTextEditors.find(
+                    (editor) => editor.document.uri.toString() === uri.toString()
+                )
+                if (openEditor) {
                     ignoreEdits = true
                     for (const delta of edit.delta.delta) {
                         // TODO: make this nicer / use the vscode interface already
@@ -167,11 +167,11 @@ export function activate(context: vscode.ExtensionContext) {
                     // left after the edit.
                     updateContents(openEditor.document)
                     ignoreEdits = false
-                })
-            } catch (e) {
-                debug("promise failed")
-                console.error(e)
-            }
+                }
+            })
+        } catch (e) {
+            debug("promise failed")
+            console.error(e)
         }
     })
 
@@ -191,29 +191,29 @@ export function activate(context: vscode.ExtensionContext) {
             debug("ack")
             return
         }
-        let document = event.document
+        mutex
+            .runExclusive(() => {
+                let document = event.document
 
-        // For some reason we get multipe events per edit caused by us.
-        // Let's actively skip the empty ones to make debugging output below less noisy.
-        if (event.contentChanges.length == 0) {
-            if (document.isDirty == false) {
-                debug("ignoring empty docChange. (probably saving...)")
-            }
-            return
-        }
+                // For some reason we get multipe events per edit caused by us.
+                // Let's actively skip the empty ones to make debugging output below less noisy.
+                if (event.contentChanges.length == 0) {
+                    if (document.isDirty == false) {
+                        debug("ignoring empty docChange. (probably saving...)")
+                    }
+                    return
+                }
 
-        const filename = document.fileName
-        if (!isEthersyncEnabled(path.dirname(filename))) {
-            return
-        }
+                const filename = document.fileName
+                if (!isEthersyncEnabled(path.dirname(filename))) {
+                    return
+                }
 
-        let revision = revisions[filename]
-        // debug("document.version: " + document.version)
-        // debug("document.isDirty: " + document.isDirty)
-        // if (event.contentChanges.length == 0) { console.log(document) }
-        for (const change of event.contentChanges) {
-            mutex
-                .runExclusive(() => {
+                let revision = revisions[filename]
+                // debug("document.version: " + document.version)
+                // debug("document.isDirty: " + document.isDirty)
+                // if (event.contentChanges.length == 0) { console.log(document) }
+                for (const change of event.contentChanges) {
                     console.log(change)
                     let content = contents[filename]
                     console.log(content)
@@ -261,12 +261,12 @@ export function activate(context: vscode.ExtensionContext) {
                     // The challenge with that is that we need to compute how many lines are
                     // left after the edit.
                     updateContents(document)
-                })
-                .catch((e: Error) => {
-                    debug("promise failed!")
-                    console.error(e)
-                })
-        }
+                }
+            })
+            .catch((e: Error) => {
+                debug("promise failed!")
+                console.error(e)
+            })
     })
 
     context.subscriptions.push(disposable)
