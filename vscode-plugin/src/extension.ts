@@ -244,7 +244,7 @@ export function activate(context: vscode.ExtensionContext) {
                     console.log(range)
                     let delta = {
                         range,
-                        replacement: change.text,
+                        replacement: change.text
                     }
                     let revDelta: RevisionedDelta = {delta: [delta], revision: revision.daemon}
                     let uri = document.uri.toString()
