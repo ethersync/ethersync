@@ -137,7 +137,7 @@ async function processEditFromDaemon(edit: Edit) {
             )
             if (openEditor) {
                 ignoreEdits = true
-                applyEdit(openEditor, edit)
+                await applyEdit(openEditor, edit)
                 ignoreEdits = false
             } else {
                 throw new Error(`No open editor for URI ${uri}`)
@@ -230,63 +230,79 @@ function processUserEdit(event: vscode.TextDocumentChangeEvent) {
             }
 
             let revision = revisions[filename]
-            // debug("document.version: " + document.version)
-            // debug("document.isDirty: " + document.isDirty)
-            // if (event.contentChanges.length == 0) { console.log(document) }
-            for (const change of event.contentChanges) {
-                console.log(change)
-                let content = contents[filename]
-                console.log(content)
-                console.log(content[0])
-                let startLine = change.range.start.line
-                let endLine = change.range.end.line
 
-                debug("startLineText")
-                console.log(content[startLine])
-                let startLineText = content[startLine]
-                let endLineText
-                if (startLine == endLine) {
-                    endLineText = startLineText
-                } else {
-                    endLineText = content[endLine]
-                }
-                const range = new vscode.Range(
-                    new vscode.Position(
-                        startLine,
-                        UTF16CodeUnitOffsetToCharOffset(change.range.start.character, startLineText)
-                    ),
-                    new vscode.Position(
-                        endLine,
-                        UTF16CodeUnitOffsetToCharOffset(change.range.end.character, endLineText)
-                    )
-                )
-                console.log(change.range)
-                console.log(range)
-                let delta = {
-                    range,
-                    replacement: change.text
-                }
-                let revDelta: RevisionedDelta = {delta: [delta], revision: revision.daemon}
-                let uri = document.uri.toString()
-                let theEdit: Edit = {uri, delta: revDelta}
-                console.log(theEdit)
+            let edits = vsCodeChangeEventToEthersyncEdits(event)
+
+            for (const theEdit of edits) {
                 // interestingly this seems to block when it can't send
                 // TODO: Catch exceptions, for example when daemon disconnects/crashes.
                 connection.sendNotification(edit, theEdit)
                 revision.editor += 1
+
                 debug(`sent edit for dR ${revision.daemon} (having edR ${revision.editor})`)
                 console.log(revisions)
-
-                // TODO: Make this more efficient by replacing only the changed lines.
-                // The challenge with that is that we need to compute how many lines are
-                // left after the edit.
-                updateContents(document)
             }
+
+            // TODO: Make this more efficient by replacing only the changed lines.
+            // The challenge with that is that we need to compute how many lines are
+            // left after the edit.
+            updateContents(document)
         })
         .catch((e: Error) => {
             debug("promise failed!")
             console.error(e)
         })
+}
+
+function vsCodeChangeEventToEthersyncEdits(event: vscode.TextDocumentChangeEvent): Edit[] {
+    let document = event.document
+    let filename = document.fileName
+
+    let revision = revisions[filename]
+    // debug("document.version: " + document.version)
+    // debug("document.isDirty: " + document.isDirty)
+    // if (event.contentChanges.length == 0) { console.log(document) }
+
+    let content = contents[filename]
+    let edits = []
+
+    for (const change of event.contentChanges) {
+        let delta = vsCodeChangeToEthersyncDelta(content, change)
+        let revDelta: RevisionedDelta = {delta: [delta], revision: revision.daemon}
+        let uri = document.uri.toString()
+        let theEdit: Edit = {uri, delta: revDelta}
+        edits.push(theEdit)
+    }
+    return edits
+}
+
+function vsCodeChangeToEthersyncDelta(content: string[], change: vscode.TextDocumentContentChangeEvent): Delta {
+    console.log(change)
+    console.log(content)
+    console.log(content[0])
+    let startLine = change.range.start.line
+    let endLine = change.range.end.line
+
+    debug("startLineText")
+    console.log(content[startLine])
+    let startLineText = content[startLine]
+    let endLineText
+    if (startLine == endLine) {
+        endLineText = startLineText
+    } else {
+        endLineText = content[endLine]
+    }
+    const range = new vscode.Range(
+        new vscode.Position(startLine, UTF16CodeUnitOffsetToCharOffset(change.range.start.character, startLineText)),
+        new vscode.Position(endLine, UTF16CodeUnitOffsetToCharOffset(change.range.end.character, endLineText))
+    )
+    console.log(change.range)
+    console.log(range)
+    let delta = {
+        range,
+        replacement: change.text
+    }
+    return delta
 }
 
 export function activate(context: vscode.ExtensionContext) {
