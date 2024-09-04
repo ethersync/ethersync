@@ -94,6 +94,34 @@ function charOffsetToUTF16CodeUnitOffset(charOffset: number, content: string): n
     return utf16Offset
 }
 
+function vsCodeRangeToEthersyncRange(content: string[], range: vscode.Range): Range {
+    return {
+        start: vsCodePositionToEthersyncPosition(content, range.start),
+        end: vsCodePositionToEthersyncPosition(content, range.end)
+    }
+}
+
+function vsCodePositionToEthersyncPosition(content: string[], position: vscode.Position): Position {
+    let lineText = content[position.line]
+    return {
+        line: position.line,
+        character: UTF16CodeUnitOffsetToCharOffset(position.character, lineText)
+    }
+}
+
+function ethersyncPositionToVSCodePosition(editor: vscode.TextEditor, position: Position): vscode.Position {
+    let lineText = editor.document.lineAt(position.line).text
+    return new vscode.Position(position.line, charOffsetToUTF16CodeUnitOffset(position.character, lineText))
+}
+
+function ethersyncRangeToVSCodeRange(editor: vscode.TextEditor, range: Range): vscode.Range {
+    // TODO: make this nicer / use the vscode interface already (which interface? --blinry)
+    return new vscode.Range(
+        ethersyncPositionToVSCodePosition(editor, range.start),
+        ethersyncPositionToVSCodePosition(editor, range.end)
+    )
+}
+
 function connect() {
     const ethersyncClient = cp.spawn("ethersync", ["client"])
 
@@ -140,7 +168,7 @@ async function processEditFromDaemon(edit: Edit) {
                 await applyEdit(openEditor, edit)
                 ignoreEdits = false
             } else {
-                throw new Error(`No open editor for URI ${uri}`)
+                throw new Error(`No open editor for URI ${uri}, why is the daemon sending me this?`)
             }
         })
     } catch (e) {
@@ -151,25 +179,7 @@ async function processEditFromDaemon(edit: Edit) {
 
 async function applyEdit(editor: vscode.TextEditor, edit: Edit) {
     for (const delta of edit.delta.delta) {
-        // TODO: make this nicer / use the vscode interface already
-        console.log(delta)
-        let startLineText = editor.document.lineAt(delta.range.start.line).text
-        let endLineText
-        if (delta.range.start.line == delta.range.end.line) {
-            endLineText = startLineText
-        } else {
-            endLineText = editor.document.lineAt(delta.range.end.line).text
-        }
-        const range = new vscode.Range(
-            new vscode.Position(
-                delta.range.start.line,
-                charOffsetToUTF16CodeUnitOffset(delta.range.start.character, startLineText)
-            ),
-            new vscode.Position(
-                delta.range.end.line,
-                charOffsetToUTF16CodeUnitOffset(delta.range.end.character, endLineText)
-            )
-        )
+        const range = ethersyncRangeToVSCodeRange(editor, delta.range)
         console.log(range)
 
         // Apply the edit
@@ -277,32 +287,10 @@ function vsCodeChangeEventToEthersyncEdits(event: vscode.TextDocumentChangeEvent
 }
 
 function vsCodeChangeToEthersyncDelta(content: string[], change: vscode.TextDocumentContentChangeEvent): Delta {
-    console.log(change)
-    console.log(content)
-    console.log(content[0])
-    let startLine = change.range.start.line
-    let endLine = change.range.end.line
-
-    debug("startLineText")
-    console.log(content[startLine])
-    let startLineText = content[startLine]
-    let endLineText
-    if (startLine == endLine) {
-        endLineText = startLineText
-    } else {
-        endLineText = content[endLine]
-    }
-    const range = new vscode.Range(
-        new vscode.Position(startLine, UTF16CodeUnitOffsetToCharOffset(change.range.start.character, startLineText)),
-        new vscode.Position(endLine, UTF16CodeUnitOffsetToCharOffset(change.range.end.character, endLineText))
-    )
-    console.log(change.range)
-    console.log(range)
-    let delta = {
-        range,
+    return {
+        range: vsCodeRangeToEthersyncRange(content, change.range),
         replacement: change.text
     }
-    return delta
 }
 
 export function activate(context: vscode.ExtensionContext) {
