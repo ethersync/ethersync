@@ -20,21 +20,31 @@ touch file
 ethersync daemon
 ```
 
+You should see some log output indicating that things are initialized etc.
+
 ### 3. See changes across editors
 
-Open the file twice, in two terminals:
+Open the file in a new terminal:
 
 ```bash
 nvim file
 ```
 
-You should see `Ethersync activated!` in Neovim, and two `Client connected` messages in the logs of the daemon.
-
-The edits you make in one editor should now appear in both.
+You should see `Ethersync activated!` in Neovim, and a `Client connected` message in the logs of the daemon.
 
 > 💡 **Tip**
 >
-> If that doesn't work, make sure that there's an `.ethersync` directory in the `playground`, and that the `ethersync` command is in the `PATH` in the terminal where you run Neovim.
+> If that doesn't work, make sure that the `ethersync` command is in the `PATH` in the terminal where you run Neovim.
+
+Next, in order to see Ethersync working, you can open the file again in a *third* terminal:
+
+```bash
+nvim file
+```
+The edits you make in one editor should now appear in both!
+
+Note that using two editors is not the main use-case of Ethersync. We show it here for demonstrating purposes.
+
 
 ## 🧑‍🤝‍🧑 Invite other people
 
@@ -51,17 +61,25 @@ cd playground
 
 You need to know two things:
 
-- When the other daemon started, it printed a connection address like `/ip4/192.168.23.42/tcp/4242/p2p/12D3KooWPNj7mom3X2D6NiSyxbFa5hHfzxDFP98ZL52yYnkEVmDv`. If you're in the same local network, you can just use that address. If you're in another local network, see [these instructions](./use-cases/pair-programming.md).
-- When the other daemon started, it generated a new passphrase, and printed it in the logs. Only people who know that passphrase are allowed to connect via the network.
+- When the first (your) daemon started, it printed a connection address like `/ip4/192.168.23.42/tcp/4242/p2p/12D3KooWPNj7mom3X2D6NiSyxbFa5hHfzxDFP98ZL52yYnkEVmDv`. If you're in the same local network, you can just use that address. If you're in another local network, see [these instructions](./use-cases/pair-programming.md).
+- When the first daemon started, it generated a passphrase, and printed it in the logs. Only people who know that passphrase are allowed to connect to it via the network.
 
-## 3. Start the daemon
+In order to allow them to connect, we assume that you sent these two things to your friend (if you're not local, a secure channel is recommended).
+
+### 3. Start the daemon
 
 The command for joining another peer will look something like this:
 
 ```bash
-ethersync daemon --peer /ip4/192.168.23.42/tcp/4242/p2p/12D3KooWPNj7mom3X2D6NiSyxbFa5hHfzxDFP98ZL52yYnkEVmDv --secret your-secret-here
+export PEER_ADDRESS=/ip4/192.168.23.42/tcp/4242/p2p/12D3KooWPNj7mom3X2D6NiSyxbFa5hHfzxDFP98ZL52yYnkEVmDv
+export PEER_SECRET=your-secret-here
+ethersync daemon --peer $PEER_ADDRESS --secret $PEER_SECRET
 ```
 
-## 3. Start collaborating in real-time!
+If a connection can be made, both sides will indicate success with a log message "Peer connected" and "Connected to peer" respectively. If you don't see it, double check the previous steps.
 
-If everything worked, connected peers can now open, edit, create and delete files in the shared directory, and the changes will be transferred over!
+### 4. Start collaborating in real-time!
+
+If everything worked, connected peers can now collaborate on existing files through opening them in their editors.
+Type somethings and the changes will be transferred over!
+If you're on nvim you should also see your peer's cursor.
