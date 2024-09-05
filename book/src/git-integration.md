@@ -111,3 +111,14 @@ Let's say you have initially added and committed all notes.
 - Then you can add and commit them with an unimportant commit message to set a "savepoint" for next time
 
 It's also a nice little back-up in case anything goes wrong with they sync. Which might happen given that this is very new and bleeding edge software, be it through bugs or misunderstandings.
+
+## Ignoring `.ethersync` directories
+
+In Ethersync-enabled projects, you will have a directory called `.ethersync`.
+
+If you always want to ignore these directories, you can add it to your global `.gitignore` file like this:
+
+```bash
+mkdir -p ~/.config/git/
+echo ".ethersync/" >> ~/.config/git/ignore
+```
