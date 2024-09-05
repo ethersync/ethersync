@@ -61,7 +61,7 @@ cd playground
 
 You need to know two things:
 
-- When the first (your) daemon started, it printed a connection address like `/ip4/192.168.23.42/tcp/4242/p2p/12D3KooWPNj7mom3X2D6NiSyxbFa5hHfzxDFP98ZL52yYnkEVmDv`. If you're in the same local network, you can just use that address. If you're in another local network, see [these instructions](./use-cases/pair-programming.md).
+- When the first (your) daemon started, it printed a connection address like `/ip4/192.168.23.42/tcp/58063/p2p/12D3KooWPNj7mom3X2D6NiSyxbFa5hHfzxDFP98ZL52yYnkEVmDv`. If you're in the same local network, you can just use that address. If you're in another local network, see [these instructions](./use-cases/pair-programming.md).
 - When the first daemon started, it generated a passphrase, and printed it in the logs. Only people who know that passphrase are allowed to connect to it via the network.
 
 In order to allow them to connect, we assume that you sent these two things to your friend (if you're not local, a secure channel is recommended).
@@ -72,7 +72,7 @@ The command for joining another peer will look something like this:
 
 ```bash
 # Note that we split the info into variables just for convenience/illustration
-PEER_ADDRESS=/ip4/192.168.23.42/tcp/4242/p2p/12D3KooWPNj7mom3X2D6NiSyxbFa5hHfzxDFP98ZL52yYnkEVmDv
+PEER_ADDRESS=/ip4/192.168.23.42/tcp/58063/p2p/12D3KooWPNj7mom3X2D6NiSyxbFa5hHfzxDFP98ZL52yYnkEVmDv
 PEER_SECRET=your-secret-here
 ethersync daemon --peer $PEER_ADDRESS --secret $PEER_SECRET
 ```

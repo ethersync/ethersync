@@ -8,7 +8,7 @@ This would also work for more than two people. One person will start the session
 
 ### Starting conditions
 
-If both people already have a copy of the project, make sure you're on the same state – for example, by making sure that you're on the same commit. If the joining peer has a different state, those changes will be overwritten.
+If both people already have a copy of the project, make sure you're on the same state – for example, by making sure that you're on the same commit with a clean working tree. If the joining peer has a different state, those changes will be overwritten.
 
 An alternative is that the joining peer starts from scratch, with an empty directory.
 
@@ -21,6 +21,7 @@ This is our convention to mark a project as shareable: It needs to have a direct
 ```bash
 mkdir .ethersync
 ```
+Note that this directory, similar to a `.git` directory will *not* be synchronized.
 
 ### First peer
 
@@ -30,10 +31,10 @@ To start the session, run:
 ethersync daemon
 ```
 
-This will print two things you need to tell the other peers:
+This will print, among other initialization information, two things you need to tell the other peers:
 
-- A connection address like `/ip4/192.168.23.42/tcp/4242/p2p/12D3KooWPNj7mom3X2D6NiSyxbFa5hHfzxDFP98ZL52yYnkEVmDv`. This is what libp2p calls a "multiaddr" – it contains your IP address, the port, and a "peer ID" (which is used by connecting peers to make sure that they're actually connecting to the correct peer, and not to a "man in the middle").
-- A secret passphrase, that is randomly generated each time you start the daemon. If you want to use a stable secret, you can put it into the [configuration file](./features/configuration.md).
+- A connection address like `/ip4/192.168.23.42/tcp/58063/p2p/12D3KooWPNj7mom3X2D6NiSyxbFa5hHfzxDFP98ZL52yYnkEVmDv`. This is what libp2p calls a [multiaddress](https://docs.libp2p.io/concepts/fundamentals/addressing/) – it contains your IP address, the TCP port, and a "peer ID" (which is used by connecting peers to make sure that they're actually connecting to the correct peer, and not to a "man in the middle").
+- A secret passphrase, that is randomly generated each time you start the daemon. If you want to use a stable secret, we recommend putting it into the [configuration file](../features/configuration.md).
 
 ### Other peers
 
@@ -43,7 +44,9 @@ To join a session, run:
 ethersync demon --peer <multiaddr> --secret <secret>
 ```
 
-This should show you a message like "Connected to peer ...". The hosing daemon should show a message like "Peer connected".
+This should show you a message like "Connected to peer ...". The hosting daemon should show a message like "Peer connected".
+
+If you prefer, it's also possible to use the [configuration file](../features/configuration.md) to provide multiaddress and secret.
 
 ### Collaborate!
 
@@ -59,6 +62,6 @@ If you later want to do another pairing session, make sure that you understand E
 
 ## How to connect across different local networks?
 
-For two people in the same network (for example, in the same wi-fi), the connection will just work. If you want to connect to someone in another local network, you'll currently need to do a workaround:
+For two people in the same network, the connection will just work. If you want to connect to someone in another local network, you'll currently need to do a workaround:
 
 You need to enable port forwarding on your router. Specifically, the hosting peer needs to configure their router in such a way that it forwards incoming connections on the port you're using with Ethersync (you can specify a fixed port with the `--port` option) to their local machine.
