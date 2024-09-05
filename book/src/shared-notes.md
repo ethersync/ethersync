@@ -1,5 +1,54 @@
-## Setting up Ethersync for a note-taking use-case
+# Using Ethersync for writing shared notes
 
-While in a "pair-programming" use case, all peers will be online at the same time, for shared notes, it is often desirable to allow peers to go offline, and other peers will still get their changes once they connect.
+Another use case for Ethersync is to have a **long-lasting collaboration session** on a directory of text files (over the span of months or years). This is similar to how you would use Google Docs, Ethersync or Hedgedoc to work on text. It would be suited for groups who want to write notes or documentation together.
 
-To enable that, our currently proposed solution is to set up a "cloud peer" – an Ethersync daemon running on a public server, which all users connect to. This resembles a server-client architecture, but all peers are essentially equal. Just the topology of the connections is star-shaped.
+This use case is different from the "pair-programming" use case, because there, all peers are online at the same time. When you're working on a directory of notes for a longer time, it might happen that you make a change to a file, and then go offline, while the other peers are also offline. Still, you want other peers to be able to receive your changes.
+
+Other systems solve this with a client-server architecture, where the server is always online, and the clients connect to it as needed.
+
+But Ethersync is fundamentally peer-to-peer, so what we suggest to use is what the research group Ink & Switch call a ["cloud peer"](https://www.inkandswitch.com/local-first/): You run an Ethersync peer on a public server, and all users will then connect to that server.
+
+## Step-by-step guide
+
+You need to have access to a server on the Internet, and install the Ethersync daemon there.
+
+### 1. Set up the directory
+
+On the server, create a new directory for your shared project, as well as an `.ethersync` directory inside it:
+
+```bash
+mkdir my-project/.ethersync
+cd my-project
+```
+
+### 2. Configure the daemon
+
+You'll want to use a stable secret passphrase and a stable port on the server, so put those into the configuration file:
+
+```bash
+echo "secret=your-passphrase-here" >> .ethersync/config
+echo "port=4242" >> .ethersync/config
+```
+
+### 3. Start the daemon
+
+Launch the daemon in a way where it will keep running once you disconnect from your terminal session on the server. You could use `screen`, `tmux`, write a systemd service, or, in the easiest case, launch it with `nohup`:
+
+```bash
+nohup ethersync daemon &
+```
+
+### 4. Collaborate!
+
+Other peers can now connect to the "cloud peer". It is most convenient for them to also use a configuration file like this:
+
+```bash
+echo "secret=your-passphrase-here" >> .ethersync/config
+echo "peer=/ip4/<server ip>/tcp/<port>/p2p/<peerid>" >> .ethersync/config
+```
+
+Then, they can connect anytime using
+
+```bash
+ethersync daemon
+```
