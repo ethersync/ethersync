@@ -1,12 +1,14 @@
 # Working with Git
 
+## When Pair Programming
+
 While we have some vague ideas on how actual Git support could look like, there's currently no real integration.
 
 This section, however, lays a foundation and then explains how a possible *workflow* looks like and how the Ethersync and Git concepts are interacting when you're working on a Git-based project.
 
 If you don't want to know all the details you could also jump ahead to the last section and just apply the workflow.
 
-## Recap: What Git is doing under the hood
+### Recap: What Git is doing under the hood
 
 In case you're not a power-user of Git, it might be helpful to review some concepts here, in order to build upon them.
 
@@ -36,7 +38,7 @@ The reason why `git pull` is different is, because it *does* change the working 
 
 TODO: Explain upstream tracking branches here as well? As background to `@{u}` below.
 
-## How Ethersync and Git interact
+### How Ethersync and Git interact
 
 - Ethersync cares *only* about changes to the working directory of files that you [don't have open](../file-ownership.md) in an editor.
 - In reverse, any change to the `.git` directory and the staging area (which is in fact also tracked in the `.git` repository) is *ignored* by Ethersync
@@ -67,7 +69,7 @@ Here are some things you might do, in increasing "order of complexity":
 - Use `git switch`/`git checkout` to switch to a different branch or get a specific file state from history.
     - Impact on Ethersync: As you're changing the whole working directory, this will be tracked! A peer's working directory will get the same working directory state (assuming no open files), but their HEAD does not move in the same way.
 
-## Recommended Workflow
+### Recommended Workflow
 
 To summarize all these bits and pieces into one pairing workflow that manages the Git related parts that Ethersync neglects.
 
@@ -89,10 +91,23 @@ In this case, just make sure you stick to this "basic recipe" :) )
     - `git reset --mixed @{u}` moves your HEAD to the same commit as the committer.
     - Use `git status`/`git diff` to double check that all of you have the same diff now.
 
-## Other workflows
+### Other workflows
 
 Things you could do, that we have not tested thoroughly:
 - Hop around different branches and states of the Git repository.
 - Use git pull to get the latest changes.
 
 When doing any of this, we recommend to close all connected editors for a smooth synchronization (because of [ownership](../file-ownership.md)).
+
+## When Note Taking
+
+In the note taking use case it's much simpler, but there's also a possible way to integrate and take advantage of it.
+
+In this use case the assumption is that everyone has their own local git, which is not synchronized with anyone else.
+You can then use it, to track which parts have been changed by others, for example while you were offline.
+
+Let's say you have initially added and committed all notes.
+- Whenever you are reconnecting to the cloud peer and are getting some changes, you can revise them by looking at the git diff.
+- Then you can add and commit them with an unimportant commit message to set a "savepoint" for next time
+
+It's also a nice little back-up in case anything goes wrong with they sync. Which might happen given that this is very new and bleeding edge software, be it through bugs or misunderstandings.
