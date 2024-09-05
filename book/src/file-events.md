@@ -16,7 +16,7 @@ Example: `echo hello > new_file`
 
 If you make changes to a file, the daemon will calculate a diff compared to the previous content, and send that to other peers as an edit.
 
-Note: Edits will only be picked up if the file is not currently opened in an editor, because of [ownership](../file-ownership.md).
+Note: Edits will only be picked up if the file is not currently opened in an editor, because of [ownership](file-ownership.md).
 
 Example: `echo new stuff >> new_file`
 

@@ -18,7 +18,7 @@ Mainly it's important to understand the three sections of a Git repository and w
 - The Git directory
 
 This picture, from the "The Three States" section of ["What is Git?"](https://git-scm.com/book/en/v2/Getting-Started-What-is-Git%3F) in the Git Book illustrates these three sections:
-![Three sections of a Git repository and their transitions](./areas.png)
+![Three sections of a Git repository and their transitions](git-integration-areas.png)
 
 (Editor's note: Another helpful perspective is https://git-scm.com/book/en/v2/Git-Tools-Reset-Demystified, which talks about "The Three Trees". Maybe that's more in the direction that we want to go, as "The Three States" rather talks about modified, staged, and committed, which is not *that* helpful here)
 
@@ -40,7 +40,7 @@ TODO: Explain upstream tracking branches here as well? As background to `@{u}` b
 
 ### How Ethersync and Git interact
 
-- Ethersync cares *only* about changes to the working directory of files that you [don't have open](../file-ownership.md) in an editor.
+- Ethersync cares *only* about changes to the working directory of files that you [don't have open](file-ownership.md) in an editor.
 - In reverse, any change to the `.git` directory and the staging area (which is in fact also tracked in the `.git` repository) is *ignored* by Ethersync
 - From that it follows that Ethersync does not care about
     - commits you create,
@@ -97,7 +97,7 @@ Things you could do, that we have not tested thoroughly:
 - Hop around different branches and states of the Git repository.
 - Use git pull to get the latest changes.
 
-When doing any of this, we recommend to close all connected editors for a smooth synchronization (because of [ownership](../file-ownership.md)).
+When doing any of this, we recommend to close all connected editors for a smooth synchronization (because of [ownership](file-ownership.md)).
 
 ## When Note Taking
 

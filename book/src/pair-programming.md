@@ -34,7 +34,7 @@ ethersync daemon
 This will print, among other initialization information, two things you need to tell the other peers:
 
 - A connection address like `/ip4/192.168.23.42/tcp/58063/p2p/12D3KooWPNj7mom3X2D6NiSyxbFa5hHfzxDFP98ZL52yYnkEVmDv`. This is what libp2p calls a [multiaddress](https://docs.libp2p.io/concepts/fundamentals/addressing/) – it contains your IP address, the TCP port, and a "peer ID" (which is used by connecting peers to make sure that they're actually connecting to the correct peer, and not to a "man in the middle").
-- A secret passphrase, that is randomly generated each time you start the daemon. If you want to use a stable secret, we recommend putting it into the [configuration file](../features/configuration.md).
+- A secret passphrase, that is randomly generated each time you start the daemon. If you want to use a stable secret, we recommend putting it into the [configuration file](configuration.md).
 
 ### Other peers
 
@@ -46,11 +46,11 @@ ethersync demon --peer <multiaddr> --secret <secret>
 
 This should show you a message like "Connected to peer ...". The hosting daemon should show a message like "Peer connected".
 
-If you prefer, it's also possible to use the [configuration file](../features/configuration.md) to provide multiaddress and secret.
+If you prefer, it's also possible to use the [configuration file](configuration.md) to provide multiaddress and secret.
 
 ### Collaborate!
 
-Connected peers can now open files and edit them together. Note the current restrictions on [file events](../features/file-events.md) and the [common pitfalls](../features/workarounds.md).
+Connected peers can now open files and edit them together. Note the current restrictions on [file events](file-events.md) and the [common pitfalls](workarounds.md).
 
 ### Stop Ethersync
 
@@ -58,7 +58,7 @@ To stop collaborating, stop the daemon (by pressing Ctrl-C in its terminal). Bot
 
 ### Reconnect later
 
-If you later want to do another pairing session, make sure that you understand Ethersync's [offline support](../features/offline-support.md) feature. When you re-start Ethersync, it will scan for changes you've made in the meantime, and try to send them to the other peer. It is probably safest if you delete the CRDT state in `.ethersync/doc` as a joining peer. The hosting peer doesn't need to do that, it will simply update their state to the latest file content and share that with others.
+If you later want to do another pairing session, make sure that you understand Ethersync's [offline support](offline-support.md) feature. When you re-start Ethersync, it will scan for changes you've made in the meantime, and try to send them to the other peer. It is probably safest if you delete the CRDT state in `.ethersync/doc` as a joining peer. The hosting peer doesn't need to do that, it will simply update their state to the latest file content and share that with others.
 
 ## How to connect across different local networks?
 
