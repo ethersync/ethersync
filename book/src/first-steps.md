@@ -57,12 +57,12 @@ mkdir -p playground/.ethersync
 cd playground
 ```
 
-### 2. Receive the information required to connect
+### 2. Exchange the information required to connect
 
-You need to know two things:
+Your friend will need to know two things:
 
-- When the first (your) daemon started, it printed a connection address like `/ip4/192.168.23.42/tcp/58063/p2p/12D3KooWPNj7mom3X2D6NiSyxbFa5hHfzxDFP98ZL52yYnkEVmDv`. If you're in the same local network, you can just use that address. If you're in another local network, see [these instructions](pair-programming.md).
-- When the first daemon started, it generated a passphrase, and printed it in the logs. Only people who know that passphrase are allowed to connect to it via the network.
+- When your daemon started, it printed a **connection address ("multiaddress")** like `/ip4/192.168.23.42/tcp/58063/p2p/12D3KooWPNj7mom3X2D6NiSyxbFa5hHfzxDFP98ZL52yYnkEVmDv`. If your friend is in the same local network, they can just use that address. If they're in another local network, see [these instructions](pair-programming.md).
+- When your daemon started, it generated a **secret passphrase**, and printed it in the logs. Only people who know that passphrase are allowed to connect to it via the network.
 
 In order to allow them to connect, we assume that you sent these two things to your friend (if you're not local, a secure channel is recommended).
 
@@ -71,10 +71,7 @@ In order to allow them to connect, we assume that you sent these two things to y
 The command for joining another peer will look something like this:
 
 ```bash
-# Note that we split the info into variables just for convenience/illustration
-PEER_ADDRESS=/ip4/192.168.23.42/tcp/58063/p2p/12D3KooWPNj7mom3X2D6NiSyxbFa5hHfzxDFP98ZL52yYnkEVmDv
-PEER_SECRET=your-secret-here
-ethersync daemon --peer $PEER_ADDRESS --secret $PEER_SECRET
+ethersync daemon --peer <multiaddress> --secret <passphrase>
 ```
 
 If a connection can be made, both sides will indicate success with a log message "Peer connected" and "Connected to peer" respectively. If you don't see it, double check the previous steps.
