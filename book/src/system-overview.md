@@ -52,6 +52,7 @@ You can compare it, if you're familiar with that, with a git repository.
 This project, this set of files, is identified by one directory.
 The tracking of, and communication about changes happens only inside the realm of that directory
 and whatever it contains recursively (which means it includes sub-directories and the files therein).
+Most files are synchronized, exceptions see [ignored files](ignored-files.md).
 
 As of this version you will need to start one daemon *per project*.
 When you start the daemon, you have the option to provide the directory as an optional parameter:
@@ -59,11 +60,3 @@ When you start the daemon, you have the option to provide the directory as an op
     ethersync daemon [OPTIONS] [DIRECTORY]
 
 If you leave it out, the current directory is selected.
-
-### Ignored files
-
-While we stated above that everything in the project is synchronized, this was not fully correct.
-You have the option to specify files that should be ignored.
-Files that might contain sensitive information, like secrets, that should not be shared with your peers.
-
-TODO: describe the basic ways to ignore files.

@@ -15,6 +15,7 @@
     - [File ownership](file-ownership.md)
 - [Features](features.md)
     - [File events](file-events.md)
+    - [Ignored files](ignored-files.md)
     - [Offline support](offline-support.md)
     - [Configuration files](configuration.md)
     - [Things that are still annoying](workarounds.md)
