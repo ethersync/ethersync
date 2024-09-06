@@ -1,4 +1,4 @@
 # Concepts
 
-- [Overall architecture](architecture.md)
+- [System Overview](system-overview.md)
 - [File ownership](file-ownership.md)

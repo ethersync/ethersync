@@ -10,7 +10,7 @@
     - [VS Code plugin]()
 - [Quickstart](quickstart.md)
 - [Concepts](concepts.md)
-    - [Overall architecture](architecture.md)
+    - [System overview](system-overview.md)
     - [File ownership](file-ownership.md)
 - [Features](features.md)
     - [File events](file-events.md)

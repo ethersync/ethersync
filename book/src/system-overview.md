@@ -1,4 +1,4 @@
-# System Overview
+# System overview
 
 At this point in time Ethersync is a piece of software that is somewhat usable but
 has a lot of traps and things that you might expect to work that do not yet work.
