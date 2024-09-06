@@ -6,7 +6,7 @@ This would also work for more than two people. One person will start the session
 
 ## Step-by-step guide
 
-### Starting conditions
+### 1. Starting conditions
 
 If both people already have a copy of the project, make sure you're on the same state – for example, by making sure that you're on the same commit with a clean working tree. If the joining peer has a different state, those changes will be overwritten.
 
@@ -14,7 +14,7 @@ An alternative is that the joining peer starts from scratch, with an empty direc
 
 Make sure you're both inside the project directory on the command line.
 
-### Create the `.ethersync` directory
+### 2. Create the `.ethersync` directory
 
 This is our convention to mark a project as shareable: It needs to have a directory called `.ethersync` in it. So both peers should make sure that it exists:
 
@@ -23,7 +23,7 @@ mkdir .ethersync
 ```
 Note that this directory, similar to a `.git` directory will *not* be synchronized.
 
-### First peer
+### 3. First peer
 
 To start the session, run:
 
@@ -36,7 +36,7 @@ This will print, among other initialization information, two things you need to 
 - The [multiaddress](connection-making.md#multiaddress) which looks like `/ip4/192.168.23.42/tcp/58063/p2p/12D3KooWPNj7mom3X2D6NiSyxbFa5hHfzxDFP98ZL52yYnkEVmDv`.
 - A secret passphrase, that is randomly generated each time you start the daemon. If you want to use a stable secret, we recommend putting it into the [configuration file](configuration.md).
 
-### Other peers
+### 4. Other peers
 
 To join a session, run:
 
@@ -48,15 +48,15 @@ This should show you a message like "Connected to peer ...". The hosting daemon 
 
 If you prefer, it's also possible to use the [configuration file](configuration.md) to provide multiaddress and secret.
 
-### Collaborate!
+### 5. Collaborate!
 
 Connected peers can now open files and edit them together. Note the current restrictions on [file events](file-events.md) and the [common pitfalls](workarounds.md).
 
-### Stop Ethersync
+### 6. Stop Ethersync
 
 To stop collaborating, stop the daemon (by pressing Ctrl-C in its terminal). Both peers will still have the code they worked on, and can continue their work independently.
 
-### Reconnect later
+### 7. Reconnect later
 
 If you later want to do another pairing session, make sure that you understand Ethersync's [offline support](offline-support.md) feature and the [local first](local-first.md) concept. When you re-start Ethersync, it will scan for changes you've made in the meantime, and try to send them to the other peer. It is probably safest if you delete the CRDT state in `.ethersync/doc` as a joining peer. The hosting peer doesn't need to do that, it will simply update their state to the latest file content and share that with others.
 
