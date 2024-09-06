@@ -18,7 +18,7 @@
     - [Ignored files](ignored-files.md)
     - [Offline support](offline-support.md)
     - [Configuration files](configuration.md)
-    - [Things that are still annoying](workarounds.md)
+    - [Workarounds](workarounds.md)
 - [Ethersync in practice](in-practice.md)
     - [Pair programming](pair-programming.md)
     - [Shared notes](shared-notes.md)
