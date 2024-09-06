@@ -29,4 +29,4 @@
 # Developer documentation
 
 - [Writing new editor plugins](editor-plugin-dev-guide.md)
-- [Our most important learnings](learn-from-us.md)
+- [What to learn from us](learn-from-us.md)
