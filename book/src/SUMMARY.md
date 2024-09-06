@@ -2,7 +2,7 @@
 
 [Introduction](introduction.md)
 
-# Usage Guide
+# User documentation
 
 - [Getting started](getting-started.md)
     - [Installation](installation.md)
@@ -20,13 +20,12 @@
     - [Things that are still annoying](workarounds.md)
 - [Ethersync in practice](in-practice.md)
     - [Pair programming](pair-programming.md)
-    - [Shared Notes](shared-notes.md)
+    - [Shared notes](shared-notes.md)
     - [Working with Git](git-integration.md)
 - [Related projects](related-projects.md)
 - [FAQ](faq.md)
 
-# Developer Documentation
+# Developer documentation
 
 - [Writing new editor plugins](editor-plugin-dev-guide.md)
-- [Contributing to Ethersync]()
 - [Our most important learnings](learn-from-us.md)
