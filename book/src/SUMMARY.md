@@ -26,7 +26,6 @@
     - [Shared notes](shared-notes.md)
     - [Working with Git](git-integration.md)
 - [Related projects](related-projects.md)
-- [FAQ](faq.md)
 
 # Developer documentation
 

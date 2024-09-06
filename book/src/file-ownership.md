@@ -13,3 +13,9 @@ However, once that file has been opened in an editor, that is undesirable – te
 Once you close the file, the daemon will write the correct content to the file again. This means that, in an Ethersync-enabled directory, saving files manually is not required – you can do it if you want, but your edits will be communicated to your peers immediately anyway.
 
 This is true as long as the daemon is running, so in case you're wrapping up your session, always make sure that you close all editors first and then the daemon, otherwise you might risk accidentally losing some of the edits to your buffer.
+
+### Opening the same file with multiple editors
+
+As you have seen in the ["first steps"](quickstart.md) section it is possible to open the same file in two editors and get the changes in both places. But keep in mind that our ownership detection is rather "basic" and does not have the ability to differentiate between those two editors. If you are opening the file with the second editor it's loading the content from disc, which might be out of date if you're not careful, leading to an out-of-sync state.
+
+In short: We are not recommending this feature for the day to day use. It mainly exists to prevent crashes and allow debugging while testing.
