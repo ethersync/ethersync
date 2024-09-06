@@ -14,6 +14,7 @@
     - [System overview](system-overview.md)
     - [File ownership](file-ownership.md)
     - [Connection making](connection-making.md)
+    - [Local first](local-first.md)
 - [Features](features.md)
     - [File events](file-events.md)
     - [Ignored files](ignored-files.md)

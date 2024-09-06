@@ -58,7 +58,7 @@ To stop collaborating, stop the daemon (by pressing Ctrl-C in its terminal). Bot
 
 ### Reconnect later
 
-If you later want to do another pairing session, make sure that you understand Ethersync's [offline support](offline-support.md) feature. When you re-start Ethersync, it will scan for changes you've made in the meantime, and try to send them to the other peer. It is probably safest if you delete the CRDT state in `.ethersync/doc` as a joining peer. The hosting peer doesn't need to do that, it will simply update their state to the latest file content and share that with others.
+If you later want to do another pairing session, make sure that you understand Ethersync's [offline support](offline-support.md) feature and the [local first](local-first.md) concept. When you re-start Ethersync, it will scan for changes you've made in the meantime, and try to send them to the other peer. It is probably safest if you delete the CRDT state in `.ethersync/doc` as a joining peer. The hosting peer doesn't need to do that, it will simply update their state to the latest file content and share that with others.
 
 ## How to connect across different local networks?
 
