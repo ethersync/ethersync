@@ -100,7 +100,7 @@ These should be sent as notifications, there is no need to reply to them.
 
 ### Sending an example message to the daemon
 
-To send messages to the daemon manually, you can try the following. Assuming you can start the daemon on a playground similar to the [README](../README.md), now we add some debugging output:
+To send messages to the daemon manually, you can try the following. Assuming you can start the daemon on a playground as described in the [first steps](first-steps.md), now we add some debugging output:
 ```bash
 ethersync daemon playground -d
 # Note for below: You will see some output like "Listening on UNIX socket: /tmp/ethersync"

@@ -1,31 +1,33 @@
 # Summary
 
-[Introduction](./introduction.md)
+[Introduction](introduction.md)
 
-# Usage Guide
+# User documentation
 
-- [Installation](./installation/README.md)
-    - [Daemon](installation/daemon.md)
-    - [Neovim plugin](installation/neovim.md)
-    - [VS Code plugin]()
-- [Quickstart](./quickstart.md)
-- [Concepts]()
-    - [Overall architecture]()
-    - [File ownership](./file-ownership.md)
-- [Features]()
-    - [File events]()
-    - [Offline support]()
-    - [Configuration files](./features/configuration.md)
-    - [Things that are still annoying]()
-- [Use cases]()
-    - [Pair programming](./use-cases/pair-programming.md)
-    - [Shared Notes](./use-cases/shared-notes.md)
-- [Advanced topics]()
-    - [Git integration]()
-- [Related projects]()
-- [FAQ](./faq.md)
+- [Getting started](getting-started.md)
+    - [Installation](installation.md)
+        - [Daemon](daemon.md)
+        - [Neovim plugin](neovim.md)
+        - [VS Code plugin]()
+    - [First steps](first-steps.md)
+- [Concepts](concepts.md)
+    - [System overview](system-overview.md)
+    - [File ownership](file-ownership.md)
+    - [Connection making](connection-making.md)
+    - [Local first](local-first.md)
+- [Features](features.md)
+    - [File events](file-events.md)
+    - [Ignored files](ignored-files.md)
+    - [Offline support](offline-support.md)
+    - [Configuration](configuration.md)
+    - [Workarounds](workarounds.md)
+- [Ethersync in practice](in-practice.md)
+    - [Pair programming](pair-programming.md)
+    - [Shared notes](shared-notes.md)
+    - [Working with Git](git-integration.md)
+- [Related projects](related-projects.md)
 
-# Developer Documentation
+# Developer documentation
 
-- [Writing new editor plugins](./editor-plugin-dev-guide.md)
-- [Contributing to Ethersync]()
+- [Writing new editor plugins](editor-plugin-dev-guide.md)
+- [What to learn from us](learn-from-us.md)
