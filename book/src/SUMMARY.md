@@ -4,11 +4,12 @@
 
 # Usage Guide
 
-- [Installation](installation.md)
-    - [Daemon](daemon.md)
-    - [Neovim plugin](neovim.md)
-    - [VS Code plugin]()
-- [Quickstart](quickstart.md)
+- [Getting started](getting-started.md)
+    - [Installation](installation.md)
+        - [Daemon](daemon.md)
+        - [Neovim plugin](neovim.md)
+        - [VS Code plugin]()
+    - [First steps](quickstart.md)
 - [Concepts](concepts.md)
     - [System overview](system-overview.md)
     - [File ownership](file-ownership.md)
