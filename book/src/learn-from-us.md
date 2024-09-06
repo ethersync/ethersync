@@ -12,7 +12,7 @@ This documentation already gives you many insights into how Ethersync works and 
 
 ## The Architecural Decision Records
 
-In addition to the documentation, we wrote a number of "architectural decision records", which each look at a certain problem we were facing, document the possible options, which one we picked, and why. We believe these records might be useful for future projects facing the same problems. You can find them here (TODO link).
+In addition to the documentation, we wrote a number of "architectural decision records", which each look at a certain problem we were facing, document the possible options, which one we picked, and why. We believe these records might be useful for future projects facing the same problems. You can find them [here](https://github.com/ethersync/ethersync/tree/main/docs/decisions).
 
 ## The editor plugins
 
@@ -22,4 +22,4 @@ But one part of our existing code that could be most helpful to you, we think, i
 
 ## Open invitation: Ask us anything!
 
-We care about the problem we're trying to solve, and we probably will care in the future. Even if we're not actively working on it anymore, you're welcome to get in touch and ask us anything. The best way to reach us is: TODO.
+We care about the problem we're trying to solve, and we probably will care in the future. Even if we're not actively working on it anymore, you're welcome to get in touch and ask us anything. The best way to reach us is by email: Moritz Neeb &lt;<span>n<span title="ihate@spam.com&lt;/span&gt;">t</span>4u</span>@kpvn<i title="&lt;/i&gt;mailto:">.</i>de&gt;, blinry &lt;<span>m<span title="ialsohate@spam.com&lt;/span&gt;">a</span>il</span>@blinry<i title="&lt;/i&gt;mailto:">.</i>org&gt;
