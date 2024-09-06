@@ -1,13 +1,6 @@
 # System overview
 
-At this point in time Ethersync is a piece of software that is somewhat usable but
-has a lot of traps and things that you might expect to work that do not yet work.
-Consider it as a proof of concept that can be used in production if you're careful.
-For details on the workarounds we have a [whole section](workarounds.md),
-that we recommend to check out, once you're comfortable with the basics.
-
-Why are we telling you this? To motivate you to learn some of the "behind the scenes"
-such that you do know what to expect and how to deal with it.
+This section gives you some introduction what's going on "behind the scenes".
 
 In order to understand how Ethersync works, let's consider what problems it is solving and then which components are involved in achieving this.
 
