@@ -1,4 +1,9 @@
-{pkgs ? import <nixpkgs> {}, lib ? pkgs.lib, ...}: pkgs.mkShell {
+{
+  pkgs ? import <nixpkgs> {},
+  lib ? pkgs.lib,
+  ...
+}:
+pkgs.mkShell {
   packages =
     (with pkgs; [cargo rustc neovim alejandra])
     ++ lib.optionals pkgs.hostPlatform.isDarwin [

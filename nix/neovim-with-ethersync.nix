@@ -1,7 +1,14 @@
-{neovim, writeShellScriptBin, lib, ethersync, nvim-ethersync, ...}: let
+{
+  neovim,
+  writeShellScriptBin,
+  lib,
+  ethersync,
+  nvim-ethersync,
+  ...
+}: let
   nvim-custom = neovim.override {
     configure = {
-      packages.plugins.start = [ nvim-ethersync ];
+      packages.plugins.start = [nvim-ethersync];
 
       # In Nix' standard environment, we can't write to $HOME, so we need to
       # disable swapfiles, and LSP log files.
@@ -11,6 +18,7 @@
       '';
     };
   };
-in writeShellScriptBin "nvim" ''
-  PATH=${lib.makeBinPath [ethersync]}:$PATH ${nvim-custom}/bin/nvim $@
-''
+in
+  writeShellScriptBin "nvim" ''
+    PATH=${lib.makeBinPath [ethersync]}:$PATH ${nvim-custom}/bin/nvim $@
+  ''

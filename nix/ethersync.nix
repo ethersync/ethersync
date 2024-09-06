@@ -1,4 +1,11 @@
-{rustPlatform, lib, stdenv, darwin, ...}: rustPlatform.buildRustPackage rec {
+{
+  rustPlatform,
+  lib,
+  stdenv,
+  darwin,
+  ...
+}:
+rustPlatform.buildRustPackage rec {
   # when upstreaming this to nixpkgs,
   # - change the version to the version you plan to pin
   # - replace src with a fetchFromGitHub derivation that fetches ethersync at the specified, released version
@@ -19,6 +26,6 @@
   meta = {
     description = "real-time co-editing of text files across multiple editors";
     homepage = "https://github.com/ethersync/ethersync";
-    licenses = [ lib.licenses.agpl3Only ];
+    licenses = [lib.licenses.agpl3Only];
   };
 }
