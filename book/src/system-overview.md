@@ -12,9 +12,7 @@ Ethersync is for a real-time local-first collaboration on text files, where
 When two or more people are collaborating on text, we are communicating each individual change to the other peers
 as soon as it's possible.
 
-There are two ways to change the file
-- through an editor with an Ethersync plugin
-- with any tool directly in place/on disc
+Ethersync picks up all changes to the file, if it's done with an editor that has the plugin installed.
 
 This change gets recorded by the daemon. If you change it through the editor,
 the daemon is able to track every single character edit, and has potentially an easier time to resolve conflicts.
