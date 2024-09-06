@@ -1,10 +1,10 @@
 # File ownership
 
-Ethersync synchronizes edits immediately to each peer. Sometimes the peer has the file already open, sometimes not. In order to deal with different situations, we are using a concept called "ownership". Either the daemon or the editor can have it, it's like a token who is allowed to change the file.
+Ethersync synchronizes edits immediately to each peer. Sometimes the peer has the file already open in an editor, sometimes not. In order to deal with different situations, we are using a concept called "ownership". Either the daemon or the editor can have it, it's like a token who is allowed to change the file.
 
 ## Daemon has ownership
 
-The daemon has ownership if *no editor is connected to it*. In this case the daemon is allowed to write the changes some other connected daemon makes to a file directly to the disk.
+The daemon has ownership of a file if it *is not open in an editor on that computer*. In this case the daemon is allowed to write the changes some other connected daemon makes to a file directly to the disk.
 
 ## Editor has ownership
 
