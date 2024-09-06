@@ -65,6 +65,12 @@ These should be sent as JSON-RPC requests, so that the daemon can send back erro
 
 #### `"open" {uri: DocumentUri}`
 
+```mermaid
+sequenceDiagram
+editor->>daemon: {"jsonrpc": "2.0", "id": 1, "method": "open", "params": {"uri":"file:///path/to/file"}}
+daemon->>editor: {"jsonrpc": "2.0", "id": 1, "result": "ok"}
+```
+
 - Sent when the editor opens a document. The daemon will respond either with a success, or with an error describing why the file could not be opened (for example, because it is an ignored file, or if it's not part of the daemons shared project).
 - When an open succeeds, the editor gets ownership of the file, and the daemon will start sending updates for it as they come in.
 - The editor has to initialize its editor revision and daemon revision for that document to 0.
