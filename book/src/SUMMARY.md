@@ -19,7 +19,7 @@
     - [File events](file-events.md)
     - [Ignored files](ignored-files.md)
     - [Offline support](offline-support.md)
-    - [Configuration files](configuration.md)
+    - [Configuration](configuration.md)
     - [Workarounds](workarounds.md)
 - [Ethersync in practice](in-practice.md)
     - [Pair programming](pair-programming.md)
