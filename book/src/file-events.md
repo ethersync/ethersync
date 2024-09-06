@@ -1,27 +1,47 @@
 # File Events
 
-> 🚨 **Warning**
->
-> The features described here will only work after [PR #133](https://github.com/ethersync/ethersync/pull/133) is merged.
+Ethersync currently only syncs changes done to the filesystem in very specific cases! We might improve this in the future, but for now, it's important to know which changes are sent to your peers:
 
-Besides syncing what is changed using text editors, Ethersync also syncs changes made to the files with other tools. We use a file watcher to do that.
+## Creating files
 
-## New files
+### Changes that are synchronized:
 
-If you create a file in the project directory (or if you open one that doesn't exist yet), it will also appear in the directory of connected peers.
+- Opening a new file with an Ethersync-enabled text editor (this will create the file in the directory of connected peers).
 
-Example: `echo hello > new_file`
+    Example: `nvim new_file`
+
+### Changes that are *not* synchronized:
+
+- Creating a file directly on the file system.
+
+    Example: `touch new_file`
+
+- Copying in a file from outside the project.
+
+    Example: `cp ../somewhere/else/file .`
 
 ## Changing files
 
-If you make changes to a file, the daemon will calculate a diff compared to the previous content, and send that to other peers as an edit.
+### Changes that are synchronized:
 
-Note: Edits will only be picked up if the file is not currently opened in an editor, because of [ownership](file-ownership.md).
+- Editing a file in an Ethersync-enabled text editor.
 
-Example: `echo new stuff >> new_file`
+    Example: `nvim existing_file`
+
+### Changes that are *not* synchronized:
+
+- Changing files with external tools. Examples:
+
+    - `echo new stuff >> file`
+    - `sort -o file file` (sorting a file in place)
+    - `git restore file`
 
 ## Deleting files
 
-If you delete a file, it will also disappear for other peers.
+This is an exception to the above: We actually watch the file system for deletion events, and transfer them over to other peers:
 
-Example: `rm new_file`
+### Changes that are synchronized:
+
+- Deleting a file directly from the file system!
+
+    Example: `rm new_file`
