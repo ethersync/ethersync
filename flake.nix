@@ -10,7 +10,7 @@
         ethersync-packages = import ./nix/default.nix {inherit pkgs;};
       in {
         packages = rec {
-          inherit (ethersync-packages) ethersync nvim-ethersync;
+          inherit (ethersync-packages) ethersync ethersync-static nvim-ethersync;
           default = ethersync;
           neovim = ethersync-packages.neovim-with-ethersync;
         };
