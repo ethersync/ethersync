@@ -1,4 +1,4 @@
-# Quickstart
+# First steps
 
 Here's how to try out Ethersync!
 

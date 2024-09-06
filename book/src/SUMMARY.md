@@ -9,7 +9,7 @@
         - [Daemon](daemon.md)
         - [Neovim plugin](neovim.md)
         - [VS Code plugin]()
-    - [First steps](quickstart.md)
+    - [First steps](first-steps.md)
 - [Concepts](concepts.md)
     - [System overview](system-overview.md)
     - [File ownership](file-ownership.md)
