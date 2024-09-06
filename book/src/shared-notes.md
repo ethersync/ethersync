@@ -4,9 +4,7 @@ Another use case for Ethersync is to have a **long-lasting collaboration session
 
 This use case is different from the "pair-programming" use case, because there, all peers are online at the same time. When you're working on a directory of notes for a longer time, it might happen that you make a change to a file, and then go offline, while the other peers are also offline. Still, you want other peers to be able to receive your changes.
 
-Other systems solve this with a client-server architecture, where the server is always online, and the clients connect to it as needed.
-
-But Ethersync is fundamentally peer-to-peer, so what we suggest to use is what the research group Ink & Switch call a ["cloud peer"](https://www.inkandswitch.com/local-first/): You run an Ethersync peer on a public server, and all users will then connect to that server.
+We suggest to use a ["cloud peer"](connection-making.md#cloud-peer), a peer that is always online.
 
 ## Step-by-step guide
 
