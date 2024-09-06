@@ -1,58 +1,52 @@
 # System overview
 
-This section gives you some introduction what's going on "behind the scenes".
+Ethersync is a system for real-time local-first collaboration on text files, where
+- *real-time* means that edits and cursor movements should appear immediately while you are in a connection with your peer
+- *local-first* means that it's also possible to continue working on the project while you're (temporarily) offline
+- and the collaboration is restricted to *text-files* only (unfortunately, we don't support docx, xlsx, images, or other binary files yet).
 
-In order to understand how Ethersync works, let's consider what problems it is solving and then which components are involved in achieving this.
+Here's a diagram of the components that are involved:
 
-Ethersync is for a real-time local-first collaboration on text files, where
-- real-time means that edits and cursor movements should appear immediately while you are in a connection with your peer
-- local-first means that it's also possible to continue working on the project while you're (temporarily) offline
-- and the collaboration is restricted to text-files only (unfortunately no docx, xlsx, images, etc.)
+```
+  daemon <---(Internet)---> daemon
+  ^    ^                    ^    ^
+  |    |                    |    |
+  v    |                    v    |
+ file  |                   file  |
+system |                  system |
+   ^   |                      ^  |
+   |   |                      |  |
+   v   v                      v  v
+   editor                    editor
+```
 
-When two or more people are collaborating on text, we are communicating each individual change to the other peers
-as soon as it's possible.
+## Text editor
 
-Ethersync picks up all changes to the file, if it's done with an editor that has the plugin installed.
+Text editors (with an installed Ethersync plugin) is what users most directly communicate with.
+If they make a change to a file, the editor instantly communicates every single character edit to the daemon.
 
-This change gets recorded by the daemon. If you change it through the editor,
-the daemon is able to track every single character edit, and has potentially an easier time to resolve conflicts.
-If you just replace the file, the daemon will infer what edits you were doing, but in a much coarser way.
+The plugins also display other peoples' cursors in real-time.
 
-The daemon then communicates the changes with other connected daemons.
+## Daemon
+
+On each participant's computer, there's an Ethersync daemon, keeping the file's content in a data structure called "CRDT".
+
+The daemon collects changes being communicated by the connected editor, and syncs them with other peers.
 If conflicts arise, because two edits happened at the same time, they will be resolved by the daemon automatically.
 
-What if we're currently offline?
-Then the daemon records the change locally and will communicate it to the other peers later.
-
-Involved components:
-- editor
-- editor plugin (which btw also uses the ethersync software)
-- daemon
-
-The daemon is:
-- the collector of changes
-- the keeper of "the truth"
-- the resolver of conflicts
-
-The editor plugin is:
-- the communicator of edits
-- knows about cursor positions (and lets you jump to them)
-
-The editor then displays the latest known state and visible cursor positions.
+If the daemon is offline, it records the change locally and will communicate it to the other peers later.
 
 ## The project
 
-When collaborating with your peers we assume that you are working on a set of files which are co-located.
-
-We call this location the "project".
+When collaborating with your peers, we assume that you are working on a set of files which are in a common directory.
+We call this directory the *project*.
 You can compare it, if you're familiar with that, with a git repository.
 
-This project, this set of files, is identified by one directory.
 The tracking of, and communication about changes happens only inside the realm of that directory
 and whatever it contains recursively (which means it includes sub-directories and the files therein).
-Most files are synchronized, exceptions see [ignored files](ignored-files.md).
+Most files are synchronized, except for [ignored files](ignored-files.md).
 
-As of this version you will need to start one daemon *per project*.
+Currently, you will need to start one daemon *per project*.
 When you start the daemon, you have the option to provide the directory as an optional parameter:
 
     ethersync daemon [OPTIONS] [DIRECTORY]
