@@ -1,6 +1,6 @@
 [package]
 name = "ethersync-integration-tests"
-description = "End-to-end testing for supported ethersync clients."
+description = "End-to-end testing of Ethersync."
 version = "0.0.0"
 edition = "2021"
 publish = false
