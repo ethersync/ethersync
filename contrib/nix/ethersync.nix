@@ -14,7 +14,7 @@ rustPlatform.buildRustPackage rec {
 
   pname = "ethersync";
   version = "latest";
-  src = ../daemon;
+  src = ../../daemon;
 
   cargoLock.lockFile = "${src}/Cargo.lock";
 

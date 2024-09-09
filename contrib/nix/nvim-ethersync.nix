@@ -1,5 +1,5 @@
 {vimUtils, ...}:
 vimUtils.buildVimPlugin {
   name = "ethersync";
-  src = ../vim-plugin;
+  src = ../../vim-plugin;
 }
