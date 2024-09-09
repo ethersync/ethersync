@@ -47,6 +47,7 @@ version = "1"
 features = [
     "rt",
     "io-std",
+    "io-util",
     "macros",
     "net",
     "time",
