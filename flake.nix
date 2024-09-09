@@ -1,80 +1,21 @@
 {
   inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
-    naersk = {
-      url = "github:nix-community/naersk";
-      inputs.nixpkgs.follows = "nixpkgs";
-    };
+    nixpkgs.url = "github:nixos/nixpkgs/nixos-unstable";
+    parts.url = "github:hercules-ci/flake-parts";
   };
-
-  outputs = {
-    self,
-    nixpkgs,
-    naersk,
-    ...
-  }: let
-    supportedSystems = [
-      "x86_64-linux"
-      "aarch64-linux"
-      "x86_64-darwin"
-      "aarch64-darwin"
-    ];
-    lib = nixpkgs.lib;
-    forAllSystems = function:
-      lib.genAttrs supportedSystems (system:
-        function (import nixpkgs {
-          inherit system;
-          overlays = [self.overlays.default];
-        }));
-  in {
-    overlays.default = final: prev: rec {
-      ethersync = (final.callPackage naersk {}).buildPackage {
-        src = ./daemon;
-      };
-      neovim-plugin = final.vimUtils.buildVimPlugin {
-        name = "ethersync";
-        src = ./vim-plugin;
-      };
-      neovim = let
-        nvim-custom = prev.neovim.override {
-          configure = {
-            packages.plugins = {
-              start = [
-                neovim-plugin
-              ];
-            };
-            # In Nix' standard environment, we can't write to $HOME, so we need to
-            # disable swapfiles, and LSP log files.
-            customRC = ''
-              set noswapfile
-              lua vim.lsp.set_log_level("off")
-            '';
-          };
+  outputs = inputs:
+    inputs.parts.lib.mkFlake {inherit inputs;} {
+      systems = ["x86_64-linux" "aarch64-linux" "x86_64-darwin" "aarch64-darwin"];
+      perSystem = {pkgs, ...}: let
+        ethersync-packages = import ./contrib/nix/default.nix {inherit pkgs;};
+      in {
+        packages = rec {
+          inherit (ethersync-packages) ethersync ethersync-static nvim-ethersync;
+          default = ethersync;
+          neovim = ethersync-packages.neovim-with-ethersync;
         };
-      in
-        final.writeShellScriptBin "nvim" ''
-          PATH=${lib.makeBinPath [ethersync]}:$PATH ${nvim-custom}/bin/nvim $@'';
-    };
-    packages = forAllSystems (pkgs: rec {
-      inherit
-        (pkgs)
-        ethersync
-        neovim-plugin
-        neovim
-        ;
-      default = ethersync;
-    });
-    devShells = forAllSystems (pkgs: {
-      default = pkgs.mkShell {
-        packages =
-          (with pkgs; [cargo rustc neovim])
-          ++ (
-            # macOS systems seem to require these extra packages for building Rust code.
-            if (lib.strings.hasInfix "darwin" pkgs.system)
-            then (with pkgs; [darwin.apple_sdk.frameworks.CoreServices libiconv])
-            else []
-          );
+        devShells.default = import ./contrib/nix/shell.nix {inherit pkgs;};
       };
-    });
-  };
+      flake.overlays.default = import ./contrib/nix/overlay.nix {};
+    };
 }

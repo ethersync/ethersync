@@ -7,13 +7,11 @@ on:
     paths:
       - 'daemon/**'
       - 'vim-plugin/**'
-      - 'flake.*'
       - '.github/workflows/general.yml'
   pull_request:
     paths:
       - 'daemon/**'
       - 'vim-plugin/**'
-      - 'flake.*'
       - '.github/workflows/general.yml'
 
 env:
