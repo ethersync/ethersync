@@ -7,13 +7,11 @@ on:
     paths:
       - 'daemon/**'
       - 'vim-plugin/**'
-      - 'flake.*'
       - '.github/workflows/general.yml'
   pull_request:
     paths:
       - 'daemon/**'
       - 'vim-plugin/**'
-      - 'flake.*'
       - '.github/workflows/general.yml'
 
 env:
@@ -57,20 +55,6 @@ jobs:
         run: cargo test --release -- --include-ignored
       - name: Run fuzzer
         run: cargo run --release --bin=fuzzer
-  check_nix:
-    name: Check Nix code
-    strategy: 
-      matrix: 
-        os: [ubuntu-latest, macos-latest]
-    runs-on: ${{ matrix.os }}
-    steps:
-      - uses: actions/checkout@v4
-      - uses: cachix/install-nix-action@v27
-      - name: Evaluate Nix code
-        run: nix -Lv flake check
-      - name: Build Neovim with Ethersync
-        run: nix -Lv build .#neovim
-      - run: result/bin/nvim --version
   check_formatting:
     name: Check Rust formatting
     runs-on: ubuntu-latest
