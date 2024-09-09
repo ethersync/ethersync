@@ -5,44 +5,61 @@ version = "0.2.0"
 edition = "2021"
 default-run = "ethersync"
 
+[lib]
+name = "ethersync"
+
+[[bin]]
+name = "ethersync"
+test = false
+bench = false
+doc = false
+required-features = ["executable-deps"]
+
 [dependencies]
-serde_json = { version = "1" }
-clap = { version = "4.5.3", features = ["derive", "env"] }
-automerge = "0.5.9"
-rand = "0.8.5"
-tokio = { version = "1", features = ["full"] }
-operational-transform = "0.6.1"
 anyhow = "1.0.81"
-tracing = "0.1.40"
-tracing-subscriber = { version = "0.3.18", features = ["local-time"] }
-nvim-rs = { version = "0.7.0", features = ["use_tokio"] }
-temp-dir = "0.1.13"
-async-trait = "0.1.79"
-pretty_assertions = "1.4.0"
-futures = "0.3.30"
-ropey = "1.6.1"
-serde = "1.0.198"
-time = { version = "0.3.36", features = ["formatting"] }
-time-macros = { version = "0.2.0-alpha.1" }
-local-ip-address = "0.6.1"
-public-ip = "0.2.2"
-tokio-util = {version = "0.7.11", features = ["codec"] }
-ignore = "0.4.22"
-notify = "6.1.1"
+automerge = "0.5.9"
+clap = { version = "4.5.3", features = ["derive", "env"], optional = true }
 dissimilar = "1.0.9"
-path-clean = "1.0.1"
-libp2p = { version = "0.53.2", features = ["tokio", "tcp", "noise", "yamux"]}
-libp2p-stream = "0.1.0-alpha.1"
+futures = { version = "0.3.30", default-features = false }
+ignore = "0.4.22"
+libp2p = { version = "0.53.2", features = ["tokio", "tcp", "noise", "yamux"] }
 libp2p-identity = { version ="0.2.9", features = ["ed25519"] }
 libp2p-pnet = "0.24.0"
+libp2p-stream = "0.1.0-alpha.1"
 memorable-wordlist = "0.1.7"
+notify = { version = "6.1.1", default-features = false, features = ["macos_fsevent"] }
+operational-transform = "0.6.1"
+path-clean = "1.0.1"
 pbkdf2 = "0.12.2"
-sha2 = "0.10.8"
+rand = "0.8.5"
+ropey = "1.6.1"
 rust-ini = "0.21.1"
+serde = { version = "1.0.198", features = ["derive"] }
+serde_json = "1"
+sha2 = "0.10.8"
+time = { version = "0.3.36", features = ["formatting"] }
+tokio-util = { version = "0.7.11", features = ["codec"] }
+tracing = "0.1.40"
+tracing-subscriber = { version = "0.3.18", default-features = false, features = ["fmt", "local-time"] }
+
+[dependencies.tokio]
+version = "1"
+features = [
+    "rt",
+    "io-std",
+    "io-util",
+    "macros",
+    "net",
+    "time",
+]
+
+[features]
+executable-deps = ["dep:clap", "tokio/signal", "tokio/rt-multi-thread"]
+default = ["executable-deps"]
 
 [dev-dependencies]
-assert_matches = "1.5"
-serial_test = "3.1.1"
+pretty_assertions = "1.4.0"
+temp-dir = "0.1.13"
 tracing-test = "0.2.4"
 
 # Stripping symbols (not debuginfo) reduces binary size by ~1.5x.

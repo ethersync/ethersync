@@ -1,4 +1,3 @@
-pub mod actors;
 pub mod daemon;
 pub mod document;
 pub mod editor;

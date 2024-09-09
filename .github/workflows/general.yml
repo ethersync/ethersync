@@ -40,7 +40,8 @@ jobs:
       - name: Add ethersync binary to PATH
         run: echo "$PWD/target/release" >> $GITHUB_PATH
       - run: ethersync --version
-      - uses: rhysd/action-setup-vim@v1
+      - name: Install Neovim
+        uses: rhysd/action-setup-vim@v1
         with:
           neovim: true
           version: v0.10.1
@@ -49,12 +50,16 @@ jobs:
         run: |
           mkdir -p $HOME/.local/share/nvim/site/pack/plugins/start
           ln -s $PWD/../vim-plugin $HOME/.local/share/nvim/site/pack/plugins/start/ethersync
-      - name: Compile tests
-        run: cargo test --release --no-run --locked
-      - name: Run tests
-        run: cargo test --release -- --include-ignored
-      - name: Run fuzzer
-        run: cargo run --release --bin=fuzzer
+      - name: Compile unit tests
+        run: cargo test --no-default-features --no-run --locked
+      - name: Run unit tests
+        run: cargo test --no-default-features
+      - name: Compile integration tests
+        working-directory: ./daemon/integration-tests
+        run: cargo test --no-run --locked
+      - name: Run integration tests
+        working-directory: ./daemon/integration-tests
+        run: cargo test
   check_formatting:
     name: Check Rust formatting
     runs-on: ubuntu-latest
