@@ -58,7 +58,7 @@ jobs:
       - name: Run fuzzer
         run: cargo run --release --bin=fuzzer
   check_nix:
-    name: Check nix code
+    name: Check Nix code
     strategy: 
       matrix: 
         os: [ubuntu-latest, macos-latest]
@@ -66,9 +66,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: cachix/install-nix-action@v27
-      - name: Evaluate nix code
+      - name: Evaluate Nix code
         run: nix -Lv flake check
-      - name: build neovim with ethersync
+      - name: Build Neovim with Ethersync
         run: nix -Lv build .#neovim
       - run: result/bin/nvim --version
   check_formatting:
