@@ -73,7 +73,9 @@ impl Watcher {
                         return Some(e);
                     }
                 }
-                EventKind::Remove(notify::event::RemoveKind::File) => {
+                EventKind::Remove(
+                    notify::event::RemoveKind::File | notify::event::RemoveKind::Any,
+                ) => {
                     assert!(event.paths.len() == 1);
                     if let Some(e) = self.maybe_removed(&event.paths[0]) {
                         return Some(e);
