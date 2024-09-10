@@ -431,26 +431,30 @@ impl DocumentActor {
             WatcherEvent::Created { file_path, content } => {
                 let file_path = self
                     .file_path_for_uri(
-                        &file_path
+                        file_path
                             .to_str()
                             .expect("Failed to convert watcher path to str"),
                     )
                     .expect("Could not determine file path when trying to create file");
-                let content =
-                    String::from_utf8(content).expect("Failed to convert file content to UTF-8");
-                self.crdt_doc.initialize_text(&content, &file_path);
-                let _ = self.doc_changed_ping_tx.send(());
+                if self.owns(&file_path) {
+                    let content = String::from_utf8(content)
+                        .expect("Failed to convert file content to UTF-8");
+                    self.crdt_doc.initialize_text(&content, &file_path);
+                    let _ = self.doc_changed_ping_tx.send(());
+                }
             }
             WatcherEvent::Removed { file_path } => {
                 let file_path = self
                     .file_path_for_uri(
-                        &file_path
+                        file_path
                             .to_str()
                             .expect("Failed to convert watcher path to str"),
                     )
                     .expect("Could not determine file path when trying to remove file");
-                self.crdt_doc.remove_text(&file_path);
-                let _ = self.doc_changed_ping_tx.send(());
+                if self.owns(&file_path) {
+                    self.crdt_doc.remove_text(&file_path);
+                    let _ = self.doc_changed_ping_tx.send(());
+                }
             }
             WatcherEvent::Changed {
                 file_path,
