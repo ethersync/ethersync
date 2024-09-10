@@ -43,6 +43,7 @@ time = { version = "0.3.36", features = ["formatting"] }
 tokio-util = { version = "0.7.11", features = ["codec"] }
 tracing = "0.1.40"
 tracing-subscriber = { version = "0.3.18", default-features = false, features = [
+    "ansi",
     "fmt",
     "local-time",
 ] }
