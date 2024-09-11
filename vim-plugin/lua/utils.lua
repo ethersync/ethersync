@@ -104,6 +104,13 @@ function M.apply_text_edits(text_edits, bufnr, offset_encoding)
         -- If the whole edit is after the lines in the buffer we can simply add the new text to the end
         -- of the buffer.
         if max <= e.start_row then
+            -- If the replacement text ends with a newline, drop it - we're happy with keeping the implicit
+            -- newline at the end of the buffer (which we're assuming to be there, because we're getting
+            -- an insert *after* the visible lines.
+            -- TODO: Is this always correct?
+            if #e.text > 1 and e.text[#e.text] == "" then
+                table.remove(e.text)
+            end
             vim.api.nvim_buf_set_lines(bufnr, max, max, false, e.text)
         else
             local last_line_len = #(get_line(bufnr, math.min(e.end_row, max - 1)) or "")
