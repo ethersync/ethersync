@@ -49,8 +49,6 @@ async fn main() {
     // Set up files in project directories.
     let (dir, file) = initialize_project();
     let (dir2, file2) = initialize_project();
-    let dir_path = dir.path().canonicalize().unwrap();
-    let dir2_path = dir2.path().canonicalize().unwrap();
 
     // Set up the actors.
     let daemon = Daemon::new(
@@ -60,7 +58,7 @@ async fn main() {
             passphrase: Some("shared-secret".to_string()),
         },
         Path::new("/tmp/ethersync"),
-        &dir_path,
+        dir.path(),
         true,
     );
 
@@ -78,7 +76,7 @@ async fn main() {
             passphrase: Some("shared-secret".to_string()),
         },
         Path::new("/tmp/etherbonk"),
-        &dir2_path,
+        dir2.path(),
         false,
     );
     // Make sure peer has synced with the other daemon before connecting Vim!

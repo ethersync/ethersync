@@ -256,10 +256,6 @@ impl DocumentActor {
 
         let base_dir_string = self.base_dir.display().to_string() + "/";
 
-        let absolute_path = Path::new(absolute_path).canonicalize()?;
-        let absolute_path = absolute_path
-            .to_str()
-            .expect("Could not convert path to string");
         Ok(absolute_path
             .strip_prefix(&base_dir_string)
             .with_context(|| {
