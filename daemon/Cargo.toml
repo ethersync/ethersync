@@ -27,9 +27,7 @@ libp2p-identity = { version = "0.2.9", features = ["ed25519"] }
 libp2p-pnet = "0.24.0"
 libp2p-stream = "0.1.0-alpha.1"
 memorable-wordlist = "0.1.7"
-notify = { version = "6.1.1", default-features = false, features = [
-    "macos_kqueue",
-] }
+notify = { version = "6.1.1", default-features = false, features = ["macos_fsevent"] }
 operational-transform = "0.6.1"
 path-clean = "1.0.1"
 pbkdf2 = "0.12.2"
