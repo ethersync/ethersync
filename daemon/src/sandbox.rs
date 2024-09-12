@@ -184,7 +184,6 @@ mod tests {
         let project = dir.child("project");
         std::os::unix::fs::symlink(&project, &linked_project).unwrap();
 
-        let file = dir.child("project/c");
         let ln_file = dir.child("ln_project/c");
 
         assert_eq!(

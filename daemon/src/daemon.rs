@@ -982,7 +982,7 @@ mod tests {
                 DocumentActor::new(
                     doc_message_rx,
                     doc_changed_ping_tx.clone(),
-                    directory.path().canonicalize().unwrap().to_path_buf(),
+                    directory.path().to_path_buf(),
                     true,
                     true,
                 )
