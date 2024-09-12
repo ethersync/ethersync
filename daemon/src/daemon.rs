@@ -975,7 +975,7 @@ mod tests {
         use tracing_test::traced_test;
 
         impl DocumentActor {
-            fn setup_for_testing(directory: PathBuf) -> Self {
+            fn setup_for_testing(directory: &TempDir) -> Self {
                 // The document task will receive messages on this channel.
                 let (_doc_message_tx, doc_message_rx) = mpsc::channel(1);
 
@@ -986,7 +986,7 @@ mod tests {
                 DocumentActor::new(
                     doc_message_rx,
                     doc_changed_ping_tx.clone(),
-                    directory,
+                    directory.path().canonicalize().unwrap().to_path_buf(),
                     true,
                     true,
                 )
@@ -1013,7 +1013,7 @@ mod tests {
         #[test]
         fn read_contents_from_dir() {
             let dir = setup_filesystem_for_testing();
-            let mut actor = DocumentActor::setup_for_testing(dir.path().to_path_buf());
+            let mut actor = DocumentActor::setup_for_testing(&dir);
 
             actor.read_current_content_from_dir(true);
 
@@ -1027,7 +1027,7 @@ mod tests {
         fn test_maybe_write_files_changed_in_file_deltas() {
             let dir = setup_filesystem_for_testing();
             debug!("{}", dir.path().display());
-            let mut actor = DocumentActor::setup_for_testing(dir.path().to_path_buf());
+            let mut actor = DocumentActor::setup_for_testing(&dir);
 
             actor.read_current_content_from_dir(true);
 
@@ -1069,7 +1069,7 @@ mod tests {
         #[test]
         fn test_file_path_for_uri_fails_not_absolute() {
             let dir = setup_filesystem_for_testing();
-            let actor = DocumentActor::setup_for_testing(dir.path().to_path_buf());
+            let actor = DocumentActor::setup_for_testing(&dir);
 
             assert!(actor
                 .file_path_for_uri("this/is/absolutely/not/absolute")
@@ -1079,7 +1079,7 @@ mod tests {
         #[test]
         fn test_file_path_for_uri_fails_not_within_base_dir() {
             let dir = setup_filesystem_for_testing();
-            let actor = DocumentActor::setup_for_testing(dir.path().to_path_buf());
+            let actor = DocumentActor::setup_for_testing(&dir);
 
             assert!(actor
                 .file_path_for_uri("/this/is/not/the/base_dir/file")
@@ -1090,7 +1090,7 @@ mod tests {
         fn test_file_path_for_uri_fails_not_within_base_dir_suffix() {
             let dir = setup_filesystem_for_testing();
             let file_in_suffix_dir = dir.path().to_str().unwrap().to_string() + "2/file";
-            let actor = DocumentActor::setup_for_testing(dir.path().to_path_buf());
+            let actor = DocumentActor::setup_for_testing(&dir);
 
             assert!(actor.file_path_for_uri(&file_in_suffix_dir).is_err());
         }
@@ -1098,7 +1098,7 @@ mod tests {
         #[test]
         fn test_file_path_for_uri_fails_only_base_dir() {
             let dir = setup_filesystem_for_testing();
-            let actor = DocumentActor::setup_for_testing(dir.path().to_path_buf());
+            let actor = DocumentActor::setup_for_testing(&dir);
 
             assert!(actor
                 .file_path_for_uri(&format!("{}", dir.path().display()))
@@ -1108,7 +1108,7 @@ mod tests {
         #[test]
         fn test_file_path_for_uri_works() {
             let dir = setup_filesystem_for_testing();
-            let actor = DocumentActor::setup_for_testing(dir.path().to_path_buf());
+            let actor = DocumentActor::setup_for_testing(&dir);
 
             let file_paths = vec!["file1", "sub/file3", "sub"];
             let prefix_options = vec!["file://", ""];
@@ -1125,7 +1125,7 @@ mod tests {
         #[tokio::test]
         async fn test_simulate_editor_edits() {
             let dir = setup_filesystem_for_testing();
-            let mut actor = DocumentActor::setup_for_testing(dir.path().to_path_buf());
+            let mut actor = DocumentActor::setup_for_testing(&dir);
             actor.read_current_content_from_dir(true);
 
             let file_path = "file1".to_string();
