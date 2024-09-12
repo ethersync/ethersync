@@ -1110,7 +1110,7 @@ mod tests {
             let dir = setup_filesystem_for_testing();
             let actor = DocumentActor::setup_for_testing(dir.path().to_path_buf());
 
-            let file_paths = vec!["afile", "adir/with/some/file", "just/adir/"];
+            let file_paths = vec!["file1", "sub/file3", "sub"];
             let prefix_options = vec!["file://", ""];
             for prefix in prefix_options {
                 for &expected in &file_paths {
