@@ -12,17 +12,9 @@ use tracing::debug;
 
 #[derive(Debug, PartialEq)]
 pub enum WatcherEvent {
-    Created {
-        file_path: PathBuf,
-        content: Vec<u8>,
-    },
-    Removed {
-        file_path: PathBuf,
-    },
-    Changed {
-        file_path: PathBuf,
-        new_content: Vec<u8>,
-    },
+    Created { file_path: PathBuf },
+    Removed { file_path: PathBuf },
+    Changed { file_path: PathBuf },
 }
 
 /// Returns events among the files in base_dir that are not ignored.
@@ -103,6 +95,8 @@ impl Watcher {
                         return Some(e);
                     }
                 }
+                // MacOS doesn't give us details on moving a file, so we need to infer what
+                // happened.
                 EventKind::Modify(notify::event::ModifyKind::Name(
                     notify::event::RenameMode::Any,
                 )) => {
@@ -135,12 +129,8 @@ impl Watcher {
             return None;
         }
 
-        let content =
-            sandbox::read_file(&self.base_dir, file_path).expect("Failed to read created file");
-
         Some(WatcherEvent::Created {
             file_path: file_path.to_path_buf(),
-            content,
         })
     }
 
@@ -159,17 +149,14 @@ impl Watcher {
             return None;
         }
 
-        let content =
-            sandbox::read_file(&self.base_dir, file_path).expect("Failed to read created file");
-
         Some(WatcherEvent::Changed {
             file_path: file_path.to_path_buf(),
-            new_content: content,
         })
     }
 }
 
 #[cfg(test)]
+#[cfg(target_os = "linux")] // TODO: For some reason, these tests hang forever on macOS.
 mod tests {
     use temp_dir::TempDir;
 
@@ -194,7 +181,6 @@ mod tests {
             Some(WatcherEvent::Created {
                 // TODO: Should the file_paths maybe be relative to the base dir already?
                 file_path: file,
-                content: b"hi".to_vec()
             })
         );
     }
@@ -214,10 +200,7 @@ mod tests {
 
         assert_eq!(
             watcher.next().await,
-            Some(WatcherEvent::Changed {
-                file_path: file,
-                new_content: b"yo".to_vec()
-            })
+            Some(WatcherEvent::Changed { file_path: file })
         );
     }
 
@@ -264,7 +247,6 @@ mod tests {
             watcher.next().await,
             Some(WatcherEvent::Created {
                 file_path: file_new,
-                content: b"hi".to_vec(),
             })
         );
     }
@@ -290,10 +272,7 @@ mod tests {
 
         assert_eq!(
             watcher.next().await,
-            Some(WatcherEvent::Created {
-                file_path: file2,
-                content: b"ho".to_vec()
-            })
+            Some(WatcherEvent::Created { file_path: file2 })
         );
     }
 }

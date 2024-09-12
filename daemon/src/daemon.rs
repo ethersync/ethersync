@@ -428,49 +428,51 @@ impl DocumentActor {
 
     async fn handle_watcher_event(&mut self, watcher_event: WatcherEvent) {
         match watcher_event {
-            WatcherEvent::Created { file_path, content } => {
-                let file_path = self
+            WatcherEvent::Created { file_path } => {
+                let relative_file_path = self
                     .file_path_for_uri(
                         file_path
                             .to_str()
                             .expect("Failed to convert watcher path to str"),
                     )
                     .expect("Could not determine file path when trying to create file");
-                if self.owns(&file_path) {
+                if self.owns(&relative_file_path) {
+                    let content = sandbox::read_file(&self.base_dir, Path::new(&file_path))
+                        .expect("Failed to read newly created file");
                     let content = String::from_utf8(content)
                         .expect("Failed to convert file content to UTF-8");
-                    self.crdt_doc.initialize_text(&content, &file_path);
+                    self.crdt_doc.initialize_text(&content, &relative_file_path);
                     let _ = self.doc_changed_ping_tx.send(());
                 }
             }
             WatcherEvent::Removed { file_path } => {
-                let file_path = self
+                let relative_file_path = self
                     .file_path_for_uri(
                         file_path
                             .to_str()
                             .expect("Failed to convert watcher path to str"),
                     )
                     .expect("Could not determine file path when trying to remove file");
-                if self.owns(&file_path) {
-                    self.crdt_doc.remove_text(&file_path);
+                if self.owns(&relative_file_path) {
+                    self.crdt_doc.remove_text(&relative_file_path);
                     let _ = self.doc_changed_ping_tx.send(());
                 }
             }
-            WatcherEvent::Changed {
-                file_path,
-                new_content,
-            } => {
+            WatcherEvent::Changed { file_path } => {
                 // Only update if we own the file.
-                let file_path = file_path
-                    .to_str()
-                    .expect("Failed to convert watcher path to str");
-                if self.owns(file_path) {
-                    let file_path = self
-                        .file_path_for_uri(file_path)
-                        .expect("Could not determine file path when trying to create file");
+                let relative_file_path = self
+                    .file_path_for_uri(
+                        file_path
+                            .to_str()
+                            .expect("Failed to convert watcher path to str"),
+                    )
+                    .expect("Could not determine file path when trying to create file");
+                if self.owns(&relative_file_path) {
+                    let new_content = sandbox::read_file(&self.base_dir, Path::new(&file_path))
+                        .expect("Failed to read changed file");
                     let new_content = String::from_utf8(new_content)
                         .expect("Failed to convert file content to UTF-8");
-                    self.crdt_doc.update_text(&new_content, &file_path);
+                    self.crdt_doc.update_text(&new_content, &relative_file_path);
                     let _ = self.doc_changed_ping_tx.send(());
                 }
             }
