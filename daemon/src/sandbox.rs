@@ -120,6 +120,29 @@ fn absolute_and_canonicalized(path: &Path) -> Result<PathBuf> {
 
     // Remove any ".." and "." from the path.
     let canonical_path = path.clean();
+    let mut suffix_path = PathBuf::new();
+    let mut prefix_path = canonical_path.clone();
+
+    for component in path.components().rev() {
+        if prefix_path.exists() {
+            break;
+        }
+        prefix_path.pop();
+        if let std::path::Component::Normal(os_str) = component {
+            suffix_path = if suffix_path.components().count() != 0 {
+                Path::new(os_str).join(&suffix_path)
+            } else {
+                Path::new(os_str).to_path_buf()
+            };
+        } else {
+            panic!("Got unexpected Component variant while canonicalizing");
+        }
+    }
+
+    let mut canonical_path = prefix_path.canonicalize().expect("Could not canonicalize");
+    if suffix_path.components().count() != 0 {
+        canonical_path = canonical_path.join(suffix_path);
+    }
 
     Ok(canonical_path)
 }
@@ -140,6 +163,56 @@ mod tests {
         fs::write(dir.path().join("secret"), b"This is a secret").expect("Failed to write file");
 
         dir
+    }
+
+    #[test]
+    fn does_canonicalize_symlink_dir() {
+        let dir = temp_dir_setup();
+        let linked_project = dir.child("ln_project");
+        let project = dir.child("project");
+        std::os::unix::fs::symlink(&project, &linked_project).unwrap();
+        assert_eq!(
+            absolute_and_canonicalized(&linked_project).unwrap(),
+            project.canonicalize().unwrap()
+        );
+    }
+
+    #[test]
+    fn does_canonicalize_symlink_file() {
+        let dir = temp_dir_setup();
+        let linked_project = dir.child("ln_project");
+        let project = dir.child("project");
+        std::os::unix::fs::symlink(&project, &linked_project).unwrap();
+
+        let file = dir.child("project/c");
+        let ln_file = dir.child("ln_project/c");
+
+        assert_eq!(
+            absolute_and_canonicalized(&ln_file).unwrap().to_str(),
+            project.canonicalize().unwrap().join("c").to_str()
+        );
+    }
+
+    #[test]
+    fn does_canonicalize_symlink_notexisting_file() {
+        let dir = temp_dir_setup();
+        let linked_project = dir.child("ln_project");
+        let project = dir.child("project");
+        std::os::unix::fs::symlink(&project, &linked_project).unwrap();
+
+        let file = dir.child("project/a");
+        let ln_file = dir.child("ln_project/a");
+
+        // tests whether it does not end on slash
+        assert_eq!(
+            absolute_and_canonicalized(&file).unwrap().to_str(),
+            file.canonicalize().unwrap().to_str()
+        );
+
+        assert_eq!(
+            absolute_and_canonicalized(&ln_file).unwrap().to_str(),
+            ln_file.canonicalize().unwrap().to_str()
+        );
     }
 
     #[test]
