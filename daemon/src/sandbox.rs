@@ -3,6 +3,7 @@
 //! All our file I/O should go through them.
 
 use anyhow::{bail, Result};
+use ignore::WalkBuilder;
 use path_clean::PathClean;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -22,6 +23,19 @@ pub fn write_file(
     let canonical_file_path =
         check_inside_base_dir_and_canonicalize(absolute_base_dir, absolute_file_path)?;
     fs::write(canonical_file_path, content)?;
+    Ok(())
+}
+
+pub fn rename_file(
+    absolute_base_dir: &Path,
+    absolute_file_path_old: &Path,
+    absolute_file_path_new: &Path,
+) -> Result<()> {
+    let canonical_file_path_old =
+        check_inside_base_dir_and_canonicalize(absolute_base_dir, absolute_file_path_old)?;
+    let canonical_file_path_new =
+        check_inside_base_dir_and_canonicalize(absolute_base_dir, absolute_file_path_new)?;
+    fs::rename(canonical_file_path_old, canonical_file_path_new)?;
     Ok(())
 }
 
@@ -52,6 +66,42 @@ pub fn exists(absolute_base_dir: &Path, absolute_file_path: &Path) -> Result<boo
     Ok(canonical_file_path.exists())
 }
 
+pub fn ignored(absolute_base_dir: &Path, absolute_file_path: &Path) -> Result<bool> {
+    let canonical_file_path =
+        check_inside_base_dir_and_canonicalize(absolute_base_dir, absolute_file_path)?;
+
+    let ignored_things = [".git", ".ethersync"];
+
+    // To use the same logic for which files are ignored, iterate through all files
+    // using ignore::Walk, and try to find this file.
+    // This has the downside that the file must already exist.
+    // TODO: Things in .gitignore are only ignored when there is a .git? Does that make sense?
+    let walk = WalkBuilder::new(absolute_base_dir)
+        .standard_filters(true)
+        .hidden(false)
+        // Interestingly, the standard filters don't seem to ignore .git.
+        .filter_entry(move |dir_entry| {
+            let name = dir_entry
+                .path()
+                .file_name()
+                .expect("Failed to get file name from path.")
+                .to_str()
+                .expect("Failed to convert OsStr to str");
+            !ignored_things.contains(&name) && !name.ends_with('~')
+        })
+        .build();
+
+    return Ok(!walk
+        .filter_map(Result::ok)
+        .filter(|dir_entry| {
+            dir_entry
+                .file_type()
+                .expect("Couldn't get file type of dir entry")
+                .is_file()
+        })
+        .any(|dir_entry| dir_entry.path() == canonical_file_path));
+}
+
 fn check_inside_base_dir_and_canonicalize(base_dir: &Path, path: &Path) -> Result<PathBuf> {
     let canonical_base_dir = absolute_and_canonicalized(base_dir)?;
     let canonical_path = absolute_and_canonicalized(path)?;
@@ -70,6 +120,29 @@ fn absolute_and_canonicalized(path: &Path) -> Result<PathBuf> {
 
     // Remove any ".." and "." from the path.
     let canonical_path = path.clean();
+    let mut suffix_path = PathBuf::new();
+    let mut prefix_path = canonical_path.clone();
+
+    for component in path.components().rev() {
+        if prefix_path.exists() {
+            break;
+        }
+        prefix_path.pop();
+        if let std::path::Component::Normal(os_str) = component {
+            suffix_path = if suffix_path.components().count() != 0 {
+                Path::new(os_str).join(&suffix_path)
+            } else {
+                Path::new(os_str).to_path_buf()
+            };
+        } else {
+            panic!("Got unexpected Component variant while canonicalizing");
+        }
+    }
+
+    let mut canonical_path = prefix_path.canonicalize().expect("Could not canonicalize");
+    if suffix_path.components().count() != 0 {
+        canonical_path = canonical_path.join(suffix_path);
+    }
 
     Ok(canonical_path)
 }
@@ -90,6 +163,55 @@ mod tests {
         fs::write(dir.path().join("secret"), b"This is a secret").expect("Failed to write file");
 
         dir
+    }
+
+    #[test]
+    fn does_canonicalize_symlink_dir() {
+        let dir = temp_dir_setup();
+        let linked_project = dir.child("ln_project");
+        let project = dir.child("project");
+        std::os::unix::fs::symlink(&project, &linked_project).unwrap();
+        assert_eq!(
+            absolute_and_canonicalized(&linked_project).unwrap(),
+            project.canonicalize().unwrap()
+        );
+    }
+
+    #[test]
+    fn does_canonicalize_symlink_file() {
+        let dir = temp_dir_setup();
+        let linked_project = dir.child("ln_project");
+        let project = dir.child("project");
+        std::os::unix::fs::symlink(&project, &linked_project).unwrap();
+
+        let ln_file = dir.child("ln_project/c");
+
+        assert_eq!(
+            absolute_and_canonicalized(&ln_file).unwrap().to_str(),
+            project.canonicalize().unwrap().join("c").to_str()
+        );
+    }
+
+    #[test]
+    fn does_canonicalize_symlink_notexisting_file() {
+        let dir = temp_dir_setup();
+        let linked_project = dir.child("ln_project");
+        let project = dir.child("project");
+        std::os::unix::fs::symlink(&project, &linked_project).unwrap();
+
+        let file = dir.child("project/a");
+        let ln_file = dir.child("ln_project/a");
+
+        // tests whether it does not end on slash
+        assert_eq!(
+            absolute_and_canonicalized(&file).unwrap().to_str(),
+            file.canonicalize().unwrap().to_str()
+        );
+
+        assert_eq!(
+            absolute_and_canonicalized(&ln_file).unwrap().to_str(),
+            ln_file.canonicalize().unwrap().to_str()
+        );
     }
 
     #[test]

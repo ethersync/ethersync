@@ -1,16 +1,17 @@
 # File Events
 
-Ethersync currently only syncs changes done to the filesystem in very specific cases! We might improve this in the future, but for now, it's important to know which changes are sent to your peers:
+Ethersync tries to sync not only file changes done by supported editors, but also by external tools.
+
+> ⚠️ **Warning:**
+>
+> When one peer edits a file from an editor, and another peer changes it with an external tool at the same time, the latter change might get lost.  
+> This is a restriction that seems hard to avoid. If you want to make sure changes by external tools are recorded correctly, do them while the daemon is not running, and make use of Ethersync's [offline support](offline-support.md).
 
 ## Creating files
-
-### Changes that are synchronized:
 
 - Opening a new file with an Ethersync-enabled text editor (this will create the file in the directory of connected peers).
 
     Example: `nvim new_file`
-
-### Changes that are *not* synchronized:
 
 - Creating a file directly on the file system.
 
@@ -22,13 +23,9 @@ Ethersync currently only syncs changes done to the filesystem in very specific c
 
 ## Changing files
 
-### Changes that are synchronized:
-
 - Editing a file in an Ethersync-enabled text editor.
 
     Example: `nvim existing_file`
-
-### Changes that are *not* synchronized:
 
 - Changing files with external tools. Examples:
 
@@ -38,10 +35,10 @@ Ethersync currently only syncs changes done to the filesystem in very specific c
 
 ## Deleting files
 
-This is an exception to the above: We actually watch the file system for deletion events, and transfer them over to other peers:
-
-### Changes that are synchronized:
-
-- Deleting a file directly from the file system!
+- Deleting a file directly from the file system.
 
     Example: `rm new_file`
+
+- Moving a file out of the project.
+
+    Example: `mv file ../somwhere/else/`

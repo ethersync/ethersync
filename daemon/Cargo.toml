@@ -23,7 +23,7 @@ dissimilar = "1.0.9"
 futures = { version = "0.3.30", default-features = false }
 ignore = "0.4.22"
 libp2p = { version = "0.53.2", features = ["tokio", "tcp", "noise", "yamux"] }
-libp2p-identity = { version ="0.2.9", features = ["ed25519"] }
+libp2p-identity = { version = "0.2.9", features = ["ed25519"] }
 libp2p-pnet = "0.24.0"
 libp2p-stream = "0.1.0-alpha.1"
 memorable-wordlist = "0.1.7"
@@ -40,18 +40,15 @@ sha2 = "0.10.8"
 time = { version = "0.3.36", features = ["formatting"] }
 tokio-util = { version = "0.7.11", features = ["codec"] }
 tracing = "0.1.40"
-tracing-subscriber = { version = "0.3.18", default-features = false, features = ["fmt", "local-time"] }
+tracing-subscriber = { version = "0.3.18", default-features = false, features = [
+    "ansi",
+    "fmt",
+    "local-time",
+] }
 
 [dependencies.tokio]
 version = "1"
-features = [
-    "rt",
-    "io-std",
-    "io-util",
-    "macros",
-    "net",
-    "time",
-]
+features = ["rt", "io-std", "io-util", "macros", "net", "time"]
 
 [features]
 executable-deps = ["dep:clap", "tokio/signal", "tokio/rt-multi-thread"]

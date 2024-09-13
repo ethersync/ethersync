@@ -15,6 +15,7 @@ Ethersync enables a workflow like that, but for **local text files, using your f
 - 👥 Real-time collaborative text editing
 - 📍 See other people's cursors
 - 🗃️ Work on entire projects
+- 🛠️ Sync changes done by text editors and external tools
 - ✒️ Local-first: You always have full access, even offline
 - 🇳 Fully-featured Neovim plugin
 - 🧩 Simple protocol for writing new editor plugins

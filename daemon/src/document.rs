@@ -8,7 +8,7 @@ use automerge::{
 };
 use dissimilar::Chunk;
 use std::env;
-use tracing::{debug, info, warn};
+use tracing::{debug, info};
 
 /// Encapsulates the Automerge `AutoCommit` and provides a generic interface,
 /// s.t. we don't need to worry about automerge internals elsewhere.
@@ -112,7 +112,7 @@ impl Document {
     }
 
     pub fn initialize_text(&mut self, text: &str, file_path: &str) {
-        info!("Initializing {file_path} in CRDT");
+        info!("Initializing '{file_path}' in CRDT.");
 
         // TODO: I don't love the assumption that the first document to initialize a text
         // object should initialize the maps...
@@ -148,11 +148,11 @@ impl Document {
             }
 
             let text_delta: TextDelta = chunks.into();
-            warn!("File {file_path} has changed while the daemon was offline. Applying delta: {text_delta:?}");
+            info!("Updating '{file_path}' in CRDT with delta: {text_delta:?}");
             self.apply_delta_to_doc(&text_delta, file_path);
         } else {
             // The file doesn't exist in the CRDT yet, so we need to initialize it.
-            info!("File {file_path} doesn't exist in CRDT yet. Initializing it.");
+            info!("Creating '{file_path}' in CRDT.");
             self.initialize_text(desired_text, file_path);
         }
     }
@@ -163,7 +163,7 @@ impl Document {
             return;
         };
 
-        debug!("Removing {file_path} from CRDT.");
+        info!("Removing {file_path} from CRDT.");
         // TODO: Also remove it from ot server, if applicable
         let file_map = self
             .top_level_map_obj("files")

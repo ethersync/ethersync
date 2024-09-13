@@ -57,9 +57,14 @@ jobs:
       - name: Compile integration tests
         working-directory: ./daemon/integration-tests
         run: cargo test --no-run --locked
-      - name: Run integration tests
+      - if: ${{ matrix.os == 'ubuntu-latest' }}
+        name: Run integration tests
         working-directory: ./daemon/integration-tests
         run: cargo test
+      - if: ${{ matrix.os == 'macos-latest' }}
+        name: Run integration tests (without fuzzer)
+        working-directory: ./daemon/integration-tests
+        run: cargo test --test vim-plugin
   check_formatting:
     name: Check Rust formatting
     runs-on: ubuntu-latest

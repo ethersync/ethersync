@@ -8,6 +8,8 @@ use crate::types::{
     EditorProtocolMessageToEditor, EditorProtocolObject, FileTextDelta, JSONRPCFromEditor,
     JSONRPCResponse, PatchEffect, Range, RevisionedEditorTextDelta, TextDelta,
 };
+use crate::watcher::Watcher;
+use crate::watcher::WatcherEvent;
 use anyhow::{bail, Context, Result};
 use automerge::{
     sync::{Message as AutomergeSyncMessage, State as SyncState},
@@ -15,7 +17,6 @@ use automerge::{
 };
 use futures::SinkExt;
 use ignore::{Walk, WalkBuilder};
-use notify::{RecursiveMode, Result as NotifyResult, Watcher};
 use rand::Rng;
 use std::collections::{HashMap, HashSet};
 use std::fmt;
@@ -38,9 +39,7 @@ pub enum DocMessage {
         response_tx: oneshot::Sender<Result<String>>,
     },
     FromEditor(EditorId, String),
-    RemoveFile {
-        file_path: String,
-    },
+    FromWatcher(WatcherEvent),
     Persist,
     RandomEdit,
     ReceiveSyncMessage {
@@ -63,7 +62,7 @@ impl fmt::Debug for DocMessage {
             DocMessage::FromEditor(id, _) => {
                 format!("open/close/edit/... message from editor #{id}")
             }
-            DocMessage::RemoveFile { .. } => "delete file".to_string(),
+            DocMessage::FromWatcher(_) => "watcher event".to_string(),
             DocMessage::Persist => "persist".to_string(),
             DocMessage::RandomEdit => "random edit".to_string(),
             DocMessage::ReceiveSyncMessage { .. } => "<automerge internal sync rcv>".to_string(),
@@ -169,16 +168,8 @@ impl DocumentActor {
             DocMessage::FromEditor(editor_id, message) => {
                 self.handle_message_from_editor(editor_id, message).await;
             }
-            DocMessage::RemoveFile { file_path } => {
-                // TODO: This is a workaround. Handle this case better by returning a Result in
-                // file_path_for_uri! The deletion happens when the fuzzer removes the temp dir.
-                if file_path.as_str() != self.base_dir.as_os_str() {
-                    let file_path = self
-                        .file_path_for_uri(&file_path)
-                        .expect("Could not determine file path when trying to remove file");
-                    self.crdt_doc.remove_text(&file_path);
-                    let _ = self.doc_changed_ping_tx.send(());
-                }
+            DocMessage::FromWatcher(watcher_event) => {
+                self.handle_watcher_event(watcher_event).await;
             }
             DocMessage::Persist => {
                 debug!("Persisting!");
@@ -208,6 +199,7 @@ impl DocumentActor {
                             cursor_states.push(cursor_state);
                         }
                         PatchEffect::FileRemoval(file_path) => {
+                            info!("Removing file '{file_path}'.");
                             sandbox::remove_file(
                                 &self.base_dir,
                                 Path::new(&self.absolute_path_for_file_path(&file_path)),
@@ -308,29 +300,8 @@ impl DocumentActor {
                 }
 
                 // We only want to process these messages for files that are not ignored.
-                // To use the same logic for which files are ignored, iterate through all files
-                // using ignore::Walk, and try to find this file.
-                // TODO: Request a better way to do this with the "ignore" crate.
-                if !self
-                    .build_walk()
-                    .filter_map(Result::ok)
-                    .filter(|dir_entry| {
-                        dir_entry
-                            .file_type()
-                            .expect("Couldn't get file type of dir entry.")
-                            .is_file()
-                    })
-                    .any(|dir_entry| {
-                        let walked_file_path = self
-                            .file_path_for_uri(
-                                dir_entry
-                                    .path()
-                                    .to_str()
-                                    .expect("Could not convert PathBuf to str"),
-                            )
-                            .expect("Could not convert URI to file path");
-                        walked_file_path == file_path
-                    })
+                if sandbox::ignored(&self.base_dir, Path::new(&absolute_file_path))
+                    .expect("Could not determine ignored status of file")
                 {
                     return Err(EditorProtocolMessageError {
                         code: -1,
@@ -452,6 +423,63 @@ impl DocumentActor {
                 error!("Error for JSON-RPC request: {:?}", response);
                 self.send_to_editor_client(&editor_id, EditorProtocolObject::Response(response))
                     .await;
+            }
+        }
+    }
+
+    async fn handle_watcher_event(&mut self, watcher_event: WatcherEvent) {
+        match watcher_event {
+            WatcherEvent::Created { file_path } => {
+                let relative_file_path = self
+                    .file_path_for_uri(
+                        file_path
+                            .to_str()
+                            .expect("Failed to convert watcher path to str"),
+                    )
+                    .expect("Could not determine file path when trying to create file");
+                if self.owns(&relative_file_path) {
+                    if !self.crdt_doc.file_exists(&relative_file_path) {
+                        let content = sandbox::read_file(&self.base_dir, Path::new(&file_path))
+                            .expect("Failed to read newly created file");
+                        let content = String::from_utf8(content)
+                            .expect("Failed to convert file content to UTF-8");
+                        self.crdt_doc.initialize_text(&content, &relative_file_path);
+                    } else {
+                        debug!("Received watcher creation event, but file already exists in CRDT.")
+                    }
+                    let _ = self.doc_changed_ping_tx.send(());
+                }
+            }
+            WatcherEvent::Removed { file_path } => {
+                let relative_file_path = self
+                    .file_path_for_uri(
+                        file_path
+                            .to_str()
+                            .expect("Failed to convert watcher path to str"),
+                    )
+                    .expect("Could not determine file path when trying to remove file");
+                if self.owns(&relative_file_path) {
+                    self.crdt_doc.remove_text(&relative_file_path);
+                    let _ = self.doc_changed_ping_tx.send(());
+                }
+            }
+            WatcherEvent::Changed { file_path } => {
+                // Only update if we own the file.
+                let relative_file_path = self
+                    .file_path_for_uri(
+                        file_path
+                            .to_str()
+                            .expect("Failed to convert watcher path to str"),
+                    )
+                    .expect("Could not determine file path when trying to create file");
+                if self.owns(&relative_file_path) {
+                    let new_content = sandbox::read_file(&self.base_dir, Path::new(&file_path))
+                        .expect("Failed to read changed file");
+                    let new_content = String::from_utf8(new_content)
+                        .expect("Failed to convert file content to UTF-8");
+                    self.crdt_doc.update_text(&new_content, &relative_file_path);
+                    let _ = self.doc_changed_ping_tx.send(());
+                }
             }
         }
     }
@@ -654,6 +682,13 @@ impl DocumentActor {
                     panic!("Could not create parent directory {}", parent_dir.display())
                 });
 
+                // If the file didn't exist before, log it.
+                if !sandbox::exists(&self.base_dir, Path::new(&abs_path))
+                    .expect("Failed to check for file existence before writing to it")
+                {
+                    info!("Creating '{file_path}'.");
+                }
+
                 sandbox::write_file(&self.base_dir, Path::new(&abs_path), &text.into_bytes())
                     .unwrap_or_else(|_| panic!("Could not write to file {abs_path}"));
             } else {
@@ -662,6 +697,7 @@ impl DocumentActor {
         }
     }
 
+    // TODO: Should this also go to the sandbox module?
     fn build_walk(&mut self) -> Walk {
         let ignored_things = [".git", ".ethersync"];
         // TODO: How to deal with binary files?
@@ -869,7 +905,7 @@ impl Daemon {
         let watcher_document_handle = document_handle.clone();
         let watcher_base_dir = base_dir.to_path_buf();
         tokio::spawn(async move {
-            spawn_file_watcher(watcher_base_dir, watcher_document_handle).await;
+            spawn_file_watcher(&watcher_base_dir, watcher_document_handle).await;
         });
 
         // Initialize persister.
@@ -899,43 +935,12 @@ impl Daemon {
     }
 }
 
-async fn spawn_file_watcher(base_dir: PathBuf, document_handle: DocumentActorHandle) {
-    // Beware of the file watching spaghetti triangle monster.
-    let mut watcher = notify::recommended_watcher(move |res: NotifyResult<notify::Event>| {
-        futures::executor::block_on(async {
-            match res {
-                Ok(event) => {
-                    // TODO: On Linux, even a directory deletion seems to yield a Remove(File)?
-                    if let notify::event::EventKind::Remove(notify::event::RemoveKind::File) =
-                        event.kind
-                    {
-                        for path in event.paths {
-                            document_handle
-                                .send_message(DocMessage::RemoveFile {
-                                    file_path: path
-                                        .to_str()
-                                        .expect("Failed to convert path to string")
-                                        .into(),
-                                })
-                                .await;
-                        }
-                    }
-                }
-                Err(e) => panic!("watch error: {e:?}"),
-            }
-        });
-    })
-    .expect("Failed to initialize file watcher");
-
-    // Add a path to be watched. All files and directories at that path and
-    // below will be monitored for changes.
-    watcher
-        .watch(&base_dir, RecursiveMode::Recursive)
-        .expect("Failed to watch directory");
-
-    // TODO: can this be event based?
-    loop {
-        tokio::time::sleep(Duration::from_millis(100)).await;
+async fn spawn_file_watcher(base_dir: &Path, document_handle: DocumentActorHandle) {
+    let mut watcher = Watcher::new(base_dir);
+    while let Some(watcher_event) = watcher.next().await {
+        document_handle
+            .send_message(DocMessage::FromWatcher(watcher_event))
+            .await;
     }
 }
 
@@ -978,7 +983,7 @@ mod tests {
         use tracing_test::traced_test;
 
         impl DocumentActor {
-            fn setup_for_testing(directory: PathBuf) -> Self {
+            fn setup_for_testing(directory: &TempDir) -> Self {
                 // The document task will receive messages on this channel.
                 let (_doc_message_tx, doc_message_rx) = mpsc::channel(1);
 
@@ -989,7 +994,7 @@ mod tests {
                 DocumentActor::new(
                     doc_message_rx,
                     doc_changed_ping_tx.clone(),
-                    directory,
+                    directory.path().to_path_buf(),
                     true,
                     true,
                 )
@@ -1016,7 +1021,7 @@ mod tests {
         #[test]
         fn read_contents_from_dir() {
             let dir = setup_filesystem_for_testing();
-            let mut actor = DocumentActor::setup_for_testing(dir.path().to_path_buf());
+            let mut actor = DocumentActor::setup_for_testing(&dir);
 
             actor.read_current_content_from_dir(true);
 
@@ -1030,7 +1035,7 @@ mod tests {
         fn test_maybe_write_files_changed_in_file_deltas() {
             let dir = setup_filesystem_for_testing();
             debug!("{}", dir.path().display());
-            let mut actor = DocumentActor::setup_for_testing(dir.path().to_path_buf());
+            let mut actor = DocumentActor::setup_for_testing(&dir);
 
             actor.read_current_content_from_dir(true);
 
@@ -1072,7 +1077,7 @@ mod tests {
         #[test]
         fn test_file_path_for_uri_fails_not_absolute() {
             let dir = setup_filesystem_for_testing();
-            let actor = DocumentActor::setup_for_testing(dir.path().to_path_buf());
+            let actor = DocumentActor::setup_for_testing(&dir);
 
             assert!(actor
                 .file_path_for_uri("this/is/absolutely/not/absolute")
@@ -1082,7 +1087,7 @@ mod tests {
         #[test]
         fn test_file_path_for_uri_fails_not_within_base_dir() {
             let dir = setup_filesystem_for_testing();
-            let actor = DocumentActor::setup_for_testing(dir.path().to_path_buf());
+            let actor = DocumentActor::setup_for_testing(&dir);
 
             assert!(actor
                 .file_path_for_uri("/this/is/not/the/base_dir/file")
@@ -1093,7 +1098,7 @@ mod tests {
         fn test_file_path_for_uri_fails_not_within_base_dir_suffix() {
             let dir = setup_filesystem_for_testing();
             let file_in_suffix_dir = dir.path().to_str().unwrap().to_string() + "2/file";
-            let actor = DocumentActor::setup_for_testing(dir.path().to_path_buf());
+            let actor = DocumentActor::setup_for_testing(&dir);
 
             assert!(actor.file_path_for_uri(&file_in_suffix_dir).is_err());
         }
@@ -1101,7 +1106,7 @@ mod tests {
         #[test]
         fn test_file_path_for_uri_fails_only_base_dir() {
             let dir = setup_filesystem_for_testing();
-            let actor = DocumentActor::setup_for_testing(dir.path().to_path_buf());
+            let actor = DocumentActor::setup_for_testing(&dir);
 
             assert!(actor
                 .file_path_for_uri(&format!("{}", dir.path().display()))
@@ -1111,9 +1116,9 @@ mod tests {
         #[test]
         fn test_file_path_for_uri_works() {
             let dir = setup_filesystem_for_testing();
-            let actor = DocumentActor::setup_for_testing(dir.path().to_path_buf());
+            let actor = DocumentActor::setup_for_testing(&dir);
 
-            let file_paths = vec!["afile", "adir/with/some/file", "just/adir/"];
+            let file_paths = vec!["file1", "sub/file3", "sub"];
             let prefix_options = vec!["file://", ""];
             for prefix in prefix_options {
                 for &expected in &file_paths {
@@ -1128,7 +1133,7 @@ mod tests {
         #[tokio::test]
         async fn test_simulate_editor_edits() {
             let dir = setup_filesystem_for_testing();
-            let mut actor = DocumentActor::setup_for_testing(dir.path().to_path_buf());
+            let mut actor = DocumentActor::setup_for_testing(&dir);
             actor.read_current_content_from_dir(true);
 
             let file_path = "file1".to_string();

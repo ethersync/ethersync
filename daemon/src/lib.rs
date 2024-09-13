@@ -6,3 +6,4 @@ pub mod ot;
 pub mod peer;
 pub mod sandbox;
 pub mod types;
+pub mod watcher;
