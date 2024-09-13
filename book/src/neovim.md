@@ -1,9 +1,5 @@
 # Neovim Plugin
 
-> ❗ **Important**
->
-> The plugin currently requires Neovim v0.10.
-
 Again, we have several options of how to install the Neovim plugin:
 
 ## Lazy
