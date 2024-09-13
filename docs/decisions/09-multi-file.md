@@ -1,6 +1,6 @@
 ---
-status: draft
-date: 2024-08-22
+status: accepted
+date: 2024-09-13
 ---
 # How to keep directory structures in sync?
 
@@ -10,7 +10,6 @@ Instead of only syncing a static, single file, we want to be able to collaborate
 
 What should our core data structure look like, and how should we approach edge cases?
 
-<!-- This is an optional element. Feel free to remove. -->
 ## Decision Drivers
 
 Our chosen solution should:
@@ -27,8 +26,9 @@ Our chosen solution should:
 
 ## Decision Outcome
 
-Chosen option: "{title of option 1}", because
-{justification. e.g., only option, which meets k.o. criterion decision driver | which resolves force {force} | … | comes out best (see below)}.
+Chosen option: "plain keys in on CRDT", because
+it's the simplest solution and we are willing to accept the drawbacks (some risk for conflicts/data loss) instead of taking in complexity.
+We'll be tackling the conflicts and preventing data loss by detecting these cases and creating a backup beforehand.
 
 ## Pros and Cons of the Options
 
@@ -43,9 +43,7 @@ In the CRDT datastructure, we keep a dictionary where the key is the full filena
 
 ### Virtual CRDT filesystem
 
-Following an approach as described in [this paper](https://inria.hal.science/hal-03278658/document), we model the shared directory as a virtual, CRDT-powered filesystem. Like in a proper file system, its entries would be identified via inodes.
-
-where all file operations are directly mapped to an underlying CRDT. Files are identified by path and user ID, which avoids problematic case 1 (see below).
+Following an approach as described in [this paper](https://inria.hal.science/hal-03278658/document), we model the shared directory as a virtual, CRDT-powered filesystem. Like in a proper file system, its entries would be identified via inodes. All file operations are then directly mapped to an underlying CRDT. Files are identified by path and user ID, which avoids problematic case 1 (see below).
 
 * Good, because it might offer the smoothest and most "correct" handling of concurrent file operations.
 * Good, because it avoids problematic case 1. In case of a conflict, both versions are "rendered" to disk smoothly.
@@ -62,7 +60,7 @@ Every file could be its own CRDT document with an URI. Directories could list to
 
 We think that file operations like creating or deleting a file don't happen very often in our use cases. File edits, however, happen a lot in comparison. So it would be okay if our data structure would neglect the first two operations a bit.
 
-Here'a a list of problematic cases that can happen when dealing with directory structures. In each case, we look at two peers, which have done some work in parallel (while offline), and now they try to reconnect.
+Here's a list of problematic cases that can happen when dealing with directory structures. In each case, we look at two peers, which have done some work in parallel (while offline), and now they try to reconnect.
 
 As a simplification, let's assume that there's no "move/rename" operation, and that those would just be mapped to a deletion and a creation.
 
