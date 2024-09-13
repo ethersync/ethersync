@@ -197,6 +197,22 @@ async fn vim_processes_deltas_correctly() {
 
     assert_vim_deltas_yield_content("ba\nna\nnas", vec![replace_ed((0, 1), (2, 1), "")], "bas")
         .await;
+
+    assert_vim_deltas_yield_content(
+        "hi\n",
+        vec![replace_ed((1, 0), (1, 0), "there\n")],
+        "hi\nthere\n",
+    )
+    .await;
+
+    assert_vim_deltas_yield_content(
+        "hi\n",
+        vec![replace_ed((1, 0), (1, 0), "there\n\n")],
+        "hi\nthere\n\n",
+    )
+    .await;
+
+    assert_vim_deltas_yield_content("hi\n", vec![replace_ed((1, 0), (1, 0), "\n")], "hi\n\n").await;
 }
 
 async fn assert_vim_input_yields_replacements(
