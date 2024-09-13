@@ -445,7 +445,7 @@ impl DocumentActor {
                             .expect("Failed to convert file content to UTF-8");
                         self.crdt_doc.initialize_text(&content, &relative_file_path);
                     } else {
-                        debug!("Received watcher creation event, but file already exists in CRDT")
+                        debug!("Received watcher creation event, but file already exists in CRDT.")
                     }
                     let _ = self.doc_changed_ping_tx.send(());
                 }
@@ -681,6 +681,13 @@ impl DocumentActor {
                 sandbox::create_dir_all(&self.base_dir, parent_dir).unwrap_or_else(|_| {
                     panic!("Could not create parent directory {}", parent_dir.display())
                 });
+
+                // If the file didn't exist before, log it.
+                if !sandbox::exists(&self.base_dir, Path::new(&abs_path))
+                    .expect("Failed to check for file existence before writing to it")
+                {
+                    info!("Creating '{file_path}'.");
+                }
 
                 sandbox::write_file(&self.base_dir, Path::new(&abs_path), &text.into_bytes())
                     .unwrap_or_else(|_| panic!("Could not write to file {abs_path}"));

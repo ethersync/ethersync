@@ -112,7 +112,7 @@ impl Document {
     }
 
     pub fn initialize_text(&mut self, text: &str, file_path: &str) {
-        info!("Initializing '{file_path}' in CRDT");
+        info!("Initializing '{file_path}' in CRDT.");
 
         // TODO: I don't love the assumption that the first document to initialize a text
         // object should initialize the maps...
@@ -152,7 +152,7 @@ impl Document {
             self.apply_delta_to_doc(&text_delta, file_path);
         } else {
             // The file doesn't exist in the CRDT yet, so we need to initialize it.
-            info!("Creating '{file_path}' in CRDT");
+            info!("Creating '{file_path}' in CRDT.");
             self.initialize_text(desired_text, file_path);
         }
     }
