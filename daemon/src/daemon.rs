@@ -737,11 +737,14 @@ impl DocumentActor {
                                     .expect("Could not convert PathBuf to str"),
                             )
                             .expect("Could not convert uri to file path");
-                        let text = String::from_utf8(bytes).expect("Could not read file as UTF-8");
-                        if init {
-                            self.crdt_doc.initialize_text(&text, &relative_file_path);
+                        if let Ok(text) = String::from_utf8(bytes) {
+                            if init {
+                                self.crdt_doc.initialize_text(&text, &relative_file_path);
+                            } else {
+                                self.crdt_doc.update_text(&text, &relative_file_path);
+                            }
                         } else {
-                            self.crdt_doc.update_text(&text, &relative_file_path);
+                            info!("Skipping non-text file {}", file_path.display())
                         }
                     }
                     Err(e) => {
