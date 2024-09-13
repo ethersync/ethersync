@@ -2,6 +2,19 @@
 name = "ethersync"
 description = "Enables real-time co-editing of local text files."
 version = "0.4.0"
+authors = ["Moritz Neeb <nt4u@kpvn.de>", "blinry <mail@blinry.org>"]
+license = "AGPL-3.0-or-later"
+readme = "../README.md"
+documentation = "https://ethersync.github.io"
+repository = "https://github.com/ethersync/ethersync"
+keywords = [
+    "collaborative-editing",
+    "local-first",
+    "synchronization",
+    "crdt",
+    "peer-to-peer",
+]
+categories = ["command-line-utilities", "text-editors"]
 edition = "2021"
 default-run = "ethersync"
 
