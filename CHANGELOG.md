@@ -1,14 +1,17 @@
-# Next release
-
-- Documentation moved to an mdBook at <https://ethersync.github.io/ethersync/>.
+# 0.4.0 (2024-09-13)
 
 New features:
 
-- #127
+- `ethersync client` now connects to the socket specified in the environment variable `ETHERSYNC_SOCKET`.
+- Published extensive user documentation at <https://ethersync.github.io/ethersync/>.
+- Published ADR-08 (on secure connections) and ADR-09 (on the data structure for multiple files).
+- Support multiple local editors connecting the the same daemon. Caveat: Their initial state needs to be in sync.
+- Watch for file creation and modification by external tools in project directory, and forward these changes to the peers.
 
 Bug fixes:
 
-- #152
+- When peers put something invalid into the "states" key of the CRDT, ignore it.
+- Fix bug when inserting text ending with \n after last visible line. This happened, for example, when performing a `echo line >> file`.
 
 # 0.3.0 (2024-08-13)
 

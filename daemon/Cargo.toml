@@ -1,7 +1,7 @@
 [package]
 name = "ethersync"
 description = "Enables real-time co-editing of local text files."
-version = "0.2.0"
+version = "0.4.0"
 edition = "2021"
 default-run = "ethersync"
 
@@ -27,7 +27,9 @@ libp2p-identity = { version = "0.2.9", features = ["ed25519"] }
 libp2p-pnet = "0.24.0"
 libp2p-stream = "0.1.0-alpha.1"
 memorable-wordlist = "0.1.7"
-notify = { version = "6.1.1", default-features = false, features = ["macos_fsevent"] }
+notify = { version = "6.1.1", default-features = false, features = [
+    "macos_fsevent",
+] }
 operational-transform = "0.6.1"
 path-clean = "1.0.1"
 pbkdf2 = "0.12.2"
