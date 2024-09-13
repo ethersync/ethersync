@@ -199,6 +199,7 @@ impl DocumentActor {
                             cursor_states.push(cursor_state);
                         }
                         PatchEffect::FileRemoval(file_path) => {
+                            info!("Removing file '{file_path}'.");
                             sandbox::remove_file(
                                 &self.base_dir,
                                 Path::new(&self.absolute_path_for_file_path(&file_path)),
