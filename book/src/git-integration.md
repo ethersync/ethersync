@@ -19,9 +19,9 @@ echo ".ethersync/" >> ~/.config/git/ignore
 
 ## How Ethersync and Git interact
 
-Ethersync currently only tracks changes that you make to files in editors with an Ethersync plugin, and certain [file events](file-events.md).
+Ethersync tracks changes that you make to files in editors with an Ethersync plugin, and with [external tools](file-events.md).
 
-In reverse, any change to the `.git` directory and the staging area (which is in fact also tracked in the `.git` repository) is *ignored* by Ethersync. This means that Ethersync does not sync
+However, any change to the `.git` directory and the staging area (which is in fact also tracked in the `.git` repository) is *ignored* by Ethersync. This means that Ethersync does not sync
 - commits you create,
 - files that you stage or unstage, or
 - changes you're making to the HEAD.

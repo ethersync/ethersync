@@ -52,7 +52,7 @@ If you prefer, it's also possible to use the [configuration file](configuration.
 
 ### 5. Collaborate!
 
-Connected peers can now open files and edit them together. Note the current restrictions on [file events](file-events.md) and the [common pitfalls](workarounds.md).
+Connected peers can now open files and edit them together. Note the [common pitfalls](workarounds.md).
 
 ### 6. Stop Ethersync
 
