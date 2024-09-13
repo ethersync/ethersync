@@ -35,7 +35,7 @@ nix run github:ethersync/ethersync#neovim
 
 If you're not using a plugin manager, here's a "quick and dirty" way to install the plugin:
 
-If you don't already have the repo (because you chose a _packaged_ option above):
+Clone the Ethersync repository:
 
 ```bash
 git clone git@github.com:ethersync/ethersync

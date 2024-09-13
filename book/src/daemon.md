@@ -1,12 +1,16 @@
 # Daemon
 
-You might be able to use one of the following packages, or you could try a manual installation.
+You might be able to use one of the following packages:
 
 ## Arch Linux
 
-Install the [ethersync-git](https://aur.archlinux.org/packages/ethersync-git) package from the AUR.
+Install the [ethersync-bin](https://aur.archlinux.org/packages/ethersync-bin) package from the AUR.
 
 ## Nix
+
+> 💡 **Tip**
+>
+> You can use the Nix package on any Linux or MacOS system!
 
 This repository provides a Nix flake. You can put it in your `PATH` like this:
 
@@ -16,27 +20,16 @@ nix shell github:ethersync/ethersync
 
 If you want to install it permanently, you probably know what your favorite approach is.
 
-> 💡 **Tip**
->
-> You can use the Nix package on any Linux or MacOS system!
+## Binary releases
 
-## Manual installation
+The releases on GitHub come with [precompiled static binaries](https://github.com/ethersync/ethersync/releases/latest) for Linux and macOS. Download one and put it somewhere in your shell's [`PATH`](https://en.wikipedia.org/wiki/PATH_(variable)), so that you can run it with `ethersync`.
 
-You will need a [Rust](https://www.rust-lang.org) installation. You can then compile the daemon like this:
+## Via Cargo
 
-```bash
-git clone git@github.com:ethersync/ethersync
-cd ethersync/daemon
-cargo build --release
-```
-
-This should download all dependencies, and successfully compile the project.
-
-For the next steps to succeed you need to make sure that the resulting `ethersync` binary is in your shell `PATH`.
-One option to do this temporarily is to run this command in the terminal:
+If you have a [Rust](https://www.rust-lang.org) installation, you can install Ethersync with `cargo`:
 
 ```bash
-export PATH="$PWD/target/release:$PATH"
+cargo install ethersync
 ```
 
 ## Confirm the installation
