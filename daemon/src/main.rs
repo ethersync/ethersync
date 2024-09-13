@@ -2,11 +2,13 @@ use anyhow::{Context, Result};
 use clap::{parser::ValueSource, CommandFactory, FromArgMatches, Parser, Subcommand};
 use ethersync::peer::PeerConnectionInfo;
 use ethersync::{daemon::Daemon, logging, sandbox};
+use shadow_rs::shadow;
 use std::path::{Path, PathBuf};
 use tokio::signal;
 use tracing::{error, info};
-
 mod jsonrpc_forwarder;
+
+shadow!(build);
 
 const DEFAULT_SOCKET_PATH: &str = "/tmp/ethersync";
 const ETHERSYNC_CONFIG_DIR: &str = ".ethersync";
@@ -14,7 +16,7 @@ const ETHERSYNC_CONFIG_FILE: &str = "config";
 const ETHERSYNC_SOCKET_ENV_VAR: &str = "ETHERSYNC_SOCKET";
 
 #[derive(Parser)]
-#[command(version, about, long_about = None)]
+#[command(version=build::CLAP_LONG_VERSION, about, long_about = None)]
 #[command(propagate_version = true)]
 struct Cli {
     #[command(subcommand)]

@@ -17,6 +17,7 @@ keywords = [
 categories = ["command-line-utilities", "text-editors"]
 edition = "2021"
 default-run = "ethersync"
+build = "build.rs"
 
 [lib]
 name = "ethersync"
@@ -29,6 +30,7 @@ doc = false
 required-features = ["executable-deps"]
 
 [dependencies]
+shadow-rs = { version = "0.34.0", features = ["metadata"] }
 anyhow = "1.0.81"
 automerge = "0.5.9"
 clap = { version = "4.5.3", features = ["derive", "env"], optional = true }
@@ -73,6 +75,9 @@ default = ["executable-deps"]
 pretty_assertions = "1.4.0"
 temp-dir = "0.1.13"
 tracing-test = "0.2.4"
+
+[build-dependencies]
+shadow-rs = "0.34.0"
 
 # Stripping symbols (not debuginfo) reduces binary size by ~1.5x.
 # This is the default profile for `cargo install`:
