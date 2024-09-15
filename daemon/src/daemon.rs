@@ -441,9 +441,11 @@ impl DocumentActor {
                     if !self.crdt_doc.file_exists(&relative_file_path) {
                         let content = sandbox::read_file(&self.base_dir, Path::new(&file_path))
                             .expect("Failed to read newly created file");
-                        let content = String::from_utf8(content)
-                            .expect("Failed to convert file content to UTF-8");
-                        self.crdt_doc.initialize_text(&content, &relative_file_path);
+                        if let Ok(content) = String::from_utf8(content) {
+                            self.crdt_doc.initialize_text(&content, &relative_file_path);
+                        } else {
+                            warn!("Ignoring newly created non-UTF-8 file '{relative_file_path}'");
+                        }
                     } else {
                         debug!("Received watcher creation event, but file already exists in CRDT.")
                     }
@@ -475,10 +477,12 @@ impl DocumentActor {
                 if self.owns(&relative_file_path) {
                     let new_content = sandbox::read_file(&self.base_dir, Path::new(&file_path))
                         .expect("Failed to read changed file");
-                    let new_content = String::from_utf8(new_content)
-                        .expect("Failed to convert file content to UTF-8");
-                    self.crdt_doc.update_text(&new_content, &relative_file_path);
-                    let _ = self.doc_changed_ping_tx.send(());
+                    if let Ok(new_content) = String::from_utf8(new_content) {
+                        self.crdt_doc.update_text(&new_content, &relative_file_path);
+                        let _ = self.doc_changed_ping_tx.send(());
+                    } else {
+                        warn!("Ignoring changed non-UTF-8 file '{relative_file_path}'");
+                    }
                 }
             }
         }
@@ -737,11 +741,14 @@ impl DocumentActor {
                                     .expect("Could not convert PathBuf to str"),
                             )
                             .expect("Could not convert uri to file path");
-                        let text = String::from_utf8(bytes).expect("Could not read file as UTF-8");
-                        if init {
-                            self.crdt_doc.initialize_text(&text, &relative_file_path);
+                        if let Ok(text) = String::from_utf8(bytes) {
+                            if init {
+                                self.crdt_doc.initialize_text(&text, &relative_file_path);
+                            } else {
+                                self.crdt_doc.update_text(&text, &relative_file_path);
+                            }
                         } else {
-                            self.crdt_doc.update_text(&text, &relative_file_path);
+                            warn!("Ignoring non-UTF-8 file '{}'", relative_file_path)
                         }
                     }
                     Err(e) => {
