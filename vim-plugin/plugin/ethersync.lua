@@ -94,7 +94,20 @@ end
 
 local function is_ethersync_enabled(filename)
     -- Recusively scan up directories. If we find an .ethersync directory on any level, return true.
-    return vim.fs.root(filename, ".ethersync") ~= nil
+    if vim.version().api_level < 12 then
+        -- In Vim 0.9, do it manually.
+        local path = filename
+        while path ~= "/" do
+            if vim.fn.isdirectory(path .. "/.ethersync") == 1 then
+                return true
+            end
+            path = vim.fn.fnamemodify(path, ":h")
+        end
+        return false
+    else
+        -- In Vim 0.10, this function is available.
+        return vim.fs.root(filename, ".ethersync") ~= nil
+    end
 end
 
 local function track_edits(filename, uri)
