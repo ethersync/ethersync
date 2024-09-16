@@ -70,12 +70,20 @@ impl Decoder for ContentLengthCodec {
         };
 
         // Find the end of the line after that.
-        let end_of_line = match src[start_of_header + c.len()..]
+        let (end_of_line, end_of_line_bytes) = match src[start_of_header + c.len()..]
             .windows(4)
             .position(|window| window == b"\r\n\r\n")
         {
-            Some(pos) => pos,
-            None => return Ok(None),
+            Some(pos) => (pos, 4),
+            // Even though this is not valid in terms of the spec, also
+            // accept plain newline separators in order to simplify manual testing.
+            None => match src[start_of_header + c.len()..]
+                .windows(2)
+                .position(|window| (window == b"\n\n"))
+            {
+                Some(pos) => (pos, 2),
+                None => return Ok(None),
+            },
         };
 
         // Parse the content length.
@@ -83,7 +91,7 @@ impl Decoder for ContentLengthCodec {
             &src[start_of_header + c.len()..start_of_header + c.len() + end_of_line],
         )?
         .parse()?;
-        let content_start = start_of_header + c.len() + end_of_line + 4;
+        let content_start = start_of_header + c.len() + end_of_line + end_of_line_bytes;
 
         // Recommended optimization, in anticipation for future calls to `decode`.
         src.reserve(content_start + content_length);
