@@ -154,8 +154,6 @@ async function processEditFromDaemon(edit: Edit) {
                 return
             }
 
-            revision.daemon += 1
-
             debug(`Received edit ${edit.delta.revision}`)
             console.log(revisions)
             const uri = edit.uri
@@ -165,7 +163,13 @@ async function processEditFromDaemon(edit: Edit) {
             )
             if (openEditor) {
                 ignoreEdits = true
-                await applyEdit(openEditor, edit)
+                let worked = await applyEdit(openEditor, edit)
+                if (worked) {
+                    revision.daemon += 1
+                } else {
+                    debug("rejected an applyEdit")
+                }
+
                 ignoreEdits = false
             } else {
                 throw new Error(`No open editor for URI ${uri}, why is the daemon sending me this?`)
@@ -177,21 +181,24 @@ async function processEditFromDaemon(edit: Edit) {
     }
 }
 
-async function applyEdit(editor: vscode.TextEditor, edit: Edit) {
-    for (const delta of edit.delta.delta) {
-        const range = ethersyncRangeToVSCodeRange(editor, delta.range)
-        console.log(range)
+async function applyEdit(editor: vscode.TextEditor, edit: Edit): Promise<boolean> {
+    let worked = await editor.edit((editBuilder) => {
+        for (const delta of edit.delta.delta) {
+            const range = ethersyncRangeToVSCodeRange(editor, delta.range)
+            console.log(range)
 
-        // Apply the edit
-        await editor.edit((editBuilder) => {
+            // Apply the edit
             editBuilder.replace(range, delta.replacement)
-        })
-        debug(`Edit applied to open document ${editor.document.uri.toString()}`)
-    }
+            debug(`Edit applied to open document ${editor.document.uri.toString()}`)
+        }
+    })
     // TODO: Make this more efficient by replacing only the changed lines.
     // The challenge with that is that we need to compute how many lines are
     // left after the edit.
-    updateContents(editor.document)
+    if (worked) {
+        updateContents(editor.document)
+    }
+    return worked
 }
 
 // TODO: check if belongs to project.
