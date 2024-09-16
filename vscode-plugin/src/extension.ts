@@ -76,7 +76,7 @@ function uri_to_fname(uri: string): string {
 function UTF16CodeUnitOffsetToCharOffset(utf16CodeUnitOffset: number, content: string): number {
     if (utf16CodeUnitOffset > content.length) {
         throw new Error(
-            `Could not convert UTF-16 code unit offset ${utf16CodeUnitOffset} to char offset in string '${content}'`
+            `Could not convert UTF-16 code unit offset ${utf16CodeUnitOffset} to char offset in string '${content}'`,
         )
     }
     return [...content.slice(0, utf16CodeUnitOffset)].length
@@ -97,7 +97,7 @@ function charOffsetToUTF16CodeUnitOffset(charOffset: number, content: string): n
 function vsCodeRangeToEthersyncRange(content: string[], range: vscode.Range): Range {
     return {
         start: vsCodePositionToEthersyncPosition(content, range.start),
-        end: vsCodePositionToEthersyncPosition(content, range.end)
+        end: vsCodePositionToEthersyncPosition(content, range.end),
     }
 }
 
@@ -105,7 +105,7 @@ function vsCodePositionToEthersyncPosition(content: string[], position: vscode.P
     let lineText = content[position.line]
     return {
         line: position.line,
-        character: UTF16CodeUnitOffsetToCharOffset(position.character, lineText)
+        character: UTF16CodeUnitOffsetToCharOffset(position.character, lineText),
     }
 }
 
@@ -118,7 +118,7 @@ function ethersyncRangeToVSCodeRange(editor: vscode.TextEditor, range: Range): v
     // TODO: make this nicer / use the vscode interface already (which interface? --blinry)
     return new vscode.Range(
         ethersyncPositionToVSCodePosition(editor, range.start),
-        ethersyncPositionToVSCodePosition(editor, range.end)
+        ethersyncPositionToVSCodePosition(editor, range.end),
     )
 }
 
@@ -135,7 +135,7 @@ function connect() {
 
     connection = rpc.createMessageConnection(
         new rpc.StreamMessageReader(ethersyncClient.stdout),
-        new rpc.StreamMessageWriter(ethersyncClient.stdin)
+        new rpc.StreamMessageWriter(ethersyncClient.stdin),
     )
 
     connection.onNotification("edit", processEditFromDaemon)
@@ -161,7 +161,7 @@ async function processEditFromDaemon(edit: Edit) {
             const uri = edit.uri
 
             const openEditor = vscode.window.visibleTextEditors.find(
-                (editor) => editor.document.uri.toString() === uri.toString()
+                (editor) => editor.document.uri.toString() === uri.toString(),
             )
             if (openEditor) {
                 ignoreEdits = true
@@ -289,7 +289,7 @@ function vsCodeChangeEventToEthersyncEdits(event: vscode.TextDocumentChangeEvent
 function vsCodeChangeToEthersyncDelta(content: string[], change: vscode.TextDocumentContentChangeEvent): Delta {
     return {
         range: vsCodeRangeToEthersyncRange(content, change.range),
-        replacement: change.text
+        replacement: change.text,
     }
 }
 
@@ -301,7 +301,7 @@ export function activate(context: vscode.ExtensionContext) {
     context.subscriptions.push(
         vscode.workspace.onDidChangeTextDocument(processUserEdit),
         vscode.workspace.onDidOpenTextDocument(processUserOpen),
-        vscode.workspace.onDidCloseTextDocument(processUserClose)
+        vscode.workspace.onDidCloseTextDocument(processUserClose),
     )
 
     debug("End of activation")
