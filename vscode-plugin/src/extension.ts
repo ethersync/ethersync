@@ -60,9 +60,9 @@ let ignoreEdits = false
 let t0 = Date.now()
 const mutex = new Mutex()
 
-const open = new rpc.NotificationType<{uri: string}>("open")
-const close = new rpc.NotificationType<{uri: string}>("close")
-const edit = new rpc.NotificationType<Edit>("edit")
+const openType = new rpc.NotificationType<{uri: string}>("open")
+const closeType = new rpc.NotificationType<{uri: string}>("close")
+const editType = new rpc.NotificationType<Edit>("edit")
 
 function uri_to_fname(uri: string): string {
     const prefix = "file://"
@@ -155,7 +155,8 @@ async function processEditFromDaemon(edit: Edit) {
             }
 
             debug(`Received edit ${edit.delta.revision}`)
-            console.log(revisions)
+            console.log(edit)
+
             const uri = edit.uri
 
             const openEditor = vscode.window.visibleTextEditors.find(
@@ -167,7 +168,11 @@ async function processEditFromDaemon(edit: Edit) {
                 if (worked) {
                     revision.daemon += 1
                 } else {
-                    debug("rejected an applyEdit")
+                    debug("rejected an applyEdit, sending empty delta")
+                    let revDelta: RevisionedDelta = {delta: [], revision: revision.daemon}
+                    let theEdit: Edit = {uri, delta: revDelta}
+                    connection.sendNotification(editType, theEdit)
+                    revision.editor += 1
                 }
 
                 ignoreEdits = false
@@ -207,7 +212,7 @@ function processUserOpen(document: vscode.TextDocument) {
     debug("OPEN " + fileUri)
     revisions[document.fileName] = new Revision()
     updateContents(document)
-    connection.sendNotification(open, {uri: fileUri})
+    connection.sendNotification(openType, {uri: fileUri})
     console.log(revisions)
 }
 
@@ -216,7 +221,7 @@ function processUserClose(document: vscode.TextDocument) {
         return
     }
     const fileUri = document.uri.toString()
-    connection.sendNotification(close, {uri: fileUri})
+    connection.sendNotification(closeType, {uri: fileUri})
 
     delete revisions[document.fileName]
 }
@@ -253,11 +258,11 @@ function processUserEdit(event: vscode.TextDocumentChangeEvent) {
             for (const theEdit of edits) {
                 // interestingly this seems to block when it can't send
                 // TODO: Catch exceptions, for example when daemon disconnects/crashes.
-                connection.sendNotification(edit, theEdit)
+                connection.sendNotification(editType, theEdit)
                 revision.editor += 1
 
                 debug(`sent edit for dR ${revision.daemon} (having edR ${revision.editor})`)
-                console.log(revisions)
+                console.log(theEdit)
             }
 
             // TODO: Make this more efficient by replacing only the changed lines.
