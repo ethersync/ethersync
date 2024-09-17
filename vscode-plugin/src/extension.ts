@@ -56,9 +56,9 @@ let revisions: {[filename: string]: Revision} = {}
 let contents: {[filename: string]: string[]} = {}
 
 // TODO: if we load from disk, this will also cause edits :-/
-let ignoreEdits = false
 let t0 = Date.now()
 const mutex = new Mutex()
+let attemptedRemoteEdits: Set<vscode.TextEdit[]> = new Set()
 
 const openType = new rpc.NotificationType<{uri: string}>("open")
 const closeType = new rpc.NotificationType<{uri: string}>("close")
@@ -122,6 +122,13 @@ function ethersyncRangeToVSCodeRange(editor: vscode.TextEditor, range: Range): v
     )
 }
 
+function ethersyncDeltasToVSCodeTextEdits(editor: vscode.TextEditor, deltas: Delta[]): vscode.TextEdit[] {
+    return deltas.map((delta) => {
+        let range = ethersyncRangeToVSCodeRange(editor, delta.range)
+        return vscode.TextEdit.replace(range, delta.replacement)
+    })
+}
+
 function connect() {
     const ethersyncClient = cp.spawn("ethersync", ["client"])
 
@@ -163,7 +170,8 @@ async function processEditFromDaemon(edit: Edit) {
                 (editor) => editor.document.uri.toString() === uri.toString(),
             )
             if (openEditor) {
-                ignoreEdits = true
+                let textEdit = ethersyncDeltasToVSCodeTextEdits(openEditor, edit.delta.delta)
+                attemptedRemoteEdits.add(textEdit)
                 let worked = await applyEdit(openEditor, edit)
                 if (worked) {
                     revision.daemon += 1
@@ -174,8 +182,6 @@ async function processEditFromDaemon(edit: Edit) {
                     connection.sendNotification(editType, theEdit)
                     revision.editor += 1
                 }
-
-                ignoreEdits = false
             } else {
                 throw new Error(`No open editor for URI ${uri}, why is the daemon sending me this?`)
             }
@@ -226,11 +232,43 @@ function processUserClose(document: vscode.TextDocument) {
     delete revisions[document.fileName]
 }
 
+function isTextEditsEqualToVSCodeContentChanges(
+    textEdits: vscode.TextEdit[],
+    changes: readonly vscode.TextDocumentContentChangeEvent[],
+): boolean {
+    if (textEdits.length !== changes.length) {
+        return false
+    }
+    for (let i = 0; i < textEdits.length; i++) {
+        let textEdit = textEdits[i]
+        let change = changes[i]
+        if (textEdit.newText !== change.text || !textEdit.range.isEqual(change.range)) {
+            return false
+        }
+    }
+    return true
+}
+
+function isRemoteEdit(event: vscode.TextDocumentChangeEvent): boolean {
+    let found: vscode.TextEdit[] | null = null
+    for (let attemptedEdit of attemptedRemoteEdits) {
+        if (isTextEditsEqualToVSCodeContentChanges(attemptedEdit, event.contentChanges)) {
+            found = attemptedEdit
+            break
+        }
+    }
+    if (found !== null) {
+        attemptedRemoteEdits.delete(found)
+        return true
+    }
+    return false
+}
+
 // NOTE: We might get multiple events per document.version,
 // as the _state_ of the document might change (like isDirty).
 function processUserEdit(event: vscode.TextDocumentChangeEvent) {
-    if (ignoreEdits) {
-        debug("ack")
+    if (isRemoteEdit(event)) {
+        debug("ignoring remote event")
         return
     }
     mutex
