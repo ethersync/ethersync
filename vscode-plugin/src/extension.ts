@@ -170,6 +170,10 @@ function connect() {
     connection.listen()
 }
 
+function openCurrentTextDocuments() {
+    vscode.workspace.textDocuments.map(processUserOpen)
+}
+
 async function processEditFromDaemon(edit: Edit) {
     try {
         await mutex.runExclusive(async () => {
@@ -395,6 +399,8 @@ export function activate(context: vscode.ExtensionContext) {
         vscode.workspace.onDidCloseTextDocument(processUserClose),
         vscode.window.onDidChangeTextEditorSelection(processSelection),
     )
+
+    openCurrentTextDocuments()
 
     debug("End of activation")
 }
