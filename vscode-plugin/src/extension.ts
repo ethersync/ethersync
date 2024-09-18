@@ -65,9 +65,9 @@ let t0 = Date.now()
 const mutex = new Mutex()
 let attemptedRemoteEdits: Set<vscode.TextEdit[]> = new Set()
 
-const openType = new rpc.NotificationType<{uri: string}>("open")
-const closeType = new rpc.NotificationType<{uri: string}>("close")
-const editType = new rpc.NotificationType<Edit>("edit")
+const openType = new rpc.RequestType<{uri: string}, string, void>("open")
+const closeType = new rpc.RequestType<{uri: string}, string, void>("close")
+const editType = new rpc.RequestType<Edit, string, void>("edit")
 const cursorType = new rpc.NotificationType<Cursor>("cursor")
 
 const selectionDecorationType = vscode.window.createTextEditorDecorationType({
@@ -202,7 +202,7 @@ async function processEditFromDaemon(edit: Edit) {
                     debug("rejected an applyEdit, sending empty delta")
                     let revDelta: RevisionedDelta = {delta: [], revision: revision.daemon}
                     let theEdit: Edit = {uri, delta: revDelta}
-                    connection.sendNotification(editType, theEdit)
+                    connection.sendRequest(editType, theEdit)
                     revision.editor += 1
                 }
             } else {
@@ -249,13 +249,19 @@ async function applyEdit(editor: vscode.TextEditor, edit: Edit): Promise<boolean
 }
 
 // TODO: check if belongs to project.
-function processUserOpen(document: vscode.TextDocument) {
+async function processUserOpen(document: vscode.TextDocument) {
     const fileUri = document.uri.toString()
     debug("OPEN " + fileUri)
-    revisions[document.fileName] = new Revision()
-    updateContents(document)
-    connection.sendNotification(openType, {uri: fileUri})
-    console.log(revisions)
+    connection
+        .sendRequest(openType, {uri: fileUri})
+        .then(() => {
+            revisions[document.fileName] = new Revision()
+            updateContents(document)
+            console.log("Successfully opened. Tracking changes.")
+        })
+        .catch(() => {
+            debug("OPEN rejected by daemon")
+        })
 }
 
 function processUserClose(document: vscode.TextDocument) {
@@ -263,7 +269,7 @@ function processUserClose(document: vscode.TextDocument) {
         return
     }
     const fileUri = document.uri.toString()
-    connection.sendNotification(closeType, {uri: fileUri})
+    connection.sendRequest(closeType, {uri: fileUri})
 
     delete revisions[document.fileName]
 }
@@ -332,7 +338,7 @@ function processUserEdit(event: vscode.TextDocumentChangeEvent) {
             for (const theEdit of edits) {
                 // interestingly this seems to block when it can't send
                 // TODO: Catch exceptions, for example when daemon disconnects/crashes.
-                connection.sendNotification(editType, theEdit)
+                connection.sendRequest(editType, theEdit)
                 revision.editor += 1
 
                 debug(`sent edit for dR ${revision.daemon} (having edR ${revision.editor})`)
