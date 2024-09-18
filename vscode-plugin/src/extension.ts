@@ -266,6 +266,7 @@ async function processUserOpen(document: vscode.TextDocument) {
 
 function processUserClose(document: vscode.TextDocument) {
     if (!(document.fileName in revisions)) {
+        // File is not currently tracked in ethersync.
         return
     }
     const fileUri = document.uri.toString()
@@ -309,6 +310,10 @@ function isRemoteEdit(event: vscode.TextDocumentChangeEvent): boolean {
 // NOTE: We might get multiple events per document.version,
 // as the _state_ of the document might change (like isDirty).
 function processUserEdit(event: vscode.TextDocumentChangeEvent) {
+    if (!(event.document.fileName in revisions)) {
+        // File is not currently tracked in ethersync.
+        return
+    }
     if (isRemoteEdit(event)) {
         debug("ignoring remote event")
         return
@@ -357,6 +362,10 @@ function processUserEdit(event: vscode.TextDocumentChangeEvent) {
 }
 
 function processSelection(event: vscode.TextEditorSelectionChangeEvent) {
+    if (!(event.textEditor.document.fileName in revisions)) {
+        // File is not currently tracked in ethersync.
+        return
+    }
     let uri = event.textEditor.document.uri.toString()
     let content = contents[event.textEditor.document.fileName]
     let ranges = event.selections.map((s) => {
