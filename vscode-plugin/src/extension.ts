@@ -70,6 +70,18 @@ const closeType = new rpc.NotificationType<{uri: string}>("close")
 const editType = new rpc.NotificationType<Edit>("edit")
 const cursorType = new rpc.NotificationType<Cursor>("cursor")
 
+const selectionDecorationType = vscode.window.createTextEditorDecorationType({
+    backgroundColor: "#1a4978",
+    borderRadius: "0.1rem",
+    rangeBehavior: vscode.DecorationRangeBehavior.ClosedClosed,
+    before: {
+        color: "#548abf",
+        contentText: "ᛙ",
+        margin: "0px 0px 0px -0.5ch",
+        textDecoration: "font-weight: bold; position: absolute; top: 0; font-size: 200%; z-index: 0;",
+    },
+})
+
 function uri_to_fname(uri: string): string {
     const prefix = "file://"
     if (!uri.startsWith(prefix)) {
@@ -152,6 +164,7 @@ function connect() {
     )
 
     connection.onNotification("edit", processEditFromDaemon)
+    connection.onNotification("cursor", processCursorFromDaemon)
 
     // Start the connection
     connection.listen()
@@ -195,6 +208,19 @@ async function processEditFromDaemon(edit: Edit) {
     } catch (e) {
         debug("promise failed")
         console.error(e)
+    }
+}
+
+async function processCursorFromDaemon(cursor: Cursor) {
+    const editor = vscode.window.visibleTextEditors.find(
+        (editor) => editor.document.uri.toString() === cursor.uri.toString(),
+    )
+
+    if (editor) {
+        let ranges = cursor.ranges.map((r) => {
+            return ethersyncRangeToVSCodeRange(editor, r)
+        })
+        editor.setDecorations(selectionDecorationType, ranges)
     }
 }
 
