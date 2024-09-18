@@ -45,6 +45,11 @@ interface Edit {
     delta: RevisionedDelta
 }
 
+interface Cursor {
+    uri: string
+    ranges: Range[]
+}
+
 class Revision {
     daemon = 0
     editor = 0
@@ -63,6 +68,7 @@ let attemptedRemoteEdits: Set<vscode.TextEdit[]> = new Set()
 const openType = new rpc.NotificationType<{uri: string}>("open")
 const closeType = new rpc.NotificationType<{uri: string}>("close")
 const editType = new rpc.NotificationType<Edit>("edit")
+const cursorType = new rpc.NotificationType<Cursor>("cursor")
 
 function uri_to_fname(uri: string): string {
     const prefix = "file://"
@@ -314,6 +320,15 @@ function processUserEdit(event: vscode.TextDocumentChangeEvent) {
         })
 }
 
+function processSelection(event: vscode.TextEditorSelectionChangeEvent) {
+    let uri = event.textEditor.document.uri.toString()
+    let content = contents[event.textEditor.document.fileName]
+    let ranges = event.selections.map((s) => {
+        return vsCodeRangeToEthersyncRange(content, s)
+    })
+    connection.sendNotification(cursorType, {uri, ranges})
+}
+
 function vsCodeChangeEventToEthersyncEdits(event: vscode.TextDocumentChangeEvent): Edit[] {
     let document = event.document
     let filename = document.fileName
@@ -352,6 +367,7 @@ export function activate(context: vscode.ExtensionContext) {
         vscode.workspace.onDidChangeTextDocument(processUserEdit),
         vscode.workspace.onDidOpenTextDocument(processUserOpen),
         vscode.workspace.onDidCloseTextDocument(processUserClose),
+        vscode.window.onDidChangeTextEditorSelection(processSelection),
     )
 
     debug("End of activation")
