@@ -97,13 +97,18 @@ local function is_ethersync_enabled(filename)
     if vim.version().api_level < 12 then
         -- In Vim 0.9, do it manually.
         local path = filename
-        while path ~= "/" do
+        while true do
             if vim.fn.isdirectory(path .. "/.ethersync") == 1 then
                 return true
             end
-            path = vim.fn.fnamemodify(path, ":h")
+            local parentPath = vim.fn.fnamemodify(path, ":h")
+            if parentPath == path then
+                -- We can't progress further like this.
+                return false
+            else
+                path = parentPath
+            end
         end
-        return false
     else
         -- In Vim 0.10, this function is available.
         return vim.fs.root(filename, ".ethersync") ~= nil
