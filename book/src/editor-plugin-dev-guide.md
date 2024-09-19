@@ -45,7 +45,7 @@ The protocol uses a couple of basic data types (we're using the same syntax to s
 
 - `Position: {line: number, character: number}`
 
-    A position inside a text document. Characters are counted in Unicode characters (as opposed to UTF-8 or UTF-16 byte counts).
+    A position inside a text document. Characters are counted in **Unicode characters** (as opposed to UTF-8 or UTF-16 byte counts).
 
 - `Range: {start: Position, end: Position}`
 
@@ -53,7 +53,7 @@ The protocol uses a couple of basic data types (we're using the same syntax to s
 
 - `Delta: {range: Range, replacement: string}[]`
 
-    A complex text manipulation, similar to LSP's [`TextEdit[]`](https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#textEditArray). Like in LSP, all ranges refer to the starting content, and must never overlap, see the linked LSP documentation.
+    A complex text manipulation, similar to LSP's [`TextEdit[]`](https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#textEditArray). Like in LSP, **all ranges refer to the starting content**, and must never overlap, see the linked LSP documentation.
 
 - `RevisionedDelta: {delta: Delta, revision: number}`
 
@@ -75,6 +75,8 @@ These should be sent as JSON-RPC requests, so that the daemon can send back erro
 
 #### `"edit" {uri: DocumentUri, delta: RevisionedDelta}`
 
+- Sent when the user edits an open document, or when the text editor makes a change to a text buffer content for any reason.
+- **Pitfall:** Make sure to not send these messages when you incorporate a remote edit into the buffer content. You have to find a way to filter out the edits you cause as a plugin, for example, by setting a temporary ignore flag while the edit is being made, or by remembering which edits you perform, and checking against them when the editor notifies you of a buffer change.
 - The `revision` attribute of `RevisionedDelta` is the last revision seen from the daemon.
 - After each user edit, the editor must increase its editor revision.
 
