@@ -79,7 +79,7 @@ const closeType = new rpc.RequestType<{uri: string}, string, void>("close")
 const editType = new rpc.RequestType<Edit, string, void>("edit")
 const cursorType = new rpc.NotificationType<Cursor>("cursor")
 
-function uri_to_fname(uri: string): string {
+function uriToFname(uri: string): string {
     const prefix = "file://"
     if (!uri.startsWith(prefix)) {
         console.error(`expected URI prefix for '${uri}'`)
@@ -130,7 +130,6 @@ function ethersyncPositionToVSCodePosition(editor: vscode.TextEditor, position: 
 }
 
 function ethersyncRangeToVSCodeRange(editor: vscode.TextEditor, range: Range): vscode.Range {
-    // TODO: make this nicer / use the vscode interface already (which interface? --blinry)
     return new vscode.Range(
         ethersyncPositionToVSCodePosition(editor, range.start),
         ethersyncPositionToVSCodePosition(editor, range.end),
@@ -154,7 +153,7 @@ function connect() {
     const ethersyncClient = cp.spawn("ethersync", ["client"])
 
     ethersyncClient.on("error", (err) => {
-        console.error(`Failed to start ethersync client: ${err.message}`)
+        vscode.window.showErrorMessage(`Failed to start ethersync client: ${err.message}`)
     })
 
     ethersyncClient.on("exit", () => {
@@ -180,7 +179,7 @@ function openCurrentTextDocuments() {
 async function processEditFromDaemon(edit: Edit) {
     try {
         await mutex.runExclusive(async () => {
-            const filename = uri_to_fname(edit.uri)
+            const filename = uriToFname(edit.uri)
             let revision = revisions[filename]
             if (edit.delta.revision !== revision.editor) {
                 debug(`Received edit for revision ${edit.delta.revision} (!= ${revision.editor}), ignoring`)
@@ -188,7 +187,6 @@ async function processEditFromDaemon(edit: Edit) {
             }
 
             debug(`Received edit ${edit.delta.revision}`)
-            console.log(edit)
 
             const uri = edit.uri
 
@@ -213,8 +211,7 @@ async function processEditFromDaemon(edit: Edit) {
             }
         })
     } catch (e) {
-        debug("promise failed")
-        console.error(e)
+        vscode.window.showErrorMessage(`Error while processing edit from Ethersync daemon: ${e}`
     }
 }
 
@@ -241,7 +238,6 @@ async function applyEdit(editor: vscode.TextEditor, edit: Edit): Promise<boolean
     let worked = await editor.edit((editBuilder) => {
         for (const delta of edit.delta.delta) {
             const range = ethersyncRangeToVSCodeRange(editor, delta.range)
-            console.log(range)
 
             // Apply the edit
             editBuilder.replace(range, delta.replacement)
@@ -266,7 +262,7 @@ async function processUserOpen(document: vscode.TextDocument) {
         .then(() => {
             revisions[document.fileName] = new Revision()
             updateContents(document)
-            console.log("Successfully opened. Tracking changes.")
+            debug("Successfully opened. Tracking changes.")
         })
         .catch(() => {
             debug("OPEN rejected by daemon")
@@ -320,11 +316,11 @@ function isRemoteEdit(event: vscode.TextDocumentChangeEvent): boolean {
 // as the _state_ of the document might change (like isDirty).
 function processUserEdit(event: vscode.TextDocumentChangeEvent) {
     if (!(event.document.fileName in revisions)) {
-        // File is not currently tracked in ethersync.
+        // File is not currently tracked in Ethersync.
         return
     }
     if (isRemoteEdit(event)) {
-        debug("ignoring remote event")
+        debug("Ignoring remote event (we have caused it)")
         return
     }
     mutex
@@ -335,7 +331,7 @@ function processUserEdit(event: vscode.TextDocumentChangeEvent) {
             // Let's actively skip the empty ones to make debugging output below less noisy.
             if (event.contentChanges.length == 0) {
                 if (document.isDirty == false) {
-                    debug("ignoring empty docChange. (probably saving...)")
+                    debug("Ignoring empty docChange. (probably saving...)")
                 }
                 return
             }
@@ -356,7 +352,6 @@ function processUserEdit(event: vscode.TextDocumentChangeEvent) {
                 revision.editor += 1
 
                 debug(`sent edit for dR ${revision.daemon} (having edR ${revision.editor})`)
-                console.log(theEdit)
             }
 
             // TODO: Make this more efficient by replacing only the changed lines.
@@ -365,8 +360,7 @@ function processUserEdit(event: vscode.TextDocumentChangeEvent) {
             updateContents(document)
         })
         .catch((e: Error) => {
-            debug("promise failed!")
-            console.error(e)
+            vscode.window.showErrorMessage(`Error while sending edit to Ethersync daemon: ${e}`
         })
 }
 
@@ -388,9 +382,6 @@ function vsCodeChangeEventToEthersyncEdits(event: vscode.TextDocumentChangeEvent
     let filename = document.fileName
 
     let revision = revisions[filename]
-    // debug("document.version: " + document.version)
-    // debug("document.isDirty: " + document.isDirty)
-    // if (event.contentChanges.length == 0) { console.log(document) }
 
     let content = contents[filename]
     let edits = []
@@ -432,13 +423,14 @@ export function activate(context: vscode.ExtensionContext) {
 export function deactivate() {}
 
 function debug(text: String) {
-    console.log(Date.now() - t0 + " " + text)
+    // Disabled because we don't need it right now.
+
+    // console.log(Date.now() - t0 + " " + text)
 }
 
 function updateContents(document: vscode.TextDocument) {
     contents[document.fileName] = new Array(document.lineCount)
     for (let line = 0; line < document.lineCount; line++) {
-        // TODO: text does not contain the newline character yet.
         contents[document.fileName][line] = document.lineAt(line).text
     }
 }
