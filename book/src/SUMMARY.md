@@ -8,7 +8,7 @@
     - [Installation](installation.md)
         - [Daemon](daemon.md)
         - [Neovim plugin](neovim.md)
-        - [VS Code plugin]()
+        - [VS Code plugin](vscode.md)
     - [First steps](first-steps.md)
 - [Concepts](concepts.md)
     - [System overview](system-overview.md)
