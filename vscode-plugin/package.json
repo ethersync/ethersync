@@ -1,0 +1,60 @@
+{
+    "name": "ethersync",
+    "displayName": "Ethersync",
+    "version": "0.1.0",
+    "publisher": "ethersync",
+    "description": "Editor-agnostic real-time collaborative editing of local text files.",
+    "contributors": [
+        "blinry",
+        "zormit"
+    ],
+    "license": "AGPL-3.0-or-later",
+    "engines": {
+        "vscode": "^1.89.0"
+    },
+    "categories": [
+        "Other"
+    ],
+    "keywords": [
+        "collaboration",
+        "local-first",
+        "synchronization",
+        "crdt",
+        "peer-to-peer"
+    ],
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/ethersync/ethersync"
+    },
+    "bugs": {
+        "url": "https://github.com/ethersync/ethersync/issues"
+    },
+    "icon": "images/ethersync-logo.png",
+    "activationEvents": [
+        "onFileSystem:file"
+    ],
+    "main": "./out/extension.js",
+    "scripts": {
+        "vscode:prepublish": "npm run compile",
+        "compile": "tsc -p ./",
+        "watch": "tsc -watch -p ./",
+        "pretest": "npm run compile && npm run lint",
+        "lint": "eslint src --ext ts",
+        "test": "vscode-test"
+    },
+    "devDependencies": {
+        "@types/mocha": "^10.0.6",
+        "@types/node": "18.x",
+        "@types/vscode": "^1.89.0",
+        "@typescript-eslint/eslint-plugin": "^7.7.1",
+        "@typescript-eslint/parser": "^7.7.1",
+        "@vscode/test-cli": "^0.0.9",
+        "@vscode/test-electron": "^2.3.9",
+        "eslint": "^8.57.0",
+        "typescript": "^5.4.5"
+    },
+    "dependencies": {
+        "async-mutex": "^0.5.0",
+        "vscode-jsonrpc": "^8.2.0"
+    }
+}

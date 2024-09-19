@@ -605,7 +605,7 @@ impl TextDelta {
         let mut delta = TextDelta::default();
         // TODO: add support, when needed
         assert!(
-            ed_delta.0.len() == 1,
+            ed_delta.0.len() <= 1,
             "We don't yet support EditorTextDelta with multiple operations."
         );
         for ed_op in ed_delta {

@@ -60,6 +60,7 @@ async fn main() {
         Path::new("/tmp/ethersync"),
         dir.path(),
         true,
+        false,
     );
 
     // Give the daemon time to boot.
@@ -77,6 +78,7 @@ async fn main() {
         },
         Path::new("/tmp/etherbonk"),
         dir2.path(),
+        false,
         false,
     );
     // Make sure peer has synced with the other daemon before connecting Vim!
