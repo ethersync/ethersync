@@ -5,6 +5,8 @@ import * as path from "path"
 import * as fs from "fs"
 var Mutex = require("async-mutex").Mutex
 
+import {setCursor} from "./cursor"
+
 function isEthersyncEnabled(dir: string) {
     if (fs.existsSync(path.join(dir, ".ethersync"))) {
         return true
@@ -50,6 +52,13 @@ interface Cursor {
     ranges: Range[]
 }
 
+interface CursorFromDaemon {
+    userid: number
+    name?: string
+    uri: string
+    ranges: Range[]
+}
+
 class Revision {
     daemon = 0
     editor = 0
@@ -69,18 +78,6 @@ const openType = new rpc.RequestType<{uri: string}, string, void>("open")
 const closeType = new rpc.RequestType<{uri: string}, string, void>("close")
 const editType = new rpc.RequestType<Edit, string, void>("edit")
 const cursorType = new rpc.NotificationType<Cursor>("cursor")
-
-const selectionDecorationType = vscode.window.createTextEditorDecorationType({
-    backgroundColor: "#1a4978",
-    borderRadius: "0.1rem",
-    rangeBehavior: vscode.DecorationRangeBehavior.ClosedClosed,
-    before: {
-        color: "#548abf",
-        contentText: "ᛙ",
-        margin: "0px 0px 0px -0.5ch",
-        textDecoration: "font-weight: bold; position: absolute; top: 0; font-size: 200%; z-index: 0;",
-    },
-})
 
 function uri_to_fname(uri: string): string {
     const prefix = "file://"
@@ -145,6 +142,12 @@ function ethersyncDeltasToVSCodeTextEdits(editor: vscode.TextEditor, deltas: Del
         let range = ethersyncRangeToVSCodeRange(editor, delta.range)
         return vscode.TextEdit.replace(range, delta.replacement)
     })
+}
+
+function vsCodeRangeToSelection(range: vscode.Range): vscode.Selection {
+    let anchor = range.start
+    let active = range.end
+    return new vscode.Selection(anchor, active)
 }
 
 function connect() {
@@ -215,16 +218,22 @@ async function processEditFromDaemon(edit: Edit) {
     }
 }
 
-async function processCursorFromDaemon(cursor: Cursor) {
-    const editor = vscode.window.visibleTextEditors.find(
-        (editor) => editor.document.uri.toString() === cursor.uri.toString(),
-    )
+async function processCursorFromDaemon(cursor: CursorFromDaemon) {
+    let uri = cursor.uri
 
-    if (editor) {
-        let ranges = cursor.ranges.map((r) => {
-            return ethersyncRangeToVSCodeRange(editor, r)
-        })
-        editor.setDecorations(selectionDecorationType, ranges)
+    const editor = vscode.window.visibleTextEditors.find((editor) => editor.document.uri.toString() === uri)
+
+    try {
+        let selections: vscode.Selection[] = []
+        if (editor) {
+            selections = cursor.ranges.map((r) => ethersyncRangeToVSCodeRange(editor, r)).map(vsCodeRangeToSelection)
+        }
+        setCursor(cursor.userid, cursor.name || "anonymous", vscode.Uri.parse(uri), selections)
+    } catch {
+        // If we couldn't convert ethersyncRangeToVSCodeRange, it's probably because
+        // we received the cursor message before integrating the edits, typing at the end of a line.
+        // In practice, this isn't a problem, as the cursor decoration is pushed to the back automatically.
+        // TODO: Make the ethersyncRangeToVSCodeRange function still return a proper range?
     }
 }
 
