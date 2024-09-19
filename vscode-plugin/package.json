@@ -1,26 +1,38 @@
 {
     "name": "ethersync",
     "displayName": "Ethersync",
-    "description": "",
     "version": "0.0.1",
+    "publisher": "ethersync",
+    "description": "Editor-agnostic real-time collaborative editing of local text files.",
+    "contributors": [
+        "blinry",
+        "zormit"
+    ],
+    "license": "AGPL-3.0-or-later",
     "engines": {
-        "vscode": "^1.88.0"
+        "vscode": "^1.89.0"
     },
     "categories": [
         "Other"
     ],
+    "keywords": [
+        "collaboration",
+        "local-first",
+        "synchronization",
+        "crdt",
+        "peer-to-peer"
+    ],
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/ethersync/ethersync"
+    },
+    "bugs": {
+        "url": "https://github.com/ethersync/ethersync/issues"
+    },
     "activationEvents": [
         "onFileSystem:file"
     ],
     "main": "./out/extension.js",
-    "contributes": {
-        "commands": [
-            {
-                "command": "ethersync.helloWorld",
-                "title": "Ethersync Hello World"
-            }
-        ]
-    },
     "scripts": {
         "vscode:prepublish": "npm run compile",
         "compile": "tsc -p ./",
