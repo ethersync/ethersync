@@ -7,19 +7,33 @@ on:
   push:
     tags:
       - v[0-9]+.*
+  pull_request:
+    paths:
+      - '.github/workflows/release.yml'
 
 jobs:
-  create-release:
+  create-release-and-vscode-plugin:
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
+      - run: |
+          npm install
+          npm i -g @vscode/vsce
+          vsce package
+        working-directory: ./vscode-plugin
+      - run: echo "name=$(ls | grep vsix | sort | tail -n 1)" >> $GITHUB_OUTPUT
+        id: identify-package
       - uses: actions/checkout@v4
       - uses: taiki-e/create-gh-release-action@v1
         with:
           changelog: CHANGELOG.md
+          title: "Testing CI Release"
+          draft: true
           token: ${{ secrets.GITHUB_TOKEN }}
+          files: ${{steps.identify-package.outputs.name}}
 
   upload-assets:
-    needs: create-release
+    needs: create-release-and-vscode-plugin
     strategy:
       matrix:
         include:
