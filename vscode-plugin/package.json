@@ -29,6 +29,7 @@
     "bugs": {
         "url": "https://github.com/ethersync/ethersync/issues"
     },
+    "icon": "images/ethersync-logo.png",
     "activationEvents": [
         "onFileSystem:file"
     ],
