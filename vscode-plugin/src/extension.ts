@@ -124,21 +124,21 @@ function vsCodePositionToEthersyncPosition(content: string[], position: vscode.P
     }
 }
 
-function ethersyncPositionToVSCodePosition(editor: vscode.TextEditor, position: Position): vscode.Position {
-    let lineText = editor.document.lineAt(position.line).text
+function ethersyncPositionToVSCodePosition(document: vscode.TextDocument, position: Position): vscode.Position {
+    let lineText = document.lineAt(position.line).text
     return new vscode.Position(position.line, charOffsetToUTF16CodeUnitOffset(position.character, lineText))
 }
 
-function ethersyncRangeToVSCodeRange(editor: vscode.TextEditor, range: Range): vscode.Range {
+function ethersyncRangeToVSCodeRange(document: vscode.TextDocument, range: Range): vscode.Range {
     return new vscode.Range(
-        ethersyncPositionToVSCodePosition(editor, range.start),
-        ethersyncPositionToVSCodePosition(editor, range.end),
+        ethersyncPositionToVSCodePosition(document, range.start),
+        ethersyncPositionToVSCodePosition(document, range.end),
     )
 }
 
-function ethersyncDeltasToVSCodeTextEdits(editor: vscode.TextEditor, deltas: Delta[]): vscode.TextEdit[] {
+function ethersyncDeltasToVSCodeTextEdits(document: vscode.TextDocument, deltas: Delta[]): vscode.TextEdit[] {
     return deltas.map((delta) => {
-        let range = ethersyncRangeToVSCodeRange(editor, delta.range)
+        let range = ethersyncRangeToVSCodeRange(document, delta.range)
         return vscode.TextEdit.replace(range, delta.replacement)
     })
 }
@@ -176,6 +176,10 @@ function openCurrentTextDocuments() {
     vscode.workspace.textDocuments.map(processUserOpen)
 }
 
+function documentForUri(uri: string): vscode.TextDocument | undefined {
+    return vscode.workspace.textDocuments.find((doc) => doc.uri.toString() === uri)
+}
+
 async function processEditFromDaemon(edit: Edit) {
     try {
         await mutex.runExclusive(async () => {
@@ -190,13 +194,11 @@ async function processEditFromDaemon(edit: Edit) {
 
             const uri = edit.uri
 
-            const openEditor = vscode.window.visibleTextEditors.find(
-                (editor) => editor.document.uri.toString() === uri.toString(),
-            )
-            if (openEditor) {
-                let textEdit = ethersyncDeltasToVSCodeTextEdits(openEditor, edit.delta.delta)
+            const document = documentForUri(uri)
+            if (document) {
+                let textEdit = ethersyncDeltasToVSCodeTextEdits(document, edit.delta.delta)
                 attemptedRemoteEdits.add(textEdit)
-                let worked = await applyEdit(openEditor, edit)
+                let worked = await applyEdit(document, edit)
                 if (worked) {
                     revision.daemon += 1
                 } else {
@@ -207,7 +209,7 @@ async function processEditFromDaemon(edit: Edit) {
                     revision.editor += 1
                 }
             } else {
-                throw new Error(`No open editor for URI ${uri}, why is the daemon sending me this?`)
+                throw new Error(`No document for URI ${uri}, why is the daemon sending me this?`)
             }
         })
     } catch (e) {
@@ -218,12 +220,12 @@ async function processEditFromDaemon(edit: Edit) {
 async function processCursorFromDaemon(cursor: CursorFromDaemon) {
     let uri = cursor.uri
 
-    const editor = vscode.window.visibleTextEditors.find((editor) => editor.document.uri.toString() === uri)
+    const document = documentForUri(uri)
 
     try {
         let selections: vscode.Selection[] = []
-        if (editor) {
-            selections = cursor.ranges.map((r) => ethersyncRangeToVSCodeRange(editor, r)).map(vsCodeRangeToSelection)
+        if (document) {
+            selections = cursor.ranges.map((r) => ethersyncRangeToVSCodeRange(document, r)).map(vsCodeRangeToSelection)
         }
         setCursor(cursor.userid, cursor.name || "anonymous", vscode.Uri.parse(uri), selections)
     } catch {
@@ -234,21 +236,23 @@ async function processCursorFromDaemon(cursor: CursorFromDaemon) {
     }
 }
 
-async function applyEdit(editor: vscode.TextEditor, edit: Edit): Promise<boolean> {
-    let worked = await editor.edit((editBuilder) => {
-        for (const delta of edit.delta.delta) {
-            const range = ethersyncRangeToVSCodeRange(editor, delta.range)
+async function applyEdit(document: vscode.TextDocument, edit: Edit): Promise<boolean> {
+    let edits = []
+    for (const delta of edit.delta.delta) {
+        const range = ethersyncRangeToVSCodeRange(document, delta.range)
+        let edit = new vscode.TextEdit(range, delta.replacement)
+        debug(`Edit applied to document ${document.uri.toString()}`)
+        edits.push(edit)
+    }
+    let workspaceEdit = new vscode.WorkspaceEdit()
+    workspaceEdit.set(document.uri, edits)
+    let worked = await vscode.workspace.applyEdit(workspaceEdit)
 
-            // Apply the edit
-            editBuilder.replace(range, delta.replacement)
-            debug(`Edit applied to open document ${editor.document.uri.toString()}`)
-        }
-    })
     // TODO: Make this more efficient by replacing only the changed lines.
     // The challenge with that is that we need to compute how many lines are
     // left after the edit.
     if (worked) {
-        updateContents(editor.document)
+        updateContents(document)
     }
     return worked
 }
