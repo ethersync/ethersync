@@ -211,7 +211,7 @@ async function processEditFromDaemon(edit: Edit) {
             }
         })
     } catch (e) {
-        vscode.window.showErrorMessage(`Error while processing edit from Ethersync daemon: ${e}`
+        vscode.window.showErrorMessage(`Error while processing edit from Ethersync daemon: ${e}`)
     }
 }
 
@@ -360,7 +360,7 @@ function processUserEdit(event: vscode.TextDocumentChangeEvent) {
             updateContents(document)
         })
         .catch((e: Error) => {
-            vscode.window.showErrorMessage(`Error while sending edit to Ethersync daemon: ${e}`
+            vscode.window.showErrorMessage(`Error while sending edit to Ethersync daemon: ${e}`)
         })
 }
 
@@ -424,7 +424,6 @@ export function deactivate() {}
 
 function debug(text: String) {
     // Disabled because we don't need it right now.
-
     // console.log(Date.now() - t0 + " " + text)
 }
 
