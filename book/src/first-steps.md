@@ -14,7 +14,7 @@ cd playground
 touch file
 ```
 
-### 2. Start the Ethersync daemon
+### 2. Start the Ethersync daemon in the project directory
 
 ```bash
 ethersync daemon

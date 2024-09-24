@@ -106,7 +106,7 @@ async fn main() -> Result<()> {
                 .expect("Could not access given directory");
             if !has_ethersync_directory(&directory) {
                 error!(
-                    "No {} found in {} (create it to Ethersync-enable the directory)",
+                    "No {}/ found in {} (create that directory to Ethersync-enable the project)",
                     ETHERSYNC_CONFIG_DIR,
                     directory.display()
                 );
