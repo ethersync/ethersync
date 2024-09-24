@@ -111,14 +111,7 @@ impl DocumentActor {
                 .unwrap_or_else(|_| panic!("Could not read file '{persistence_file:?}'"));
             Document::load(&bytes)
         } else {
-            // Here we either do not have a persistence_file_exists
-            // or we want to force recreating it with the --init flag.
-            //
-            // If we are the host, we are responsible for setting up
-            // the top level structure of the document, a peer *must not* do that.
-            let role = if is_host { "host" } else { "peer" };
-            info!("Initializing a new CRDT document (as {role})",);
-            Document::new(is_host)
+            Document::new()
         };
         info!("Done.");
 
