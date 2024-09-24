@@ -24,6 +24,7 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest, macos-latest]
+        nvim-version: [v0.9.5, v0.10.1]
     runs-on: ${{ matrix.os }}
     defaults:
       run:
@@ -44,7 +45,7 @@ jobs:
         uses: rhysd/action-setup-vim@v1
         with:
           neovim: true
-          version: v0.10.1
+          version: ${{ matrix.nvim-version }}
       - run: nvim --version
       - name: Install Neovim plugin
         run: |
@@ -57,11 +58,11 @@ jobs:
       - name: Compile integration tests
         working-directory: ./daemon/integration-tests
         run: cargo test --no-run --locked
-      - if: ${{ matrix.os == 'ubuntu-latest' }}
+      - if: ${{ matrix.os == 'ubuntu-latest' && matrix.nvim-version == 'v0.10.1' }}
         name: Run integration tests
         working-directory: ./daemon/integration-tests
         run: cargo test
-      - if: ${{ matrix.os == 'macos-latest' }}
+      - if: ${{ matrix.os == 'macos-latest' || matrix.nvim-version == 'v0.9.5' }}
         name: Run integration tests (without fuzzer)
         working-directory: ./daemon/integration-tests
         run: cargo test --test vim-plugin
