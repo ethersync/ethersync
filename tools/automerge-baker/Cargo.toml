@@ -1,0 +1,7 @@
+[package]
+name = "automerge-baker"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+automerge = "0.5.11"
