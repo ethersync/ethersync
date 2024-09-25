@@ -66,6 +66,8 @@ pub fn exists(absolute_base_dir: &Path, absolute_file_path: &Path) -> Result<boo
     Ok(canonical_file_path.exists())
 }
 
+// TODO: Don't build the list of ignored files on every call.
+// TODO: Allow calling this for non-existing files.
 pub fn ignored(absolute_base_dir: &Path, absolute_file_path: &Path) -> Result<bool> {
     let canonical_file_path =
         check_inside_base_dir_and_canonicalize(absolute_base_dir, absolute_file_path)?;
@@ -99,7 +101,11 @@ pub fn ignored(absolute_base_dir: &Path, absolute_file_path: &Path) -> Result<bo
                 .expect("Couldn't get file type of dir entry")
                 .is_file()
         })
-        .any(|dir_entry| dir_entry.path() == canonical_file_path));
+        .map(|dir_entry| {
+            absolute_and_canonicalized(dir_entry.path())
+                .expect("Failed to canonicalize ignored file")
+        })
+        .any(|path| path == canonical_file_path));
 }
 
 fn check_inside_base_dir_and_canonicalize(base_dir: &Path, path: &Path) -> Result<PathBuf> {
