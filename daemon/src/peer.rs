@@ -92,16 +92,17 @@ impl P2PActor {
         }
     }
 
-    pub async fn run(self) -> Result<()> {
+    pub async fn run(mut self) -> Result<()> {
         let keypair = self.get_keypair();
         let mut swarm = libp2p::SwarmBuilder::with_existing_identity(keypair)
             .with_tokio()
             .with_other_transport(|keypair| {
-                let passphrase = self.connection_info.passphrase.clone().unwrap_or_else(|| {
-                    let p = Self::generate_passphrase();
-                    info!("Generated new passphrase: {}", p);
-                    p
-                });
+                let passphrase = self
+                    .connection_info
+                    .passphrase
+                    .clone()
+                    .unwrap_or_else(Self::generate_passphrase);
+                self.connection_info.passphrase = Some(passphrase.clone());
 
                 let psk = pnet::PreSharedKey::new(Self::passphrase_to_bytes(&passphrase));
 
@@ -151,7 +152,11 @@ impl P2PActor {
             match event {
                 libp2p::swarm::SwarmEvent::NewListenAddr { address, .. } => {
                     let listen_address = address.with_p2p(*swarm.local_peer_id()).unwrap();
-                    tracing::info!(%listen_address);
+                    tracing::info!(
+                        "Others can connect with: ethersync daemon --peer {} --secret {}",
+                        listen_address,
+                        self.connection_info.passphrase.as_ref().unwrap()
+                    );
                 }
                 libp2p::swarm::SwarmEvent::ConnectionEstablished {
                     peer_id,

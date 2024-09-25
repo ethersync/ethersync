@@ -57,27 +57,23 @@ mkdir -p playground/.ethersync
 cd playground
 ```
 
-### 2. Exchange the information required to connect
+### 2. Start the daemon
 
-Your friend will need to know two things:
-
-- When your daemon started, it printed a **connection address ("multiaddress")** like `/ip4/192.168.23.42/tcp/58063/p2p/12D3KooWPNj7mom3X2D6NiSyxbFa5hHfzxDFP98ZL52yYnkEVmDv`. If your friend is in the same local network, they can just use that address. If they're in another local network, see [these instructions](pair-programming.md).
-- When your daemon started, it generated a **secret passphrase**, and printed it in the logs. Only people who know that passphrase are allowed to connect to it via the network.
-
-In order to allow them to connect, we assume that you sent these two things to your friend (if you're not local, a secure channel is recommended).
-
-### 3. Start the daemon
-
-The command for joining another peer will look something like this:
+The first daemon will print the full command required to connect to it in its logs.
+It will look like this:
 
 ```bash
 ethersync daemon --peer <multiaddress> --secret <passphrase>
 ```
 
+The daemon might print lines like this multiple times.
+If you're in the same local network, look for the one starting with "192.168".
+If you're in different local network, see [these instructions](pair-programming.md).
+
 If a connection can be made, both sides will indicate success with a log message "Peer connected" and "Connected to peer" respectively. If you don't see it, double check the previous steps.
 
-### 4. Start collaborating in real-time!
+### 3. Start collaborating in real-time!
 
-If everything worked, connected peers can now collaborate on existing files through opening them in their editors.
+If everything worked, connected peers can now collaborate on existing files by opening them in their editors.
 Type somethings and the changes will be transferred over!
-If you're on nvim you should also see your peer's cursor.
+You should also see your peer's cursor.
