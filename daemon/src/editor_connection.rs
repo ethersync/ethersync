@@ -39,7 +39,7 @@ impl EditorConnection {
         self.ot_servers.contains_key(file_path)
     }
 
-    pub fn message_from_inside(
+    pub fn message_from_daemon(
         &mut self,
         message: &InsideMessage,
     ) -> Vec<EditorProtocolMessageToEditor> {
@@ -79,7 +79,7 @@ impl EditorConnection {
         }
     }
 
-    pub fn message_from_outside(
+    pub fn message_from_editor(
         &mut self,
         message: &EditorProtocolMessageFromEditor,
     ) -> Result<(InsideMessage, Vec<EditorProtocolMessageToEditor>), EditorProtocolMessageError>
@@ -236,7 +236,7 @@ mod tests {
         let mut editor_connection = EditorConnection::new("1".to_string(), dir.path());
 
         let result =
-            editor_connection.message_from_outside(&EditorProtocolMessageFromEditor::Open {
+            editor_connection.message_from_editor(&EditorProtocolMessageFromEditor::Open {
                 uri: "file:///foobar/file".to_string(),
             });
 
@@ -253,7 +253,7 @@ mod tests {
 
         // Editor opens the file.
         let result =
-            editor_connection.message_from_outside(&EditorProtocolMessageFromEditor::Open {
+            editor_connection.message_from_editor(&EditorProtocolMessageFromEditor::Open {
                 uri: format!("file://{}", file.display()),
             });
         assert_eq!(
@@ -268,7 +268,7 @@ mod tests {
 
         // Daemon sends an edit.
         let delta = insert(1, "x"); // hello -> hxello
-        let result = editor_connection.message_from_inside(&InsideMessage::Edit {
+        let result = editor_connection.message_from_daemon(&InsideMessage::Edit {
             file_path: "file".to_string(),
             delta,
         });
@@ -283,7 +283,7 @@ mod tests {
         // Editor sends an edit.
         let delta = rev_ed_delta(0, ed_delta_single((0, 3), (0, 3), "y")); // hello -> helylo
         let result =
-            editor_connection.message_from_outside(&EditorProtocolMessageFromEditor::Edit {
+            editor_connection.message_from_editor(&EditorProtocolMessageFromEditor::Edit {
                 uri: format!("file://{}", file.display()),
                 delta,
             });

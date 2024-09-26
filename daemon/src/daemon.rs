@@ -297,7 +297,7 @@ impl DocumentActor {
             .editor_connections
             .get_mut(&editor_id)
             .expect("Could not get editor connection")
-            .message_from_outside(message)?;
+            .message_from_editor(message)?;
 
         self.inside_message_to_doc(&inside_message).await;
         self.broadcast_to_editors(Some(editor_id), &inside_message)
@@ -639,7 +639,7 @@ impl DocumentActor {
                 .editor_connections
                 .get_mut(&editor_id)
                 .expect("Could not get editor connection")
-                .message_from_inside(message);
+                .message_from_daemon(message);
 
             for message_to_editor in messages_to_editor {
                 self.send_to_editor_client(
