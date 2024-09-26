@@ -39,7 +39,6 @@ libp2p = { version = "0.54.1", features = ["tokio", "tcp", "noise", "yamux"] }
 libp2p-identity = { version = "0.2.9", features = ["ed25519"] }
 libp2p-pnet = "0.25.0"
 libp2p-stream = "0.2.0-alpha"
-memorable-wordlist = "0.1.7"
 notify = { version = "6.1.1", default-features = false, features = [
     "macos_fsevent",
 ] }
