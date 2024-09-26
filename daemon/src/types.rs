@@ -1,5 +1,9 @@
 #![allow(dead_code)]
-use std::fmt::{Display, Formatter};
+use std::{
+    ffi::OsStr,
+    fmt::{Display, Formatter},
+    path::PathBuf,
+};
 
 use anyhow::bail;
 use automerge::{Patch, PatchAction, Prop};
@@ -164,6 +168,43 @@ pub enum EditorProtocolMessageFromEditor {
         uri: DocumentUri,
         ranges: Vec<Range>,
     },
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Eq, Hash)]
+pub struct AbsolutePath(String);
+
+impl TryFrom<PathBuf> for AbsolutePath {
+    type Error = anyhow::Error;
+
+    fn try_from(path: PathBuf) -> Result<Self, Self::Error> {
+        if !path.is_absolute() {
+            bail!("PathBuf is not absolute")
+        }
+
+        if let Some(path) = path.to_str() {
+            Ok(Self(path.to_string()))
+        } else {
+            bail!("Failed to convert PathBuf to AbsolutePath")
+        }
+    }
+}
+
+impl Into<PathBuf> for AbsolutePath {
+    fn into(self) -> PathBuf {
+        self.0.into()
+    }
+}
+
+impl Display for AbsolutePath {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl AsRef<OsStr> for AbsolutePath {
+    fn as_ref(&self) -> &OsStr {
+        self.0.as_ref()
+    }
 }
 
 /// Paths like these are relative to the project directory.

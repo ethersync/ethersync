@@ -4,7 +4,7 @@ use crate::editor_connection::EditorConnection;
 use crate::peer;
 use crate::sandbox;
 use crate::types::{
-    ComponentMessage, EditorProtocolMessageError, EditorProtocolMessageFromEditor,
+    AbsolutePath, ComponentMessage, EditorProtocolMessageError, EditorProtocolMessageFromEditor,
     EditorProtocolObject, FileTextDelta, JSONRPCFromEditor, JSONRPCResponse, PatchEffect,
     RelativePath, TextDelta,
 };
@@ -202,9 +202,10 @@ impl DocumentActor {
                         }
                         PatchEffect::FileRemoval(file_path) => {
                             info!("Removing file '{file_path}'.");
+
                             sandbox::remove_file(
                                 &self.base_dir,
-                                Path::new(&self.absolute_path_for_file_path(&file_path)),
+                                &Path::new(&self.absolute_path_for_file_path(&file_path)),
                             )
                             .unwrap_or_else(|err| {
                                 warn!("Failed to remove file {file_path}: {err}");
@@ -286,8 +287,11 @@ impl DocumentActor {
         Ok(RelativePath(path.to_string()))
     }
 
-    fn absolute_path_for_file_path(&self, file_path: &RelativePath) -> String {
-        format!("{}/{}", self.base_dir.display(), file_path.display())
+    fn absolute_path_for_file_path(&self, file_path: &RelativePath) -> AbsolutePath {
+        self.base_dir
+            .join(&file_path.0)
+            .try_into()
+            .expect("base_dir should be absolute")
     }
 
     async fn react_to_message_from_editor(
