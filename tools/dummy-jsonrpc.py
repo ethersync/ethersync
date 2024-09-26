@@ -28,18 +28,16 @@ messages = {
         "id": 2,
         "params": {
             "uri": uri,
-            "delta": {
-                "revision": 0,
-                "delta": [
-                    {
-                        "range": {
-                            "start": {"line": 0, "character": 0},
-                            "end": {"line": 0, "character": 0},
-                        },
-                        "replacement": "hello, world",
-                    }
-                ],
-            },
+            "revision": 0,
+            "delta": [
+                {
+                    "range": {
+                        "start": {"line": 0, "character": 0},
+                        "end": {"line": 0, "character": 0},
+                    },
+                    "replacement": "hello, world",
+                }
+            ],
         },
     },
 }

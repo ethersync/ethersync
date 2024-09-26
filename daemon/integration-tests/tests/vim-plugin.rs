@@ -4,7 +4,6 @@ use ethersync::sandbox;
 use ethersync::types::{
     factories::*, EditorProtocolMessageFromEditor, EditorProtocolMessageToEditor,
     EditorProtocolObject, EditorTextDelta, EditorTextOp, JSONRPCFromEditor,
-    RevisionedEditorTextDelta,
 };
 
 use pretty_assertions::assert_eq;
@@ -145,13 +144,10 @@ async fn assert_vim_deltas_yield_content(
     socket.acknowledge_open().await;
 
     for op in &deltas {
-        let rev_editor_delta = RevisionedEditorTextDelta {
-            revision: 0,
-            delta: EditorTextDelta(vec![op.clone()]),
-        };
         let editor_message = EditorProtocolMessageToEditor::Edit {
             uri: format!("file://{}", file_path.display()),
-            delta: rev_editor_delta,
+            revision: 0,
+            delta: EditorTextDelta(vec![op.clone()]),
         };
         let payload = EditorProtocolObject::Request(editor_message)
             .to_jsonrpc()
@@ -243,7 +239,7 @@ async fn assert_vim_input_yields_replacements(
                         ..
                     } = message else {continue;};
                     let expected_replacement = expected_replacements.remove(0);
-                    let operations = delta.delta.0;
+                    let operations = delta.0;
                     assert_eq!(vec![expected_replacement], operations, "Different replacements when applying input '{}' to content '{:?}'", input, initial_content);
                 }
             })

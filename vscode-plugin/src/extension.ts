@@ -37,14 +37,10 @@ interface Delta {
     replacement: string
 }
 
-interface RevisionedDelta {
-    delta: Delta[]
-    revision: number
-}
-
 interface Edit {
-    uri: string
-    delta: RevisionedDelta
+    uri: string,
+    revision: number,
+    delta: Delta[]
 }
 
 interface Cursor {
@@ -185,26 +181,25 @@ async function processEditFromDaemon(edit: Edit) {
         await mutex.runExclusive(async () => {
             const filename = uriToFname(edit.uri)
             let revision = revisions[filename]
-            if (edit.delta.revision !== revision.editor) {
-                debug(`Received edit for revision ${edit.delta.revision} (!= ${revision.editor}), ignoring`)
+            if (edit.revision !== revision.editor) {
+                debug(`Received edit for revision ${edit.revision} (!= ${revision.editor}), ignoring`)
                 return
             }
 
-            debug(`Received edit ${edit.delta.revision}`)
+            debug(`Received edit ${edit.revision}`)
 
             const uri = edit.uri
 
             const document = documentForUri(uri)
             if (document) {
-                let textEdit = ethersyncDeltasToVSCodeTextEdits(document, edit.delta.delta)
+                let textEdit = ethersyncDeltasToVSCodeTextEdits(document, edit.delta)
                 attemptedRemoteEdits.add(textEdit)
                 let worked = await applyEdit(document, edit)
                 if (worked) {
                     revision.daemon += 1
                 } else {
                     debug("rejected an applyEdit, sending empty delta")
-                    let revDelta: RevisionedDelta = {delta: [], revision: revision.daemon}
-                    let theEdit: Edit = {uri, delta: revDelta}
+                    let theEdit: Edit = {uri, revision: revision.daemon, delta: []}
                     connection.sendRequest(editType, theEdit)
                     revision.editor += 1
                 }
@@ -238,7 +233,7 @@ async function processCursorFromDaemon(cursor: CursorFromDaemon) {
 
 async function applyEdit(document: vscode.TextDocument, edit: Edit): Promise<boolean> {
     let edits = []
-    for (const delta of edit.delta.delta) {
+    for (const delta of edit.delta) {
         const range = ethersyncRangeToVSCodeRange(document, delta.range)
         let edit = new vscode.TextEdit(range, delta.replacement)
         debug(`Edit applied to document ${document.uri.toString()}`)
@@ -392,9 +387,8 @@ function vsCodeChangeEventToEthersyncEdits(event: vscode.TextDocumentChangeEvent
 
     for (const change of event.contentChanges) {
         let delta = vsCodeChangeToEthersyncDelta(content, change)
-        let revDelta: RevisionedDelta = {delta: [delta], revision: revision.daemon}
         let uri = document.uri.toString()
-        let theEdit: Edit = {uri, delta: revDelta}
+        let theEdit: Edit = {uri, revision: revision.daemon, delta: [delta]}
         edits.push(theEdit)
     }
     return edits

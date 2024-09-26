@@ -155,7 +155,8 @@ pub enum EditorProtocolMessageFromEditor {
     },
     Edit {
         uri: DocumentUri,
-        delta: RevisionedEditorTextDelta,
+        revision: usize,
+        delta: EditorTextDelta,
     },
     Cursor {
         uri: DocumentUri,
@@ -271,7 +272,8 @@ impl EditorProtocolObject {
 pub enum EditorProtocolMessageToEditor {
     Edit {
         uri: DocumentUri,
-        delta: RevisionedEditorTextDelta,
+        revision: usize,
+        delta: EditorTextDelta,
     },
     Cursor {
         userid: CursorId,

@@ -12,7 +12,7 @@ use crate::{
     sandbox,
     types::{
         ComponentMessage, EditorProtocolMessageError, EditorProtocolMessageFromEditor,
-        EditorProtocolMessageToEditor,
+        EditorProtocolMessageToEditor, RevisionedEditorTextDelta,
     },
 };
 
@@ -51,7 +51,8 @@ impl EditorConnection {
 
                     vec![EditorProtocolMessageToEditor::Edit {
                         uri: format!("file://{}", self.absolute_path_for_file_path(file_path)),
-                        delta: rev_text_delta_for_editor,
+                        delta: rev_text_delta_for_editor.delta,
+                        revision: rev_text_delta_for_editor.revision,
                     }]
                 } else {
                     // We don't have the file open, just do nothing.
@@ -142,10 +143,14 @@ impl EditorConnection {
                 Ok((ComponentMessage::Close { file_path }, vec![]))
             }
             EditorProtocolMessageFromEditor::Edit {
-                delta: rev_delta,
                 uri,
+                revision,
+                delta,
             } => {
-                debug!("Handling RevDelta from editor: {:#?}", rev_delta);
+                debug!(
+                    "Handling RevDelta from editor: revision {:#?}, delta {:#?}",
+                    revision, delta
+                );
                 let file_path = self
                     .file_path_for_uri(uri)
                     .map_err(anyhow_err_to_protocol_err)?;
@@ -163,6 +168,12 @@ impl EditorConnection {
                     .ot_servers
                     .get_mut(&file_path)
                     .expect("Could not find OT server.");
+
+                let rev_delta = RevisionedEditorTextDelta {
+                    revision: *revision,
+                    delta: delta.clone(),
+                };
+
                 let (delta_for_crdt, rev_deltas_for_editor) =
                     ot_server.apply_editor_operation(rev_delta.clone());
 
@@ -170,7 +181,8 @@ impl EditorConnection {
                     .into_iter()
                     .map(|rev_delta_for_editor| EditorProtocolMessageToEditor::Edit {
                         uri: format!("file://{}", self.absolute_path_for_file_path(&file_path)),
-                        delta: rev_delta_for_editor,
+                        delta: rev_delta_for_editor.delta,
+                        revision: rev_delta_for_editor.revision,
                     })
                     .collect();
 
@@ -276,16 +288,17 @@ mod tests {
             result,
             vec![EditorProtocolMessageToEditor::Edit {
                 uri: format!("file://{}", file.display()),
-                delta: rev_ed_delta(0, ed_delta_single((0, 1), (0, 1), "x"))
+                revision: 0,
+                delta: ed_delta_single((0, 1), (0, 1), "x")
             }]
         );
 
         // Editor sends an edit.
-        let delta = rev_ed_delta(0, ed_delta_single((0, 3), (0, 3), "y")); // hello -> helylo
         let result =
             editor_connection.message_from_editor(&EditorProtocolMessageFromEditor::Edit {
                 uri: format!("file://{}", file.display()),
-                delta,
+                revision: 0,
+                delta: ed_delta_single((0, 3), (0, 3), "y"),
             });
         let (inside_message, messages_to_editor) = result.unwrap();
         let delta = insert(4, "y"); // Position gets transformed!
@@ -300,8 +313,9 @@ mod tests {
             messages_to_editor,
             vec![EditorProtocolMessageToEditor::Edit {
                 uri: format!("file://{}", file.display()),
-                delta: rev_ed_delta(1, ed_delta_single((0, 1), (0, 1), "x")) // Delta is still the
-                                                                             // same.
+                revision: 1,
+                delta: ed_delta_single((0, 1), (0, 1), "x") // Delta is still the
+                                                            // same.
             }]
         );
     }

@@ -55,10 +55,6 @@ The protocol uses a couple of basic data types (we're using the same syntax to s
 
     A complex text manipulation, similar to LSP's [`TextEdit[]`](https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#textEditArray). Like in LSP, **all ranges refer to the starting content**, and must never overlap, see the linked LSP documentation.
 
-- `RevisionedDelta: {delta: Delta, revision: number}`
-
-    This attaches a revision number to a delta. The semantics are that the delta *applies to* (is intended for) that specified revision.
-
 ### Messages sent by the editor to the daemon
 
 These should be sent as JSON-RPC requests, so that the daemon can send back errors.
@@ -73,11 +69,11 @@ These should be sent as JSON-RPC requests, so that the daemon can send back erro
 
 - Sent when the editor closes the file. It is no longer interested in receiving updates.
 
-#### `"edit" {uri: DocumentUri, delta: RevisionedDelta}`
+#### `"edit" {uri: DocumentUri, revision: number, delta: Delta}`
 
 - Sent when the user edits an open document, or when the text editor makes a change to a text buffer content for any reason.
 - **Pitfall:** Make sure to not send these messages when you incorporate a remote edit into the buffer content. You have to find a way to filter out the edits you cause as a plugin, for example, by setting a temporary ignore flag while the edit is being made, or by remembering which edits you perform, and checking against them when the editor notifies you of a buffer change.
-- The `revision` attribute of `RevisionedDelta` is the last revision seen from the daemon.
+- The `revision` is the last revision seen from the daemon. This means that this edit is *intended for* that daemon revision.
 - After each user edit, the editor must increase its editor revision.
 
 #### `"cursor" {uri: DocumentUri, ranges: Range[]}`
@@ -88,9 +84,9 @@ These should be sent as JSON-RPC requests, so that the daemon can send back erro
 
 These should be sent as notifications, there is no need to reply to them.
 
-#### `"edit" {uri: DocumentUri, delta: RevisionedDelta}`
+#### `"edit" {uri: DocumentUri, revision: number, delta: Delta}`
 
-- `revision` in the `RevisionedDelta` is the last revision the daemon has seen from the editor.
+- `revision` is the last revision the daemon has seen from the editor.
 - If this is not the editor revision stored in the editor, the editor must ignore the edit. The daemon will send an updated version later.
 - After applying the received edit, the editor must increase its daemon revision.
 
