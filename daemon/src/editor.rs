@@ -19,7 +19,7 @@ use tracing::info;
 
 pub type EditorId = usize;
 
-pub type EditorHandle = FramedWrite<WriteHalf<UnixStream>, EditorProtocolCodec>;
+pub type EditorWriter = FramedWrite<WriteHalf<UnixStream>, EditorProtocolCodec>;
 
 pub struct EditorProtocolCodec;
 
