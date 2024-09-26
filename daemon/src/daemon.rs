@@ -84,7 +84,6 @@ type DocChangedReceiver = broadcast::Receiver<()>;
 pub struct DocumentActor {
     doc_message_rx: mpsc::Receiver<DocMessage>,
     doc_changed_ping_tx: DocChangedSender,
-    editor_handles: HashMap<EditorId, EditorHandle>,
     editor_connections: HashMap<EditorId, EditorConnection>,
     /// The Document is the main I/O managed resource of this actor.
     crdt_doc: Document,
@@ -126,7 +125,6 @@ impl DocumentActor {
         let mut s = Self {
             doc_message_rx,
             doc_changed_ping_tx,
-            editor_handles: HashMap::default(),
             editor_connections: HashMap::default(),
             base_dir,
             crdt_doc,
@@ -245,14 +243,12 @@ impl DocumentActor {
                     warn!("Failed to send peer state and sync message in response to GenerateSyncMessage.");
                 }
             }
-            DocMessage::NewEditorConnection(id, editor_handle) => {
+            DocMessage::NewEditorConnection(id, editor_writer) => {
                 let editor_connection_id = self.cursor_id(id);
                 self.editor_connections.insert(
                     id,
-                    EditorConnection::new(editor_connection_id, &self.base_dir),
+                    EditorConnection::new(editor_connection_id, &self.base_dir, editor_writer),
                 );
-
-                self.editor_handles.insert(id, editor_handle);
             }
             DocMessage::CloseEditorConnection(editor_id) => {
                 self.editor_connections.remove(&editor_id);
@@ -260,8 +256,6 @@ impl DocumentActor {
                 let cursor_id = self.cursor_id(editor_id);
                 debug!("Deleting cursor {cursor_id}");
                 self.maybe_delete_cursor_position(&cursor_id).await;
-
-                self.editor_handles.remove(&editor_id);
             }
         }
     }
@@ -467,12 +461,12 @@ impl DocumentActor {
     }
 
     async fn send_to_editor_client(&mut self, editor_id: &EditorId, message: EditorProtocolObject) {
-        let handle = self
-            .editor_handles
+        let connection = self
+            .editor_connections
             .get_mut(editor_id)
             .expect("Could not get editor handle");
 
-        handle.send(message).await.unwrap_or_else(|err| {
+        connection.writer.send(message).await.unwrap_or_else(|err| {
             error!("Failed to send message to editor: {err} Removing editor.");
             self.editor_connections.remove(editor_id);
         });
