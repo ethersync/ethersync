@@ -88,6 +88,7 @@ pub struct DocumentActor {
     /// The Document is the main I/O managed resource of this actor.
     crdt_doc: Document,
     base_dir: PathBuf,
+    save_fully: bool,
 }
 
 impl DocumentActor {
@@ -128,6 +129,7 @@ impl DocumentActor {
             editor_connections: HashMap::default(),
             base_dir,
             crdt_doc,
+            save_fully: true,
         };
 
         if persistence_file_exists {
@@ -171,11 +173,19 @@ impl DocumentActor {
                 self.handle_watcher_event(watcher_event).await;
             }
             DocMessage::Persist => {
-                debug!("Persisting!");
-                let bytes = self.crdt_doc.save();
                 let persistence_file = self.base_dir.join(".ethersync/doc");
-                sandbox::write_file(&self.base_dir, &persistence_file, &bytes)
-                    .unwrap_or_else(|_| panic!("Failed to persist to {persistence_file:?}"));
+                if self.save_fully {
+                    debug!("Persisting fully!");
+                    let bytes = self.crdt_doc.save();
+                    sandbox::write_file(&self.base_dir, &persistence_file, &bytes)
+                        .unwrap_or_else(|_| panic!("Failed to persist to {persistence_file:?}"));
+                    self.save_fully = false
+                } else {
+                    debug!("Persisting incrementally!");
+                    let bytes = self.crdt_doc.save_incremental();
+                    sandbox::append_file(&self.base_dir, &persistence_file, &bytes)
+                        .unwrap_or_else(|_| panic!("Failed to persist to {persistence_file:?}"));
+                }
             }
             DocMessage::ReceiveSyncMessage {
                 message,
