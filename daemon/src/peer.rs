@@ -8,7 +8,7 @@ use futures::{AsyncReadExt, AsyncWriteExt};
 use ini::Ini;
 use libp2p::core::transport::upgrade::Version;
 use libp2p::core::ConnectedPoint;
-use libp2p::Multiaddr;
+use libp2p::multiaddr::{Multiaddr, Protocol};
 use libp2p::Stream;
 use libp2p::StreamProtocol;
 use libp2p::Transport;
@@ -20,6 +20,7 @@ use pbkdf2::pbkdf2_hmac;
 use rand::Rng;
 use sha2::Sha256;
 use std::mem;
+use std::net::Ipv4Addr;
 use std::path::{Path, PathBuf};
 use tokio::sync::{broadcast, mpsc, oneshot};
 use tokio::time::Duration;
@@ -152,11 +153,17 @@ impl P2PActor {
             match event {
                 libp2p::swarm::SwarmEvent::NewListenAddr { address, .. } => {
                     let listen_address = address.with_p2p(*swarm.local_peer_id()).unwrap();
-                    tracing::info!(
-                        "Others can connect with: ethersync daemon --peer {} --secret {}",
-                        listen_address,
-                        self.connection_info.passphrase.as_ref().unwrap()
-                    );
+                    // Filter for not useful address.
+                    let is_localhost = listen_address
+                        .iter()
+                        .any(|component| component == Protocol::Ip4(Ipv4Addr::new(127, 0, 0, 1)));
+                    if !is_localhost {
+                        info!(
+                            "Others can connect with:\n\n\tethersync daemon --peer {} --secret {}\n",
+                            listen_address,
+                            self.connection_info.passphrase.as_ref().unwrap()
+                        );
+                    }
                 }
                 libp2p::swarm::SwarmEvent::ConnectionEstablished {
                     peer_id,
