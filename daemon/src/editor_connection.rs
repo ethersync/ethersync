@@ -12,7 +12,7 @@ use crate::{
     sandbox,
     types::{
         ComponentMessage, EditorProtocolMessageError, EditorProtocolMessageFromEditor,
-        EditorProtocolMessageToEditor, RevisionedEditorTextDelta,
+        EditorProtocolMessageToEditor, RelativePath, RevisionedEditorTextDelta,
     },
 };
 
@@ -23,7 +23,7 @@ pub struct EditorConnection {
     // TODO: Feels a bit duplicated here?
     base_dir: PathBuf,
     /// There's one OTServer per open buffer.
-    ot_servers: HashMap<String, OTServer>,
+    ot_servers: HashMap<RelativePath, OTServer>,
 }
 
 impl EditorConnection {
@@ -35,7 +35,7 @@ impl EditorConnection {
         }
     }
 
-    pub fn owns(&self, file_path: &str) -> bool {
+    pub fn owns(&self, file_path: &RelativePath) -> bool {
         self.ot_servers.contains_key(file_path)
     }
 
@@ -211,11 +211,12 @@ impl EditorConnection {
         }
     }
 
-    fn absolute_path_for_file_path(&self, file_path: &str) -> String {
-        format!("{}/{}", self.base_dir.display(), file_path)
+    fn absolute_path_for_file_path(&self, file_path: &RelativePath) -> String {
+        format!("{}/{}", self.base_dir.display(), file_path.display())
     }
 
-    fn file_path_for_uri(&self, uri: &str) -> anyhow::Result<String> {
+    // TODO: Duplicate of the function in the daemon?
+    fn file_path_for_uri(&self, uri: &str) -> anyhow::Result<RelativePath> {
         // If uri starts with "file://", we remove it.
         let absolute_path = uri.strip_prefix("file://").unwrap_or(uri);
 
@@ -226,12 +227,13 @@ impl EditorConnection {
 
         let base_dir_string = self.base_dir.display().to_string() + "/";
 
-        Ok(absolute_path
+        let path = absolute_path
             .strip_prefix(&base_dir_string)
             .with_context(|| {
                 format!("Path '{absolute_path}' is not within base dir '{base_dir_string}'")
-            })?
-            .to_string())
+            })?;
+
+        Ok(RelativePath(path.to_string()))
     }
 }
 

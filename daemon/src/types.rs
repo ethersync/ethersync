@@ -1,6 +1,8 @@
 #![allow(dead_code)]
+use std::fmt::{Display, Formatter};
+
 use anyhow::bail;
-use automerge::{Patch, PatchAction};
+use automerge::{Patch, PatchAction, Prop};
 use dissimilar::Chunk;
 use operational_transform::{Operation as OTOperation, OperationSeq};
 use ropey::Rope;
@@ -76,13 +78,13 @@ impl RevisionedTextDelta {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct FileTextDelta {
-    pub file_path: String,
+    pub file_path: RelativePath,
     pub delta: TextDelta,
 }
 
 impl FileTextDelta {
     #[must_use]
-    pub fn new(file_path: String, delta: TextDelta) -> Self {
+    pub fn new(file_path: RelativePath, delta: TextDelta) -> Self {
         Self { file_path, delta }
     }
 }
@@ -94,13 +96,13 @@ type CursorId = String;
 pub struct CursorState {
     pub cursor_id: CursorId,
     pub name: Option<String>,
-    pub file_path: String,
+    pub file_path: RelativePath,
     pub ranges: Vec<Range>,
 }
 
 pub enum PatchEffect {
     FileChange(FileTextDelta),
-    FileRemoval(String), // (relative file path)
+    FileRemoval(RelativePath),
     CursorChange(CursorState),
     NoEffect,
 }
@@ -164,24 +166,46 @@ pub enum EditorProtocolMessageFromEditor {
     },
 }
 
+/// Paths like these are relative to the project directory.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Eq, Hash)]
+pub struct RelativePath(pub String);
+
+impl Display for RelativePath {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl RelativePath {
+    pub fn display(&self) -> String {
+        self.0.clone()
+    }
+}
+
+impl Into<Prop> for &RelativePath {
+    fn into(self) -> Prop {
+        Prop::Map(self.0.clone())
+    }
+}
+
 /// These messages are "internally" passed between the components that the daemon consists of -
 /// namely, the connected editors and the CRDT document.
 #[derive(Debug, Clone, PartialEq)]
 pub enum ComponentMessage {
     Open {
-        file_path: String,
+        file_path: RelativePath,
     },
     Close {
-        file_path: String,
+        file_path: RelativePath,
     },
     Edit {
-        file_path: String,
+        file_path: RelativePath,
         delta: TextDelta,
     },
     Cursor {
         cursor_id: CursorId,
         name: Option<String>,
-        file_path: String,
+        file_path: RelativePath,
         ranges: Vec<Range>,
     },
 }
@@ -405,7 +429,7 @@ impl TryFrom<Patch> for PatchEffect {
     fn try_from(patch: Patch) -> Result<Self, Self::Error> {
         fn file_path_from_path_default(
             path: &[(automerge::ObjId, automerge::Prop)],
-        ) -> Result<String, anyhow::Error> {
+        ) -> Result<RelativePath, anyhow::Error> {
             if path.len() != 2 {
                 return Err(anyhow::anyhow!(
                     "Unexpected path in Automerge patch, length is not 2"
@@ -413,7 +437,7 @@ impl TryFrom<Patch> for PatchEffect {
             }
             let (_obj_id, prop) = &path[1];
             if let automerge::Prop::Map(file_path) = prop {
-                return Ok(file_path.into());
+                return Ok(RelativePath(file_path.clone()));
             }
             Err(anyhow::anyhow!(
                 "Unexpected path in Automerge patch: Prop is not a map"
@@ -451,12 +475,14 @@ impl TryFrom<Patch> for PatchEffect {
                             if conflict {
                                 warn!("Resolved conflict for file '{key}' by overwriting your version");
                             }
-                            Ok(PatchEffect::FileChange(FileTextDelta::new(key, delta)))
+                            let path = RelativePath(key);
+                            Ok(PatchEffect::FileChange(FileTextDelta::new(path, delta)))
                         }
                         PatchAction::DeleteMap { key } => {
                             // This action happens when a file is deleted.
                             debug!("Got file removal from patch: {key}");
-                            Ok(PatchEffect::FileRemoval(key))
+                            let path = RelativePath(key);
+                            Ok(PatchEffect::FileRemoval(path))
                         }
                         PatchAction::Conflict { prop } => {
                             // This can happen when both sides create the same file.

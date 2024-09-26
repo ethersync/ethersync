@@ -1,4 +1,4 @@
-use crate::types::{CursorState, EditorTextDelta, Range, TextDelta};
+use crate::types::{CursorState, EditorTextDelta, Range, RelativePath, TextDelta};
 use anyhow::Result;
 use automerge::{
     patches::TextRepresentation,
@@ -78,7 +78,7 @@ impl Document {
         self.doc.sync().generate_sync_message(peer_state)
     }
 
-    pub fn apply_delta_to_doc(&mut self, delta: &TextDelta, file_path: &str) {
+    pub fn apply_delta_to_doc(&mut self, delta: &TextDelta, file_path: &RelativePath) {
         let text_obj = self
             .text_obj(file_path)
             .expect("Couldn't get automerge text object, so not able to modify it");
@@ -103,7 +103,7 @@ impl Document {
         }
     }
 
-    pub fn current_file_content(&self, file_path: &str) -> Result<String> {
+    pub fn current_file_content(&self, file_path: &RelativePath) -> Result<String> {
         self.text_obj(file_path).map(|to| {
             self.doc
                 .text(to)
@@ -111,7 +111,7 @@ impl Document {
         })
     }
 
-    pub fn initialize_text(&mut self, text: &str, file_path: &str) {
+    pub fn initialize_text(&mut self, text: &str, file_path: &RelativePath) {
         info!("Initializing '{file_path}' in CRDT.");
 
         // Now it should definitely work?
@@ -130,7 +130,7 @@ impl Document {
 
     // This function is used to integrate text that was changed while the daemon was offline.
     // We need to calculate the patches compared to the current CRDT content, and apply them.
-    pub fn update_text(&mut self, desired_text: &str, file_path: &str) {
+    pub fn update_text(&mut self, desired_text: &str, file_path: &RelativePath) {
         if self.text_obj(file_path).is_ok() {
             let current_text = self
                 .current_file_content(file_path)
@@ -151,7 +151,7 @@ impl Document {
         }
     }
 
-    pub fn remove_text(&mut self, file_path: &str) {
+    pub fn remove_text(&mut self, file_path: &RelativePath) {
         if self.text_obj(file_path).is_err() {
             debug!("Failed to get {file_path} Text object, so I can't remove it from the CRDT");
             return;
@@ -178,7 +178,7 @@ impl Document {
         }
     }
 
-    fn text_obj(&self, file_path: &str) -> Result<automerge::ObjId> {
+    fn text_obj(&self, file_path: &RelativePath) -> Result<automerge::ObjId> {
         let file_map = self.top_level_map_obj("files")?;
         let text_obj = self
             .doc
@@ -193,15 +193,15 @@ impl Document {
         }
     }
 
-    pub fn files(&self) -> Vec<String> {
+    pub fn files(&self) -> Vec<RelativePath> {
         if let Ok(file_map) = self.top_level_map_obj("files") {
-            self.doc.keys(file_map).collect()
+            self.doc.keys(file_map).map(|k| RelativePath(k)).collect()
         } else {
             vec![]
         }
     }
 
-    pub fn file_exists(&self, file_path: &str) -> bool {
+    pub fn file_exists(&self, file_path: &RelativePath) -> bool {
         self.text_obj(file_path).is_ok()
     }
 
@@ -209,7 +209,7 @@ impl Document {
         &mut self,
         cursor_id: &str,
         name: Option<String>,
-        file_path: String,
+        file_path: &RelativePath,
         ranges: Vec<Range>,
     ) {
         let state_map = self
@@ -222,7 +222,7 @@ impl Document {
         let cursor_state = CursorState {
             cursor_id: cursor_id.to_owned(),
             name,
-            file_path,
+            file_path: file_path.clone(),
             ranges,
         };
         let data = serde_json::to_string(&cursor_state).expect("Could not serialize cursor state");
@@ -236,14 +236,14 @@ impl Document {
         // We try to set an empty cursor position, but in case we don't have any file in the
         // project its not a big deal if it stays.
         if let Some(file_path) = self.get_valid_file_path() {
-            self.store_cursor_position(cursor_id, None, file_path, vec![]);
+            self.store_cursor_position(cursor_id, None, &file_path, vec![]);
         }
     }
 
-    fn get_valid_file_path(&self) -> Option<String> {
+    fn get_valid_file_path(&self) -> Option<RelativePath> {
         let file_map = self.top_level_map_obj("files");
         if let Ok(file_map) = file_map {
-            self.doc.keys(file_map).next()
+            self.doc.keys(file_map).next().map(|k| RelativePath(k))
         } else {
             None
         }

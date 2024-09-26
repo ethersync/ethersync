@@ -6,7 +6,7 @@ use crate::sandbox;
 use crate::types::{
     ComponentMessage, EditorProtocolMessageError, EditorProtocolMessageFromEditor,
     EditorProtocolObject, FileTextDelta, JSONRPCFromEditor, JSONRPCResponse, PatchEffect,
-    TextDelta,
+    RelativePath, TextDelta,
 };
 use crate::watcher::Watcher;
 use crate::watcher::WatcherEvent;
@@ -135,7 +135,7 @@ impl DocumentActor {
     }
 
     /// If any editor owns the file, it means that the daemon doesn't have ownership.
-    fn owns(&mut self, file_path: &str) -> bool {
+    fn owns(&mut self, file_path: &RelativePath) -> bool {
         !self
             .editor_connections
             .values()
@@ -147,13 +147,13 @@ impl DocumentActor {
         match message {
             DocMessage::GetContent { response_tx } => {
                 response_tx
-                    .send(self.current_file_content(TEST_FILE_PATH))
+                    .send(self.current_file_content(&RelativePath(TEST_FILE_PATH.to_string())))
                     .expect("Failed to send content to response channel");
             }
             DocMessage::RandomEdit => {
                 let delta = self.random_delta();
                 let message = ComponentMessage::Edit {
-                    file_path: TEST_FILE_PATH.to_string(),
+                    file_path: RelativePath(TEST_FILE_PATH.to_string()),
                     delta,
                 };
                 self.inside_message_to_doc(&message).await;
@@ -266,7 +266,7 @@ impl DocumentActor {
         }
     }
 
-    fn file_path_for_uri(&self, uri: &str) -> Result<String> {
+    fn file_path_for_uri(&self, uri: &str) -> Result<RelativePath> {
         // If uri starts with "file://", we remove it.
         let absolute_path = uri.strip_prefix("file://").unwrap_or(uri);
 
@@ -277,16 +277,17 @@ impl DocumentActor {
 
         let base_dir_string = self.base_dir.display().to_string() + "/";
 
-        Ok(absolute_path
+        let path = absolute_path
             .strip_prefix(&base_dir_string)
             .with_context(|| {
                 format!("Path '{absolute_path}' is not within base dir '{base_dir_string}'")
-            })?
-            .to_string())
+            })?;
+
+        Ok(RelativePath(path.to_string()))
     }
 
-    fn absolute_path_for_file_path(&self, file_path: &str) -> String {
-        format!("{}/{}", self.base_dir.display(), file_path)
+    fn absolute_path_for_file_path(&self, file_path: &RelativePath) -> String {
+        format!("{}/{}", self.base_dir.display(), file_path.display())
     }
 
     async fn react_to_message_from_editor(
@@ -438,7 +439,7 @@ impl DocumentActor {
 
     fn random_delta(&self) -> TextDelta {
         let text = self
-            .current_file_content(TEST_FILE_PATH)
+            .current_file_content(&RelativePath(TEST_FILE_PATH.to_string()))
             .expect("Should have initialized text before performing random edit");
         // let options = ["d", "ü", "🥕", "💚", "\n"];
         let options = ["a", "b", "c", "d", "e", "f", "\n"];
@@ -492,7 +493,7 @@ impl DocumentActor {
         }
     }
 
-    fn maybe_write_file(&mut self, file_path: &str) {
+    fn maybe_write_file(&mut self, file_path: &RelativePath) {
         // Only write to the file if editor *doesn't* have the file open.
         if self.owns(file_path) {
             if let Ok(text) = self.current_file_content(file_path) {
@@ -587,7 +588,7 @@ impl DocumentActor {
         let _ = self.doc_changed_ping_tx.send(());
     }
 
-    fn current_file_content(&self, file_path: &str) -> Result<String> {
+    fn current_file_content(&self, file_path: &RelativePath) -> Result<String> {
         self.crdt_doc.current_file_content(file_path)
     }
 
@@ -618,7 +619,7 @@ impl DocumentActor {
                 self.crdt_doc.store_cursor_position(
                     cursor_id,
                     name.clone(),
-                    file_path.clone(),
+                    &file_path,
                     ranges.clone(),
                 );
                 let _ = self.doc_changed_ping_tx.send(());
@@ -664,7 +665,7 @@ impl DocumentActor {
             &ComponentMessage::Cursor {
                 cursor_id: cursor_id.to_string(),
                 name: None,
-                file_path: "".to_string(),
+                file_path: RelativePath("".to_string()), // TODO: Fix by changing the "cursor" message?
                 ranges: vec![],
             },
         )
