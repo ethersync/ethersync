@@ -84,9 +84,9 @@ async fn main() -> Result<()> {
     match cli.command {
         Commands::Daemon {
             directory,
-            mut peer,
-            mut port,
-            mut secret,
+            peer,
+            port,
+            secret,
             init,
             random,
         } => {
@@ -114,9 +114,9 @@ async fn main() -> Result<()> {
             }
 
             let mut peer_connection_info = PeerConnectionInfo {
-                peer: peer.take(),
-                port: port.take(),
-                passphrase: secret.take(),
+                peer,
+                port,
+                passphrase: secret,
             };
 
             let config_file = directory

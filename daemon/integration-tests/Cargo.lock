@@ -728,7 +728,6 @@ dependencies = [
  "libp2p-identity",
  "libp2p-pnet",
  "libp2p-stream",
- "memorable-wordlist",
  "notify",
  "operational-transform",
  "path-clean",
@@ -1825,15 +1824,6 @@ name = "memchr"
 version = "2.7.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "78ca9ab1a0babb1e7d5695e3530886289c18cf2f87ec19a575a0abdce112e3a3"
-
-[[package]]
-name = "memorable-wordlist"
-version = "0.1.7"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "673c6a442e72f0bca457afb369a8130596eeeb51c80a38b1dd39b6c490ed36c1"
-dependencies = [
- "rand 0.7.3",
-]
 
 [[package]]
 name = "minimal-lexical"

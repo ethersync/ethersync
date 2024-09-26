@@ -8,7 +8,7 @@ use futures::{AsyncReadExt, AsyncWriteExt};
 use ini::Ini;
 use libp2p::core::transport::upgrade::Version;
 use libp2p::core::ConnectedPoint;
-use libp2p::Multiaddr;
+use libp2p::multiaddr::{Multiaddr, Protocol};
 use libp2p::Stream;
 use libp2p::StreamProtocol;
 use libp2p::Transport;
@@ -17,15 +17,17 @@ use libp2p_identity::Keypair;
 use libp2p_pnet as pnet;
 use libp2p_stream as stream;
 use pbkdf2::pbkdf2_hmac;
-use rand::Rng;
 use sha2::Sha256;
 use std::mem;
+use std::net::Ipv4Addr;
 use std::path::{Path, PathBuf};
 use tokio::sync::{broadcast, mpsc, oneshot};
 use tokio::time::Duration;
-use tracing::{debug, error, info};
+use tracing::{debug, error, info, warn};
 
 const ETHERSYNC_PROTOCOL: StreamProtocol = StreamProtocol::new("/ethersync");
+// Used for "easy try out" purposes that are not security critical.
+const DEFAULT_PASSPHRASE: &str = "default-passphrase";
 
 /// Responsible for offering peer-to-peer connectivity to the outside world. Uses libp2p.
 /// For every new connection, spawns and runs a `SyncActor`.
@@ -92,16 +94,21 @@ impl P2PActor {
         }
     }
 
-    pub async fn run(self) -> Result<()> {
+    pub async fn run(mut self) -> Result<()> {
         let keypair = self.get_keypair();
+        let passphrase = self
+            .connection_info
+            .passphrase
+            .clone()
+            .unwrap_or(DEFAULT_PASSPHRASE.to_string());
+        let is_default_passphrase = passphrase == DEFAULT_PASSPHRASE;
+        if is_default_passphrase {
+            warn!("\n\n\tSECURITY WARNING: Running without a secret is only recommended when trying out this software locally.\n\tYou can provide one with --secret, or put secret = <secret> in .ethersync/config.\n");
+        }
         let mut swarm = libp2p::SwarmBuilder::with_existing_identity(keypair)
             .with_tokio()
             .with_other_transport(|keypair| {
-                let passphrase = self.connection_info.passphrase.clone().unwrap_or_else(|| {
-                    let p = Self::generate_passphrase();
-                    info!("Generated new passphrase: {}", p);
-                    p
-                });
+                self.connection_info.passphrase = Some(passphrase.clone());
 
                 let psk = pnet::PreSharedKey::new(Self::passphrase_to_bytes(&passphrase));
 
@@ -151,7 +158,21 @@ impl P2PActor {
             match event {
                 libp2p::swarm::SwarmEvent::NewListenAddr { address, .. } => {
                     let listen_address = address.with_p2p(*swarm.local_peer_id()).unwrap();
-                    tracing::info!(%listen_address);
+                    // Filter for not useful address.
+                    let is_localhost = listen_address
+                        .iter()
+                        .any(|component| component == Protocol::Ip4(Ipv4Addr::new(127, 0, 0, 1)));
+                    if !is_localhost {
+                        let secret_parameter = if is_default_passphrase {
+                            ""
+                        } else {
+                            " --secret <your secret>"
+                        };
+                        info!(
+                            "Others can connect with:\n\n\tethersync daemon --peer {}{}\n",
+                            listen_address, secret_parameter
+                        );
+                    }
                 }
                 libp2p::swarm::SwarmEvent::ConnectionEstablished {
                     peer_id,
@@ -199,19 +220,6 @@ impl P2PActor {
             std::fs::write(keyfile, bytes).expect("Failed to write key file");
             keypair
         }
-    }
-
-    fn generate_passphrase() -> String {
-        let words = memorable_wordlist::WORDS
-            .iter()
-            .take(2048)
-            .collect::<Vec<_>>();
-        let number_of_words = 3;
-        let mut rng = rand::thread_rng();
-        (0..number_of_words)
-            .map(|_| (*words[rng.gen_range(0..words.len())]).to_string())
-            .collect::<Vec<_>>()
-            .join("-")
     }
 
     // This "stretches" the passphrase to fill the 32 bytes required by the pnet crate.
