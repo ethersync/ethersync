@@ -1,5 +1,5 @@
 use crate::document::Document;
-use crate::editor::{self, EditorHandle, EditorId};
+use crate::editor::{self, EditorId, EditorWriter};
 use crate::editor_connection::EditorConnection;
 use crate::peer;
 use crate::sandbox;
@@ -51,7 +51,7 @@ pub enum DocMessage {
         state: SyncState,
         response_tx: oneshot::Sender<(SyncState, Option<AutomergeSyncMessage>)>,
     },
-    NewEditorConnection(EditorId, EditorHandle),
+    NewEditorConnection(EditorId, EditorWriter),
     CloseEditorConnection(EditorId),
 }
 
@@ -84,7 +84,7 @@ type DocChangedReceiver = broadcast::Receiver<()>;
 pub struct DocumentActor {
     doc_message_rx: mpsc::Receiver<DocMessage>,
     doc_changed_ping_tx: DocChangedSender,
-    editor_connections: HashMap<EditorId, (EditorConnection, EditorHandle)>,
+    editor_connections: HashMap<EditorId, (EditorConnection, EditorWriter)>,
     /// The Document is the main I/O managed resource of this actor.
     crdt_doc: Document,
     base_dir: PathBuf,
