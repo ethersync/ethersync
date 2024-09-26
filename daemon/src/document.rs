@@ -17,13 +17,13 @@ use tracing::{debug, info};
 /// - applying a delta (coming from an editor) directly
 ///
 /// Furthermore there's a way to retrieve and initialize the content.
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct Document {
     doc: AutoCommit,
 }
 
-impl Document {
-    pub fn new() -> Self {
+impl Default for Document {
+    fn default() -> Self {
         // We hard-code the initial change here to make documents that were created by independent peers.
         // See https://automerge.org/docs/cookbook/modeling-data/#setting-up-an-initial-document-structure
         let initial_doc = [
@@ -37,7 +37,9 @@ impl Document {
         ];
         Self::load(&initial_doc)
     }
+}
 
+impl Document {
     pub fn load(bytes: &[u8]) -> Self {
         let doc =
             AutoCommit::load(bytes).expect("Failed to load Automerge document from given bytes");

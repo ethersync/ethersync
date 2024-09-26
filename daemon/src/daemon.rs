@@ -111,7 +111,7 @@ impl DocumentActor {
                 .unwrap_or_else(|_| panic!("Could not read file '{persistence_file:?}'"));
             Document::load(&bytes)
         } else {
-            Document::new()
+            Document::default()
         };
         info!("Done.");
 
