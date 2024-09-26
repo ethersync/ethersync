@@ -8,7 +8,6 @@ use anyhow::{bail, Context};
 use tracing::debug;
 
 use crate::{
-    editor::EditorHandle,
     ot::OTServer,
     sandbox,
     types::{
@@ -25,16 +24,14 @@ pub struct EditorConnection {
     base_dir: PathBuf,
     /// There's one OTServer per open buffer.
     ot_servers: HashMap<String, OTServer>,
-    pub writer: EditorHandle,
 }
 
 impl EditorConnection {
-    pub fn new(id: String, base_dir: &Path, writer: EditorHandle) -> Self {
+    pub fn new(id: String, base_dir: &Path) -> Self {
         Self {
             id,
             base_dir: base_dir.to_owned(),
             ot_servers: HashMap::new(),
-            writer,
         }
     }
 

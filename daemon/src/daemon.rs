@@ -84,7 +84,7 @@ type DocChangedReceiver = broadcast::Receiver<()>;
 pub struct DocumentActor {
     doc_message_rx: mpsc::Receiver<DocMessage>,
     doc_changed_ping_tx: DocChangedSender,
-    editor_connections: HashMap<EditorId, EditorConnection>,
+    editor_connections: HashMap<EditorId, (EditorConnection, EditorHandle)>,
     /// The Document is the main I/O managed resource of this actor.
     crdt_doc: Document,
     base_dir: PathBuf,
@@ -144,7 +144,7 @@ impl DocumentActor {
         !self
             .editor_connections
             .values()
-            .any(|connection| connection.owns(file_path))
+            .any(|connection| connection.0.owns(file_path))
     }
 
     async fn handle_message(&mut self, message: DocMessage) {
@@ -247,7 +247,10 @@ impl DocumentActor {
                 let editor_connection_id = self.cursor_id(id);
                 self.editor_connections.insert(
                     id,
-                    EditorConnection::new(editor_connection_id, &self.base_dir, editor_writer),
+                    (
+                        EditorConnection::new(editor_connection_id, &self.base_dir),
+                        editor_writer,
+                    ),
                 );
             }
             DocMessage::CloseEditorConnection(editor_id) => {
@@ -292,6 +295,7 @@ impl DocumentActor {
             .editor_connections
             .get_mut(&editor_id)
             .expect("Could not get editor connection")
+            .0
             .message_from_editor(message)?;
 
         self.inside_message_to_doc(&inside_message).await;
@@ -466,7 +470,7 @@ impl DocumentActor {
             .get_mut(editor_id)
             .expect("Could not get editor handle");
 
-        connection.writer.send(message).await.unwrap_or_else(|err| {
+        connection.1.send(message).await.unwrap_or_else(|err| {
             error!("Failed to send message to editor: {err} Removing editor.");
             self.editor_connections.remove(editor_id);
         });
@@ -634,6 +638,7 @@ impl DocumentActor {
                 .editor_connections
                 .get_mut(&editor_id)
                 .expect("Could not get editor connection")
+                .0
                 .message_from_daemon(message);
 
             for message_to_editor in messages_to_editor {
