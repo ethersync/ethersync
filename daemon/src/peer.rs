@@ -103,7 +103,7 @@ impl P2PActor {
             .unwrap_or(DEFAULT_PASSPHRASE.to_string());
         let is_default_passphrase = passphrase == DEFAULT_PASSPHRASE;
         if is_default_passphrase {
-            warn!("\n\n\tSECURITY WARNING: Running without passphrase is only recommended when trying out this software locally.\n");
+            warn!("\n\n\tSECURITY WARNING: Running without a secret is only recommended when trying out this software locally.\n\tYou can provide one with --secret, or put secret = <secret> in .ethersync/config.\n");
         }
         let mut swarm = libp2p::SwarmBuilder::with_existing_identity(keypair)
             .with_tokio()
