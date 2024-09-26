@@ -50,6 +50,10 @@ impl Document {
         self.doc.save()
     }
 
+    pub fn save_incremental(&mut self) -> Vec<u8> {
+        self.doc.save_incremental()
+    }
+
     pub fn actor_id(&self) -> String {
         self.doc.get_actor().to_hex_string()
     }

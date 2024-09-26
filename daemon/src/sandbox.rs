@@ -5,7 +5,8 @@
 use anyhow::{bail, Result};
 use ignore::WalkBuilder;
 use path_clean::PathClean;
-use std::fs;
+use std::fs::{self, OpenOptions};
+use std::io::Write;
 use std::path::{Path, PathBuf};
 
 pub fn read_file(absolute_base_dir: &Path, absolute_file_path: &Path) -> Result<Vec<u8>> {
@@ -23,6 +24,18 @@ pub fn write_file(
     let canonical_file_path =
         check_inside_base_dir_and_canonicalize(absolute_base_dir, absolute_file_path)?;
     fs::write(canonical_file_path, content)?;
+    Ok(())
+}
+
+pub fn append_file(
+    absolute_base_dir: &Path,
+    absolute_file_path: &Path,
+    content: &[u8],
+) -> Result<()> {
+    let canonical_file_path =
+        check_inside_base_dir_and_canonicalize(absolute_base_dir, absolute_file_path)?;
+    let mut file = OpenOptions::new().append(true).open(canonical_file_path)?;
+    file.write_all(content)?;
     Ok(())
 }
 
