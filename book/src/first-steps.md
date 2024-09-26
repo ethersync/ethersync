@@ -63,11 +63,11 @@ The first daemon will print the full command required to connect to it in its lo
 It will look like this:
 
 ```bash
-ethersync daemon --peer <multiaddress> --secret <passphrase>
+ethersync daemon --peer <multiaddress>
 ```
 
 The daemon might print lines like this multiple times.
-If you're in the same local network, look for the one starting with "192.168".
+If you're in the same local network, the one starting with "192.168" is probably the right one.
 If you're in different local network, see [these instructions](pair-programming.md).
 
 If a connection can be made, both sides will indicate success with a log message "Peer connected" and "Connected to peer" respectively. If you don't see it, double check the previous steps.
