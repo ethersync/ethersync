@@ -1,12 +1,13 @@
 use crate::document::Document;
 use crate::editor::{self, EditorId, EditorWriter};
 use crate::editor_connection::EditorConnection;
+use crate::path::{AbsolutePath, RelativePath};
 use crate::peer;
 use crate::sandbox;
 use crate::types::{
-    AbsolutePath, ComponentMessage, EditorProtocolMessageError, EditorProtocolMessageFromEditor,
+    ComponentMessage, EditorProtocolMessageError, EditorProtocolMessageFromEditor,
     EditorProtocolObject, FileTextDelta, JSONRPCFromEditor, JSONRPCResponse, PatchEffect,
-    RelativePath, TextDelta,
+    TextDelta,
 };
 use crate::watcher::Watcher;
 use crate::watcher::WatcherEvent;
@@ -252,7 +253,7 @@ impl DocumentActor {
                 self.editor_connections.insert(
                     id,
                     (
-                        EditorConnection::new(editor_connection_id, &self.base_dir),
+                        EditorConnection::new(editor_connection_id, self.base_dir.clone()),
                         editor_writer,
                     ),
                 );

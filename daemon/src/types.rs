@@ -1,12 +1,6 @@
-#![allow(dead_code)]
-use std::{
-    ffi::OsStr,
-    fmt::{Display, Formatter},
-    path::PathBuf,
-};
-
+use crate::path::RelativePath;
 use anyhow::bail;
-use automerge::{Patch, PatchAction, Prop};
+use automerge::{Patch, PatchAction};
 use dissimilar::Chunk;
 use operational_transform::{Operation as OTOperation, OperationSeq};
 use ropey::Rope;
@@ -168,65 +162,6 @@ pub enum EditorProtocolMessageFromEditor {
         uri: DocumentUri,
         ranges: Vec<Range>,
     },
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Eq, Hash)]
-pub struct AbsolutePath(String);
-
-impl TryFrom<PathBuf> for AbsolutePath {
-    type Error = anyhow::Error;
-
-    fn try_from(path: PathBuf) -> Result<Self, Self::Error> {
-        if !path.is_absolute() {
-            bail!("PathBuf is not absolute")
-        }
-
-        if let Some(path) = path.to_str() {
-            Ok(Self(path.to_string()))
-        } else {
-            bail!("Failed to convert PathBuf to AbsolutePath")
-        }
-    }
-}
-
-impl Into<PathBuf> for AbsolutePath {
-    fn into(self) -> PathBuf {
-        self.0.into()
-    }
-}
-
-impl Display for AbsolutePath {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.0)
-    }
-}
-
-impl AsRef<OsStr> for AbsolutePath {
-    fn as_ref(&self) -> &OsStr {
-        self.0.as_ref()
-    }
-}
-
-/// Paths like these are relative to the project directory.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Eq, Hash)]
-pub struct RelativePath(pub String);
-
-impl Display for RelativePath {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.0)
-    }
-}
-
-impl RelativePath {
-    pub fn display(&self) -> String {
-        self.0.clone()
-    }
-}
-
-impl Into<Prop> for &RelativePath {
-    fn into(self) -> Prop {
-        Prop::Map(self.0.clone())
-    }
 }
 
 /// These messages are "internally" passed between the components that the daemon consists of -

@@ -1,4 +1,7 @@
-use crate::types::{CursorState, EditorTextDelta, Range, RelativePath, TextDelta};
+use crate::{
+    path::RelativePath,
+    types::{CursorState, EditorTextDelta, Range, TextDelta},
+};
 use anyhow::Result;
 use automerge::{
     patches::TextRepresentation,

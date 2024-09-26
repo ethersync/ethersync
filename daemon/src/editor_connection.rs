@@ -2,17 +2,19 @@ use std::{
     collections::HashMap,
     env,
     path::{Path, PathBuf},
+    str::FromStr,
 };
 
-use anyhow::{bail, Context};
+use anyhow::Context;
 use tracing::debug;
 
 use crate::{
     ot::OTServer,
+    path::{AbsolutePath, RelativePath},
     sandbox,
     types::{
         ComponentMessage, EditorProtocolMessageError, EditorProtocolMessageFromEditor,
-        EditorProtocolMessageToEditor, RelativePath, RevisionedEditorTextDelta,
+        EditorProtocolMessageToEditor, RevisionedEditorTextDelta,
     },
 };
 
@@ -27,10 +29,10 @@ pub struct EditorConnection {
 }
 
 impl EditorConnection {
-    pub fn new(id: String, base_dir: &Path) -> Self {
+    pub fn new(id: String, base_dir: PathBuf) -> Self {
         Self {
             id,
-            base_dir: base_dir.to_owned(),
+            base_dir,
             ot_servers: HashMap::new(),
         }
     }
@@ -220,20 +222,11 @@ impl EditorConnection {
         // If uri starts with "file://", we remove it.
         let absolute_path = uri.strip_prefix("file://").unwrap_or(uri);
 
-        // Check that it's an absolute path.
-        if !absolute_path.starts_with('/') {
-            bail!("Path '{absolute_path}' is not an absolute file:// URI");
-        }
+        let path: AbsolutePath = PathBuf::from_str(absolute_path).expect("TODO").try_into()?;
 
-        let base_dir_string = self.base_dir.display().to_string() + "/";
+        let relative_path = RelativePath::try_from_absolute(path, &self.base_dir)?;
 
-        let path = absolute_path
-            .strip_prefix(&base_dir_string)
-            .with_context(|| {
-                format!("Path '{absolute_path}' is not within base dir '{base_dir_string}'")
-            })?;
-
-        Ok(RelativePath(path.to_string()))
+        Ok(relative_path)
     }
 }
 
