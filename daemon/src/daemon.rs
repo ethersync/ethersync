@@ -4,8 +4,9 @@ use crate::editor_connection::EditorConnection;
 use crate::peer;
 use crate::sandbox;
 use crate::types::{
-    EditorProtocolMessageError, EditorProtocolMessageFromEditor, EditorProtocolObject,
-    FileTextDelta, InsideMessage, JSONRPCFromEditor, JSONRPCResponse, PatchEffect, TextDelta,
+    ComponentMessage, EditorProtocolMessageError, EditorProtocolMessageFromEditor,
+    EditorProtocolObject, FileTextDelta, JSONRPCFromEditor, JSONRPCResponse, PatchEffect,
+    TextDelta,
 };
 use crate::watcher::Watcher;
 use crate::watcher::WatcherEvent;
@@ -158,7 +159,7 @@ impl DocumentActor {
             }
             DocMessage::RandomEdit => {
                 let delta = self.random_delta();
-                let message = InsideMessage::Edit {
+                let message = ComponentMessage::Edit {
                     file_path: TEST_FILE_PATH.to_string(),
                     delta,
                 };
@@ -214,14 +215,14 @@ impl DocumentActor {
 
                 self.maybe_write_files_changed_in_file_deltas(&file_deltas);
                 for file_text_delta in &file_deltas {
-                    let message = InsideMessage::Edit {
+                    let message = ComponentMessage::Edit {
                         file_path: file_text_delta.file_path.clone(),
                         delta: file_text_delta.delta.clone(),
                     };
                     self.broadcast_to_editors(None, &message).await;
                 }
                 for cursor_state in &cursor_states {
-                    let message = InsideMessage::Cursor {
+                    let message = ComponentMessage::Cursor {
                         cursor_id: cursor_state.cursor_id.clone(),
                         name: cursor_state.name.clone(),
                         file_path: cursor_state.file_path.clone(),
@@ -589,9 +590,9 @@ impl DocumentActor {
         self.crdt_doc.current_file_content(file_path)
     }
 
-    async fn inside_message_to_doc(&mut self, message: &InsideMessage) {
+    async fn inside_message_to_doc(&mut self, message: &ComponentMessage) {
         match message {
-            InsideMessage::Open { file_path } => {
+            ComponentMessage::Open { file_path } => {
                 self.current_file_content(file_path).unwrap_or_else(|_| {
                     // The file doesn't exist yet - create it in the Automerge document.
                     let text = String::new();
@@ -599,15 +600,15 @@ impl DocumentActor {
                     text
                 });
             }
-            InsideMessage::Close { file_path } => {
+            ComponentMessage::Close { file_path } => {
                 self.maybe_write_file(file_path);
             }
-            InsideMessage::Edit { file_path, delta } => {
+            ComponentMessage::Edit { file_path, delta } => {
                 self.crdt_doc.apply_delta_to_doc(delta, file_path);
                 let _ = self.doc_changed_ping_tx.send(());
                 self.maybe_write_file(file_path);
             }
-            InsideMessage::Cursor {
+            ComponentMessage::Cursor {
                 cursor_id,
                 name,
                 file_path,
@@ -627,7 +628,7 @@ impl DocumentActor {
     async fn broadcast_to_editors(
         &mut self,
         exclude_id: Option<EditorId>,
-        message: &InsideMessage,
+        message: &ComponentMessage,
     ) {
         let editor_ids: Vec<EditorId> = self.editor_connections.keys().cloned().collect();
         for editor_id in editor_ids {
@@ -658,7 +659,7 @@ impl DocumentActor {
         // Send cursor delete to local peers.
         self.broadcast_to_editors(
             None,
-            &InsideMessage::Cursor {
+            &ComponentMessage::Cursor {
                 cursor_id: cursor_id.to_string(),
                 name: None,
                 file_path: "".to_string(),

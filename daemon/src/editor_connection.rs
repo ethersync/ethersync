@@ -11,8 +11,8 @@ use crate::{
     ot::OTServer,
     sandbox,
     types::{
-        EditorProtocolMessageError, EditorProtocolMessageFromEditor, EditorProtocolMessageToEditor,
-        InsideMessage,
+        ComponentMessage, EditorProtocolMessageError, EditorProtocolMessageFromEditor,
+        EditorProtocolMessageToEditor,
     },
 };
 
@@ -41,10 +41,10 @@ impl EditorConnection {
 
     pub fn message_from_daemon(
         &mut self,
-        message: &InsideMessage,
+        message: &ComponentMessage,
     ) -> Vec<EditorProtocolMessageToEditor> {
         match message {
-            InsideMessage::Edit { file_path, delta } => {
+            ComponentMessage::Edit { file_path, delta } => {
                 if let Some(ot_server) = self.ot_servers.get_mut(file_path) {
                     debug!("Applying incoming CRDT patch for {file_path}");
                     let rev_text_delta_for_editor = ot_server.apply_crdt_change(delta);
@@ -58,7 +58,7 @@ impl EditorConnection {
                     vec![]
                 }
             }
-            InsideMessage::Cursor {
+            ComponentMessage::Cursor {
                 file_path,
                 ranges,
                 name,
@@ -82,7 +82,7 @@ impl EditorConnection {
     pub fn message_from_editor(
         &mut self,
         message: &EditorProtocolMessageFromEditor,
-    ) -> Result<(InsideMessage, Vec<EditorProtocolMessageToEditor>), EditorProtocolMessageError>
+    ) -> Result<(ComponentMessage, Vec<EditorProtocolMessageToEditor>), EditorProtocolMessageError>
     {
         fn anyhow_err_to_protocol_err(error: anyhow::Error) -> EditorProtocolMessageError {
             EditorProtocolMessageError {
@@ -130,7 +130,7 @@ impl EditorConnection {
                 let ot_server = OTServer::new(text);
                 self.ot_servers.insert(file_path.clone(), ot_server);
 
-                Ok((InsideMessage::Open { file_path }, vec![]))
+                Ok((ComponentMessage::Open { file_path }, vec![]))
             }
             EditorProtocolMessageFromEditor::Close { uri } => {
                 let file_path = self
@@ -139,7 +139,7 @@ impl EditorConnection {
                 debug!("Got a 'close' message for {file_path}");
                 self.ot_servers.remove(&file_path);
 
-                Ok((InsideMessage::Close { file_path }, vec![]))
+                Ok((ComponentMessage::Close { file_path }, vec![]))
             }
             EditorProtocolMessageFromEditor::Edit {
                 delta: rev_delta,
@@ -175,7 +175,7 @@ impl EditorConnection {
                     .collect();
 
                 Ok((
-                    InsideMessage::Edit {
+                    ComponentMessage::Edit {
                         file_path,
                         delta: delta_for_crdt,
                     },
@@ -187,7 +187,7 @@ impl EditorConnection {
                     .file_path_for_uri(uri)
                     .map_err(anyhow_err_to_protocol_err)?;
                 Ok((
-                    InsideMessage::Cursor {
+                    ComponentMessage::Cursor {
                         cursor_id: self.id.clone(),
                         name: env::var("USER").ok(),
                         file_path,
@@ -259,7 +259,7 @@ mod tests {
         assert_eq!(
             result,
             Ok((
-                InsideMessage::Open {
+                ComponentMessage::Open {
                     file_path: "file".to_string()
                 },
                 vec![]
@@ -268,7 +268,7 @@ mod tests {
 
         // Daemon sends an edit.
         let delta = insert(1, "x"); // hello -> hxello
-        let result = editor_connection.message_from_daemon(&InsideMessage::Edit {
+        let result = editor_connection.message_from_daemon(&ComponentMessage::Edit {
             file_path: "file".to_string(),
             delta,
         });
@@ -291,7 +291,7 @@ mod tests {
         let delta = insert(4, "y"); // Position gets transformed!
         assert_eq!(
             inside_message,
-            InsideMessage::Edit {
+            ComponentMessage::Edit {
                 file_path: "file".to_string(),
                 delta
             }

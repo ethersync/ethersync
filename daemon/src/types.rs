@@ -166,7 +166,7 @@ pub enum EditorProtocolMessageFromEditor {
 /// These messages are "internally" passed between the components that the daemon consists of -
 /// namely, the connected editors and the CRDT document.
 #[derive(Debug, Clone, PartialEq)]
-pub enum InsideMessage {
+pub enum ComponentMessage {
     Open {
         file_path: String,
     },
