@@ -1,7 +1,7 @@
 {
     "name": "ethersync",
     "displayName": "Ethersync",
-    "version": "0.1.0",
+    "version": "0.2.0",
     "publisher": "ethersync",
     "description": "Editor-agnostic real-time collaborative editing of local text files.",
     "contributors": [

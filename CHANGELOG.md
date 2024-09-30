@@ -1,3 +1,21 @@
+# 0.5.0 (2024-09-30)
+
+Breaking changes:
+
+- "edit" messages now contain the revision and the delta on the top level, to avoid unnecessary nesting.
+
+New features:
+
+- We have installable packages on crates.io and on the Arch User Repository.
+- Lower mimimum supported Neovim version from 0.10 to 0.7.
+- Released a VS Code plugin!
+- When there is no persisted CRDT document, load a structure that's compatible with other peers. This allows peers to start up individually, and sync up later.
+- Persist changes to CRDT incrementally, instead of saving the entire document each time. This gives a big performance boost.
+
+Bug fixes:
+
+- Does not crash when binary files exist by ignoring them.
+
 # 0.4.0 (2024-09-13)
 
 New features:
