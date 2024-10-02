@@ -198,7 +198,10 @@ impl Document {
 
     pub fn files(&self) -> Vec<RelativePath> {
         if let Ok(file_map) = self.top_level_map_obj("files") {
-            self.doc.keys(file_map).map(|k| RelativePath(k)).collect()
+            self.doc
+                .keys(file_map)
+                .map(|k| RelativePath::new(&k))
+                .collect()
         } else {
             vec![]
         }
@@ -246,7 +249,10 @@ impl Document {
     fn get_valid_file_path(&self) -> Option<RelativePath> {
         let file_map = self.top_level_map_obj("files");
         if let Ok(file_map) = file_map {
-            self.doc.keys(file_map).next().map(|k| RelativePath(k))
+            self.doc
+                .keys(file_map)
+                .next()
+                .map(|k| RelativePath::new(&k))
         } else {
             None
         }

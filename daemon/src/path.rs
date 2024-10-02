@@ -96,7 +96,7 @@ impl FileUri {
 
 /// Paths like these are relative to the project directory.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Eq, Hash)]
-pub struct RelativePath(pub String);
+pub struct RelativePath(String);
 
 impl Display for RelativePath {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
@@ -105,6 +105,10 @@ impl Display for RelativePath {
 }
 
 impl RelativePath {
+    pub fn new(path: &str) -> Self {
+        Self(path.to_string())
+    }
+
     pub fn try_from_absolute(path: &AbsolutePath, base_dir: &Path) -> Result<Self, anyhow::Error> {
         let path = PathBuf::from(path.clone().0);
         let project_dir = path::absolute(base_dir).with_context(|| {

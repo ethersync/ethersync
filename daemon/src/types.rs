@@ -413,7 +413,7 @@ impl TryFrom<Patch> for PatchEffect {
             }
             let (_obj_id, prop) = &path[1];
             if let automerge::Prop::Map(file_path) = prop {
-                return Ok(RelativePath(file_path.clone()));
+                return Ok(RelativePath::new(&file_path));
             }
             Err(anyhow::anyhow!(
                 "Unexpected path in Automerge patch: Prop is not a map"
@@ -451,13 +451,13 @@ impl TryFrom<Patch> for PatchEffect {
                             if conflict {
                                 warn!("Resolved conflict for file '{key}' by overwriting your version");
                             }
-                            let path = RelativePath(key);
+                            let path = RelativePath::new(&key);
                             Ok(PatchEffect::FileChange(FileTextDelta::new(path, delta)))
                         }
                         PatchAction::DeleteMap { key } => {
                             // This action happens when a file is deleted.
                             debug!("Got file removal from patch: {key}");
-                            let path = RelativePath(key);
+                            let path = RelativePath::new(&key);
                             Ok(PatchEffect::FileRemoval(path))
                         }
                         PatchAction::Conflict { prop } => {

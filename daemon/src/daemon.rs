@@ -148,13 +148,13 @@ impl DocumentActor {
         match message {
             DocMessage::GetContent { response_tx } => {
                 response_tx
-                    .send(self.current_file_content(&RelativePath(TEST_FILE_PATH.to_string())))
+                    .send(self.current_file_content(&RelativePath::new(TEST_FILE_PATH)))
                     .expect("Failed to send content to response channel");
             }
             DocMessage::RandomEdit => {
                 let delta = self.random_delta();
                 let message = ComponentMessage::Edit {
-                    file_path: RelativePath(TEST_FILE_PATH.to_string()),
+                    file_path: RelativePath::new(TEST_FILE_PATH),
                     delta,
                 };
                 self.inside_message_to_doc(&message).await;
@@ -270,7 +270,7 @@ impl DocumentActor {
 
     fn absolute_path_for_file_path(&self, file_path: &RelativePath) -> AbsolutePath {
         self.base_dir
-            .join(&file_path.0)
+            .join(&file_path.path())
             .try_into()
             .expect("base_dir should be absolute")
     }
@@ -409,7 +409,7 @@ impl DocumentActor {
 
     fn random_delta(&self) -> TextDelta {
         let text = self
-            .current_file_content(&RelativePath(TEST_FILE_PATH.to_string()))
+            .current_file_content(&RelativePath::new(TEST_FILE_PATH))
             .expect("Should have initialized text before performing random edit");
         // let options = ["d", "ü", "🥕", "💚", "\n"];
         let options = ["a", "b", "c", "d", "e", "f", "\n"];
@@ -631,7 +631,7 @@ impl DocumentActor {
             &ComponentMessage::Cursor {
                 cursor_id: cursor_id.to_string(),
                 name: None,
-                file_path: RelativePath("".to_string()), // TODO: Fix by changing the "cursor" message?
+                file_path: RelativePath::new(""), // TODO: Fix by changing the "cursor" message?
                 ranges: vec![],
             },
         )
