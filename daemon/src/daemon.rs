@@ -202,14 +202,14 @@ impl DocumentActor {
                             cursor_states.push(cursor_state);
                         }
                         PatchEffect::FileRemoval(file_path) => {
-                            info!("Removing file '{file_path}'.");
+                            info!("Removing file {file_path:?}.");
 
                             sandbox::remove_file(
                                 &self.base_dir,
-                                &Path::new(&self.absolute_path_for_file_path(&file_path)),
+                                &self.absolute_path_for_file_path(&file_path),
                             )
                             .unwrap_or_else(|err| {
-                                warn!("Failed to remove file {file_path}: {err}");
+                                warn!("Failed to remove file {file_path:?}: {err}");
                             });
                         }
                         PatchEffect::NoEffect => {}
@@ -270,7 +270,7 @@ impl DocumentActor {
 
     fn absolute_path_for_file_path(&self, file_path: &RelativePath) -> AbsolutePath {
         self.base_dir
-            .join(&file_path.path())
+            .join(file_path)
             .try_into()
             .expect("base_dir should be absolute")
     }
@@ -361,7 +361,7 @@ impl DocumentActor {
                         if let Ok(content) = String::from_utf8(content) {
                             self.crdt_doc.initialize_text(&content, &relative_file_path);
                         } else {
-                            warn!("Ignoring newly created non-UTF-8 file '{relative_file_path}'");
+                            warn!("Ignoring newly created non-UTF-8 file {relative_file_path:?}");
                         }
                     } else {
                         debug!("Received watcher creation event, but file already exists in CRDT.")
@@ -388,7 +388,7 @@ impl DocumentActor {
                         self.crdt_doc.update_text(&new_content, &relative_file_path);
                         let _ = self.doc_changed_ping_tx.send(());
                     } else {
-                        warn!("Ignoring changed non-UTF-8 file '{relative_file_path}'");
+                        warn!("Ignoring changed non-UTF-8 file {relative_file_path:?}");
                     }
                 }
             }
@@ -468,25 +468,25 @@ impl DocumentActor {
         if self.owns(file_path) {
             if let Ok(text) = self.current_file_content(file_path) {
                 let abs_path = self.absolute_path_for_file_path(file_path);
-                debug!("Writing to {abs_path}.");
+                debug!("Writing to {abs_path:?}.");
 
                 // Create the parent directorie(s), if neccessary.
-                let parent_dir = Path::new(&abs_path).parent().unwrap();
+                let parent_dir = abs_path.parent().unwrap();
                 sandbox::create_dir_all(&self.base_dir, parent_dir).unwrap_or_else(|_| {
                     panic!("Could not create parent directory {}", parent_dir.display())
                 });
 
                 // If the file didn't exist before, log it.
-                if !sandbox::exists(&self.base_dir, Path::new(&abs_path))
+                if !sandbox::exists(&self.base_dir, &abs_path)
                     .expect("Failed to check for file existence before writing to it")
                 {
-                    info!("Creating '{file_path}'.");
+                    info!("Creating {file_path:?}.");
                 }
 
-                sandbox::write_file(&self.base_dir, Path::new(&abs_path), &text.into_bytes())
-                    .unwrap_or_else(|_| panic!("Could not write to file {abs_path}"));
+                sandbox::write_file(&self.base_dir, &abs_path, &text.into_bytes())
+                    .unwrap_or_else(|_| panic!("Could not write to file {abs_path:?}"));
             } else {
-                warn!("Failed to get content of file '{file_path}' when writing to disk. Key should have existed?");
+                warn!("Failed to get content of file '{file_path:?}' when writing to disk. Key should have existed?");
             }
         }
     }
@@ -534,19 +534,19 @@ impl DocumentActor {
                                 self.crdt_doc.update_text(&text, &relative_file_path);
                             }
                         } else {
-                            warn!("Ignoring non-UTF-8 file '{}'", relative_file_path)
+                            warn!("Ignoring non-UTF-8 file {relative_file_path:?}",)
                         }
                     }
                     Err(e) => {
-                        warn!("Failed to read file {}: {e}", file_path.display());
+                        warn!("Failed to read file {file_path:?}: {e}");
                     }
                 }
             });
         for file_path in self.crdt_doc.files() {
             let absolute_file_path = self.absolute_path_for_file_path(&file_path);
-            if !sandbox::exists(&self.base_dir, Path::new(&absolute_file_path)).expect("") {
+            if !sandbox::exists(&self.base_dir, &absolute_file_path).expect("") {
                 warn!(
-                    "File '{file_path}' exists in the CRDT, but not on disk. Deleting from CRDT."
+                    "File {file_path:?} exists in the CRDT, but not on disk. Deleting from CRDT."
                 );
                 self.crdt_doc.remove_text(&file_path);
             }

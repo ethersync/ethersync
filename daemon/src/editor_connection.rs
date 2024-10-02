@@ -43,15 +43,15 @@ impl EditorConnection {
         match message {
             ComponentMessage::Edit { file_path, delta } => {
                 if let Some(ot_server) = self.ot_servers.get_mut(file_path) {
-                    debug!("Applying incoming CRDT patch for {file_path}");
+                    debug!("Applying incoming CRDT patch for {file_path:?}");
                     let rev_text_delta_for_editor = ot_server.apply_crdt_change(delta);
 
                     let uri = AbsolutePath::from_parts(&self.base_dir, file_path)
                         .expect("Should be able to construct absolute URI")
-                        .file_uri();
+                        .to_file_uri();
 
                     vec![EditorProtocolMessageToEditor::Edit {
-                        uri: uri.display(),
+                        uri: uri.to_string(),
                         delta: rev_text_delta_for_editor.delta,
                         revision: rev_text_delta_for_editor.revision,
                     }]
@@ -68,17 +68,17 @@ impl EditorConnection {
             } => {
                 let uri = AbsolutePath::from_parts(&self.base_dir, file_path)
                     .expect("Should be able to construct absolute URI")
-                    .file_uri();
+                    .to_file_uri();
 
                 vec![EditorProtocolMessageToEditor::Cursor {
                     name: name.clone(),
                     userid: cursor_id.clone(),
-                    uri: uri.display(),
+                    uri: uri.to_string(),
                     ranges: ranges.clone(),
                 }]
             }
             _ => {
-                debug!("Ignoring message from inside: {:#?}", message);
+                debug!("Ignoring message from inside: {message:#?}");
                 vec![]
             }
         }
@@ -99,25 +99,23 @@ impl EditorConnection {
 
         match message {
             EditorProtocolMessageFromEditor::Open { uri } => {
-                let uri = FileUri::new(uri).map_err(anyhow_err_to_protocol_err)?;
-                let absolute_path = uri.absolute_path();
+                let uri = FileUri::try_from(uri.clone()).map_err(anyhow_err_to_protocol_err)?;
+                let absolute_path = uri.to_absolute_path();
                 let relative_path = RelativePath::try_from_absolute(&absolute_path, &self.base_dir)
                     .map_err(anyhow_err_to_protocol_err)?;
 
-                let absolute_file_path = absolute_path.path();
-
-                debug!("Got an 'open' message for {relative_path}");
-                if !sandbox::exists(&self.base_dir, &absolute_file_path)
+                debug!("Got an 'open' message for {relative_path:?}");
+                if !sandbox::exists(&self.base_dir, &absolute_path)
                     .map_err(anyhow_err_to_protocol_err)?
                 {
                     // Creating nonexisting files allows us to traverse this file for whether it's
                     // ignored, which is needed to even be allowed to open it.
-                    sandbox::write_file(&self.base_dir, &absolute_file_path, b"")
+                    sandbox::write_file(&self.base_dir, &absolute_path, b"")
                         .map_err(anyhow_err_to_protocol_err)?;
                 }
 
                 // We only want to process these messages for files that are not ignored.
-                if sandbox::ignored(&self.base_dir, &absolute_file_path)
+                if sandbox::ignored(&self.base_dir, &absolute_path)
                     .expect("Could not check ignore status of opened file")
                 {
                     return Err(EditorProtocolMessageError {
@@ -127,7 +125,7 @@ impl EditorConnection {
                     });
                 }
 
-                let bytes = sandbox::read_file(&self.base_dir, &absolute_file_path)
+                let bytes = sandbox::read_file(&self.base_dir, &absolute_path)
                     .map_err(anyhow_err_to_protocol_err)?;
                 let text = String::from_utf8(bytes)
                     .context("Failed to convert bytes to string")
@@ -144,12 +142,12 @@ impl EditorConnection {
                 ))
             }
             EditorProtocolMessageFromEditor::Close { uri } => {
-                let uri = FileUri::new(uri).map_err(anyhow_err_to_protocol_err)?;
-                let absolute_path = uri.absolute_path();
+                let uri = FileUri::try_from(uri.clone()).map_err(anyhow_err_to_protocol_err)?;
+                let absolute_path = uri.to_absolute_path();
                 let relative_path = RelativePath::try_from_absolute(&absolute_path, &self.base_dir)
                     .map_err(anyhow_err_to_protocol_err)?;
 
-                debug!("Got a 'close' message for {relative_path}");
+                debug!("Got a 'close' message for {relative_path:?}");
                 self.ot_servers.remove(&relative_path);
 
                 Ok((
@@ -169,8 +167,8 @@ impl EditorConnection {
                     revision, delta
                 );
 
-                let uri = FileUri::new(uri).map_err(anyhow_err_to_protocol_err)?;
-                let absolute_path = uri.absolute_path();
+                let uri = FileUri::try_from(uri.clone()).map_err(anyhow_err_to_protocol_err)?;
+                let absolute_path = uri.to_absolute_path();
                 let relative_path = RelativePath::try_from_absolute(&absolute_path, &self.base_dir)
                     .map_err(anyhow_err_to_protocol_err)?;
 
@@ -199,12 +197,12 @@ impl EditorConnection {
 
                 let uri = AbsolutePath::from_parts(&self.base_dir, &relative_path)
                     .expect("Should be able to construct absolute URI")
-                    .file_uri();
+                    .to_file_uri();
 
                 let messages_to_editor = rev_deltas_for_editor
                     .into_iter()
                     .map(|rev_delta_for_editor| EditorProtocolMessageToEditor::Edit {
-                        uri: uri.display(),
+                        uri: uri.to_string(),
                         delta: rev_delta_for_editor.delta,
                         revision: rev_delta_for_editor.revision,
                     })
@@ -219,8 +217,8 @@ impl EditorConnection {
                 ))
             }
             EditorProtocolMessageFromEditor::Cursor { uri, ranges } => {
-                let uri = FileUri::new(uri).map_err(anyhow_err_to_protocol_err)?;
-                let absolute_path = uri.absolute_path();
+                let uri = FileUri::try_from(uri.clone()).map_err(anyhow_err_to_protocol_err)?;
+                let absolute_path = uri.to_absolute_path();
                 let relative_path = RelativePath::try_from_absolute(&absolute_path, &self.base_dir)
                     .map_err(anyhow_err_to_protocol_err)?;
 
