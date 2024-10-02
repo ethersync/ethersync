@@ -10,6 +10,24 @@ use std::{
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Eq, Hash)]
 pub struct AbsolutePath(String);
 
+impl AbsolutePath {
+    pub fn new(path: &str) -> Result<Self, anyhow::Error> {
+        if Path::new(&path).is_absolute() {
+            Ok(Self(path.to_string()))
+        } else {
+            bail!("Path '{}' is not absolute", path);
+        }
+    }
+
+    pub fn path(&self) -> PathBuf {
+        self.0.clone().into()
+    }
+
+    pub fn display(&self) -> String {
+        self.0.clone()
+    }
+}
+
 impl TryFrom<PathBuf> for AbsolutePath {
     type Error = anyhow::Error;
 
@@ -44,6 +62,24 @@ impl AsRef<OsStr> for AbsolutePath {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct FileUri(String);
+
+impl FileUri {
+    pub fn new(string: &str) -> anyhow::Result<Self> {
+        if string.starts_with("file:///") {
+            Ok(Self(string.to_string()))
+        } else {
+            bail!("File URI '{}' does not start with 'file:///'", string);
+        }
+    }
+
+    pub fn absolute_path(&self) -> AbsolutePath {
+        let path = self.0[7..].to_string();
+        AbsolutePath::new(&path).expect("File URI should contain an absolute path")
+    }
+}
+
 /// Paths like these are relative to the project directory.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Eq, Hash)]
 pub struct RelativePath(pub String);
@@ -55,8 +91,8 @@ impl Display for RelativePath {
 }
 
 impl RelativePath {
-    pub fn try_from_absolute(path: AbsolutePath, base_dir: &Path) -> Result<Self, anyhow::Error> {
-        let path = PathBuf::from(path.0);
+    pub fn try_from_absolute(path: &AbsolutePath, base_dir: &Path) -> Result<Self, anyhow::Error> {
+        let path = PathBuf::from(path.clone().0);
         let project_dir = path::absolute(base_dir).with_context(|| {
             format!(
                 "Failed to get absolute path for project directory '{:?}'",
@@ -70,6 +106,15 @@ impl RelativePath {
             )
         })?;
         Ok(Self(relative_path.to_string_lossy().to_string()))
+    }
+
+    pub fn try_from_path(path: &Path, base_dir: &Path) -> Result<Self, anyhow::Error> {
+        let absolute_path = AbsolutePath::try_from(path.to_path_buf())?;
+        Self::try_from_absolute(&absolute_path, base_dir)
+    }
+
+    pub fn path(&self) -> PathBuf {
+        self.0.clone().into()
     }
 
     pub fn display(&self) -> String {

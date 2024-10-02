@@ -11,7 +11,7 @@ use crate::types::{
 };
 use crate::watcher::Watcher;
 use crate::watcher::WatcherEvent;
-use anyhow::{bail, Context, Result};
+use anyhow::Result;
 use automerge::{
     sync::{Message as AutomergeSyncMessage, State as SyncState},
     Patch,
@@ -268,26 +268,6 @@ impl DocumentActor {
         }
     }
 
-    fn file_path_for_uri(&self, uri: &str) -> Result<RelativePath> {
-        // If uri starts with "file://", we remove it.
-        let absolute_path = uri.strip_prefix("file://").unwrap_or(uri);
-
-        // Check that it's an absolute path.
-        if !absolute_path.starts_with('/') {
-            bail!("Path '{absolute_path}' is not an absolute file:// URI");
-        }
-
-        let base_dir_string = self.base_dir.display().to_string() + "/";
-
-        let path = absolute_path
-            .strip_prefix(&base_dir_string)
-            .with_context(|| {
-                format!("Path '{absolute_path}' is not within base dir '{base_dir_string}'")
-            })?;
-
-        Ok(RelativePath(path.to_string()))
-    }
-
     fn absolute_path_for_file_path(&self, file_path: &RelativePath) -> AbsolutePath {
         self.base_dir
             .join(&file_path.0)
@@ -372,13 +352,8 @@ impl DocumentActor {
     async fn handle_watcher_event(&mut self, watcher_event: WatcherEvent) {
         match watcher_event {
             WatcherEvent::Created { file_path } => {
-                let relative_file_path = self
-                    .file_path_for_uri(
-                        file_path
-                            .to_str()
-                            .expect("Failed to convert watcher path to str"),
-                    )
-                    .expect("Could not determine file path when trying to create file");
+                let relative_file_path = RelativePath::try_from_path(&file_path, &self.base_dir)
+                    .expect("Watcher event should have a path within the base directory");
                 if self.owns(&relative_file_path) {
                     if !self.crdt_doc.file_exists(&relative_file_path) {
                         let content = sandbox::read_file(&self.base_dir, Path::new(&file_path))
@@ -395,13 +370,8 @@ impl DocumentActor {
                 }
             }
             WatcherEvent::Removed { file_path } => {
-                let relative_file_path = self
-                    .file_path_for_uri(
-                        file_path
-                            .to_str()
-                            .expect("Failed to convert watcher path to str"),
-                    )
-                    .expect("Could not determine file path when trying to remove file");
+                let relative_file_path = RelativePath::try_from_path(&file_path, &self.base_dir)
+                    .expect("Watcher event should have a path within the base directory");
                 if self.owns(&relative_file_path) {
                     self.crdt_doc.remove_text(&relative_file_path);
                     let _ = self.doc_changed_ping_tx.send(());
@@ -409,13 +379,8 @@ impl DocumentActor {
             }
             WatcherEvent::Changed { file_path } => {
                 // Only update if we own the file.
-                let relative_file_path = self
-                    .file_path_for_uri(
-                        file_path
-                            .to_str()
-                            .expect("Failed to convert watcher path to str"),
-                    )
-                    .expect("Could not determine file path when trying to create file");
+                let relative_file_path = RelativePath::try_from_path(&file_path, &self.base_dir)
+                    .expect("Watcher event should have a path within the base directory");
                 if self.owns(&relative_file_path) {
                     let new_content = sandbox::read_file(&self.base_dir, Path::new(&file_path))
                         .expect("Failed to read changed file");
@@ -559,13 +524,9 @@ impl DocumentActor {
                 let file_path = dir_entry.path();
                 match sandbox::read_file(&self.base_dir, file_path) {
                     Ok(bytes) => {
-                        let relative_file_path = self
-                            .file_path_for_uri(
-                                file_path
-                                    .to_str()
-                                    .expect("Could not convert PathBuf to str"),
-                            )
-                            .expect("Could not convert uri to file path");
+                        let relative_file_path =
+                            RelativePath::try_from_path(file_path, &self.base_dir)
+                                .expect("Walked file path should be within base directory");
                         if let Ok(text) = String::from_utf8(bytes) {
                             if init {
                                 self.crdt_doc.initialize_text(&text, &relative_file_path);
@@ -969,6 +930,7 @@ mod tests {
         }
         */
 
+        /* TODO: Move these tests to path.rs
         #[test]
         fn test_file_path_for_uri_fails_not_absolute() {
             let dir = setup_filesystem_for_testing();
@@ -1024,6 +986,7 @@ mod tests {
                 }
             }
         }
+        */
 
         /*
         TODO: Same as test_maybe_write_files_changed_in_file_deltas: We'd need a real editor connection.
