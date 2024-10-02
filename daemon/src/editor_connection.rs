@@ -1,4 +1,4 @@
-use std::{collections::HashMap, env, path::PathBuf, str::FromStr};
+use std::{collections::HashMap, env, path::PathBuf};
 
 use anyhow::Context;
 use tracing::debug;
@@ -46,8 +46,12 @@ impl EditorConnection {
                     debug!("Applying incoming CRDT patch for {file_path}");
                     let rev_text_delta_for_editor = ot_server.apply_crdt_change(delta);
 
+                    let uri = AbsolutePath::from_parts(&self.base_dir, file_path)
+                        .expect("Should be able to construct absolute URI")
+                        .file_uri();
+
                     vec![EditorProtocolMessageToEditor::Edit {
-                        uri: self.file_uri_for_relative_path(file_path),
+                        uri: uri.display(),
                         delta: rev_text_delta_for_editor.delta,
                         revision: rev_text_delta_for_editor.revision,
                     }]
@@ -62,10 +66,14 @@ impl EditorConnection {
                 name,
                 cursor_id,
             } => {
+                let uri = AbsolutePath::from_parts(&self.base_dir, file_path)
+                    .expect("Should be able to construct absolute URI")
+                    .file_uri();
+
                 vec![EditorProtocolMessageToEditor::Cursor {
                     name: name.clone(),
                     userid: cursor_id.clone(),
-                    uri: self.file_uri_for_relative_path(file_path),
+                    uri: uri.display(),
                     ranges: ranges.clone(),
                 }]
             }
@@ -189,10 +197,14 @@ impl EditorConnection {
                 let (delta_for_crdt, rev_deltas_for_editor) =
                     ot_server.apply_editor_operation(rev_delta.clone());
 
+                let uri = AbsolutePath::from_parts(&self.base_dir, &relative_path)
+                    .expect("Should be able to construct absolute URI")
+                    .file_uri();
+
                 let messages_to_editor = rev_deltas_for_editor
                     .into_iter()
                     .map(|rev_delta_for_editor| EditorProtocolMessageToEditor::Edit {
-                        uri: self.file_uri_for_relative_path(&relative_path),
+                        uri: uri.display(),
                         delta: rev_delta_for_editor.delta,
                         revision: rev_delta_for_editor.revision,
                     })
@@ -207,36 +219,22 @@ impl EditorConnection {
                 ))
             }
             EditorProtocolMessageFromEditor::Cursor { uri, ranges } => {
-                let file_path = self
-                    .file_path_for_uri(uri)
+                let uri = FileUri::new(uri).map_err(anyhow_err_to_protocol_err)?;
+                let absolute_path = uri.absolute_path();
+                let relative_path = RelativePath::try_from_absolute(&absolute_path, &self.base_dir)
                     .map_err(anyhow_err_to_protocol_err)?;
+
                 Ok((
                     ComponentMessage::Cursor {
                         cursor_id: self.id.clone(),
                         name: env::var("USER").ok(),
-                        file_path,
+                        file_path: relative_path,
                         ranges: ranges.clone(),
                     },
                     vec![],
                 ))
             }
         }
-    }
-
-    fn file_uri_for_relative_path(&self, file_path: &RelativePath) -> String {
-        format!("file://{}/{}", self.base_dir.display(), file_path.display())
-    }
-
-    // TODO: Duplicate of the function in the daemon?
-    fn file_path_for_uri(&self, uri: &str) -> anyhow::Result<RelativePath> {
-        // If uri starts with "file://", we remove it.
-        let absolute_path = uri.strip_prefix("file://").unwrap_or(uri);
-
-        let path: AbsolutePath = PathBuf::from_str(absolute_path).expect("TODO").try_into()?;
-
-        let relative_path = RelativePath::try_from_absolute(&path, &self.base_dir)?;
-
-        Ok(relative_path)
     }
 }
 

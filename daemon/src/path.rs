@@ -19,6 +19,16 @@ impl AbsolutePath {
         }
     }
 
+    pub fn from_parts(base: &Path, relative_path: &RelativePath) -> Result<Self, anyhow::Error> {
+        let path = base.join(relative_path.display());
+        Self::try_from(path)
+    }
+
+    pub fn file_uri(&self) -> FileUri {
+        FileUri::new(&format!("file://{}", self.0))
+            .expect("Should be able to create File URI from absolute path")
+    }
+
     pub fn path(&self) -> PathBuf {
         self.0.clone().into()
     }
@@ -77,6 +87,10 @@ impl FileUri {
     pub fn absolute_path(&self) -> AbsolutePath {
         let path = self.0[7..].to_string();
         AbsolutePath::new(&path).expect("File URI should contain an absolute path")
+    }
+
+    pub fn display(&self) -> String {
+        self.0.clone()
     }
 }
 
