@@ -246,7 +246,8 @@ mod tests {
     #[test]
     fn opening_file_in_wrong_dir_fails() {
         let dir = TempDir::new().expect("Failed to create temp directory");
-        let mut editor_connection = EditorConnection::new("1".to_string(), dir.path());
+        let mut editor_connection =
+            EditorConnection::new("1".to_string(), dir.path().to_path_buf());
 
         let result =
             editor_connection.message_from_editor(&EditorProtocolMessageFromEditor::Open {
@@ -262,7 +263,8 @@ mod tests {
         let file = dir.path().join("file");
         std::fs::write(&file, "hello").expect("Failed to write file");
 
-        let mut editor_connection = EditorConnection::new("1".to_string(), dir.path());
+        let mut editor_connection =
+            EditorConnection::new("1".to_string(), dir.path().to_path_buf());
 
         // Editor opens the file.
         let result =
@@ -273,7 +275,7 @@ mod tests {
             result,
             Ok((
                 ComponentMessage::Open {
-                    file_path: "file".to_string()
+                    file_path: RelativePath::new("file")
                 },
                 vec![]
             ))
@@ -282,7 +284,7 @@ mod tests {
         // Daemon sends an edit.
         let delta = insert(1, "x"); // hello -> hxello
         let result = editor_connection.message_from_daemon(&ComponentMessage::Edit {
-            file_path: "file".to_string(),
+            file_path: RelativePath::new("file"),
             delta,
         });
         assert_eq!(
@@ -306,7 +308,7 @@ mod tests {
         assert_eq!(
             inside_message,
             ComponentMessage::Edit {
-                file_path: "file".to_string(),
+                file_path: RelativePath::new("file"),
                 delta
             }
         );

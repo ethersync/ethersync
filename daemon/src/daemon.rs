@@ -850,9 +850,9 @@ mod tests {
                     true,
                 )
             }
-            fn assert_file_content(&self, file_path: &str, content: &str) {
+            fn assert_file_content(&self, file_path: &RelativePath, content: &str) {
                 // unfortunately anyhow::Error doesn't implement PartialEq, so we'll rather unwrap.
-                assert_eq!(self.current_file_content(file_path).unwrap(), content);
+                assert_eq!(self.current_file_content(&file_path).unwrap(), content);
             }
         }
 
@@ -876,9 +876,9 @@ mod tests {
 
             actor.read_current_content_from_dir(true);
 
-            actor.assert_file_content("file1", "content1");
-            actor.assert_file_content("file2", "content2");
-            actor.assert_file_content("sub/file3", "content3");
+            actor.assert_file_content(&RelativePath::new("file1"), "content1");
+            actor.assert_file_content(&RelativePath::new("file2"), "content2");
+            actor.assert_file_content(&RelativePath::new("sub/file3"), "content3");
         }
 
         /*

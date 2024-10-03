@@ -265,9 +265,9 @@ mod tests {
     use crate::types::factories::*;
 
     impl Document {
-        fn assert_file_content(&self, file_path: &str, content: &str) {
+        fn assert_file_content(&self, file_path: &RelativePath, content: &str) {
             // unfortunately anyhow::Error doesn't implement PartialEq, so we'll rather unwrap.
-            assert_eq!(self.current_file_content(file_path).unwrap(), content);
+            assert_eq!(self.current_file_content(&file_path).unwrap(), content);
         }
     }
 
@@ -275,39 +275,46 @@ mod tests {
     fn can_initialize_content() {
         let mut document = Document::default();
         let text = "To be or not to be, that is the question";
+        let file = RelativePath::new("text");
 
-        document.initialize_text(text, "text");
+        document.initialize_text(text, &file);
 
-        document.assert_file_content("text", text);
+        document.assert_file_content(&file, text);
     }
 
     #[test]
     fn can_initialize_content_multifile() {
         let mut document = Document::default();
+
         let text = "To be or not to be, that is the question";
         let text2 = "2b||!2b, that is the question";
 
-        document.initialize_text(text, "text");
-        document.initialize_text(text2, "text2");
+        let file1 = RelativePath::new("text");
+        let file2 = RelativePath::new("text2");
 
-        document.assert_file_content("text", text);
-        document.assert_file_content("text2", text2);
+        document.initialize_text(text, &file1);
+        document.initialize_text(text2, &file2);
+
+        document.assert_file_content(&file1, text);
+        document.assert_file_content(&file2, text2);
     }
 
     #[test]
     fn retrieve_content_file_nonexistent_errs() {
         let document = Document::default();
         document
-            .current_file_content("text")
+            .current_file_content(&RelativePath::new("text"))
             .expect_err("File shouldn't exist");
     }
 
     fn apply_delta_to_doc_works(initial: &str, delta: &TextDelta, expected: &str) {
         let mut document = Document::default();
-        document.initialize_text(initial, "text");
-        document.apply_delta_to_doc(delta, "text");
+        let file = RelativePath::new("text");
 
-        document.assert_file_content("text", expected);
+        document.initialize_text(initial, &file);
+        document.apply_delta_to_doc(delta, &file);
+
+        document.assert_file_content(&file, expected);
     }
 
     #[test]
@@ -350,14 +357,18 @@ mod tests {
     #[test]
     fn apply_delta_only_changes_specified_file() {
         let mut document = Document::default();
-        document.initialize_text("", "text");
-        document.initialize_text("", "text2");
+
+        let file1 = RelativePath::new("text");
+        let file2 = RelativePath::new("text2");
+
+        document.initialize_text("", &file1);
+        document.initialize_text("", &file2);
 
         let delta = insert(0, "foobar");
-        document.apply_delta_to_doc(&delta, "text");
+        document.apply_delta_to_doc(&delta, &file1);
 
-        document.assert_file_content("text", "foobar");
-        document.assert_file_content("text2", "");
+        document.assert_file_content(&file1, "foobar");
+        document.assert_file_content(&file2, "");
     }
 
     /// This set of tests has some documentation character to show to ourselves,
@@ -373,7 +384,7 @@ mod tests {
             // Stops for now and waits for a response
             assert!(document.generate_sync_message(&mut state).is_none());
 
-            document.initialize_text("", "text");
+            document.initialize_text("", &RelativePath::new("text"));
             // We have progressed our state, so update all peers about that.
             assert!(document.generate_sync_message(&mut state).is_some());
             // Again, stop, until peers tell us if they want more information.
