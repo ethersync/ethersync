@@ -32,6 +32,14 @@ impl TryFrom<PathBuf> for AbsolutePath {
     }
 }
 
+impl TryFrom<&str> for AbsolutePath {
+    type Error = anyhow::Error;
+
+    fn try_from(path: &str) -> Result<Self, Self::Error> {
+        Path::new(&path).to_path_buf().try_into()
+    }
+}
+
 /// Paths like these are relative to the project directory.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Eq, Hash, Deref, AsRef)]
 #[as_ref(Path)]
@@ -56,6 +64,11 @@ impl RelativePath {
                 project_dir, path
             )
         })?;
+
+        if relative_path.iter().count() == 0 {
+            bail!("base_dir was equal to path when computing relative path");
+        }
+
         Ok(Self(relative_path.to_path_buf()))
     }
 
@@ -90,6 +103,55 @@ impl TryFrom<String> for FileUri {
             Ok(Self(string.to_string()))
         } else {
             bail!("File URI '{}' does not start with 'file:///'", string);
+        }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn test_file_path_for_uri_fails_not_absolute() {
+        assert!(AbsolutePath::try_from("this/is/absolutely/not/absolute").is_err());
+    }
+
+    #[test]
+    fn test_file_path_for_uri_fails_not_within_base_dir() {
+        let base_dir = Path::new("/an/absolute/path");
+        let path = AbsolutePath::try_from("/a/very/different/path").unwrap();
+
+        assert!(RelativePath::try_from_absolute(&path, base_dir).is_err());
+    }
+
+    #[test]
+    fn test_file_path_for_uri_fails_not_within_base_dir_suffix() {
+        let base_dir = Path::new("/an/absolute/path");
+        let path = AbsolutePath::try_from("/an/absolute/path2/file").unwrap();
+
+        assert!(RelativePath::try_from_absolute(&path, base_dir).is_err());
+    }
+
+    #[test]
+    fn test_file_path_for_uri_fails_only_base_dir() {
+        let base_dir = Path::new("/an/absolute/path");
+        let path = AbsolutePath::try_from("/an/absolute/path").unwrap();
+
+        assert!(RelativePath::try_from_absolute(&path, base_dir).is_err());
+    }
+
+    #[test]
+    fn test_file_path_for_uri_works() {
+        let base_dir = Path::new("/an/absolute/path");
+
+        let file_paths = vec!["file1", "sub/file3", "sub"];
+        for &expected in &file_paths {
+            let uri =
+                FileUri::try_from(format!("file://{}/{}", base_dir.display(), expected)).unwrap();
+            let absolute_path = uri.to_absolute_path();
+            let relative_path = RelativePath::try_from_absolute(&absolute_path, base_dir).unwrap();
+
+            assert_eq!(RelativePath::new(expected), relative_path);
         }
     }
 }

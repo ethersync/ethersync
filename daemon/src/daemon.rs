@@ -928,68 +928,6 @@ mod tests {
                 b"content3",
             );
         }
-        */
-
-        /* TODO: Move these tests to path.rs
-        #[test]
-        fn test_file_path_for_uri_fails_not_absolute() {
-            let dir = setup_filesystem_for_testing();
-            let actor = DocumentActor::setup_for_testing(&dir);
-
-            assert!(actor
-                .file_path_for_uri("this/is/absolutely/not/absolute")
-                .is_err());
-        }
-
-        #[test]
-        fn test_file_path_for_uri_fails_not_within_base_dir() {
-            let dir = setup_filesystem_for_testing();
-            let actor = DocumentActor::setup_for_testing(&dir);
-
-            assert!(actor
-                .file_path_for_uri("/this/is/not/the/base_dir/file")
-                .is_err());
-        }
-
-        #[test]
-        fn test_file_path_for_uri_fails_not_within_base_dir_suffix() {
-            let dir = setup_filesystem_for_testing();
-            let file_in_suffix_dir = dir.path().to_str().unwrap().to_string() + "2/file";
-            let actor = DocumentActor::setup_for_testing(&dir);
-
-            assert!(actor.file_path_for_uri(&file_in_suffix_dir).is_err());
-        }
-
-        #[test]
-        fn test_file_path_for_uri_fails_only_base_dir() {
-            let dir = setup_filesystem_for_testing();
-            let actor = DocumentActor::setup_for_testing(&dir);
-
-            assert!(actor
-                .file_path_for_uri(&format!("{}", dir.path().display()))
-                .is_err());
-        }
-
-        #[test]
-        fn test_file_path_for_uri_works() {
-            let dir = setup_filesystem_for_testing();
-            let actor = DocumentActor::setup_for_testing(&dir);
-
-            let file_paths = vec!["file1", "sub/file3", "sub"];
-            let prefix_options = vec!["file://", ""];
-            for prefix in prefix_options {
-                for &expected in &file_paths {
-                    let uri = format!("{}{}/{}", prefix, dir.path().display(), expected);
-
-                    // unfortunately anyhow::Error doesn't implement PartialEq, so we'll rather unwrap.
-                    assert_eq!(actor.file_path_for_uri(&uri).unwrap(), expected);
-                }
-            }
-        }
-        */
-
-        /*
-        TODO: Same as test_maybe_write_files_changed_in_file_deltas: We'd need a real editor connection.
 
         #[tokio::test]
         async fn test_simulate_editor_edits() {
