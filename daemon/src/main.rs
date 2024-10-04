@@ -49,8 +49,6 @@ enum Commands {
         /// Initialize the current contents of the directory as a new Ethersync directory.
         #[arg(long)]
         init: bool,
-        #[arg(short, long)]
-        random: bool,
     },
     /// Open a JSON-RPC connection to the Ethersync daemon on stdin/stdout.
     Client,
@@ -88,7 +86,6 @@ async fn main() -> Result<()> {
             port,
             secret,
             init,
-            random,
         } => {
             if matches.value_source("socket_path").unwrap() == ValueSource::EnvVariable {
                 info!(
@@ -128,7 +125,7 @@ async fn main() -> Result<()> {
             }
 
             info!("Starting Ethersync on {}", directory.display());
-            Daemon::new(peer_connection_info, &socket_path, &directory, init, random);
+            Daemon::new(peer_connection_info, &socket_path, &directory, init);
             match signal::ctrl_c().await {
                 Ok(()) => {}
                 Err(err) => {

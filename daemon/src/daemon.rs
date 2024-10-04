@@ -440,8 +440,7 @@ impl DocumentActor {
         let text = self
             .current_file_content(TEST_FILE_PATH)
             .expect("Should have initialized text before performing random edit");
-        // let options = ["d", "ü", "🥕", "💚", "\n"];
-        let options = ["a", "b", "c", "d", "e", "f", "\n"];
+        let options = ["d", "ü", "🥕", "💚", "\n"];
         let random_text: String = (1..5)
             .map(|_| {
                 let random_option = rand::thread_rng().gen_range(0..options.len());
@@ -761,7 +760,6 @@ impl Daemon {
         socket_path: &Path,
         base_dir: &Path,
         init: bool,
-        random: bool,
     ) -> Self {
         let is_host = peer_connection_info.is_host();
 
@@ -799,19 +797,6 @@ impl Daemon {
             let document_handle = document_handle.clone();
             tokio::spawn(async move {
                 editor::make_editor_connection(socket_path, document_handle).await;
-            });
-        }
-
-        if random {
-            let random_document_handle = document_handle.clone();
-            tokio::spawn(async move {
-                tokio::time::sleep(Duration::from_millis(5000)).await;
-                loop {
-                    random_document_handle
-                        .send_message(DocMessage::RandomEdit)
-                        .await;
-                    tokio::time::sleep(Duration::from_millis(500)).await;
-                }
             });
         }
 
