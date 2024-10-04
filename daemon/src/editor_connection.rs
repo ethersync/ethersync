@@ -120,7 +120,7 @@ impl EditorConnection {
                 {
                     return Err(EditorProtocolMessageError {
                         code: -1,
-                        message: format!("File '{absolute_path:?}' is ignored"),
+                        message: format!("File {absolute_path:?} is ignored"),
                         data: Some("This file should not be shared with other peers".into()),
                     });
                 }

@@ -448,10 +448,10 @@ impl TryFrom<Patch> for PatchEffect {
                             // This action happens when a new file is created.
                             // We return an empty delta on the new file, so that the file is created on disk when
                             // synced over to another peer. TODO: Is this the best way to solve this?
-                            if conflict {
-                                warn!("Resolved conflict for file '{key}' by overwriting your version");
-                            }
                             let path = RelativePath::new(&key);
+                            if conflict {
+                                warn!("Resolved conflict for file {path:?} by overwriting your version");
+                            }
                             Ok(PatchEffect::FileChange(FileTextDelta::new(path, delta)))
                         }
                         PatchAction::DeleteMap { key } => {
