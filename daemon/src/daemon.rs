@@ -269,10 +269,7 @@ impl DocumentActor {
     }
 
     fn absolute_path_for_file_path(&self, file_path: &RelativePath) -> AbsolutePath {
-        self.base_dir
-            .join(file_path)
-            .try_into()
-            .expect("base_dir should be absolute")
+        AbsolutePath::from_parts(&self.base_dir, file_path).expect("base_dir should be absolute")
     }
 
     async fn react_to_message_from_editor(
