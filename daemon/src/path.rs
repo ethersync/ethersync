@@ -4,6 +4,7 @@ use derive_more::{AsRef, Deref, Display};
 use serde::{Deserialize, Serialize};
 use std::path::{self, Path, PathBuf};
 
+/// Paths like these are guaranteed to be absolute.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Eq, Hash, Deref, AsRef, Display)]
 #[as_ref(Path)]
 #[display("'{}'", self.0.display())]
