@@ -123,7 +123,7 @@ impl Watcher {
         if sandbox::ignored(&self.base_dir, file_path)
             .expect("Could not check ignore state of file")
         {
-            debug!("Ignoring creation of '{file_path:?}'");
+            debug!("Ignoring creation of '{}'", file_path.display());
             return None;
         }
 
@@ -143,7 +143,7 @@ impl Watcher {
         if sandbox::ignored(&self.base_dir, file_path)
             .expect("Could not check ignore state of file")
         {
-            debug!("Ignoring modification of '{file_path:?}'");
+            debug!("Ignoring modification of {}", file_path.display());
             return None;
         }
 

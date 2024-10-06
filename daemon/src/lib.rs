@@ -4,6 +4,7 @@ pub mod editor;
 pub mod editor_connection;
 pub mod logging;
 pub mod ot;
+pub mod path;
 pub mod peer;
 pub mod sandbox;
 pub mod types;
