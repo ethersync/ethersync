@@ -115,7 +115,7 @@ impl Document {
     }
 
     pub fn initialize_text(&mut self, text: &str, file_path: &RelativePath) {
-        info!("Initializing {file_path:?} in CRDT.");
+        info!("Initializing {file_path} in CRDT.");
 
         // Now it should definitely work?
         let file_map = self
@@ -137,7 +137,7 @@ impl Document {
         if self.text_obj(file_path).is_ok() {
             let current_text = self
                 .current_file_content(file_path)
-                .unwrap_or_else(|_| panic!("Failed to get {file_path:?} text object"));
+                .unwrap_or_else(|_| panic!("Failed to get {file_path} text object"));
 
             let chunks = dissimilar::diff(&current_text, desired_text);
             if let [] | [Chunk::Equal(_)] = chunks.as_slice() {
@@ -145,22 +145,22 @@ impl Document {
             }
 
             let text_delta: TextDelta = chunks.into();
-            info!("Updating {file_path:?} in CRDT with delta: {text_delta:?}");
+            info!("Updating {file_path} in CRDT with delta: {text_delta:?}");
             self.apply_delta_to_doc(&text_delta, file_path);
         } else {
             // The file doesn't exist in the CRDT yet, so we need to initialize it.
-            info!("Creating {file_path:?} in CRDT.");
+            info!("Creating {file_path} in CRDT.");
             self.initialize_text(desired_text, file_path);
         }
     }
 
     pub fn remove_text(&mut self, file_path: &RelativePath) {
         if self.text_obj(file_path).is_err() {
-            debug!("Failed to get {file_path:?} Text object, so I can't remove it from the CRDT");
+            debug!("Failed to get {file_path} Text object, so I can't remove it from the CRDT");
             return;
         };
 
-        info!("Removing {file_path:?} from CRDT.");
+        info!("Removing {file_path} from CRDT.");
         // TODO: Also remove it from ot server, if applicable
         let file_map = self
             .top_level_map_obj("files")
@@ -186,12 +186,12 @@ impl Document {
         let text_obj = self
             .doc
             .get(file_map, file_path)
-            .unwrap_or_else(|_| panic!("Failed to get {file_path:?} key from Automerge document"));
+            .unwrap_or_else(|_| panic!("Failed to get {file_path} key from Automerge document"));
         if let Some((automerge::Value::Object(ObjType::Text), text_obj)) = text_obj {
             Ok(text_obj)
         } else {
             Err(anyhow::anyhow!(
-                "Automerge document doesn't have a {file_path:?} Text object, so I can't provide it"
+                "Automerge document doesn't have a {file_path} Text object, so I can't provide it"
             ))
         }
     }

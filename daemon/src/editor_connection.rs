@@ -43,7 +43,7 @@ impl EditorConnection {
         match message {
             ComponentMessage::Edit { file_path, delta } => {
                 if let Some(ot_server) = self.ot_servers.get_mut(file_path) {
-                    debug!("Applying incoming CRDT patch for {file_path:?}");
+                    debug!("Applying incoming CRDT patch for {file_path}");
                     let rev_text_delta_for_editor = ot_server.apply_crdt_change(delta);
 
                     let uri = AbsolutePath::from_parts(&self.base_dir, file_path)
@@ -104,7 +104,7 @@ impl EditorConnection {
                 let relative_path = RelativePath::try_from_absolute(&absolute_path, &self.base_dir)
                     .map_err(anyhow_err_to_protocol_err)?;
 
-                debug!("Got an 'open' message for {relative_path:?}");
+                debug!("Got an 'open' message for {relative_path}");
                 if !sandbox::exists(&self.base_dir, &absolute_path)
                     .map_err(anyhow_err_to_protocol_err)?
                 {
@@ -120,7 +120,7 @@ impl EditorConnection {
                 {
                     return Err(EditorProtocolMessageError {
                         code: -1,
-                        message: format!("File {absolute_path:?} is ignored"),
+                        message: format!("File {absolute_path} is ignored"),
                         data: Some("This file should not be shared with other peers".into()),
                     });
                 }
@@ -147,7 +147,7 @@ impl EditorConnection {
                 let relative_path = RelativePath::try_from_absolute(&absolute_path, &self.base_dir)
                     .map_err(anyhow_err_to_protocol_err)?;
 
-                debug!("Got a 'close' message for {relative_path:?}");
+                debug!("Got a 'close' message for {relative_path}");
                 self.ot_servers.remove(&relative_path);
 
                 Ok((

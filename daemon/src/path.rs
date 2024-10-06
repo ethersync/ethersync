@@ -1,11 +1,12 @@
 use anyhow::{bail, Context};
 use automerge::Prop;
-use derive_more::{AsRef, Deref};
+use derive_more::{AsRef, Deref, Display};
 use serde::{Deserialize, Serialize};
 use std::path::{self, Path, PathBuf};
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Eq, Hash, Deref, AsRef)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Eq, Hash, Deref, AsRef, Display)]
 #[as_ref(Path)]
+#[display("'{}'", self.0.display())]
 pub struct AbsolutePath(PathBuf);
 
 impl AbsolutePath {
@@ -25,7 +26,7 @@ impl TryFrom<PathBuf> for AbsolutePath {
 
     fn try_from(path: PathBuf) -> Result<Self, Self::Error> {
         if !path.is_absolute() {
-            bail!("Path '{:?}' is not absolute", path);
+            bail!("Path '{}' is not absolute", path.display());
         }
 
         Ok(Self(path))
@@ -41,8 +42,9 @@ impl TryFrom<&str> for AbsolutePath {
 }
 
 /// Paths like these are relative to the project directory.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Eq, Hash, Deref, AsRef)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Eq, Hash, Deref, AsRef, Display)]
 #[as_ref(Path)]
+#[display("'{}'", self.0.display())]
 pub struct RelativePath(PathBuf);
 
 impl RelativePath {
@@ -54,14 +56,14 @@ impl RelativePath {
     pub fn try_from_absolute(path: &AbsolutePath, base_dir: &Path) -> Result<Self, anyhow::Error> {
         let project_dir = path::absolute(base_dir).with_context(|| {
             format!(
-                "Failed to get absolute path for project directory '{:?}'",
-                base_dir
+                "Failed to get absolute path for project directory '{}'",
+                base_dir.display()
             )
         })?;
         let relative_path = path.strip_prefix(&project_dir).with_context(|| {
             format!(
-                "Failed to strip project directory '{:?}' from path '{:?}'",
-                project_dir, path
+                "Failed to strip project directory '{}' from path {path}",
+                project_dir.display()
             )
         })?;
 
