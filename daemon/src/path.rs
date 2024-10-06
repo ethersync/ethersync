@@ -53,7 +53,7 @@ impl RelativePath {
         Self(path.into())
     }
 
-    pub fn try_from_absolute(path: &AbsolutePath, base_dir: &Path) -> Result<Self, anyhow::Error> {
+    pub fn try_from_absolute(base_dir: &Path, path: &AbsolutePath) -> Result<Self, anyhow::Error> {
         let project_dir = path::absolute(base_dir).with_context(|| {
             format!(
                 "Failed to get absolute path for project directory '{}'",
@@ -74,9 +74,9 @@ impl RelativePath {
         Ok(Self(relative_path.to_path_buf()))
     }
 
-    pub fn try_from_path(path: &Path, base_dir: &Path) -> Result<Self, anyhow::Error> {
+    pub fn try_from_path(base_dir: &Path, path: &Path) -> Result<Self, anyhow::Error> {
         let absolute_path = AbsolutePath::try_from(path.to_path_buf())?;
-        Self::try_from_absolute(&absolute_path, base_dir)
+        Self::try_from_absolute(base_dir, &absolute_path)
     }
 }
 
@@ -123,7 +123,7 @@ mod test {
         let base_dir = Path::new("/an/absolute/path");
         let path = AbsolutePath::try_from("/a/very/different/path").unwrap();
 
-        assert!(RelativePath::try_from_absolute(&path, base_dir).is_err());
+        assert!(RelativePath::try_from_absolute(base_dir, &path,).is_err());
     }
 
     #[test]
@@ -131,7 +131,7 @@ mod test {
         let base_dir = Path::new("/an/absolute/path");
         let path = AbsolutePath::try_from("/an/absolute/path2/file").unwrap();
 
-        assert!(RelativePath::try_from_absolute(&path, base_dir).is_err());
+        assert!(RelativePath::try_from_absolute(base_dir, &path,).is_err());
     }
 
     #[test]
@@ -139,7 +139,7 @@ mod test {
         let base_dir = Path::new("/an/absolute/path");
         let path = AbsolutePath::try_from("/an/absolute/path").unwrap();
 
-        assert!(RelativePath::try_from_absolute(&path, base_dir).is_err());
+        assert!(RelativePath::try_from_absolute(base_dir, &path,).is_err());
     }
 
     #[test]
@@ -151,7 +151,7 @@ mod test {
             let uri =
                 FileUri::try_from(format!("file://{}/{}", base_dir.display(), expected)).unwrap();
             let absolute_path = uri.to_absolute_path();
-            let relative_path = RelativePath::try_from_absolute(&absolute_path, base_dir).unwrap();
+            let relative_path = RelativePath::try_from_absolute(base_dir, &absolute_path).unwrap();
 
             assert_eq!(RelativePath::new(expected), relative_path);
         }

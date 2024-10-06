@@ -354,7 +354,7 @@ impl DocumentActor {
     async fn handle_watcher_event(&mut self, watcher_event: WatcherEvent) {
         match watcher_event {
             WatcherEvent::Created { file_path } => {
-                let relative_file_path = RelativePath::try_from_path(&file_path, &self.base_dir)
+                let relative_file_path = RelativePath::try_from_path(&self.base_dir, &file_path)
                     .expect("Watcher event should have a path within the base directory");
                 if self.owns(&relative_file_path) {
                     if !self.crdt_doc.file_exists(&relative_file_path) {
@@ -372,7 +372,7 @@ impl DocumentActor {
                 }
             }
             WatcherEvent::Removed { file_path } => {
-                let relative_file_path = RelativePath::try_from_path(&file_path, &self.base_dir)
+                let relative_file_path = RelativePath::try_from_path(&self.base_dir, &file_path)
                     .expect("Watcher event should have a path within the base directory");
                 if self.owns(&relative_file_path) {
                     self.crdt_doc.remove_text(&relative_file_path);
@@ -381,7 +381,7 @@ impl DocumentActor {
             }
             WatcherEvent::Changed { file_path } => {
                 // Only update if we own the file.
-                let relative_file_path = RelativePath::try_from_path(&file_path, &self.base_dir)
+                let relative_file_path = RelativePath::try_from_path(&self.base_dir, &file_path)
                     .expect("Watcher event should have a path within the base directory");
                 if self.owns(&relative_file_path) {
                     let new_content = sandbox::read_file(&self.base_dir, Path::new(&file_path))
@@ -527,7 +527,7 @@ impl DocumentActor {
                 match sandbox::read_file(&self.base_dir, file_path) {
                     Ok(bytes) => {
                         let relative_file_path =
-                            RelativePath::try_from_path(file_path, &self.base_dir)
+                            RelativePath::try_from_path(&self.base_dir, file_path)
                                 .expect("Walked file path should be within base directory");
                         if let Ok(text) = String::from_utf8(bytes) {
                             if init {

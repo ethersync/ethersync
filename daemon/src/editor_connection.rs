@@ -101,7 +101,7 @@ impl EditorConnection {
             EditorProtocolMessageFromEditor::Open { uri } => {
                 let uri = FileUri::try_from(uri.clone()).map_err(anyhow_err_to_protocol_err)?;
                 let absolute_path = uri.to_absolute_path();
-                let relative_path = RelativePath::try_from_absolute(&absolute_path, &self.base_dir)
+                let relative_path = RelativePath::try_from_absolute(&self.base_dir, &absolute_path)
                     .map_err(anyhow_err_to_protocol_err)?;
 
                 debug!("Got an 'open' message for {relative_path}");
@@ -144,7 +144,7 @@ impl EditorConnection {
             EditorProtocolMessageFromEditor::Close { uri } => {
                 let uri = FileUri::try_from(uri.clone()).map_err(anyhow_err_to_protocol_err)?;
                 let absolute_path = uri.to_absolute_path();
-                let relative_path = RelativePath::try_from_absolute(&absolute_path, &self.base_dir)
+                let relative_path = RelativePath::try_from_absolute(&self.base_dir, &absolute_path)
                     .map_err(anyhow_err_to_protocol_err)?;
 
                 debug!("Got a 'close' message for {relative_path}");
@@ -169,7 +169,7 @@ impl EditorConnection {
 
                 let uri = FileUri::try_from(uri.clone()).map_err(anyhow_err_to_protocol_err)?;
                 let absolute_path = uri.to_absolute_path();
-                let relative_path = RelativePath::try_from_absolute(&absolute_path, &self.base_dir)
+                let relative_path = RelativePath::try_from_absolute(&self.base_dir, &absolute_path)
                     .map_err(anyhow_err_to_protocol_err)?;
 
                 if self.ot_servers.get_mut(&relative_path).is_none() {
@@ -219,7 +219,7 @@ impl EditorConnection {
             EditorProtocolMessageFromEditor::Cursor { uri, ranges } => {
                 let uri = FileUri::try_from(uri.clone()).map_err(anyhow_err_to_protocol_err)?;
                 let absolute_path = uri.to_absolute_path();
-                let relative_path = RelativePath::try_from_absolute(&absolute_path, &self.base_dir)
+                let relative_path = RelativePath::try_from_absolute(&self.base_dir, &absolute_path)
                     .map_err(anyhow_err_to_protocol_err)?;
 
                 Ok((
