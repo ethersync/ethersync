@@ -1,6 +1,7 @@
 use crate::document::Document;
 use crate::editor::{self, EditorId, EditorWriter};
 use crate::editor_connection::EditorConnection;
+use crate::path::{AbsolutePath, RelativePath};
 use crate::peer;
 use crate::sandbox;
 use crate::types::{
@@ -10,7 +11,7 @@ use crate::types::{
 };
 use crate::watcher::Watcher;
 use crate::watcher::WatcherEvent;
-use anyhow::{bail, Context, Result};
+use anyhow::Result;
 use automerge::{
     sync::{Message as AutomergeSyncMessage, State as SyncState},
     Patch,
@@ -107,9 +108,12 @@ impl DocumentActor {
             .expect("Could not check for the existence of the persistence file");
 
         let crdt_doc = if persistence_file_exists && !init {
-            info!("Loading persisted CRDT document from {persistence_file:?}");
+            info!(
+                "Loading persisted CRDT document from '{}'",
+                persistence_file.display()
+            );
             let bytes = sandbox::read_file(&base_dir, &persistence_file)
-                .unwrap_or_else(|_| panic!("Could not read file '{persistence_file:?}'"));
+                .unwrap_or_else(|_| panic!("Could not read file '{}'", persistence_file.display()));
             Document::load(&bytes)
         } else {
             Document::default()
@@ -135,7 +139,7 @@ impl DocumentActor {
     }
 
     /// If any editor owns the file, it means that the daemon doesn't have ownership.
-    fn owns(&mut self, file_path: &str) -> bool {
+    fn owns(&mut self, file_path: &RelativePath) -> bool {
         !self
             .editor_connections
             .values()
@@ -147,13 +151,13 @@ impl DocumentActor {
         match message {
             DocMessage::GetContent { response_tx } => {
                 response_tx
-                    .send(self.current_file_content(TEST_FILE_PATH))
+                    .send(self.current_file_content(&RelativePath::new(TEST_FILE_PATH)))
                     .expect("Failed to send content to response channel");
             }
             DocMessage::RandomEdit => {
                 let delta = self.random_delta();
                 let message = ComponentMessage::Edit {
-                    file_path: TEST_FILE_PATH.to_string(),
+                    file_path: RelativePath::new(TEST_FILE_PATH),
                     delta,
                 };
                 self.inside_message_to_doc(&message).await;
@@ -170,14 +174,16 @@ impl DocumentActor {
                 if self.save_fully {
                     debug!("Persisting fully!");
                     let bytes = self.crdt_doc.save();
-                    sandbox::write_file(&self.base_dir, &persistence_file, &bytes)
-                        .unwrap_or_else(|_| panic!("Failed to persist to {persistence_file:?}"));
+                    sandbox::write_file(&self.base_dir, &persistence_file, &bytes).unwrap_or_else(
+                        |_| panic!("Failed to persist to '{}'", persistence_file.display()),
+                    );
                     self.save_fully = false
                 } else {
                     debug!("Persisting incrementally!");
                     let bytes = self.crdt_doc.save_incremental();
-                    sandbox::append_file(&self.base_dir, &persistence_file, &bytes)
-                        .unwrap_or_else(|_| panic!("Failed to persist to {persistence_file:?}"));
+                    sandbox::append_file(&self.base_dir, &persistence_file, &bytes).unwrap_or_else(
+                        |_| panic!("Failed to persist to '{}'", persistence_file.display()),
+                    );
                 }
             }
             DocMessage::ReceiveSyncMessage {
@@ -201,10 +207,11 @@ impl DocumentActor {
                             cursor_states.push(cursor_state);
                         }
                         PatchEffect::FileRemoval(file_path) => {
-                            info!("Removing file '{file_path}'.");
+                            info!("Removing file {file_path}.");
+
                             sandbox::remove_file(
                                 &self.base_dir,
-                                Path::new(&self.absolute_path_for_file_path(&file_path)),
+                                &self.absolute_path_for_file_path(&file_path),
                             )
                             .unwrap_or_else(|err| {
                                 warn!("Failed to remove file {file_path}: {err}");
@@ -251,7 +258,7 @@ impl DocumentActor {
                 self.editor_connections.insert(
                     id,
                     (
-                        EditorConnection::new(editor_connection_id, &self.base_dir),
+                        EditorConnection::new(editor_connection_id, self.base_dir.clone()),
                         editor_writer,
                     ),
                 );
@@ -266,27 +273,8 @@ impl DocumentActor {
         }
     }
 
-    fn file_path_for_uri(&self, uri: &str) -> Result<String> {
-        // If uri starts with "file://", we remove it.
-        let absolute_path = uri.strip_prefix("file://").unwrap_or(uri);
-
-        // Check that it's an absolute path.
-        if !absolute_path.starts_with('/') {
-            bail!("Path '{absolute_path}' is not an absolute file:// URI");
-        }
-
-        let base_dir_string = self.base_dir.display().to_string() + "/";
-
-        Ok(absolute_path
-            .strip_prefix(&base_dir_string)
-            .with_context(|| {
-                format!("Path '{absolute_path}' is not within base dir '{base_dir_string}'")
-            })?
-            .to_string())
-    }
-
-    fn absolute_path_for_file_path(&self, file_path: &str) -> String {
-        format!("{}/{}", self.base_dir.display(), file_path)
+    fn absolute_path_for_file_path(&self, file_path: &RelativePath) -> AbsolutePath {
+        AbsolutePath::from_parts(&self.base_dir, file_path).expect("base_dir should be absolute")
     }
 
     async fn react_to_message_from_editor(
@@ -366,13 +354,8 @@ impl DocumentActor {
     async fn handle_watcher_event(&mut self, watcher_event: WatcherEvent) {
         match watcher_event {
             WatcherEvent::Created { file_path } => {
-                let relative_file_path = self
-                    .file_path_for_uri(
-                        file_path
-                            .to_str()
-                            .expect("Failed to convert watcher path to str"),
-                    )
-                    .expect("Could not determine file path when trying to create file");
+                let relative_file_path = RelativePath::try_from_path(&self.base_dir, &file_path)
+                    .expect("Watcher event should have a path within the base directory");
                 if self.owns(&relative_file_path) {
                     if !self.crdt_doc.file_exists(&relative_file_path) {
                         let content = sandbox::read_file(&self.base_dir, Path::new(&file_path))
@@ -380,7 +363,7 @@ impl DocumentActor {
                         if let Ok(content) = String::from_utf8(content) {
                             self.crdt_doc.initialize_text(&content, &relative_file_path);
                         } else {
-                            warn!("Ignoring newly created non-UTF-8 file '{relative_file_path}'");
+                            warn!("Ignoring newly created non-UTF-8 file {relative_file_path}");
                         }
                     } else {
                         debug!("Received watcher creation event, but file already exists in CRDT.")
@@ -389,13 +372,8 @@ impl DocumentActor {
                 }
             }
             WatcherEvent::Removed { file_path } => {
-                let relative_file_path = self
-                    .file_path_for_uri(
-                        file_path
-                            .to_str()
-                            .expect("Failed to convert watcher path to str"),
-                    )
-                    .expect("Could not determine file path when trying to remove file");
+                let relative_file_path = RelativePath::try_from_path(&self.base_dir, &file_path)
+                    .expect("Watcher event should have a path within the base directory");
                 if self.owns(&relative_file_path) {
                     self.crdt_doc.remove_text(&relative_file_path);
                     let _ = self.doc_changed_ping_tx.send(());
@@ -403,13 +381,8 @@ impl DocumentActor {
             }
             WatcherEvent::Changed { file_path } => {
                 // Only update if we own the file.
-                let relative_file_path = self
-                    .file_path_for_uri(
-                        file_path
-                            .to_str()
-                            .expect("Failed to convert watcher path to str"),
-                    )
-                    .expect("Could not determine file path when trying to create file");
+                let relative_file_path = RelativePath::try_from_path(&self.base_dir, &file_path)
+                    .expect("Watcher event should have a path within the base directory");
                 if self.owns(&relative_file_path) {
                     let new_content = sandbox::read_file(&self.base_dir, Path::new(&file_path))
                         .expect("Failed to read changed file");
@@ -417,7 +390,7 @@ impl DocumentActor {
                         self.crdt_doc.update_text(&new_content, &relative_file_path);
                         let _ = self.doc_changed_ping_tx.send(());
                     } else {
-                        warn!("Ignoring changed non-UTF-8 file '{relative_file_path}'");
+                        warn!("Ignoring changed non-UTF-8 file {relative_file_path}");
                     }
                 }
             }
@@ -438,7 +411,7 @@ impl DocumentActor {
 
     fn random_delta(&self) -> TextDelta {
         let text = self
-            .current_file_content(TEST_FILE_PATH)
+            .current_file_content(&RelativePath::new(TEST_FILE_PATH))
             .expect("Should have initialized text before performing random edit");
         let options = ["d", "ü", "🥕", "💚", "\n"];
         let random_text: String = (1..5)
@@ -491,7 +464,7 @@ impl DocumentActor {
         }
     }
 
-    fn maybe_write_file(&mut self, file_path: &str) {
+    fn maybe_write_file(&mut self, file_path: &RelativePath) {
         // Only write to the file if editor *doesn't* have the file open.
         if self.owns(file_path) {
             if let Ok(text) = self.current_file_content(file_path) {
@@ -499,19 +472,19 @@ impl DocumentActor {
                 debug!("Writing to {abs_path}.");
 
                 // Create the parent directorie(s), if neccessary.
-                let parent_dir = Path::new(&abs_path).parent().unwrap();
+                let parent_dir = abs_path.parent().unwrap();
                 sandbox::create_dir_all(&self.base_dir, parent_dir).unwrap_or_else(|_| {
                     panic!("Could not create parent directory {}", parent_dir.display())
                 });
 
                 // If the file didn't exist before, log it.
-                if !sandbox::exists(&self.base_dir, Path::new(&abs_path))
+                if !sandbox::exists(&self.base_dir, &abs_path)
                     .expect("Failed to check for file existence before writing to it")
                 {
-                    info!("Creating '{file_path}'.");
+                    info!("Creating {file_path}.");
                 }
 
-                sandbox::write_file(&self.base_dir, Path::new(&abs_path), &text.into_bytes())
+                sandbox::write_file(&self.base_dir, &abs_path, &text.into_bytes())
                     .unwrap_or_else(|_| panic!("Could not write to file {abs_path}"));
             } else {
                 warn!("Failed to get content of file '{file_path}' when writing to disk. Key should have existed?");
@@ -552,13 +525,9 @@ impl DocumentActor {
                 let file_path = dir_entry.path();
                 match sandbox::read_file(&self.base_dir, file_path) {
                     Ok(bytes) => {
-                        let relative_file_path = self
-                            .file_path_for_uri(
-                                file_path
-                                    .to_str()
-                                    .expect("Could not convert PathBuf to str"),
-                            )
-                            .expect("Could not convert uri to file path");
+                        let relative_file_path =
+                            RelativePath::try_from_path(&self.base_dir, file_path)
+                                .expect("Walked file path should be within base directory");
                         if let Ok(text) = String::from_utf8(bytes) {
                             if init {
                                 self.crdt_doc.initialize_text(&text, &relative_file_path);
@@ -566,27 +535,25 @@ impl DocumentActor {
                                 self.crdt_doc.update_text(&text, &relative_file_path);
                             }
                         } else {
-                            warn!("Ignoring non-UTF-8 file '{}'", relative_file_path)
+                            warn!("Ignoring non-UTF-8 file {relative_file_path}",)
                         }
                     }
                     Err(e) => {
-                        warn!("Failed to read file {}: {e}", file_path.display());
+                        warn!("Failed to read file '{}': {e}", file_path.display());
                     }
                 }
             });
         for file_path in self.crdt_doc.files() {
             let absolute_file_path = self.absolute_path_for_file_path(&file_path);
-            if !sandbox::exists(&self.base_dir, Path::new(&absolute_file_path)).expect("") {
-                warn!(
-                    "File '{file_path}' exists in the CRDT, but not on disk. Deleting from CRDT."
-                );
+            if !sandbox::exists(&self.base_dir, &absolute_file_path).expect("") {
+                warn!("File {file_path} exists in the CRDT, but not on disk. Deleting from CRDT.");
                 self.crdt_doc.remove_text(&file_path);
             }
         }
         let _ = self.doc_changed_ping_tx.send(());
     }
 
-    fn current_file_content(&self, file_path: &str) -> Result<String> {
+    fn current_file_content(&self, file_path: &RelativePath) -> Result<String> {
         self.crdt_doc.current_file_content(file_path)
     }
 
@@ -617,7 +584,7 @@ impl DocumentActor {
                 self.crdt_doc.store_cursor_position(
                     cursor_id,
                     name.clone(),
-                    file_path.clone(),
+                    &file_path,
                     ranges.clone(),
                 );
                 let _ = self.doc_changed_ping_tx.send(());
@@ -663,7 +630,7 @@ impl DocumentActor {
             &ComponentMessage::Cursor {
                 cursor_id: cursor_id.to_string(),
                 name: None,
-                file_path: "".to_string(),
+                file_path: RelativePath::new(""), // TODO: Fix by changing the "cursor" message?
                 ranges: vec![],
             },
         )
@@ -868,9 +835,9 @@ mod tests {
                     true,
                 )
             }
-            fn assert_file_content(&self, file_path: &str, content: &str) {
+            fn assert_file_content(&self, file_path: &RelativePath, content: &str) {
                 // unfortunately anyhow::Error doesn't implement PartialEq, so we'll rather unwrap.
-                assert_eq!(self.current_file_content(file_path).unwrap(), content);
+                assert_eq!(self.current_file_content(&file_path).unwrap(), content);
             }
         }
 
@@ -894,9 +861,9 @@ mod tests {
 
             actor.read_current_content_from_dir(true);
 
-            actor.assert_file_content("file1", "content1");
-            actor.assert_file_content("file2", "content2");
-            actor.assert_file_content("sub/file3", "content3");
+            actor.assert_file_content(&RelativePath::new("file1"), "content1");
+            actor.assert_file_content(&RelativePath::new("file2"), "content2");
+            actor.assert_file_content(&RelativePath::new("sub/file3"), "content3");
         }
 
         /*
@@ -946,66 +913,6 @@ mod tests {
                 b"content3",
             );
         }
-        */
-
-        #[test]
-        fn test_file_path_for_uri_fails_not_absolute() {
-            let dir = setup_filesystem_for_testing();
-            let actor = DocumentActor::setup_for_testing(&dir);
-
-            assert!(actor
-                .file_path_for_uri("this/is/absolutely/not/absolute")
-                .is_err());
-        }
-
-        #[test]
-        fn test_file_path_for_uri_fails_not_within_base_dir() {
-            let dir = setup_filesystem_for_testing();
-            let actor = DocumentActor::setup_for_testing(&dir);
-
-            assert!(actor
-                .file_path_for_uri("/this/is/not/the/base_dir/file")
-                .is_err());
-        }
-
-        #[test]
-        fn test_file_path_for_uri_fails_not_within_base_dir_suffix() {
-            let dir = setup_filesystem_for_testing();
-            let file_in_suffix_dir = dir.path().to_str().unwrap().to_string() + "2/file";
-            let actor = DocumentActor::setup_for_testing(&dir);
-
-            assert!(actor.file_path_for_uri(&file_in_suffix_dir).is_err());
-        }
-
-        #[test]
-        fn test_file_path_for_uri_fails_only_base_dir() {
-            let dir = setup_filesystem_for_testing();
-            let actor = DocumentActor::setup_for_testing(&dir);
-
-            assert!(actor
-                .file_path_for_uri(&format!("{}", dir.path().display()))
-                .is_err());
-        }
-
-        #[test]
-        fn test_file_path_for_uri_works() {
-            let dir = setup_filesystem_for_testing();
-            let actor = DocumentActor::setup_for_testing(&dir);
-
-            let file_paths = vec!["file1", "sub/file3", "sub"];
-            let prefix_options = vec!["file://", ""];
-            for prefix in prefix_options {
-                for &expected in &file_paths {
-                    let uri = format!("{}{}/{}", prefix, dir.path().display(), expected);
-
-                    // unfortunately anyhow::Error doesn't implement PartialEq, so we'll rather unwrap.
-                    assert_eq!(actor.file_path_for_uri(&uri).unwrap(), expected);
-                }
-            }
-        }
-
-        /*
-        TODO: Same as test_maybe_write_files_changed_in_file_deltas: We'd need a real editor connection.
 
         #[tokio::test]
         async fn test_simulate_editor_edits() {

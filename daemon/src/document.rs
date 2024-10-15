@@ -1,4 +1,7 @@
-use crate::types::{CursorState, EditorTextDelta, Range, TextDelta};
+use crate::{
+    path::RelativePath,
+    types::{CursorState, EditorTextDelta, Range, TextDelta},
+};
 use anyhow::Result;
 use automerge::{
     patches::TextRepresentation,
@@ -78,7 +81,7 @@ impl Document {
         self.doc.sync().generate_sync_message(peer_state)
     }
 
-    pub fn apply_delta_to_doc(&mut self, delta: &TextDelta, file_path: &str) {
+    pub fn apply_delta_to_doc(&mut self, delta: &TextDelta, file_path: &RelativePath) {
         let text_obj = self
             .text_obj(file_path)
             .expect("Couldn't get automerge text object, so not able to modify it");
@@ -103,7 +106,7 @@ impl Document {
         }
     }
 
-    pub fn current_file_content(&self, file_path: &str) -> Result<String> {
+    pub fn current_file_content(&self, file_path: &RelativePath) -> Result<String> {
         self.text_obj(file_path).map(|to| {
             self.doc
                 .text(to)
@@ -111,8 +114,8 @@ impl Document {
         })
     }
 
-    pub fn initialize_text(&mut self, text: &str, file_path: &str) {
-        info!("Initializing '{file_path}' in CRDT.");
+    pub fn initialize_text(&mut self, text: &str, file_path: &RelativePath) {
+        info!("Initializing {file_path} in CRDT.");
 
         // Now it should definitely work?
         let file_map = self
@@ -130,11 +133,11 @@ impl Document {
 
     // This function is used to integrate text that was changed while the daemon was offline.
     // We need to calculate the patches compared to the current CRDT content, and apply them.
-    pub fn update_text(&mut self, desired_text: &str, file_path: &str) {
+    pub fn update_text(&mut self, desired_text: &str, file_path: &RelativePath) {
         if self.text_obj(file_path).is_ok() {
             let current_text = self
                 .current_file_content(file_path)
-                .unwrap_or_else(|_| panic!("Failed to get '{file_path}' text object"));
+                .unwrap_or_else(|_| panic!("Failed to get {file_path} text object"));
 
             let chunks = dissimilar::diff(&current_text, desired_text);
             if let [] | [Chunk::Equal(_)] = chunks.as_slice() {
@@ -142,16 +145,16 @@ impl Document {
             }
 
             let text_delta: TextDelta = chunks.into();
-            info!("Updating '{file_path}' in CRDT with delta: {text_delta:?}");
+            info!("Updating {file_path} in CRDT with delta: {text_delta:?}");
             self.apply_delta_to_doc(&text_delta, file_path);
         } else {
             // The file doesn't exist in the CRDT yet, so we need to initialize it.
-            info!("Creating '{file_path}' in CRDT.");
+            info!("Creating {file_path} in CRDT.");
             self.initialize_text(desired_text, file_path);
         }
     }
 
-    pub fn remove_text(&mut self, file_path: &str) {
+    pub fn remove_text(&mut self, file_path: &RelativePath) {
         if self.text_obj(file_path).is_err() {
             debug!("Failed to get {file_path} Text object, so I can't remove it from the CRDT");
             return;
@@ -178,7 +181,7 @@ impl Document {
         }
     }
 
-    fn text_obj(&self, file_path: &str) -> Result<automerge::ObjId> {
+    fn text_obj(&self, file_path: &RelativePath) -> Result<automerge::ObjId> {
         let file_map = self.top_level_map_obj("files")?;
         let text_obj = self
             .doc
@@ -193,15 +196,18 @@ impl Document {
         }
     }
 
-    pub fn files(&self) -> Vec<String> {
+    pub fn files(&self) -> Vec<RelativePath> {
         if let Ok(file_map) = self.top_level_map_obj("files") {
-            self.doc.keys(file_map).collect()
+            self.doc
+                .keys(file_map)
+                .map(|k| RelativePath::new(&k))
+                .collect()
         } else {
             vec![]
         }
     }
 
-    pub fn file_exists(&self, file_path: &str) -> bool {
+    pub fn file_exists(&self, file_path: &RelativePath) -> bool {
         self.text_obj(file_path).is_ok()
     }
 
@@ -209,7 +215,7 @@ impl Document {
         &mut self,
         cursor_id: &str,
         name: Option<String>,
-        file_path: String,
+        file_path: &RelativePath,
         ranges: Vec<Range>,
     ) {
         let state_map = self
@@ -222,7 +228,7 @@ impl Document {
         let cursor_state = CursorState {
             cursor_id: cursor_id.to_owned(),
             name,
-            file_path,
+            file_path: file_path.clone(),
             ranges,
         };
         let data = serde_json::to_string(&cursor_state).expect("Could not serialize cursor state");
@@ -236,14 +242,17 @@ impl Document {
         // We try to set an empty cursor position, but in case we don't have any file in the
         // project its not a big deal if it stays.
         if let Some(file_path) = self.get_valid_file_path() {
-            self.store_cursor_position(cursor_id, None, file_path, vec![]);
+            self.store_cursor_position(cursor_id, None, &file_path, vec![]);
         }
     }
 
-    fn get_valid_file_path(&self) -> Option<String> {
+    fn get_valid_file_path(&self) -> Option<RelativePath> {
         let file_map = self.top_level_map_obj("files");
         if let Ok(file_map) = file_map {
-            self.doc.keys(file_map).next()
+            self.doc
+                .keys(file_map)
+                .next()
+                .map(|k| RelativePath::new(&k))
         } else {
             None
         }
@@ -256,9 +265,9 @@ mod tests {
     use crate::types::factories::*;
 
     impl Document {
-        fn assert_file_content(&self, file_path: &str, content: &str) {
+        fn assert_file_content(&self, file_path: &RelativePath, content: &str) {
             // unfortunately anyhow::Error doesn't implement PartialEq, so we'll rather unwrap.
-            assert_eq!(self.current_file_content(file_path).unwrap(), content);
+            assert_eq!(self.current_file_content(&file_path).unwrap(), content);
         }
     }
 
@@ -266,39 +275,46 @@ mod tests {
     fn can_initialize_content() {
         let mut document = Document::default();
         let text = "To be or not to be, that is the question";
+        let file = RelativePath::new("text");
 
-        document.initialize_text(text, "text");
+        document.initialize_text(text, &file);
 
-        document.assert_file_content("text", text);
+        document.assert_file_content(&file, text);
     }
 
     #[test]
     fn can_initialize_content_multifile() {
         let mut document = Document::default();
+
         let text = "To be or not to be, that is the question";
         let text2 = "2b||!2b, that is the question";
 
-        document.initialize_text(text, "text");
-        document.initialize_text(text2, "text2");
+        let file1 = RelativePath::new("text");
+        let file2 = RelativePath::new("text2");
 
-        document.assert_file_content("text", text);
-        document.assert_file_content("text2", text2);
+        document.initialize_text(text, &file1);
+        document.initialize_text(text2, &file2);
+
+        document.assert_file_content(&file1, text);
+        document.assert_file_content(&file2, text2);
     }
 
     #[test]
     fn retrieve_content_file_nonexistent_errs() {
         let document = Document::default();
         document
-            .current_file_content("text")
+            .current_file_content(&RelativePath::new("text"))
             .expect_err("File shouldn't exist");
     }
 
     fn apply_delta_to_doc_works(initial: &str, delta: &TextDelta, expected: &str) {
         let mut document = Document::default();
-        document.initialize_text(initial, "text");
-        document.apply_delta_to_doc(delta, "text");
+        let file = RelativePath::new("text");
 
-        document.assert_file_content("text", expected);
+        document.initialize_text(initial, &file);
+        document.apply_delta_to_doc(delta, &file);
+
+        document.assert_file_content(&file, expected);
     }
 
     #[test]
@@ -341,14 +357,18 @@ mod tests {
     #[test]
     fn apply_delta_only_changes_specified_file() {
         let mut document = Document::default();
-        document.initialize_text("", "text");
-        document.initialize_text("", "text2");
+
+        let file1 = RelativePath::new("text");
+        let file2 = RelativePath::new("text2");
+
+        document.initialize_text("", &file1);
+        document.initialize_text("", &file2);
 
         let delta = insert(0, "foobar");
-        document.apply_delta_to_doc(&delta, "text");
+        document.apply_delta_to_doc(&delta, &file1);
 
-        document.assert_file_content("text", "foobar");
-        document.assert_file_content("text2", "");
+        document.assert_file_content(&file1, "foobar");
+        document.assert_file_content(&file2, "");
     }
 
     /// This set of tests has some documentation character to show to ourselves,
@@ -364,7 +384,7 @@ mod tests {
             // Stops for now and waits for a response
             assert!(document.generate_sync_message(&mut state).is_none());
 
-            document.initialize_text("", "text");
+            document.initialize_text("", &RelativePath::new("text"));
             // We have progressed our state, so update all peers about that.
             assert!(document.generate_sync_message(&mut state).is_some());
             // Again, stop, until peers tell us if they want more information.
