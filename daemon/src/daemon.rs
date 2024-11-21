@@ -358,8 +358,19 @@ impl DocumentActor {
                     .expect("Watcher event should have a path within the base directory");
                 if self.owns(&relative_file_path) {
                     if !self.crdt_doc.file_exists(&relative_file_path) {
-                        let content = sandbox::read_file(&self.base_dir, Path::new(&file_path))
-                            .expect("Failed to read newly created file");
+                        let content = match sandbox::read_file(
+                            &self.base_dir,
+                            Path::new(&file_path),
+                        ) {
+                            Ok(content) => content,
+                            Err(e) => {
+                                warn!(
+                                    "The file watcher noticed a file creation for {relative_file_path}, \
+                                    but we couldn't read it: {e} (probably it disappeared again already?)"
+                                );
+                                return;
+                            }
+                        };
                         if let Ok(content) = String::from_utf8(content) {
                             self.crdt_doc.initialize_text(&content, &relative_file_path);
                         } else {
@@ -384,8 +395,19 @@ impl DocumentActor {
                 let relative_file_path = RelativePath::try_from_path(&self.base_dir, &file_path)
                     .expect("Watcher event should have a path within the base directory");
                 if self.owns(&relative_file_path) {
-                    let new_content = sandbox::read_file(&self.base_dir, Path::new(&file_path))
-                        .expect("Failed to read changed file");
+                    let new_content = match sandbox::read_file(
+                        &self.base_dir,
+                        Path::new(&file_path),
+                    ) {
+                        Ok(content) => content,
+                        Err(e) => {
+                            warn!(
+                                    "The file watcher noticed a file change for {relative_file_path}, \
+                                    but we couldn't read it: {e} (probably it was deleted after the change?)"
+                            );
+                            return;
+                        }
+                    };
                     if let Ok(new_content) = String::from_utf8(new_content) {
                         self.crdt_doc.update_text(&new_content, &relative_file_path);
                         let _ = self.doc_changed_ping_tx.send(());
