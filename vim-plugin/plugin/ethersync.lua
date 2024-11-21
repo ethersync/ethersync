@@ -2,6 +2,9 @@ local changetracker = require("changetracker")
 local cursor = require("cursor")
 local debug = require("logging").debug
 
+-- We only want to communicate a possibly annoying info once.
+local did_print_autoread_info = false
+
 -- JSON-RPC connection.
 local client
 
@@ -138,6 +141,16 @@ local function track_edits(filename, uri)
     end)
 end
 
+local function ensure_autoread_is_off()
+    if vim.o.autoread then
+        if not did_print_autoread_info then
+            print("Ethersync works better when autoread is off, so we're disabling it for you (in Ethersync buffers).")
+            did_print_autoread_info = true
+        end
+        vim.bo.autoread = false
+    end
+end
+
 -- Forward buffer edits to daemon as well as subscribe to daemon events ("open").
 local function on_buffer_open()
     local filename = vim.fn.expand("%:p")
@@ -161,6 +174,7 @@ local function on_buffer_open()
 
     send_request("open", { uri = uri }, function()
         debug("Tracking Edits")
+        ensure_autoread_is_off()
         track_edits(filename, uri)
     end)
 end
