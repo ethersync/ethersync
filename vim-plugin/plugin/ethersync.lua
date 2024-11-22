@@ -2,6 +2,9 @@ local changetracker = require("changetracker")
 local cursor = require("cursor")
 local debug = require("logging").debug
 
+-- We only want to communicate a possibly annoying info once.
+local did_print_autoread_info = false
+
 -- JSON-RPC connection.
 local client
 
@@ -138,6 +141,19 @@ local function track_edits(filename, uri)
     end)
 end
 
+-- Disabling 'autoread' prevents Neovim from reloading the file when it changes externally,
+-- but only in the case where the buffer hasn't been modified in Neovim already.
+-- For the conflicting case, we prevent a popup dialog by setting the FileChangedShell autocommand below.
+local function ensure_autoread_is_off()
+    if vim.o.autoread then
+        if not did_print_autoread_info then
+            print("Ethersync works better when autoread is off, so we're disabling it for you (in Ethersync buffers).")
+            did_print_autoread_info = true
+        end
+        vim.bo.autoread = false
+    end
+end
+
 -- Forward buffer edits to daemon as well as subscribe to daemon events ("open").
 local function on_buffer_open()
     local filename = vim.fn.expand("%:p")
@@ -161,8 +177,17 @@ local function on_buffer_open()
 
     send_request("open", { uri = uri }, function()
         debug("Tracking Edits")
+        ensure_autoread_is_off()
         track_edits(filename, uri)
     end)
+end
+
+local function on_buffer_new_file()
+    -- Ensure that the file exists on disk before we "open" it in the daemon,
+    -- to prevent a warning that the file has been created externally (W13).
+    -- This resolves issue #92.
+    vim.cmd("silent write")
+    on_buffer_open()
 end
 
 local function on_buffer_close()
@@ -196,8 +221,13 @@ local function print_info()
     end
 end
 
-vim.api.nvim_create_autocmd({ "BufRead", "BufNewFile" }, { callback = on_buffer_open })
+vim.api.nvim_create_autocmd({ "BufRead" }, { callback = on_buffer_open })
+vim.api.nvim_create_autocmd({ "BufNewFile" }, { callback = on_buffer_new_file })
 vim.api.nvim_create_autocmd("BufUnload", { callback = on_buffer_close })
+
+-- This autocommand prevents that, when a file changes on disk while Neovim has the file open,
+-- it should not attempt to reload it. Related to issue #176.
+vim.api.nvim_create_autocmd("FileChangedShell", { callback = function() end })
 
 vim.api.nvim_create_user_command("EthersyncInfo", print_info, {})
 vim.api.nvim_create_user_command("EthersyncJumpToCursor", cursor.jump_to_cursor, {})
