@@ -141,6 +141,9 @@ local function track_edits(filename, uri)
     end)
 end
 
+-- Disabling 'autoread' prevents Neovim from reloading the file when it changes externally,
+-- but only in the case where the buffer hasn't been modified in Neovim already.
+-- For the conflicting case, we prevent a popup dialog by setting the FileChangedShell autocommand below.
 local function ensure_autoread_is_off()
     if vim.o.autoread then
         if not did_print_autoread_info then
@@ -212,6 +215,10 @@ end
 
 vim.api.nvim_create_autocmd({ "BufRead", "BufNewFile" }, { callback = on_buffer_open })
 vim.api.nvim_create_autocmd("BufUnload", { callback = on_buffer_close })
+
+-- This autocommand prevents that, when a file changes on disk while Neovim has the file open,
+-- it should not attempt to reload it.
+vim.api.nvim_create_autocmd("FileChangedShell", { callback = function() end })
 
 vim.api.nvim_create_user_command("EthersyncInfo", print_info, {})
 vim.api.nvim_create_user_command("EthersyncJumpToCursor", cursor.jump_to_cursor, {})
