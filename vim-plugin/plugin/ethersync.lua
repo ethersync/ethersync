@@ -182,6 +182,14 @@ local function on_buffer_open()
     end)
 end
 
+local function on_buffer_new_file()
+    -- Ensure that the file exists on disk before we "open" it in the daemon,
+    -- to prevent a warning that the file has been created externally (W13).
+    -- This resolves issue #92.
+    vim.cmd("silent write")
+    on_buffer_open()
+end
+
 local function on_buffer_close()
     local closed_file = vim.fn.expand("<afile>:p")
     debug("on_buffer_close: " .. closed_file)
@@ -213,11 +221,12 @@ local function print_info()
     end
 end
 
-vim.api.nvim_create_autocmd({ "BufRead", "BufNewFile" }, { callback = on_buffer_open })
+vim.api.nvim_create_autocmd({ "BufRead" }, { callback = on_buffer_open })
+vim.api.nvim_create_autocmd({ "BufNewFile" }, { callback = on_buffer_new_file })
 vim.api.nvim_create_autocmd("BufUnload", { callback = on_buffer_close })
 
 -- This autocommand prevents that, when a file changes on disk while Neovim has the file open,
--- it should not attempt to reload it.
+-- it should not attempt to reload it. Related to issue #176.
 vim.api.nvim_create_autocmd("FileChangedShell", { callback = function() end })
 
 vim.api.nvim_create_user_command("EthersyncInfo", print_info, {})
