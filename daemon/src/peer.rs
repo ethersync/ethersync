@@ -198,7 +198,15 @@ impl P2PActor {
                         self.spawn_peer_sync(stream);
                     }
                 }
-                event => tracing::debug!(?event),
+                libp2p::swarm::SwarmEvent::OutgoingConnectionError { error, .. } => {
+                    error!("Failed to connect, the peer multiaddress or secret you provided might be wrong?");
+                    debug!("{:?}", error);
+                }
+                libp2p::swarm::SwarmEvent::IncomingConnectionError { error, .. } => {
+                    error!("Someone tried to connect to you, but failed. The secret they provided might be wrong?");
+                    debug!("{:?}", error);
+                }
+                event => debug!(?event),
             }
         }
     }
