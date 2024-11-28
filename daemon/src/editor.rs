@@ -2,9 +2,11 @@
 use crate::daemon::{DocMessage, DocumentActorHandle};
 use crate::sandbox;
 use crate::types::EditorProtocolObject;
+use anyhow::{bail, Context, Result};
 use futures::StreamExt;
 use std::{
-    io,
+    fs, io,
+    os::unix::fs::PermissionsExt,
     path::{Path, PathBuf},
 };
 use tokio::{
@@ -37,10 +39,31 @@ impl Encoder<EditorProtocolObject> for EditorProtocolCodec {
     }
 }
 
+fn is_user_readable_only(socket_path: &Path) -> Result<()> {
+    let parent_dir = socket_path
+        .parent()
+        .context("The socket path should not be the root directory")?;
+    let current_permissions = fs::metadata(parent_dir)
+        .context("Expected to have access to metadata of the socket path's parent")?
+        .permissions()
+        .mode();
+    // Group and others should not have any permissions.
+    let allowed_permissions = 0o77700u32;
+    if current_permissions | allowed_permissions != allowed_permissions {
+        bail!("For security reasons, the parent directory of the socket must only be accessible by the current user");
+    }
+    Ok(())
+}
+
 /// # Panics
 ///
 /// Will panic if we fail to listen on the socket, or if we fail to accept an incoming connection.
 pub async fn make_editor_connection(socket_path: PathBuf, document_handle: DocumentActorHandle) {
+    // Make sure the parent directory of the socket is only accessible by the current user.
+    if let Err(description) = is_user_readable_only(&socket_path) {
+        panic!("{}", description);
+    }
+
     // Using the sandbox method here is technically unnecessary,
     // but we want to really run all path operations through the sandbox module.
     if sandbox::exists(Path::new("/"), Path::new(&socket_path))
@@ -48,6 +71,7 @@ pub async fn make_editor_connection(socket_path: PathBuf, document_handle: Docum
     {
         sandbox::remove_file(Path::new("/"), &socket_path).expect("Could not remove socket");
     }
+
     let result = accept_editor_loop(&socket_path, document_handle).await;
     match result {
         Ok(()) => {}

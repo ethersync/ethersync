@@ -1,14 +1,18 @@
-use anyhow::{Context, Result};
+use anyhow::{bail, Context, Result};
 use clap::{parser::ValueSource, CommandFactory, FromArgMatches, Parser, Subcommand};
 use ethersync::peer::PeerConnectionInfo;
 use ethersync::{daemon::Daemon, logging, sandbox};
-use std::path::{Path, PathBuf};
+use std::{
+    fs,
+    os::unix::fs::PermissionsExt,
+    path::{Path, PathBuf},
+};
 use tokio::signal;
 use tracing::{error, info};
 
 mod jsonrpc_forwarder;
 
-const DEFAULT_SOCKET_PATH: &str = "/tmp/ethersync";
+const DEFAULT_SOCKET_NAME: &str = "ethersync";
 const ETHERSYNC_CONFIG_DIR: &str = ".ethersync";
 const ETHERSYNC_CONFIG_FILE: &str = "config";
 const ETHERSYNC_SOCKET_ENV_VAR: &str = "ETHERSYNC_SOCKET";
@@ -22,10 +26,10 @@ struct Cli {
     /// Path to the Unix domain socket to use for communication between daemon and editors.
     #[arg(
       short, long, global = true,
-      default_value = DEFAULT_SOCKET_PATH,
+      default_value = DEFAULT_SOCKET_NAME,
       env = ETHERSYNC_SOCKET_ENV_VAR,
     )]
-    socket_path: PathBuf,
+    socket_name: PathBuf,
     /// Enable verbose debug output.
     #[arg(short, long, global = true)]
     debug: bool,
@@ -61,6 +65,37 @@ fn has_ethersync_directory(dir: &Path) -> bool {
     sandbox::exists(dir, &ethersync_dir).expect("Failed to check") && ethersync_dir.is_dir()
 }
 
+fn is_valid_socket_name(socket_name: &Path) -> Result<()> {
+    if socket_name.components().count() != 1 {
+        bail!("The socket name must be a single path component");
+    }
+    if let std::path::Component::Normal(_) = socket_name
+        .components()
+        .next()
+        .expect("The component count of socket_name was previously checked to be non-empty")
+    {
+        // All good :)
+    } else {
+        bail!("The socket name must be a plain filename");
+    }
+    Ok(())
+}
+
+fn get_fallback_socket_dir() -> String {
+    let socket_dir = format!(
+        "/tmp/ethersync-{}",
+        std::env::var("USER").expect("$USER should be set")
+    );
+    if !fs::exists(&socket_dir).expect("Should be able to test for existence of directory in /tmp")
+    {
+        fs::create_dir(&socket_dir).expect("Should be able to create a directory in /tmp");
+        let permissions = fs::Permissions::from_mode(0o700);
+        fs::set_permissions(&socket_dir, permissions)
+            .expect("Should be able to set permissions for a directory we just created");
+    }
+    socket_dir
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
     let default_panic = std::panic::take_hook();
@@ -77,7 +112,12 @@ async fn main() -> Result<()> {
 
     logging::initialize(cli.debug);
 
-    let socket_path = cli.socket_path;
+    let socket_dir = std::env::var("XDG_RUNTIME_DIR").unwrap_or_else(|_| get_fallback_socket_dir());
+    let socket_dir = Path::new(&socket_dir);
+    if let Err(description) = is_valid_socket_name(&cli.socket_name) {
+        panic!("{}", description);
+    }
+    let socket_path = socket_dir.join(cli.socket_name);
 
     match cli.command {
         Commands::Daemon {
@@ -87,7 +127,7 @@ async fn main() -> Result<()> {
             secret,
             init,
         } => {
-            if matches.value_source("socket_path").unwrap() == ValueSource::EnvVariable {
+            if matches.value_source("socket_name").unwrap() == ValueSource::EnvVariable {
                 info!(
                     "Using socket path {} from env var {}",
                     socket_path.display(),
