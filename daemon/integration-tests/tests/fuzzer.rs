@@ -1,6 +1,7 @@
 use ethersync_integration_tests::actors::{Actor, Neovim};
 
 use ethersync::daemon::{Daemon, TEST_FILE_PATH};
+use ethersync::editor::get_socket_path;
 use ethersync::logging;
 use ethersync::peer::PeerConnectionInfo;
 use ethersync::sandbox;
@@ -46,54 +47,56 @@ async fn main() {
     let debug_logging = std::env::args().any(|arg| arg == "-v");
     logging::initialize(debug_logging);
 
+    let sleep_duration = std::time::Duration::from_millis(5000);
+
     // Set up files in project directories.
     let (dir, file) = initialize_project();
     let (dir2, file2) = initialize_project();
 
-    // XDG_RUNTIME_DIR is not expected to exist on MacOS,
-    // but as of now, we're not running the fuzzer there anymore.
-    let xdg_runtime_dir =
-        std::env::var("XDG_RUNTIME_DIR").expect("Systemd should set XDG_RUNTIME_DIR");
-    let socket_dir = Path::new(&xdg_runtime_dir);
-
     // Set up the actors.
+    let socket_name = Path::new("ethersync-fuzzer-peer-1");
+    let socket_path = get_socket_path(socket_name);
+    let port = 42424;
     let daemon = Daemon::new(
         PeerConnectionInfo {
-            port: Some(4242),
+            port: Some(port),
             peer: None,
             passphrase: Some("shared-secret".to_string()),
         },
-        &socket_dir.join("ethersync"),
+        &socket_path,
         dir.path(),
         true,
     );
 
     // Give the daemon time to boot.
-    sleep(std::time::Duration::from_millis(5000)).await;
+    sleep(sleep_duration).await;
 
+    std::env::set_var("ETHERSYNC_SOCKET", socket_name);
     let nvim = Neovim::new(file).await;
     // Give the editor time to process the open.
-    sleep(std::time::Duration::from_millis(5000)).await;
+    sleep(sleep_duration).await;
 
+    let socket_name_2 = Path::new("ethersync-fuzzer-peer-2");
+    let socket_path_2 = get_socket_path(socket_name_2);
     let peer = Daemon::new(
         PeerConnectionInfo {
-            peer: Some("/ip4/127.0.0.1/tcp/4242".to_string()),
+            peer: Some(format!("/ip4/127.0.0.1/tcp/{}", port)),
             port: Some(0),
             passphrase: Some("shared-secret".to_string()),
         },
-        &socket_dir.join("etherbonk"),
+        &socket_path_2,
         dir2.path(),
         false,
     );
     // Make sure peer has synced with the other daemon before connecting Vim!
     // Otherwise, peer might not have a document yet.
-    sleep(std::time::Duration::from_millis(5000)).await;
+    sleep(sleep_duration).await;
 
-    std::env::set_var("ETHERSYNC_SOCKET", "etherbonk");
+    std::env::set_var("ETHERSYNC_SOCKET", socket_name_2);
     let nvim2 = Neovim::new(file2).await;
 
     // Give the second Neovim time to process the "open" call.
-    sleep(std::time::Duration::from_millis(5000)).await;
+    sleep(sleep_duration).await;
 
     let mut actors: HashMap<String, Box<dyn Actor>> = HashMap::new();
     actors.insert("daemon".to_string(), Box::new(daemon));
