@@ -164,8 +164,9 @@ fn absolute_and_canonicalized(path: &Path) -> Result<PathBuf> {
         let backtrace = std::backtrace::Backtrace::force_capture();
 
         panic!(
-            "Failed to canonicalize path: '{}', backtrace: {}",
+            "Failed to canonicalize path: '{}', original path: '{}', backtrace: {}",
             prefix_path.display(),
+            path.display(),
             backtrace
         );
     });
