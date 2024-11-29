@@ -158,6 +158,7 @@ fn absolute_and_canonicalized(path: &Path) -> Result<PathBuf> {
         }
     }
 
+    // TODO: can we handle this expect more graceful? Or log more information when crashing?
     let mut canonical_path = prefix_path.canonicalize().expect("Could not canonicalize");
     if suffix_path.components().count() != 0 {
         canonical_path = canonical_path.join(suffix_path);

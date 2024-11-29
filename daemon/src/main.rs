@@ -1,14 +1,14 @@
 use anyhow::{Context, Result};
 use clap::{parser::ValueSource, CommandFactory, FromArgMatches, Parser, Subcommand};
 use ethersync::peer::PeerConnectionInfo;
-use ethersync::{daemon::Daemon, logging, sandbox};
+use ethersync::{daemon::Daemon, editor, logging, sandbox};
 use std::path::{Path, PathBuf};
 use tokio::signal;
 use tracing::{error, info};
 
 mod jsonrpc_forwarder;
 
-const DEFAULT_SOCKET_PATH: &str = "/tmp/ethersync";
+const DEFAULT_SOCKET_NAME: &str = "ethersync";
 const ETHERSYNC_CONFIG_DIR: &str = ".ethersync";
 const ETHERSYNC_CONFIG_FILE: &str = "config";
 const ETHERSYNC_SOCKET_ENV_VAR: &str = "ETHERSYNC_SOCKET";
@@ -22,10 +22,10 @@ struct Cli {
     /// Path to the Unix domain socket to use for communication between daemon and editors.
     #[arg(
       short, long, global = true,
-      default_value = DEFAULT_SOCKET_PATH,
+      default_value = DEFAULT_SOCKET_NAME,
       env = ETHERSYNC_SOCKET_ENV_VAR,
     )]
-    socket_path: PathBuf,
+    socket_name: PathBuf,
     /// Enable verbose debug output.
     #[arg(short, long, global = true)]
     debug: bool,
@@ -77,7 +77,7 @@ async fn main() -> Result<()> {
 
     logging::initialize(cli.debug);
 
-    let socket_path = cli.socket_path;
+    let socket_path = editor::get_socket_path(&cli.socket_name);
 
     match cli.command {
         Commands::Daemon {
@@ -87,7 +87,7 @@ async fn main() -> Result<()> {
             secret,
             init,
         } => {
-            if matches.value_source("socket_path").unwrap() == ValueSource::EnvVariable {
+            if matches.value_source("socket_name").unwrap() == ValueSource::EnvVariable {
                 info!(
                     "Using socket path {} from env var {}",
                     socket_path.display(),
