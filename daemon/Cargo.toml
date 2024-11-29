@@ -80,7 +80,8 @@ tracing-test = "0.2.4"
 # TODO: We may want to make [profile.release-size] the default
 # once we're out of the fast iteration development phase.
 [profile.release]
-strip = true
+# TODO: Enable this again once we've fixed the "could not canonicalize" bug
+#strip = true
 opt-level = 3
 
 # 2-3x slower to compile, but produces a ~1.2x smaller binary.
