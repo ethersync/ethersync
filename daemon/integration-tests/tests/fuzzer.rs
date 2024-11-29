@@ -50,6 +50,12 @@ async fn main() {
     let (dir, file) = initialize_project();
     let (dir2, file2) = initialize_project();
 
+    // XDG_RUNTIME_DIR is not expected to exist on MacOS,
+    // but as of now, we're not running the fuzzer there anymore.
+    let xdg_runtime_dir =
+        std::env::var("XDG_RUNTIME_DIR").expect("Systemd should set XDG_RUNTIME_DIR");
+    let socket_dir = Path::new(&xdg_runtime_dir);
+
     // Set up the actors.
     let daemon = Daemon::new(
         PeerConnectionInfo {
@@ -57,7 +63,7 @@ async fn main() {
             peer: None,
             passphrase: Some("shared-secret".to_string()),
         },
-        Path::new("/tmp/ethersync"),
+        &socket_dir.join("ethersync"),
         dir.path(),
         true,
     );
@@ -75,7 +81,7 @@ async fn main() {
             port: Some(0),
             passphrase: Some("shared-secret".to_string()),
         },
-        Path::new("/tmp/etherbonk"),
+        &socket_dir.join("etherbonk"),
         dir2.path(),
         false,
     );
@@ -83,7 +89,7 @@ async fn main() {
     // Otherwise, peer might not have a document yet.
     sleep(std::time::Duration::from_millis(5000)).await;
 
-    std::env::set_var("ETHERSYNC_SOCKET", "/tmp/etherbonk");
+    std::env::set_var("ETHERSYNC_SOCKET", "etherbonk");
     let nvim2 = Neovim::new(file2).await;
 
     // Give the second Neovim time to process the "open" call.
