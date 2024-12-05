@@ -33,22 +33,21 @@ To start the session, run:
 ethersync daemon
 ```
 
-This will print, among other initialization information, two things you need to tell the other peers:
+This will print, among other initialization information, the [multiaddress](connection-making.md#multiaddress) which looks like `/ip4/192.168.23.42/tcp/58063/p2p/12D3KooWPNj7mom3X2D6NiSyxbFa5hHfzxDFP98ZL52yYnkEVmDv`.
 
-- The [multiaddress](connection-making.md#multiaddress) which looks like `/ip4/192.168.23.42/tcp/58063/p2p/12D3KooWPNj7mom3X2D6NiSyxbFa5hHfzxDFP98ZL52yYnkEVmDv`.
-- A secret passphrase, that is randomly generated each time you start the daemon. If you want to use a stable secret, we recommend putting it into the [configuration file](configuration.md).
+You need to share this with the other peers.
 
 ### 4. Other peers
 
 To join a session, run:
 
 ```bash
-ethersync demon --peer <multiaddr> --secret <secret>
+ethersync demon --peer <multiaddr>
 ```
 
 This should show you a message like "Connected to peer ...". The hosting daemon should show a message like "Peer connected".
 
-If you prefer, it's also possible to use the [configuration file](configuration.md) to provide multiaddress and secret.
+ When used "in production" it's also possible and recommended to use the [configuration file](configuration.md) to provide the multiaddress and a secret for encryption.
 
 ### 5. Collaborate!
 
