@@ -120,11 +120,22 @@ impl Watcher {
     }
 
     fn maybe_created(&self, file_path: &Path) -> Option<WatcherEvent> {
-        if sandbox::ignored(&self.base_dir, file_path)
-            .expect("Could not check ignore state of file")
-        {
-            debug!("Ignoring creation of '{}'", file_path.display());
-            return None;
+        match sandbox::ignored(&self.base_dir, file_path) {
+            Ok(is_ignored) => {
+                if is_ignored {
+                    debug!("Ignoring creation of '{}'", file_path.display());
+                    return None;
+                }
+                // We only dispatch the event, if ignore check worked and it's not ignored.
+            }
+            Err(error) => {
+                debug!(
+                    "Ignoring creation of '{}' because of an error: {}",
+                    file_path.display(),
+                    error
+                );
+                return None;
+            }
         }
 
         Some(WatcherEvent::Created {
@@ -140,11 +151,22 @@ impl Watcher {
     }
 
     fn maybe_modified(&self, file_path: &Path) -> Option<WatcherEvent> {
-        if sandbox::ignored(&self.base_dir, file_path)
-            .expect("Could not check ignore state of file")
-        {
-            debug!("Ignoring modification of {}", file_path.display());
-            return None;
+        match sandbox::ignored(&self.base_dir, file_path) {
+            Ok(is_ignored) => {
+                if is_ignored {
+                    debug!("Ignoring modification of '{}'", file_path.display());
+                    return None;
+                }
+                // We only dispatch the event, if ignore check worked and it's not ignored.
+            }
+            Err(error) => {
+                debug!(
+                    "Ignoring modification of '{}' because of an error: {}",
+                    file_path.display(),
+                    error
+                );
+                return None;
+            }
         }
 
         Some(WatcherEvent::Changed {
