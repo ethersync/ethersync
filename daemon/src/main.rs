@@ -8,6 +8,7 @@ use tracing::{error, info};
 
 mod jsonrpc_forwarder;
 
+// TODO: Define these constants in the ethersync crate, and use them here.
 const DEFAULT_SOCKET_NAME: &str = "ethersync";
 const ETHERSYNC_CONFIG_DIR: &str = ".ethersync";
 const ETHERSYNC_CONFIG_FILE: &str = "config";
@@ -43,9 +44,6 @@ enum Commands {
         /// Port to listen on as a hosting peer [default: assigned by OS].
         #[arg(long)]
         port: Option<u16>,
-        /// Shared secret passphrase to use for mutual authorization.
-        #[arg(long)]
-        secret: Option<String>,
         /// Initialize the current contents of the directory as a new Ethersync directory.
         #[arg(long)]
         init: bool,
@@ -84,7 +82,6 @@ async fn main() -> Result<()> {
             directory,
             peer,
             port,
-            secret,
             init,
         } => {
             if matches.value_source("socket_name").unwrap() == ValueSource::EnvVariable {
@@ -110,10 +107,12 @@ async fn main() -> Result<()> {
                 return Ok(());
             }
 
+            // There's the option to put a user provided passphrase here, which is disabled for
+            // now until we code a more secure way for user to provide it.
             let mut peer_connection_info = PeerConnectionInfo {
                 peer,
                 port,
-                passphrase: secret,
+                passphrase: None,
             };
 
             let config_file = directory
