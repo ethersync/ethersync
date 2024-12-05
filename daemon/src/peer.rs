@@ -16,8 +16,11 @@ use libp2p::{identity::Keypair, noise, pnet, tcp, yamux};
 use libp2p_stream as stream;
 use pbkdf2::pbkdf2_hmac;
 use sha2::Sha256;
+use std::fs::{self, OpenOptions};
+use std::io::Write;
 use std::mem;
 use std::net::Ipv4Addr;
+use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
 use std::path::{Path, PathBuf};
 use tokio::sync::{broadcast, mpsc, oneshot};
 use tokio::time::Duration;
@@ -213,6 +216,14 @@ impl P2PActor {
     fn get_keypair(&self) -> Keypair {
         let keyfile = self.base_dir.join(".ethersync").join("key");
         if keyfile.exists() {
+            let current_permissions = fs::metadata(&keyfile)
+                .expect("Expected to have access to metadata of the keyfile")
+                .permissions()
+                .mode();
+            let allowed_permissions = 0o100600;
+            if current_permissions != allowed_permissions {
+                panic!("For security reasons, please make sure to set the key file to user-readable only (set the permissions to 600).");
+            }
             info!("Re-using existing keypair");
             let bytes = std::fs::read(keyfile).expect("Failed to read key file");
             Keypair::from_protobuf_encoding(&bytes).expect("Failed to deserialize key file")
@@ -223,7 +234,16 @@ impl P2PActor {
             let bytes = keypair
                 .to_protobuf_encoding()
                 .expect("Failed to serialize keypair");
-            std::fs::write(keyfile, bytes).expect("Failed to write key file");
+
+            let mut file = OpenOptions::new()
+                .create(true)
+                .write(true)
+                .truncate(true)
+                .mode(0o600)
+                .open(keyfile)
+                .expect("Should have been able to create key file that did not exist before");
+            file.write_all(&bytes).expect("Failed to write to key file");
+
             keypair
         }
     }
