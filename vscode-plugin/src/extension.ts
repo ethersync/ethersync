@@ -197,6 +197,9 @@ async function processEditFromDaemon(edit: Edit) {
                 let worked = await applyEdit(document, edit)
                 if (worked) {
                     revision.daemon += 1
+                    // Attempt auto-save to avoid the situation where one user closes a modified
+                    // document without saving, which will cause VS Code to undo the dirty changes.
+                    document.save()
                 } else {
                     debug("rejected an applyEdit, sending empty delta")
                     let theEdit: Edit = {uri, revision: revision.daemon, delta: []}
@@ -357,6 +360,10 @@ function processUserEdit(event: vscode.TextDocumentChangeEvent) {
             // The challenge with that is that we need to compute how many lines are
             // left after the edit.
             updateContents(document)
+
+            // Attempt auto-save to avoid the situation where one user closes a modified
+            // document without saving, which will cause VS Code to undo the dirty changes.
+            document.save()
         })
         .catch((e: Error) => {
             vscode.window.showErrorMessage(`Error while sending edit to Ethersync daemon: ${e}`)
