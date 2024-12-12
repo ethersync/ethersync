@@ -38,8 +38,8 @@ interface Delta {
 }
 
 interface Edit {
-    uri: string,
-    revision: number,
+    uri: string
+    revision: number
     delta: Delta[]
 }
 
