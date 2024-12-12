@@ -2,7 +2,7 @@
 //! The functions in this module are supposed to prevent file I/O outside the base directory.
 //! All our file I/O should go through them.
 
-use anyhow::{bail, Result};
+use anyhow::{bail, Context, Result};
 use ignore::WalkBuilder;
 use path_clean::PathClean;
 use std::fs::{self, OpenOptions};
@@ -114,10 +114,8 @@ pub fn ignored(absolute_base_dir: &Path, absolute_file_path: &Path) -> Result<bo
                 .expect("Couldn't get file type of dir entry")
                 .is_file()
         })
-        .map(|dir_entry| {
-            absolute_and_canonicalized(dir_entry.path())
-                .expect("Failed to canonicalize ignored file")
-        })
+        .map(|dir_entry| absolute_and_canonicalized(dir_entry.path()))
+        .filter_map(Result::ok)
         .any(|path| path == canonical_file_path));
 }
 
@@ -158,18 +156,10 @@ fn absolute_and_canonicalized(path: &Path) -> Result<PathBuf> {
         }
     }
 
-    // TODO: can we handle this expect more graceful? Or log more information when crashing?
-    let mut canonical_path = prefix_path.canonicalize().unwrap_or_else(|_| {
-        // TODO: Remove this backtrace when we could reproduce this panic more reliably.
-        let backtrace = std::backtrace::Backtrace::force_capture();
+    let mut canonical_path = prefix_path
+        .canonicalize()
+        .context("Failed to canonicalize path, probably the file disappeared already")?;
 
-        panic!(
-            "Failed to canonicalize path: '{}', original path: '{}', backtrace: {}",
-            prefix_path.display(),
-            path.display(),
-            backtrace
-        );
-    });
     if suffix_path.components().count() != 0 {
         canonical_path = canonical_path.join(suffix_path);
     }
