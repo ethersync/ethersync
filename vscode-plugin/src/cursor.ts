@@ -43,3 +43,25 @@ export function setCursor(userid: number, name: string, uri: vscode.Uri, selecti
         editor.setDecorations(selectionDecorationType, selections)
     }
 }
+
+export function getCursorInfo(): string {
+    if (cursors.size == 0) {
+        return "(No cursors.)"
+    } else {
+        let message: string[] = []
+        cursors.forEach((usersCursors, _userid) => {
+            for (let cursor of usersCursors) {
+                let line1 = cursor.selection.active.line + 1
+                let line2 = cursor.selection.anchor.line + 1
+                if (line1 > line2) {
+                    ;[line1, line2] = [line2, line1]
+                }
+                let position = line1 == line2 ? `${line1}` : `${line1}-${line2}`
+
+                // TODO: Trim URI to the relevant parts inside the project.
+                message.push(`${cursor.name} @ ${cursor.uri}:${position}`)
+            }
+        })
+        return message.join("\n")
+    }
+}

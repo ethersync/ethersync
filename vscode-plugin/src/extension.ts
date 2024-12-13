@@ -5,7 +5,7 @@ import * as path from "path"
 import * as fs from "fs"
 var Mutex = require("async-mutex").Mutex
 
-import {setCursor} from "./cursor"
+import {setCursor, getCursorInfo} from "./cursor"
 
 function isEthersyncEnabled(dir: string) {
     if (fs.existsSync(path.join(dir, ".ethersync"))) {
@@ -408,6 +408,10 @@ function vsCodeChangeToEthersyncDelta(content: string[], change: vscode.TextDocu
     }
 }
 
+function showCursorNotification() {
+    vscode.window.showInformationMessage(getCursorInfo(), {modal: true})
+}
+
 export function activate(context: vscode.ExtensionContext) {
     debug("Ethersync extension activated!")
 
@@ -418,6 +422,7 @@ export function activate(context: vscode.ExtensionContext) {
         vscode.workspace.onDidOpenTextDocument(processUserOpen),
         vscode.workspace.onDidCloseTextDocument(processUserClose),
         vscode.window.onDidChangeTextEditorSelection(processSelection),
+        vscode.commands.registerCommand("ethersync.showCursors", showCursorNotification),
     )
 
     openCurrentTextDocuments()
@@ -427,7 +432,7 @@ export function activate(context: vscode.ExtensionContext) {
 
 export function deactivate() {}
 
-function debug(text: String) {
+function debug(text: string) {
     // Disabled because we don't need it right now.
     // console.log(Date.now() - t0 + " " + text)
 }

@@ -12,6 +12,14 @@
     "engines": {
         "vscode": "^1.89.0"
     },
+    "contributes": {
+        "commands": [
+            {
+                "command": "ethersync.showCursors",
+                "title": "Ethersync: List other cursor positions"
+            }
+        ]
+    },
     "categories": [
         "Other"
     ],
