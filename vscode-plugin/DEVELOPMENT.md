@@ -10,4 +10,4 @@
 
 1. Bump the version in `package.json`.
 2. Run `vsce publish`.
-3. Run `ovsx publish --pat <token>` (or provide the token via `OVSX_PAT`).
+3. Run `npx ovsx publish --pat <token>` (or provide the token via `OVSX_PAT`).
