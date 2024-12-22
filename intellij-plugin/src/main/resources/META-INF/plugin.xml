@@ -1,0 +1,31 @@
+<idea-plugin>
+   <id>io.github.ethersync</id>
+
+   <name>ethersync</name>
+   <vendor url="https://ethersync.github.io/ethersync/">Ethersync GitHub org</vendor>
+
+   <description><![CDATA[
+   Ethersync enables real-time co-editing of local text files. You can use it for pair programming or note-taking, for example! Think Google Docs, but from the comfort of your favorite text editor!
+   ]]></description>
+
+   <depends>com.intellij.modules.platform</depends>
+
+   <extensions defaultExtensionNs="com.intellij">
+      <projectService
+         serviceInterface="io.github.ethersync.EthersyncService"
+         serviceImplementation="io.github.ethersync.EthersyncServiceImpl"/>
+
+
+      <projectService
+         serviceInterface="io.github.ethersync.protocol.EthersyncEditorProtocol"
+         serviceImplementation="io.github.ethersync.protocol.EthersyncEditorProtocolImpl"/>
+      <toolWindow id="Ethersync Daemon Output" factoryClass="io.github.ethersync.DaemonToolWindowFactory" />
+   </extensions>
+
+   <actions>
+      <action id="ConnectToPeerAction" class="io.github.ethersync.ConnectToPeerAction"
+              text="Connect to ethersync peer" description="Connect to a running ethersync daemon">
+         <add-to-group group-id="ToolsMenu" anchor="first"/>
+      </action>
+   </actions>
+</idea-plugin>
