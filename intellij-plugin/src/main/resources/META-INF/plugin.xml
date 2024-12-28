@@ -15,10 +15,6 @@
          serviceInterface="io.github.ethersync.EthersyncService"
          serviceImplementation="io.github.ethersync.EthersyncServiceImpl"/>
 
-
-      <projectService
-         serviceInterface="io.github.ethersync.protocol.EthersyncEditorProtocol"
-         serviceImplementation="io.github.ethersync.protocol.EthersyncEditorProtocolImpl"/>
       <toolWindow id="Ethersync Daemon Output" factoryClass="io.github.ethersync.DaemonToolWindowFactory" />
    </extensions>
 
