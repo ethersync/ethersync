@@ -7,7 +7,6 @@ import com.intellij.openapi.project.Project
 import com.intellij.util.io.awaitExit
 import com.intellij.util.io.readLineAsync
 import io.github.ethersync.protocol.EthersyncEditorProtocol
-import io.github.ethersync.protocol.EthersyncEditorProtocolImpl
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import org.eclipse.lsp4j.jsonrpc.Launcher
@@ -87,7 +86,7 @@ class EthersyncServiceImpl(
                clientProcess.outputStream,
                Executors.newCachedThreadPool(),
                { c -> c },
-               { gsonBuilder -> {} }
+               { _ -> run {} }
          )
 
          val listening = launcher.startListening()
