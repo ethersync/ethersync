@@ -9,10 +9,7 @@ import com.intellij.openapi.editor.event.CaretEvent
 import com.intellij.openapi.editor.event.CaretListener
 import com.intellij.openapi.editor.event.EditorFactoryEvent
 import com.intellij.openapi.editor.event.EditorFactoryListener
-import com.intellij.openapi.editor.markup.HighlighterLayer
-import com.intellij.openapi.editor.markup.HighlighterTargetArea
-import com.intellij.openapi.editor.markup.RangeHighlighter
-import com.intellij.openapi.editor.markup.TextAttributes
+import com.intellij.openapi.editor.markup.*
 import com.intellij.openapi.fileEditor.FileEditorManager
 import com.intellij.openapi.fileEditor.FileEditorManagerListener
 import com.intellij.openapi.fileEditor.TextEditor
@@ -20,6 +17,7 @@ import com.intellij.openapi.project.Project
 import com.intellij.openapi.project.ProjectManager
 import com.intellij.openapi.project.ProjectManagerListener
 import com.intellij.openapi.vfs.VirtualFile
+import com.intellij.platform.diagnostic.telemetry.EDT
 import com.intellij.ui.JBColor
 import com.intellij.util.io.await
 import com.intellij.util.io.awaitExit
@@ -73,6 +71,12 @@ class EthersyncServiceImpl(
          }
       }
 
+      for (editor in FileEditorManager.getInstance(project).allEditors) {
+         if (editor is TextEditor) {
+            editor.editor.caretModel.addCaretListener(caretListener)
+         }
+      }
+
       EditorFactory.getInstance().addEditorFactoryListener(object : EditorFactoryListener {
          override fun editorCreated(event: EditorFactoryEvent) {
             event.editor.caretModel.addCaretListener(caretListener)
@@ -83,8 +87,8 @@ class EthersyncServiceImpl(
          }
       }, project)
 
-      bus.subscribe(ProjectManager.TOPIC, object: ProjectManagerListener {
-         override fun projectClosing(project: Project) {
+      ProjectManager.getInstance().addProjectManagerListener(project, object: ProjectManagerListener {
+         override fun projectClosingBeforeSave(project: Project) {
             if (clientProcess != null) {
                cs.launch {
                   clientProcess!!.destroy()
@@ -122,15 +126,21 @@ class EthersyncServiceImpl(
 
          val notifier = project.messageBus.syncPublisher(DaemonOutputNotifier.CHANGE_ACTION_TOPIC)
 
-         val stdout = BufferedReader(InputStreamReader(daemonProcess.inputStream))
-         stdout.use {
-            while (true) {
-               val line = stdout.readLineAsync() ?: break;
-               LOG.trace(line)
-               notifier.logOutput(line)
+         cs.launch {
+            val stdout = BufferedReader(InputStreamReader(daemonProcess.inputStream))
+            stdout.use {
+               while (true) {
+                  val line = stdout.readLineAsync() ?: break;
+                  LOG.trace(line)
+                  cs.launch {
+                     withContext(Dispatchers.EDT) {
+                        notifier.logOutput(line)
+                     }
+                  }
 
-               if (line.contains("Others can connect with")) {
-                  launchEthersyncClient(socket, projectDirectory)
+                  if (line.contains("Others can connect with")) {
+                     launchEthersyncClient(socket, projectDirectory)
+                  }
                }
             }
          }
@@ -142,17 +152,23 @@ class EthersyncServiceImpl(
                while (true) {
                   val line = stderr.readLineAsync() ?: break;
                   LOG.trace(line)
-                  notifier.logOutput(line)
+                  cs.launch {
+                     withContext(Dispatchers.EDT) {
+                        notifier.logOutput(line)
+                     }
+                  }
                }
             }
 
-            notifier.logOutput("ethersync exited with exit code: " + daemonProcess.exitValue())
+            withContext(Dispatchers.EDT) {
+               notifier.logOutput("ethersync exited with exit code: " + daemonProcess.exitValue())
+            }
          }
       }
    }
 
    private fun createProtocolHandler(): EthersyncEditorProtocol {
-      val highlighter = LinkedList<RangeHighlighter>()
+      val highlighter = HashMap<String, List<RangeHighlighter>>()
 
       return object : EthersyncEditorProtocol {
          override fun cursor(cursorEvent: CursorEvent) {
@@ -169,20 +185,24 @@ class EthersyncServiceImpl(
                      synchronized(highlighter) {
                         val markupModel = editor.markupModel
 
-                        for (hl in highlighter) {
-                           markupModel.removeHighlighter(hl)
+                        val previous = highlighter.remove(cursorEvent.userId)
+                        if (previous != null) {
+                           for (hl in previous) {
+                              markupModel.removeHighlighter(hl)
+                           }
                         }
-                        highlighter.clear()
 
+                        val newHighlighter = LinkedList<RangeHighlighter>()
                         for(range in cursorEvent.ranges) {
                            val startPosition = editor.logicalPositionToOffset(LogicalPosition(range.start.line, range.start.character))
                            val endPosition = editor.logicalPositionToOffset(LogicalPosition(range.end.line, range.end.character))
 
                            val textAttributes = TextAttributes().apply {
-                              backgroundColor = JBColor(JBColor.YELLOW, JBColor.DARK_GRAY)
+                              // foregroundColor = JBColor(JBColor.YELLOW, JBColor.DARK_GRAY)
+
                               // TODO: unclear which is the best effect type
-                              // effectType = EffectType.LINE_UNDERSCORE
-                              // effectColor = JBColor(JBColor.YELLOW, JBColor.DARK_GRAY)
+                              effectType = EffectType.ROUNDED_BOX
+                              effectColor = JBColor(JBColor.YELLOW, JBColor.DARK_GRAY)
                            }
 
                            val hl = markupModel.addRangeHighlighter(
@@ -192,9 +212,13 @@ class EthersyncServiceImpl(
                               textAttributes,
                               HighlighterTargetArea.EXACT_RANGE
                            )
+                           if (cursorEvent.name != null) {
+                              hl.errorStripeTooltip = cursorEvent.name
+                           }
 
-                           highlighter.add(hl)
+                           newHighlighter.add(hl)
                         }
+                        highlighter[cursorEvent.userId] = newHighlighter
                      }
                   }
                }
