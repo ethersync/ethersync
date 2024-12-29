@@ -1,8 +1,6 @@
 package io.github.ethersync
 
-import com.google.gson.JsonObject
-import com.intellij.openapi.application.ApplicationManager
-import com.intellij.openapi.application.ModalityState
+import com.intellij.openapi.application.EDT
 import com.intellij.openapi.components.Service
 import com.intellij.openapi.diagnostic.logger
 import com.intellij.openapi.editor.EditorFactory
@@ -19,26 +17,27 @@ import com.intellij.openapi.fileEditor.FileEditorManager
 import com.intellij.openapi.fileEditor.FileEditorManagerListener
 import com.intellij.openapi.fileEditor.TextEditor
 import com.intellij.openapi.project.Project
+import com.intellij.openapi.project.ProjectManager
+import com.intellij.openapi.project.ProjectManagerListener
 import com.intellij.openapi.vfs.VirtualFile
-import com.intellij.testFramework.utils.editor.getVirtualFile
 import com.intellij.ui.JBColor
+import com.intellij.util.io.await
 import com.intellij.util.io.awaitExit
 import com.intellij.util.io.readLineAsync
-import io.github.ethersync.protocol.CursorEvent
-import io.github.ethersync.protocol.CursorRequest
-import io.github.ethersync.protocol.DocumentRequest
-import io.github.ethersync.protocol.EthersyncEditorProtocol
+import io.github.ethersync.protocol.*
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.eclipse.lsp4j.Position
 import org.eclipse.lsp4j.Range
 import org.eclipse.lsp4j.jsonrpc.Launcher
+import org.eclipse.lsp4j.jsonrpc.ResponseErrorException
 import java.io.BufferedReader
 import java.io.File
 import java.io.InputStreamReader
 import java.util.Collections
 import java.util.LinkedList
-import java.util.concurrent.CompletableFuture
 import java.util.concurrent.Executors
 
 private val LOG = logger<EthersyncServiceImpl>()
@@ -46,8 +45,63 @@ private val LOG = logger<EthersyncServiceImpl>()
 @Service(Service.Level.PROJECT)
 class EthersyncServiceImpl(
    private val project: Project,
-   private val cs: CoroutineScope
+   private val cs: CoroutineScope,
 )  : EthersyncService {
+
+   private var launcher: Launcher<RemoteEthersyncClientProtocol>? = null
+   private var daemonProcess: Process? = null
+   private var clientProcess: Process? = null
+
+   init {
+      val bus = project.messageBus.connect()
+      bus.subscribe(FileEditorManagerListener.FILE_EDITOR_MANAGER, object : FileEditorManagerListener {
+         override fun fileOpened(source: FileEditorManager, file: VirtualFile) {
+            launchDocumentOpenRequest(file.url)
+         }
+
+         override fun fileClosed(source: FileEditorManager, file: VirtualFile) {
+            launchDocumentCloseNotification(file.url)
+         }
+      })
+
+      val caretListener = object : CaretListener {
+         override fun caretPositionChanged(event: CaretEvent) {
+            val uri = event.editor.virtualFile.url
+            val pos = Position(event.newPosition.line, event.newPosition.column)
+            val range = Range(pos, pos)
+            launchCursorRequest(CursorRequest(uri, Collections.singletonList(range)))
+         }
+      }
+
+      EditorFactory.getInstance().addEditorFactoryListener(object : EditorFactoryListener {
+         override fun editorCreated(event: EditorFactoryEvent) {
+            event.editor.caretModel.addCaretListener(caretListener)
+         }
+
+         override fun editorReleased(event: EditorFactoryEvent) {
+            event.editor.caretModel.removeCaretListener(caretListener)
+         }
+      }, project)
+
+      bus.subscribe(ProjectManager.TOPIC, object: ProjectManagerListener {
+         override fun projectClosing(project: Project) {
+            if (clientProcess != null) {
+               cs.launch {
+                  clientProcess!!.destroy()
+                  clientProcess!!.awaitExit()
+                  clientProcess = null
+               }
+            }
+            if (daemonProcess != null) {
+               cs.launch {
+                  daemonProcess!!.destroy()
+                  daemonProcess!!.awaitExit()
+                  daemonProcess = null
+               }
+            }
+         }
+      })
+   }
 
    override fun connectToPeer(peer: String) {
       val projectDirectory = File(project.basePath!!)
@@ -63,7 +117,8 @@ class EthersyncServiceImpl(
          LOG.info("Starting ethersync daemon")
          val daemonProcessBuilder = ProcessBuilder("ethersync", "daemon", "--peer", peer, "--socket-name", socket)
             .directory(projectDirectory)
-         val daemonProcess = daemonProcessBuilder.start()
+         daemonProcess = daemonProcessBuilder.start()
+         val daemonProcess = daemonProcess!!
 
          val notifier = project.messageBus.syncPublisher(DaemonOutputNotifier.CHANGE_ACTION_TOPIC)
 
@@ -108,47 +163,42 @@ class EthersyncServiceImpl(
 
             if (fileEditor is TextEditor) {
                val editor = fileEditor.editor
-               ApplicationManager.getApplication().invokeLater({
-                  synchronized(highlighter) {
-                     val markupModel = editor.markupModel
 
-                     for (hl in highlighter) {
-                        markupModel.removeHighlighter(hl)
-                     }
-                     highlighter.clear()
+               cs.launch {
+                  withContext(Dispatchers.EDT) {
+                     synchronized(highlighter) {
+                        val markupModel = editor.markupModel
 
-                     for(range in cursorEvent.ranges) {
-                        val startPosition = editor.logicalPositionToOffset(LogicalPosition(range.start.line, range.start.character))
-                        val endPosition = editor.logicalPositionToOffset(LogicalPosition(range.end.line, range.end.character))
-
-                        val textAttributes = TextAttributes().apply {
-                           backgroundColor = JBColor(JBColor.YELLOW, JBColor.DARK_GRAY)
-                           // TODO: unclear which is the best effect type
-                           // effectType = EffectType.LINE_UNDERSCORE
-                           // effectColor = JBColor(JBColor.YELLOW, JBColor.DARK_GRAY)
+                        for (hl in highlighter) {
+                           markupModel.removeHighlighter(hl)
                         }
+                        highlighter.clear()
 
-                        val hl = markupModel.addRangeHighlighter(
-                           startPosition,
-                           endPosition + 1,
-                           HighlighterLayer.ADDITIONAL_SYNTAX,
-                           textAttributes,
-                           HighlighterTargetArea.EXACT_RANGE
-                        )
+                        for(range in cursorEvent.ranges) {
+                           val startPosition = editor.logicalPositionToOffset(LogicalPosition(range.start.line, range.start.character))
+                           val endPosition = editor.logicalPositionToOffset(LogicalPosition(range.end.line, range.end.character))
 
-                        highlighter.add(hl)
+                           val textAttributes = TextAttributes().apply {
+                              backgroundColor = JBColor(JBColor.YELLOW, JBColor.DARK_GRAY)
+                              // TODO: unclear which is the best effect type
+                              // effectType = EffectType.LINE_UNDERSCORE
+                              // effectColor = JBColor(JBColor.YELLOW, JBColor.DARK_GRAY)
+                           }
+
+                           val hl = markupModel.addRangeHighlighter(
+                              startPosition,
+                              endPosition + 1,
+                              HighlighterLayer.ADDITIONAL_SYNTAX,
+                              textAttributes,
+                              HighlighterTargetArea.EXACT_RANGE
+                           )
+
+                           highlighter.add(hl)
+                        }
                      }
                   }
-               }, ModalityState.nonModal())
+               }
             }
-         }
-
-         override fun open(documentRequest: DocumentRequest): CompletableFuture<JsonObject> {
-            return CompletableFuture.completedFuture(JsonObject())
-         }
-
-         override fun close(documentRequest: DocumentRequest): CompletableFuture<JsonObject> {
-            return CompletableFuture.completedFuture(JsonObject())
          }
 
       }
@@ -161,12 +211,13 @@ class EthersyncServiceImpl(
          LOG.info("Starting ethersync client")
          val clientProcessBuilder = ProcessBuilder("ethersync", "client", "--socket-name", socket)
                .directory(projectDirectory)
-         val clientProcess = clientProcessBuilder.start()
+         clientProcess = clientProcessBuilder.start()
+         val clientProcess = clientProcess!!
 
          val ethersyncEditorProtocol = createProtocolHandler()
-         val launcher = Launcher.createIoLauncher(
+         launcher = Launcher.createIoLauncher(
                ethersyncEditorProtocol,
-               EthersyncEditorProtocol::class.java,
+               RemoteEthersyncClientProtocol::class.java,
                clientProcess.inputStream,
                clientProcess.outputStream,
                Executors.newCachedThreadPool(),
@@ -174,60 +225,56 @@ class EthersyncServiceImpl(
                { _ -> run {} }
          )
 
-         val bus = project.messageBus.connect()
-         bus.subscribe(FileEditorManagerListener.FILE_EDITOR_MANAGER, object : FileEditorManagerListener {
-            override fun fileOpened(source: FileEditorManager, file: VirtualFile) {
-               ethersyncEditorProtocol.open(DocumentRequest(file.url))
-            }
+         val listening = launcher!!.startListening()
 
-            override fun fileClosed(source: FileEditorManager, file: VirtualFile) {
-               ethersyncEditorProtocol.close(DocumentRequest(file.url))
-            }
-         })
-
-         val caretListener = object : CaretListener {
-            override fun caretPositionChanged(event: CaretEvent) {
-               val uri = event.editor.virtualFile.url
-               val pos = Position(event.newPosition.line, event.newPosition.column)
-               val range = Range(pos, pos)
-               launcher.remoteEndpoint.notify("cursor", CursorRequest(uri, Collections.singletonList(range)))
-            }
-         }
-
-         EditorFactory.getInstance().addEditorFactoryListener(object : EditorFactoryListener {
-            override fun editorCreated(event: EditorFactoryEvent) {
-               event.editor.caretModel.addCaretListener(caretListener)
-            }
-
-            override fun editorReleased(event: EditorFactoryEvent) {
-               event.editor.caretModel.removeCaretListener(caretListener)
-            }
-         }, project)
-
-
-         val listening = launcher.startListening()
-
-         cs.launch {
-            val fileEditorManager = FileEditorManager.getInstance(project)
-
-            for (file in fileEditorManager.openFiles) {
-               ethersyncEditorProtocol.open(DocumentRequest(file.url))
-            }
+         val fileEditorManager = FileEditorManager.getInstance(project)
+         for (file in fileEditorManager.openFiles) {
+            launchDocumentOpenRequest(file.url)
          }
 
          clientProcess.awaitExit()
 
          listening.cancel(true)
+         listening.await()
 
          if (clientProcess.exitValue() != 0) {
-               val stderr = BufferedReader(InputStreamReader(clientProcess.errorStream))
-               stderr.use {
-                  while (true) {
-                     val line = stderr.readLineAsync() ?: break;
-                     LOG.trace(line)
-                     System.out.println(line)
-                  }
+            val stderr = BufferedReader(InputStreamReader(clientProcess.errorStream))
+            stderr.use {
+               while (true) {
+                  val line = stderr.readLineAsync() ?: break;
+                  LOG.trace(line)
+                  System.out.println(line)
                }
+            }
+         }
+      }
+   }
+
+   fun launchDocumentCloseNotification(fileUri: String) {
+      val launcher = launcher ?: return
+      cs.launch {
+         launcher.remoteProxy.close(DocumentRequest(fileUri))
+      }
+   }
+
+   fun launchDocumentOpenRequest(fileUri: String) {
+      val launcher = launcher ?: return
+      cs.launch {
+         try {
+            launcher.remoteProxy.open(DocumentRequest(fileUri)).await()
+         } catch (e: ResponseErrorException) {
+            TODO("not yet implemented: notify about an protocol error")
+         }
+      }
+   }
+
+   fun launchCursorRequest(cursorRequest: CursorRequest) {
+      val launcher = launcher ?: return
+      cs.launch {
+         try {
+            launcher.remoteProxy.cursor(cursorRequest).await()
+         } catch (e: ResponseErrorException) {
+            TODO("not yet implemented: notify about an protocol error")
          }
       }
    }
