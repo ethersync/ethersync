@@ -9,11 +9,16 @@ version = "1.0-SNAPSHOT"
 
 repositories {
    mavenCentral()
+   maven {
+      url = uri("https://jitpack.io")
+   }
 }
 
 dependencies {
+   implementation("com.github.Osiris-Team:jansi:2.4.6")
    implementation("org.eclipse.lsp4j:org.eclipse.lsp4j:0.23.1")
    implementation("org.eclipse.lsp4j:org.eclipse.lsp4j.jsonrpc:0.23.1")
+   implementation("org.jsoup:jsoup:1.18.3")
 }
 
 // Configure Gradle IntelliJ Plugin
