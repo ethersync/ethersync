@@ -12,6 +12,9 @@ interface RemoteEthersyncClientProtocol {
     @JsonRequest
     fun open(documentRequest: DocumentRequest): CompletableFuture<JsonObject>
 
+    @JsonRequest
+    fun edit(editRequest: EditRequest): CompletableFuture<JsonObject>
+
     @JsonNotification
     fun close(documentRequest: DocumentRequest)
 }
