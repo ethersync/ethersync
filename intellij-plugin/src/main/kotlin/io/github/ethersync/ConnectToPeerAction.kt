@@ -10,7 +10,13 @@ class ConnectToPeerAction : AnAction() {
    override fun actionPerformed(e: AnActionEvent) {
       val project = e.project ?: return
 
-      val address = Messages.showInputDialog(project, "Provide ethersync peer address", "Peer address", null)
+      val address = Messages.showInputDialog(
+         project,
+         "Provide ethersync peer address",
+         "Peer Address",
+         Icons.PluginIcon
+      )
+
       if (address != null) {
          val service = project.service<EthersyncService>()
 
