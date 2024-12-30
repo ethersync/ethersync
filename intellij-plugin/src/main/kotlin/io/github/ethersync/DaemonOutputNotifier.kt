@@ -11,5 +11,7 @@ interface DaemonOutputNotifier {
          Topic.create("ethersync daemon output", DaemonOutputNotifier::class.java)
    }
 
+   fun clear()
+
    fun logOutput(line: String)
 }

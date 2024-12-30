@@ -35,6 +35,11 @@ class ToolWindowFactory : ToolWindowFactory {
       project.messageBus.connect().subscribe(
          DaemonOutputNotifier.CHANGE_ACTION_TOPIC,
          object : DaemonOutputNotifier {
+            override fun clear() {
+               body.clear()
+               logTextArea.text = document.html()
+            }
+
             override fun logOutput(line: String) {
                body.append(utilsAnsiHtml.convertAnsiToHtml(line))
                body.append("<br>")

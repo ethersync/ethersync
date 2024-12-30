@@ -5,11 +5,10 @@ import com.intellij.openapi.components.Service
 import com.intellij.openapi.diagnostic.logger
 import com.intellij.openapi.editor.EditorFactory
 import com.intellij.openapi.editor.LogicalPosition
-import com.intellij.openapi.editor.event.CaretEvent
-import com.intellij.openapi.editor.event.CaretListener
-import com.intellij.openapi.editor.event.EditorFactoryEvent
-import com.intellij.openapi.editor.event.EditorFactoryListener
+import com.intellij.openapi.editor.event.*
+import com.intellij.openapi.editor.impl.DocumentImpl
 import com.intellij.openapi.editor.markup.*
+import com.intellij.openapi.fileEditor.FileDocumentManager
 import com.intellij.openapi.fileEditor.FileEditorManager
 import com.intellij.openapi.fileEditor.FileEditorManagerListener
 import com.intellij.openapi.fileEditor.TextEditor
@@ -17,7 +16,7 @@ import com.intellij.openapi.project.Project
 import com.intellij.openapi.project.ProjectManager
 import com.intellij.openapi.project.ProjectManagerListener
 import com.intellij.openapi.vfs.VirtualFile
-import com.intellij.platform.diagnostic.telemetry.EDT
+import com.intellij.refactoring.suggested.newRange
 import com.intellij.ui.JBColor
 import com.intellij.util.io.await
 import com.intellij.util.io.awaitExit
@@ -34,8 +33,7 @@ import org.eclipse.lsp4j.jsonrpc.ResponseErrorException
 import java.io.BufferedReader
 import java.io.File
 import java.io.InputStreamReader
-import java.util.Collections
-import java.util.LinkedList
+import java.util.*
 import java.util.concurrent.Executors
 
 private val LOG = logger<EthersyncServiceImpl>()
@@ -49,6 +47,12 @@ class EthersyncServiceImpl(
    private var launcher: Launcher<RemoteEthersyncClientProtocol>? = null
    private var daemonProcess: Process? = null
    private var clientProcess: Process? = null
+
+   data class EthersyncRevision(
+      var daemon: UInt = 0u,
+      var editor: UInt = 0u,
+   )
+   val revisions: HashMap<String, EthersyncRevision> = HashMap()
 
    init {
       val bus = project.messageBus.connect()
@@ -71,40 +75,80 @@ class EthersyncServiceImpl(
          }
       }
 
+      val documentListener = object : DocumentListener {
+         override fun documentChanged(event: DocumentEvent) {
+            val file = FileDocumentManager.getInstance().getFile(event.document)!!
+            val fileEditor = FileEditorManager.getInstance(project).getEditors(file)
+               .filterIsInstance<TextEditor>()
+               .first()
+
+            val editor = fileEditor.editor
+
+            val uri = file.url
+
+            val rev = revisions.getOrPut(uri) { EthersyncRevision() };
+            rev.editor += 1u
+
+            // TODO: this calc doesn't seem right because there are some odd changes on the Neovim instance
+            val start = editor.offsetToLogicalPosition(event.newRange.startOffset)
+            val end = editor.offsetToLogicalPosition(event.newRange.endOffset)
+
+            launchEditRequest(
+               EditRequest(
+                  uri,
+                  rev.daemon,
+                  Collections.singletonList(Delta(
+                     Range(
+                        Position(start.line, start.column),
+                        Position(end.line, end.column)
+                     ),
+                     event.newFragment.toString()
+                  ))
+               )
+            )
+         }
+      }
+
       for (editor in FileEditorManager.getInstance(project).allEditors) {
          if (editor is TextEditor) {
             editor.editor.caretModel.addCaretListener(caretListener)
+            editor.editor.document.addDocumentListener(documentListener)
          }
       }
 
       EditorFactory.getInstance().addEditorFactoryListener(object : EditorFactoryListener {
          override fun editorCreated(event: EditorFactoryEvent) {
             event.editor.caretModel.addCaretListener(caretListener)
+            event.editor.document.addDocumentListener(documentListener)
          }
 
          override fun editorReleased(event: EditorFactoryEvent) {
             event.editor.caretModel.removeCaretListener(caretListener)
+            event.editor.document.removeDocumentListener(documentListener)
          }
       }, project)
 
       ProjectManager.getInstance().addProjectManagerListener(project, object: ProjectManagerListener {
          override fun projectClosingBeforeSave(project: Project) {
-            if (clientProcess != null) {
-               cs.launch {
-                  clientProcess!!.destroy()
-                  clientProcess!!.awaitExit()
-                  clientProcess = null
-               }
-            }
-            if (daemonProcess != null) {
-               cs.launch {
-                  daemonProcess!!.destroy()
-                  daemonProcess!!.awaitExit()
-                  daemonProcess = null
-               }
+            cs.launch {
+               shutdown()
             }
          }
       })
+   }
+
+   suspend fun shutdown() {
+      clientProcess?.let {
+         it.destroy()
+         it.awaitExit()
+         clientProcess = null
+      }
+      daemonProcess?.let {
+         it.destroy()
+         it.awaitExit()
+         daemonProcess = null
+      }
+      revisions.clear()
    }
 
    override fun connectToPeer(peer: String) {
@@ -118,13 +162,17 @@ class EthersyncServiceImpl(
             ethersyncDirectory.mkdir()
          }
 
+         val notifier = project.messageBus.syncPublisher(DaemonOutputNotifier.CHANGE_ACTION_TOPIC)
+         if (daemonProcess != null || clientProcess != null) {
+            notifier.clear()
+            shutdown()
+         }
+
          LOG.info("Starting ethersync daemon")
          val daemonProcessBuilder = ProcessBuilder("ethersync", "daemon", "--peer", peer, "--socket-name", socket)
             .directory(projectDirectory)
          daemonProcess = daemonProcessBuilder.start()
          val daemonProcess = daemonProcess!!
-
-         val notifier = project.messageBus.syncPublisher(DaemonOutputNotifier.CHANGE_ACTION_TOPIC)
 
          cs.launch {
             val stdout = BufferedReader(InputStreamReader(daemonProcess.inputStream))
@@ -229,9 +277,7 @@ class EthersyncServiceImpl(
    }
 
    private fun launchEthersyncClient(socket: String, projectDirectory: File) {
-
       cs.launch {
-
          LOG.info("Starting ethersync client")
          val clientProcessBuilder = ProcessBuilder("ethersync", "client", "--socket-name", socket)
                .directory(projectDirectory)
@@ -297,6 +343,17 @@ class EthersyncServiceImpl(
       cs.launch {
          try {
             launcher.remoteProxy.cursor(cursorRequest).await()
+         } catch (e: ResponseErrorException) {
+            TODO("not yet implemented: notify about an protocol error")
+         }
+      }
+   }
+
+   fun launchEditRequest(editRequest: EditRequest) {
+      val launcher = launcher ?: return
+      cs.launch {
+         try {
+            launcher.remoteProxy.edit(editRequest).await()
          } catch (e: ResponseErrorException) {
             TODO("not yet implemented: notify about an protocol error")
          }
