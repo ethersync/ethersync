@@ -1,3 +1,28 @@
+# 0.6.0 (2024-12-13)
+
+Breaking changes:
+
+- The command-line option `--socket-path` was removed and `--socket-name` added (for security reasons, see below).
+- The command-line option `--secret` was removed (see also "Security improvements")
+
+Security improvements:
+
+- Make sure that the socket file is always in a directory only accessible by the current user.
+- Remove the `--secret` command-line option, to avoid people from leaking their secret on multi-user systems.
+- Force the keyfile permissions to be restricted to the user, to prevent leaking it on a multi-user system.
+
+Bug fixes:
+
+- Avoid crashes in the daemon in cases where files appear and quickly disappear again.
+- Neovim plugin: Prevent reloading changed files from disk, which can lead to inconsistent content between peers, by forcing the 'autoread' option off.
+- VS Code plugin: Send out UTF-8 file path in messages to daemon, instead of using percent encoding, to keep compatibility with our existing assumptions.
+- VS Code plugin: Auto-save files to prevent data loss when closing without saving.
+
+New features:
+
+- When failing to connect to a peer (or when a peer fails to connect) show an error message.
+- VS Code plugin: Provide a command to show other cursor positions (for accessibility).
+
 # 0.5.0 (2024-09-30)
 
 Breaking changes:
