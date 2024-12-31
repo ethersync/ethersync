@@ -4,6 +4,9 @@ import org.eclipse.lsp4j.jsonrpc.services.JsonNotification
 
 interface EthersyncEditorProtocol {
 
-   @JsonNotification("cursor")
+   @JsonNotification
    fun cursor(cursorEvent: CursorEvent)
+
+   @JsonNotification
+   fun edit(editEvent: EditEvent)
 }

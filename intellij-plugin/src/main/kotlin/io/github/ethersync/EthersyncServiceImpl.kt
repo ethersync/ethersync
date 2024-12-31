@@ -1,12 +1,12 @@
 package io.github.ethersync
 
 import com.intellij.openapi.application.EDT
+import com.intellij.openapi.command.WriteCommandAction
 import com.intellij.openapi.components.Service
 import com.intellij.openapi.diagnostic.logger
 import com.intellij.openapi.editor.EditorFactory
 import com.intellij.openapi.editor.LogicalPosition
 import com.intellij.openapi.editor.event.*
-import com.intellij.openapi.editor.impl.DocumentImpl
 import com.intellij.openapi.editor.markup.*
 import com.intellij.openapi.fileEditor.FileDocumentManager
 import com.intellij.openapi.fileEditor.FileEditorManager
@@ -32,9 +32,11 @@ import org.eclipse.lsp4j.jsonrpc.Launcher
 import org.eclipse.lsp4j.jsonrpc.ResponseErrorException
 import java.io.BufferedReader
 import java.io.File
+import java.io.IOException
 import java.io.InputStreamReader
 import java.util.*
 import java.util.concurrent.Executors
+import java.util.concurrent.atomic.AtomicBoolean
 
 private val LOG = logger<EthersyncServiceImpl>()
 
@@ -48,11 +50,15 @@ class EthersyncServiceImpl(
    private var daemonProcess: Process? = null
    private var clientProcess: Process? = null
 
-   data class EthersyncRevision(
+   private val ignoreChangeEvent = AtomicBoolean(false)
+
+   data class FileRevision(
+      // Number of operations the daemon has made.
       var daemon: UInt = 0u,
+      // Number of operations we have made.
       var editor: UInt = 0u,
    )
-   val revisions: HashMap<String, EthersyncRevision> = HashMap()
+   val revisions: HashMap<String, FileRevision> = HashMap()
 
    init {
       val bus = project.messageBus.connect()
@@ -77,6 +83,10 @@ class EthersyncServiceImpl(
 
       val documentListener = object : DocumentListener {
          override fun documentChanged(event: DocumentEvent) {
+            if (ignoreChangeEvent.get()) {
+               return
+            }
+
             val file = FileDocumentManager.getInstance().getFile(event.document)!!
             val fileEditor = FileEditorManager.getInstance(project).getEditors(file)
                .filterIsInstance<TextEditor>()
@@ -86,7 +96,7 @@ class EthersyncServiceImpl(
 
             val uri = file.url
 
-            val rev = revisions.getOrPut(uri) { EthersyncRevision() };
+            val rev = revisions[uri]!!
             rev.editor += 1u
 
             // TODO: this calc doesn't seem right because there are some odd changes on the Neovim instance
@@ -102,6 +112,7 @@ class EthersyncServiceImpl(
                         Position(start.line, start.column),
                         Position(end.line, end.column)
                      ),
+                     // TODO: I remember UTF-16/32… did not test a none ASCII file yet
                      event.newFragment.toString()
                   ))
                )
@@ -178,7 +189,12 @@ class EthersyncServiceImpl(
             val stdout = BufferedReader(InputStreamReader(daemonProcess.inputStream))
             stdout.use {
                while (true) {
-                  val line = stdout.readLineAsync() ?: break;
+                  val line = try {
+                      stdout.readLineAsync() ?: break;
+                  } catch (e: IOException) {
+                     LOG.error(e)
+                     break
+                  }
                   LOG.trace(line)
                   cs.launch {
                      withContext(Dispatchers.EDT) {
@@ -273,6 +289,38 @@ class EthersyncServiceImpl(
             }
          }
 
+         override fun edit(editEvent: EditEvent) {
+            val revision = revisions[editEvent.documentUri]!!
+
+            // Check if operation is up-to-date to our content.
+            // If it's not, ignore it! The daemon will send a transformed one later.
+            if (editEvent.editorRevision == revision.editor) {
+               ignoreChangeEvent.set(true)
+
+               val fileEditorManager = FileEditorManager.getInstance(project)
+
+               val fileEditor = fileEditorManager.allEditors
+                  .first { editor -> editor.file.url == editEvent.documentUri } ?: return
+
+               if (fileEditor is TextEditor) {
+                  val editor = fileEditor.editor
+
+                  WriteCommandAction.runWriteCommandAction(project, {
+                     for(delta in editEvent.delta) {
+                        val start = editor.logicalPositionToOffset(LogicalPosition(delta.range.start.line, delta.range.start.character))
+                        val end = editor.logicalPositionToOffset(LogicalPosition(delta.range.end.line, delta.range.end.character))
+
+                        editor.document.replaceString(start, end, delta.replacement)
+                     }
+                  })
+
+                  revision.daemon += 1u
+
+                  ignoreChangeEvent.set(false)
+               }
+            }
+         }
+
       }
    }
 
@@ -324,6 +372,7 @@ class EthersyncServiceImpl(
       val launcher = launcher ?: return
       cs.launch {
          launcher.remoteProxy.close(DocumentRequest(fileUri))
+         revisions.remove(fileUri)
       }
    }
 
@@ -331,6 +380,7 @@ class EthersyncServiceImpl(
       val launcher = launcher ?: return
       cs.launch {
          try {
+            revisions[fileUri] = FileRevision();
             launcher.remoteProxy.open(DocumentRequest(fileUri)).await()
          } catch (e: ResponseErrorException) {
             TODO("not yet implemented: notify about an protocol error")
