@@ -22,6 +22,7 @@ import com.intellij.util.io.await
 import com.intellij.util.io.awaitExit
 import com.intellij.util.io.readLineAsync
 import io.github.ethersync.protocol.*
+import io.github.ethersync.settings.AppSettings
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -180,7 +181,13 @@ class EthersyncServiceImpl(
          }
 
          LOG.info("Starting ethersync daemon")
-         val daemonProcessBuilder = ProcessBuilder("ethersync", "daemon", "--peer", peer, "--socket-name", socket)
+
+         // TODO: try catch not existing binary
+         val daemonProcessBuilder = ProcessBuilder(
+            AppSettings.getInstance().state.ethersyncBinaryPath,
+            "daemon",
+            "--peer", peer,
+            "--socket-name", socket)
             .directory(projectDirectory)
          daemonProcess = daemonProcessBuilder.start()
          val daemonProcess = daemonProcess!!
@@ -239,7 +246,7 @@ class EthersyncServiceImpl(
             val fileEditorManager = FileEditorManager.getInstance(project)
 
             val fileEditor = fileEditorManager.allEditors
-               .first { editor -> editor.file.url == cursorEvent.documentUri } ?: return
+               .firstOrNull { editor -> editor.file.url == cursorEvent.documentUri } ?: return
 
             if (fileEditor is TextEditor) {
                val editor = fileEditor.editor
@@ -327,7 +334,10 @@ class EthersyncServiceImpl(
    private fun launchEthersyncClient(socket: String, projectDirectory: File) {
       cs.launch {
          LOG.info("Starting ethersync client")
-         val clientProcessBuilder = ProcessBuilder("ethersync", "client", "--socket-name", socket)
+         // TODO: try catch not existing binary
+         val clientProcessBuilder = ProcessBuilder(
+            AppSettings.getInstance().state.ethersyncBinaryPath,
+            "client", "--socket-name", socket)
                .directory(projectDirectory)
          clientProcess = clientProcessBuilder.start()
          val clientProcess = clientProcess!!

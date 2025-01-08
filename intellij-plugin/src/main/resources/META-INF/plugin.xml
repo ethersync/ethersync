@@ -11,6 +11,14 @@
    <depends>com.intellij.modules.platform</depends>
 
    <extensions defaultExtensionNs="com.intellij">
+      <applicationService
+         serviceImplementation="io.github.ethersync.settings.AppSettings"/>
+      <applicationConfigurable
+         parentId="tools"
+         instance="io.github.ethersync.settings.AppSettingsConfigurable"
+         id="io.github.ethersync.settings.AppSettingsConfigurable"
+         displayName="Ethersync"/>
+
       <projectService
          serviceInterface="io.github.ethersync.EthersyncService"
          serviceImplementation="io.github.ethersync.EthersyncServiceImpl"/>
