@@ -16,7 +16,7 @@ import com.intellij.openapi.project.Project
 import com.intellij.openapi.project.ProjectManager
 import com.intellij.openapi.project.ProjectManagerListener
 import com.intellij.openapi.vfs.VirtualFile
-import com.intellij.refactoring.suggested.newRange
+import com.intellij.refactoring.suggested.oldRange
 import com.intellij.ui.JBColor
 import com.intellij.util.io.await
 import com.intellij.util.io.awaitExit
@@ -65,17 +65,17 @@ class EthersyncServiceImpl(
       val bus = project.messageBus.connect()
       bus.subscribe(FileEditorManagerListener.FILE_EDITOR_MANAGER, object : FileEditorManagerListener {
          override fun fileOpened(source: FileEditorManager, file: VirtualFile) {
-            launchDocumentOpenRequest(file.url)
+            launchDocumentOpenRequest(file.canonicalFile!!.url)
          }
 
          override fun fileClosed(source: FileEditorManager, file: VirtualFile) {
-            launchDocumentCloseNotification(file.url)
+            launchDocumentCloseNotification(file.canonicalFile!!.url)
          }
       })
 
       val caretListener = object : CaretListener {
          override fun caretPositionChanged(event: CaretEvent) {
-            val uri = event.editor.virtualFile.url
+            val uri = event.editor.virtualFile.canonicalFile!!.url
             val pos = Position(event.newPosition.line, event.newPosition.column)
             val range = Range(pos, pos)
             launchCursorRequest(CursorRequest(uri, Collections.singletonList(range)))
@@ -95,14 +95,14 @@ class EthersyncServiceImpl(
 
             val editor = fileEditor.editor
 
-            val uri = file.url
+            val uri = file.canonicalFile!!.url
 
             val rev = revisions[uri]!!
             rev.editor += 1u
 
             // TODO: this calc doesn't seem right because there are some odd changes on the Neovim instance
-            val start = editor.offsetToLogicalPosition(event.newRange.startOffset)
-            val end = editor.offsetToLogicalPosition(event.newRange.endOffset)
+            val start = editor.offsetToLogicalPosition(event.oldRange.startOffset)
+            val end = editor.offsetToLogicalPosition(event.oldRange.endOffset)
 
             launchEditRequest(
                EditRequest(
@@ -246,7 +246,7 @@ class EthersyncServiceImpl(
             val fileEditorManager = FileEditorManager.getInstance(project)
 
             val fileEditor = fileEditorManager.allEditors
-               .firstOrNull { editor -> editor.file.url == cursorEvent.documentUri } ?: return
+               .firstOrNull { editor -> editor.file.canonicalFile!!.url == cursorEvent.documentUri } ?: return
 
             if (fileEditor is TextEditor) {
                val editor = fileEditor.editor
@@ -307,7 +307,7 @@ class EthersyncServiceImpl(
                val fileEditorManager = FileEditorManager.getInstance(project)
 
                val fileEditor = fileEditorManager.allEditors
-                  .first { editor -> editor.file.url == editEvent.documentUri } ?: return
+                  .first { editor -> editor.file.canonicalFile!!.url == editEvent.documentUri } ?: return
 
                if (fileEditor is TextEditor) {
                   val editor = fileEditor.editor
@@ -357,7 +357,7 @@ class EthersyncServiceImpl(
 
          val fileEditorManager = FileEditorManager.getInstance(project)
          for (file in fileEditorManager.openFiles) {
-            launchDocumentOpenRequest(file.url)
+            launchDocumentOpenRequest(file.canonicalFile!!.url)
          }
 
          clientProcess.awaitExit()
