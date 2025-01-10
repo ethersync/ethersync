@@ -1,7 +1,7 @@
 //! This module is all about daemon to editor communication.
 use crate::daemon::{DocMessage, DocumentActorHandle};
 use crate::types::EditorProtocolObject;
-use anyhow::{Result};
+use anyhow::Result;
 use futures::StreamExt;
 use std::{
     io,
@@ -36,13 +36,13 @@ impl Encoder<EditorProtocolObject> for EditorProtocolCodec {
 // Unix-specific imports and definitions
 // ------------------------------------------------------------------------------------
 #[cfg(unix)]
-use std::fs;
-#[cfg(unix)]
-use std::os::unix::fs::PermissionsExt;
-#[cfg(unix)]
 use crate::sandbox;
 #[cfg(unix)]
 use anyhow::{bail, Context};
+#[cfg(unix)]
+use std::fs;
+#[cfg(unix)]
+use std::os::unix::fs::PermissionsExt;
 #[cfg(unix)]
 use tokio::net::{UnixListener, UnixStream};
 
@@ -186,7 +186,7 @@ fn spawn_editor_connection(
 // Windows-specific imports and definitions
 // ------------------------------------------------------------------------------------
 #[cfg(windows)]
-use tokio::net::windows::named_pipe::{NamedPipeServer, ServerOptions, PipeMode};
+use tokio::net::windows::named_pipe::{NamedPipeServer, PipeMode, ServerOptions};
 
 #[cfg(windows)]
 pub type EditorWriter = FramedWrite<WriteHalf<NamedPipeServer>, EditorProtocolCodec>;
@@ -208,8 +208,14 @@ pub async fn make_editor_connection(socket_path: PathBuf, document_handle: Docum
 }
 
 #[cfg(windows)]
-async fn accept_editor_loop(socket_path: PathBuf, document_handle: DocumentActorHandle) -> io::Result<()> {
-    let pipe_name = format!(r"\\.\pipe\{}", socket_path.to_str().unwrap().split('\\').last().unwrap());
+async fn accept_editor_loop(
+    socket_path: PathBuf,
+    document_handle: DocumentActorHandle,
+) -> io::Result<()> {
+    let pipe_name = format!(
+        r"\\.\pipe\{}",
+        socket_path.to_str().unwrap().split('\\').last().unwrap()
+    );
     loop {
         let mut server_options = ServerOptions::new();
         server_options.pipe_mode(PipeMode::Byte);
@@ -225,13 +231,19 @@ async fn accept_editor_loop(socket_path: PathBuf, document_handle: DocumentActor
 }
 
 #[cfg(windows)]
-fn spawn_editor_connection(stream: NamedPipeServer, document_handle: DocumentActorHandle, editor_id: EditorId) {
+fn spawn_editor_connection(
+    stream: NamedPipeServer,
+    document_handle: DocumentActorHandle,
+    editor_id: EditorId,
+) {
     tokio::spawn(async move {
         let (stream_read, stream_write) = tokio::io::split(stream);
         let mut reader = FramedRead::new(stream_read, LinesCodec::new());
         let writer = FramedWrite::new(stream_write, EditorProtocolCodec);
 
-        document_handle.send_message(DocMessage::NewEditorConnection(editor_id, writer)).await;
+        document_handle
+            .send_message(DocMessage::NewEditorConnection(editor_id, writer))
+            .await;
         info!("Client #{editor_id} connected");
 
         while let Some(Ok(line)) = reader.next().await {

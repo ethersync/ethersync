@@ -18,7 +18,7 @@ use pbkdf2::pbkdf2_hmac;
 use sha2::Sha256;
 #[cfg(unix)]
 use std::fs;
-use std::fs::{OpenOptions};
+use std::fs::OpenOptions;
 use std::io::Write;
 use std::mem;
 use std::net::Ipv4Addr;

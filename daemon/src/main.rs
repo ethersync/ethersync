@@ -92,7 +92,9 @@ async fn main() -> Result<()> {
                 );
             }
 
-            let directory = normalize_directory(directory.unwrap_or_else(|| {std::env::current_dir().expect("Could not access current directory")}));
+            let directory = normalize_directory(directory.unwrap_or_else(|| {
+                std::env::current_dir().expect("Could not access current directory")
+            }));
 
             if !has_ethersync_directory(&directory) {
                 error!(
@@ -152,6 +154,8 @@ fn normalize_directory(directory: PathBuf) -> PathBuf {
     }
     #[cfg(unix)]
     {
-        return directory.canonicalize().expect("Could not access given directory");
+        return directory
+            .canonicalize()
+            .expect("Could not access given directory");
     }
 }

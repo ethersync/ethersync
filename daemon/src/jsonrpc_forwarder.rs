@@ -12,11 +12,11 @@ use futures::{SinkExt, StreamExt};
 use std::path::Path;
 use tokio::io::{BufReader, BufWriter};
 #[cfg(unix)]
-use tokio::net::UnixStream;
-#[cfg(unix)]
 use tokio::net::unix::{OwnedReadHalf, OwnedWriteHalf};
 #[cfg(windows)]
-use tokio::net::windows::named_pipe::{NamedPipeClient, ClientOptions, PipeMode};
+use tokio::net::windows::named_pipe::{ClientOptions, NamedPipeClient, PipeMode};
+#[cfg(unix)]
+use tokio::net::UnixStream;
 use tokio_util::bytes::{Buf, BytesMut};
 use tokio_util::codec::{Decoder, Encoder, FramedRead, FramedWrite, LinesCodec};
 
@@ -51,7 +51,10 @@ pub async fn connection(socket_path: &Path) -> anyhow::Result<()> {
 #[cfg(unix)]
 async fn connect_stream(
     socket_path: &Path,
-) -> anyhow::Result<(FramedRead<OwnedReadHalf, LinesCodec>, FramedWrite<OwnedWriteHalf, LinesCodec>)> {
+) -> anyhow::Result<(
+    FramedRead<OwnedReadHalf, LinesCodec>,
+    FramedWrite<OwnedWriteHalf, LinesCodec>,
+)> {
     // Unix domain socket approach
     let stream = UnixStream::connect(socket_path).await?;
     let (read_half, write_half) = stream.into_split();
@@ -64,9 +67,15 @@ async fn connect_stream(
 #[cfg(windows)]
 async fn connect_stream(
     socket_path: &Path,
-) -> anyhow::Result<(FramedRead<tokio::io::ReadHalf<NamedPipeClient>, LinesCodec>, FramedWrite<tokio::io::WriteHalf<NamedPipeClient>, LinesCodec>)> {
+) -> anyhow::Result<(
+    FramedRead<tokio::io::ReadHalf<NamedPipeClient>, LinesCodec>,
+    FramedWrite<tokio::io::WriteHalf<NamedPipeClient>, LinesCodec>,
+)> {
     // Convert the Path to a UTF-8 string and prepend the named pipe prefix
-    let pipe_name = format!(r"\\.\pipe\{}", socket_path.to_str().unwrap().split('\\').last().unwrap());
+    let pipe_name = format!(
+        r"\\.\pipe\{}",
+        socket_path.to_str().unwrap().split('\\').last().unwrap()
+    );
     // Attempt to create the client
     let mut client_options = ClientOptions::new();
     client_options.pipe_mode(PipeMode::Byte);
