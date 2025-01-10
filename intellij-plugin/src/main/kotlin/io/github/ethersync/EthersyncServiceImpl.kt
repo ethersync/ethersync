@@ -1,14 +1,11 @@
 package io.github.ethersync
 
-import com.intellij.execution.ExecutionListener
-import com.intellij.execution.ExecutionManager
 import com.intellij.execution.configurations.GeneralCommandLine
-import com.intellij.execution.process.ProcessAdapter
+import com.intellij.execution.process.ColoredProcessHandler
 import com.intellij.execution.process.ProcessEvent
 import com.intellij.execution.process.ProcessHandler
-import com.intellij.execution.process.ProcessHandlerFactory
-import com.intellij.execution.runners.ExecutionEnvironment
-import com.intellij.openapi.application.EDT
+import com.intellij.execution.process.ProcessListener
+import com.intellij.execution.ui.ConsoleView
 import com.intellij.openapi.components.Service
 import com.intellij.openapi.diagnostic.logger
 import com.intellij.openapi.editor.EditorFactory
@@ -22,11 +19,10 @@ import com.intellij.openapi.project.ProjectManagerListener
 import com.intellij.openapi.rd.util.withUiContext
 import com.intellij.openapi.util.Key
 import com.intellij.openapi.vfs.VirtualFile
+import com.intellij.openapi.wm.ToolWindowManager
 import com.intellij.util.io.await
 import com.intellij.util.io.awaitExit
 import com.intellij.util.io.readLineAsync
-import com.jediterm.terminal.TtyConnector
-import com.jediterm.terminal.model.TerminalModelListener
 import io.github.ethersync.protocol.*
 import io.github.ethersync.settings.AppSettings
 import io.github.ethersync.sync.Changetracker
@@ -35,13 +31,10 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import org.eclipse.lsp4j.jsonrpc.Launcher
 import org.eclipse.lsp4j.jsonrpc.ResponseErrorException
-import org.jetbrains.plugins.terminal.ProxyTtyConnector
-import org.jetbrains.plugins.terminal.TerminalToolWindowManager
 import java.io.BufferedReader
 import java.io.File
 import java.io.InputStreamReader
 import java.util.concurrent.Executors
-import java.util.function.Consumer
 
 private val LOG = logger<EthersyncServiceImpl>()
 
@@ -52,6 +45,7 @@ class EthersyncServiceImpl(
 )  : EthersyncService {
 
    private var launcher: Launcher<RemoteEthersyncClientProtocol>? = null
+   private var daemonProcess: ProcessHandler? = null
    private var clientProcess: Process? = null
 
    private val changetracker: Changetracker = Changetracker(project, cs)
@@ -103,6 +97,11 @@ class EthersyncServiceImpl(
          it.awaitExit()
          clientProcess = null
       }
+      daemonProcess?.let {
+         it.detachProcess()
+         it.destroyProcess()
+         daemonProcess = null
+      }
       changetracker.clear()
       cursortracker.clear()
    }
@@ -118,9 +117,12 @@ class EthersyncServiceImpl(
       }
 
       val cmd = GeneralCommandLine(AppSettings.getInstance().state.ethersyncBinaryPath)
+      cmd.workDirectory = projectDirectory
       cmd.addParameter("daemon")
-      cmd.addParameter("--peer")
-      cmd.addParameter(peer)
+      if (peer.isNotBlank()) {
+         cmd.addParameter("--peer")
+         cmd.addParameter(peer)
+      }
       cmd.addParameter("--socket-name")
       cmd.addParameter(socket)
 
@@ -128,22 +130,34 @@ class EthersyncServiceImpl(
          shutdown()
 
          withUiContext {
-            // TODO: how to detect errors in the daemon process?
-            // TODO: how to reuse the terminal?
-            // TODO: how to make readonly?
-            // TODO: how to close after exit?
-            val terminalWidget = TerminalToolWindowManager.getInstance(project)
-               .createLocalShellWidget(project.basePath, "Ethersync Daemon")
+            daemonProcess = ColoredProcessHandler(cmd)
 
-            terminalWidget.executeCommand(cmd.commandLineString)
-            terminalWidget.terminalTextBuffer.addModelListener(object : TerminalModelListener {
-               override fun modelChanged() {
-                  if (terminalWidget.terminalTextBuffer.screenLines.contains("Others can connect with")) {
+            daemonProcess!!.addProcessListener(object : ProcessListener {
+               override fun onTextAvailable(event: ProcessEvent, outputType: Key<*>) {
+                  if (event.text.contains("Others can connect with")) {
                      launchEthersyncClient(socket, projectDirectory)
                   }
                }
+
+               override fun processTerminated(event: ProcessEvent) {
+                  cs.launch {
+                     shutdown()
+                  }
+               }
             })
+
+
+            val tw = ToolWindowManager.getInstance(project).getToolWindow("ethersync")!!
+            val console =  tw.contentManager.findContent("Daemon")!!.component
+            if (console is ConsoleView) {
+               console.attachToProcess(daemonProcess!!)
+            }
+
+            tw.show()
+
+            daemonProcess!!.startNotify()
          }
+
       }
    }
 
@@ -207,7 +221,6 @@ class EthersyncServiceImpl(
                while (true) {
                   val line = stderr.readLineAsync() ?: break;
                   LOG.trace(line)
-                  System.out.println(line)
                }
             }
          }

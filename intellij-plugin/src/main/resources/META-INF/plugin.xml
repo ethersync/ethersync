@@ -23,6 +23,11 @@
       <projectService
          serviceInterface="io.github.ethersync.EthersyncService"
          serviceImplementation="io.github.ethersync.EthersyncServiceImpl"/>
+
+      <toolWindow
+           id="ethersync"
+           icon="io.github.ethersync.Icons.PluginIcon"
+           factoryClass="io.github.ethersync.EthersyncToolWindowFactory"/>
    </extensions>
 
    <actions>
