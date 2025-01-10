@@ -92,12 +92,8 @@ async fn main() -> Result<()> {
                 );
             }
 
-            let directory = directory
-                .unwrap_or_else(|| {
-                    std::env::current_dir().expect("Could not access current directory")
-                })
-                .canonicalize()
-                .expect("Could not access given directory");
+            let directory = normalize_directory(directory.unwrap_or_else(|| {std::env::current_dir().expect("Could not access current directory")}));
+
             if !has_ethersync_directory(&directory) {
                 error!(
                     "No {}/ found in {} (create that directory to Ethersync-enable the project)",
@@ -140,4 +136,22 @@ async fn main() -> Result<()> {
         }
     }
     Ok(())
+}
+
+fn normalize_directory(directory: PathBuf) -> PathBuf {
+    #[cfg(windows)]
+    {
+        let directory_str = directory.to_string_lossy();
+        if directory_str.len() > 2 && directory_str.chars().nth(1) == Some(':') {
+            let (drive_letter, rest) = directory_str.split_at(1);
+            let lower_drive = drive_letter.to_lowercase();
+            let path_with_forward_slashes = rest.replace('\\', "/");
+            return PathBuf::from(format!("{}{}", lower_drive, path_with_forward_slashes));
+        }
+        directory
+    }
+    #[cfg(unix)]
+    {
+        return directory.canonicalize().expect("Could not access given directory");
+    }
 }

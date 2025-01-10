@@ -1,18 +1,13 @@
 //! This module is all about daemon to editor communication.
 use crate::daemon::{DocMessage, DocumentActorHandle};
-use crate::sandbox;
 use crate::types::EditorProtocolObject;
-use anyhow::{bail, Context, Result};
+use anyhow::{Result};
 use futures::StreamExt;
 use std::{
-    fs, io,
-    os::unix::fs::PermissionsExt,
+    io,
     path::{Path, PathBuf},
 };
-use tokio::{
-    io::WriteHalf,
-    net::{UnixListener, UnixStream},
-};
+use tokio::io::WriteHalf;
 use tokio_util::{
     bytes::BytesMut,
     codec::{Encoder, FramedRead, FramedWrite, LinesCodec},
@@ -20,8 +15,6 @@ use tokio_util::{
 use tracing::info;
 
 pub type EditorId = usize;
-
-pub type EditorWriter = FramedWrite<WriteHalf<UnixStream>, EditorProtocolCodec>;
 
 pub struct EditorProtocolCodec;
 
@@ -39,6 +32,24 @@ impl Encoder<EditorProtocolObject> for EditorProtocolCodec {
     }
 }
 
+// ------------------------------------------------------------------------------------
+// Unix-specific imports and definitions
+// ------------------------------------------------------------------------------------
+#[cfg(unix)]
+use std::fs;
+#[cfg(unix)]
+use std::os::unix::fs::PermissionsExt;
+#[cfg(unix)]
+use crate::sandbox;
+#[cfg(unix)]
+use anyhow::{bail, Context};
+#[cfg(unix)]
+use tokio::net::{UnixListener, UnixStream};
+
+#[cfg(unix)]
+pub type EditorWriter = FramedWrite<WriteHalf<UnixStream>, EditorProtocolCodec>;
+
+#[cfg(unix)]
 fn get_fallback_socket_dir() -> String {
     let socket_dir = format!(
         "/tmp/ethersync-{}",
@@ -54,6 +65,7 @@ fn get_fallback_socket_dir() -> String {
     socket_dir
 }
 
+#[cfg(unix)]
 fn is_valid_socket_name(socket_name: &Path) -> Result<()> {
     if socket_name.components().count() != 1 {
         bail!("The socket name must be a single path component");
@@ -70,6 +82,7 @@ fn is_valid_socket_name(socket_name: &Path) -> Result<()> {
     Ok(())
 }
 
+#[cfg(unix)]
 pub fn get_socket_path(socket_name: &Path) -> PathBuf {
     let socket_dir = std::env::var("XDG_RUNTIME_DIR").unwrap_or_else(|_| get_fallback_socket_dir());
     let socket_dir = Path::new(&socket_dir);
@@ -79,6 +92,7 @@ pub fn get_socket_path(socket_name: &Path) -> PathBuf {
     socket_dir.join(socket_name)
 }
 
+#[cfg(unix)]
 fn is_user_readable_only(socket_path: &Path) -> Result<()> {
     let parent_dir = socket_path
         .parent()
@@ -98,6 +112,7 @@ fn is_user_readable_only(socket_path: &Path) -> Result<()> {
 /// # Panics
 ///
 /// Will panic if we fail to listen on the socket, or if we fail to accept an incoming connection.
+#[cfg(unix)]
 pub async fn make_editor_connection(socket_path: PathBuf, document_handle: DocumentActorHandle) {
     // Make sure the parent directory of the socket is only accessible by the current user.
     if let Err(description) = is_user_readable_only(&socket_path) {
@@ -121,6 +136,7 @@ pub async fn make_editor_connection(socket_path: PathBuf, document_handle: Docum
     }
 }
 
+#[cfg(unix)]
 async fn accept_editor_loop(
     socket_path: &Path,
     document_handle: DocumentActorHandle,
@@ -137,6 +153,7 @@ async fn accept_editor_loop(
     }
 }
 
+#[cfg(unix)]
 fn spawn_editor_connection(
     stream: UnixStream,
     document_handle: DocumentActorHandle,
@@ -150,6 +167,71 @@ fn spawn_editor_connection(
         document_handle
             .send_message(DocMessage::NewEditorConnection(editor_id, writer))
             .await;
+        info!("Client #{editor_id} connected");
+
+        while let Some(Ok(line)) = reader.next().await {
+            document_handle
+                .send_message(DocMessage::FromEditor(editor_id, line))
+                .await;
+        }
+
+        document_handle
+            .send_message(DocMessage::CloseEditorConnection(editor_id))
+            .await;
+        info!("Client #{editor_id} disconnected");
+    });
+}
+
+// ------------------------------------------------------------------------------------
+// Windows-specific imports and definitions
+// ------------------------------------------------------------------------------------
+#[cfg(windows)]
+use tokio::net::windows::named_pipe::{NamedPipeServer, ServerOptions, PipeMode};
+
+#[cfg(windows)]
+pub type EditorWriter = FramedWrite<WriteHalf<NamedPipeServer>, EditorProtocolCodec>;
+
+#[cfg(windows)]
+pub fn get_socket_path(_socket_name: &Path) -> PathBuf {
+    PathBuf::from("ethersync_pipe")
+}
+
+#[cfg(windows)]
+pub async fn make_editor_connection(socket_path: PathBuf, document_handle: DocumentActorHandle) {
+    let result = accept_editor_loop(socket_path, document_handle).await;
+    match result {
+        Ok(()) => {}
+        Err(err) => {
+            panic!("Failed to make editor connection: {err}");
+        }
+    }
+}
+
+#[cfg(windows)]
+async fn accept_editor_loop(socket_path: PathBuf, document_handle: DocumentActorHandle) -> io::Result<()> {
+    let pipe_name = format!(r"\\.\pipe\{}", socket_path.to_str().unwrap().split('\\').last().unwrap());
+    loop {
+        let mut server_options = ServerOptions::new();
+        server_options.pipe_mode(PipeMode::Byte);
+        let pipe: NamedPipeServer = server_options.create(&pipe_name)?;
+        info!("Listening for connections on named pipe: {}", pipe_name);
+
+        // Wait asynchronously for a client to connect
+        pipe.connect().await?;
+        info!("Client connected!");
+        let id = document_handle.next_editor_id();
+        spawn_editor_connection(pipe, document_handle.clone(), id);
+    }
+}
+
+#[cfg(windows)]
+fn spawn_editor_connection(stream: NamedPipeServer, document_handle: DocumentActorHandle, editor_id: EditorId) {
+    tokio::spawn(async move {
+        let (stream_read, stream_write) = tokio::io::split(stream);
+        let mut reader = FramedRead::new(stream_read, LinesCodec::new());
+        let writer = FramedWrite::new(stream_write, EditorProtocolCodec);
+
+        document_handle.send_message(DocMessage::NewEditorConnection(editor_id, writer)).await;
         info!("Client #{editor_id} connected");
 
         while let Some(Ok(line)) = reader.next().await {

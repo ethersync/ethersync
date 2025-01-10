@@ -54,8 +54,23 @@ impl RelativePath {
         Self(path.into())
     }
 
-    pub fn try_from_absolute(base_dir: &Path, path: &AbsolutePath) -> Result<Self, anyhow::Error> {
-        let project_dir = path::absolute(base_dir).with_context(|| {
+    pub fn try_from_absolute(_base_dir: &Path, _path: &AbsolutePath) -> anyhow::Result<Self> {
+        let base_dir;
+        let path;
+
+        #[cfg(windows)]
+        {
+            base_dir = Self::strip_extended_prefix(_base_dir);
+            path = Self::strip_extended_prefix(_path);
+        }
+
+        #[cfg(unix)]
+        {
+            base_dir = _base_dir.to_path_buf();
+            path = _path.to_path_buf();
+        }
+
+        let project_dir = path::absolute(base_dir.clone()).with_context(|| {
             format!(
                 "Failed to get absolute path for project directory '{}'",
                 base_dir.display()
@@ -63,7 +78,7 @@ impl RelativePath {
         })?;
         let relative_path = path.strip_prefix(&project_dir).with_context(|| {
             format!(
-                "Failed to strip project directory '{}' from path {path}",
+                "Failed to strip project directory '{}' from path {_path}",
                 project_dir.display()
             )
         })?;
@@ -73,6 +88,17 @@ impl RelativePath {
         }
 
         Ok(Self(relative_path.to_path_buf()))
+    }
+
+    #[cfg(windows)]
+    pub fn strip_extended_prefix(p: &Path) -> std::path::PathBuf {
+        let s = p.display().to_string();
+        if let Some(stripped) = s.strip_prefix(r"\\?\") {
+            // Rebuild as PathBuf
+            std::path::PathBuf::from(stripped)
+        } else {
+            p.to_path_buf()
+        }
     }
 
     pub fn try_from_path(base_dir: &Path, path: &Path) -> Result<Self, anyhow::Error> {
@@ -92,7 +118,10 @@ pub struct FileUri(String);
 
 impl FileUri {
     pub fn to_absolute_path(&self) -> AbsolutePath {
+        #[cfg(unix)]
         let path = Path::new(&self.0[7..]);
+        #[cfg(windows)]
+        let path = Path::new(&self.0[8..]);
         AbsolutePath::try_from(path.to_path_buf())
             .expect("File URI should contain an absolute path")
     }
@@ -102,10 +131,22 @@ impl TryFrom<String> for FileUri {
     type Error = anyhow::Error;
 
     fn try_from(string: String) -> Result<Self, Self::Error> {
-        if string.starts_with("file:///") {
-            Ok(Self(string.to_string()))
+        let uri;
+        let file_prefix;
+        #[cfg(unix)]
+        {
+            file_prefix = "file:///";
+            uri = string;
+        }
+        #[cfg(windows)]
+        {
+            file_prefix = "file://";
+            uri = string.replace("%3A", ":");
+        }
+        if uri.starts_with(file_prefix) {
+            Ok(Self(uri.to_string()))
         } else {
-            bail!("File URI '{}' does not start with 'file:///'", string);
+            bail!("File URI '{}' does not start with '{}'", uri, file_prefix);
         }
     }
 }

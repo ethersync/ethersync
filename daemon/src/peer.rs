@@ -16,10 +16,13 @@ use libp2p::{identity::Keypair, noise, pnet, tcp, yamux};
 use libp2p_stream as stream;
 use pbkdf2::pbkdf2_hmac;
 use sha2::Sha256;
-use std::fs::{self, OpenOptions};
+#[cfg(unix)]
+use std::fs;
+use std::fs::{OpenOptions};
 use std::io::Write;
 use std::mem;
 use std::net::Ipv4Addr;
+#[cfg(unix)]
 use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
 use std::path::{Path, PathBuf};
 use tokio::sync::{broadcast, mpsc, oneshot};
@@ -213,17 +216,23 @@ impl P2PActor {
     }
 
     /// Returns an existing keypair, or generates a new one.
+    /// On Unix, we check for permissions. On Windows, do nothing special.
     fn get_keypair(&self) -> Keypair {
         let keyfile = self.base_dir.join(".ethersync").join("key");
         if keyfile.exists() {
-            let current_permissions = fs::metadata(&keyfile)
-                .expect("Expected to have access to metadata of the keyfile")
-                .permissions()
-                .mode();
-            let allowed_permissions = 0o100600;
-            if current_permissions != allowed_permissions {
-                panic!("For security reasons, please make sure to set the key file to user-readable only (set the permissions to 600).");
+            // Check file perms only on Unix
+            #[cfg(unix)]
+            {
+                let current_permissions = fs::metadata(&keyfile)
+                    .expect("Expected to have access to metadata of the keyfile")
+                    .permissions()
+                    .mode();
+                let allowed_permissions = 0o100600;
+                if current_permissions != allowed_permissions {
+                    panic!("For security reasons, please make sure to set the key file to user-readable only (set the permissions to 600).");
+                }
             }
+            // On Windows, do nothing
             info!("Re-using existing keypair");
             let bytes = std::fs::read(keyfile).expect("Failed to read key file");
             Keypair::from_protobuf_encoding(&bytes).expect("Failed to deserialize key file")
@@ -235,6 +244,8 @@ impl P2PActor {
                 .to_protobuf_encoding()
                 .expect("Failed to serialize keypair");
 
+            // On Unix, set mode. On Windows, skip.
+            #[cfg(unix)]
             let mut file = OpenOptions::new()
                 .create(true)
                 .write(true)
@@ -242,6 +253,15 @@ impl P2PActor {
                 .mode(0o600)
                 .open(keyfile)
                 .expect("Should have been able to create key file that did not exist before");
+
+            #[cfg(windows)]
+            let mut file = OpenOptions::new()
+                .create(true)
+                .write(true)
+                .truncate(true)
+                .open(&keyfile)
+                .expect("Could not create key file on Windows");
+
             file.write_all(&bytes).expect("Failed to write to key file");
 
             keypair
@@ -351,12 +371,12 @@ impl SyncActor {
     }
 
     async fn receive_sync_message(&mut self, message: AutomergeSyncMessage) {
-        let (reponse_tx, response_rx) = oneshot::channel();
+        let (response_tx, response_rx) = oneshot::channel();
         self.document_handle
             .send_message(DocMessage::ReceiveSyncMessage {
                 message,
                 state: mem::take(&mut self.peer_state),
-                response_tx: reponse_tx,
+                response_tx: response_tx,
             })
             .await;
         self.peer_state = response_rx
@@ -365,11 +385,11 @@ impl SyncActor {
     }
 
     async fn generate_sync_message(&mut self) -> Result<()> {
-        let (reponse_tx, response_rx) = oneshot::channel();
+        let (response_tx, response_rx) = oneshot::channel();
         self.document_handle
             .send_message(DocMessage::GenerateSyncMessage {
                 state: mem::take(&mut self.peer_state),
-                response_tx: reponse_tx,
+                response_tx,
             })
             .await;
         let (ps, message) = response_rx
