@@ -9,6 +9,7 @@
    ]]></description>
 
    <depends>com.intellij.modules.platform</depends>
+   <depends>org.jetbrains.plugins.terminal</depends>
 
    <extensions defaultExtensionNs="com.intellij">
       <applicationService
@@ -22,11 +23,6 @@
       <projectService
          serviceInterface="io.github.ethersync.EthersyncService"
          serviceImplementation="io.github.ethersync.EthersyncServiceImpl"/>
-
-      <toolWindow
-         id="Ethersync"
-         factoryClass="io.github.ethersync.ToolWindowFactory"
-         icon="io.github.ethersync.Icons.PluginIcon" />
    </extensions>
 
    <actions>
