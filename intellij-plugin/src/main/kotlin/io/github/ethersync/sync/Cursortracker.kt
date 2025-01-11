@@ -1,6 +1,5 @@
 package io.github.ethersync.sync
 
-import com.intellij.openapi.application.EDT
 import com.intellij.openapi.editor.LogicalPosition
 import com.intellij.openapi.editor.event.CaretEvent
 import com.intellij.openapi.editor.event.CaretListener
@@ -8,26 +7,27 @@ import com.intellij.openapi.editor.markup.*
 import com.intellij.openapi.fileEditor.FileEditorManager
 import com.intellij.openapi.fileEditor.TextEditor
 import com.intellij.openapi.project.Project
+import com.intellij.openapi.rd.util.withUiContext
 import com.intellij.ui.JBColor
 import com.intellij.util.io.await
 import io.github.ethersync.protocol.CursorEvent
 import io.github.ethersync.protocol.CursorRequest
 import io.github.ethersync.protocol.RemoteEthersyncClientProtocol
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import org.eclipse.lsp4j.Position
 import org.eclipse.lsp4j.Range
 import org.eclipse.lsp4j.jsonrpc.ResponseErrorException
 import java.util.*
+import kotlin.collections.HashMap
 
 class Cursortracker(
    private val project: Project,
    private val cs: CoroutineScope,
 ) : CaretListener {
 
-   private val highlighter = HashMap<String, List<RangeHighlighter>>()
+   private data class Key(val documentUri: String, val user: String)
+   private val highlighter = HashMap<Key, List<RangeHighlighter>>()
 
    var remoteProxy: RemoteEthersyncClientProtocol? = null
 
@@ -38,14 +38,15 @@ class Cursortracker(
          .filter { editor -> editor.file.canonicalFile != null }
          .firstOrNull { editor -> editor.file.canonicalFile!!.url == cursorEvent.documentUri } ?: return
 
+      val key = Key(cursorEvent.documentUri, cursorEvent.userId)
       val editor = fileEditor.editor
 
       cs.launch {
-         withContext(Dispatchers.EDT) {
+         withUiContext {
             synchronized(highlighter) {
                val markupModel = editor.markupModel
 
-               val previous = highlighter.remove(cursorEvent.userId)
+               val previous = highlighter.remove(key)
                if (previous != null) {
                   for (hl in previous) {
                      markupModel.removeHighlighter(hl)
@@ -58,16 +59,12 @@ class Cursortracker(
                   val endPosition = editor.logicalPositionToOffset(LogicalPosition(range.end.line, range.end.character))
 
                   val textAttributes = TextAttributes().apply {
-                     // foregroundColor = JBColor(JBColor.YELLOW, JBColor.DARK_GRAY)
-
-                     // TODO: unclear which is the best effect type
                      effectType = EffectType.ROUNDED_BOX
                      effectColor = JBColor(JBColor.YELLOW, JBColor.DARK_GRAY)
                   }
-
                   val hl = markupModel.addRangeHighlighter(
                      startPosition,
-                     endPosition + 1,
+                     endPosition,
                      HighlighterLayer.ADDITIONAL_SYNTAX,
                      textAttributes,
                      HighlighterTargetArea.EXACT_RANGE
@@ -78,7 +75,7 @@ class Cursortracker(
 
                   newHighlighter.add(hl)
                }
-               highlighter[cursorEvent.userId] = newHighlighter
+               highlighter[key] = newHighlighter
             }
          }
       }
@@ -87,9 +84,15 @@ class Cursortracker(
    override fun caretPositionChanged(event: CaretEvent) {
       val canonicalFile = event.editor.virtualFile?.canonicalFile ?: return
       val uri = canonicalFile.url
-      val pos = Position(event.newPosition.line, event.newPosition.column)
-      val range = Range(pos, pos)
-      launchCursorRequest(CursorRequest(uri, Collections.singletonList(range)))
+
+      val ranges = event.editor.caretModel
+         .allCarets
+         .map {caret ->
+            val pos = Position(caret.logicalPosition.line, caret.logicalPosition.column)
+            Range(pos, pos)
+         }
+
+      launchCursorRequest(CursorRequest(uri, ranges))
    }
 
    private fun launchCursorRequest(cursorRequest: CursorRequest) {
@@ -103,7 +106,24 @@ class Cursortracker(
       }
    }
 
-   fun clear() {
+   suspend fun clear() {
       remoteProxy = null
+      withUiContext {
+         synchronized(highlighter) {
+            for (entry in highlighter) {
+               val fileEditor = FileEditorManager.getInstance(project)
+                  .allEditors
+                  .filterIsInstance<TextEditor>()
+                  .filter { editor -> editor.file.canonicalFile != null }
+                  .firstOrNull { editor -> editor.file.canonicalFile!!.url == entry.key.documentUri } ?: continue
+
+               for (rangeHighlighter in entry.value) {
+                  fileEditor.editor.markupModel.removeHighlighter(rangeHighlighter)
+               }
+            }
+
+            highlighter.clear()
+         }
+      }
    }
 }
