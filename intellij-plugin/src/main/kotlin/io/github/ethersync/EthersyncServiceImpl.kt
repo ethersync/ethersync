@@ -3,7 +3,6 @@ package io.github.ethersync
 import com.intellij.execution.configurations.GeneralCommandLine
 import com.intellij.execution.process.ColoredProcessHandler
 import com.intellij.execution.process.ProcessEvent
-import com.intellij.execution.process.ProcessHandler
 import com.intellij.execution.process.ProcessListener
 import com.intellij.execution.ui.ConsoleView
 import com.intellij.openapi.components.Service
@@ -45,7 +44,7 @@ class EthersyncServiceImpl(
 )  : EthersyncService {
 
    private var launcher: Launcher<RemoteEthersyncClientProtocol>? = null
-   private var daemonProcess: ProcessHandler? = null
+   private var daemonProcess: ColoredProcessHandler? = null
    private var clientProcess: Process? = null
 
    private val changetracker: Changetracker = Changetracker(project, cs)
@@ -99,35 +98,63 @@ class EthersyncServiceImpl(
       }
       daemonProcess?.let {
          it.detachProcess()
-         it.destroyProcess()
+         it.process.destroy()
+         it.process.awaitExit()
          daemonProcess = null
       }
       changetracker.clear()
       cursortracker.clear()
    }
 
-   override fun connectToPeer(peer: String) {
-      val projectDirectory = File(project.basePath!!)
-      val ethersyncDirectory = File(projectDirectory, ".ethersync")
+   override fun start(peer: String?) {
       val socket = "ethersync-%s-socket".format(project.name)
 
-      if (!ethersyncDirectory.exists()) {
-         LOG.debug("Creating ethersync directory")
-         ethersyncDirectory.mkdir()
-      }
-
       val cmd = GeneralCommandLine(AppSettings.getInstance().state.ethersyncBinaryPath)
-      cmd.workDirectory = projectDirectory
+
       cmd.addParameter("daemon")
-      if (peer.isNotBlank()) {
-         cmd.addParameter("--peer")
-         cmd.addParameter(peer)
+      peer?.let {
+         if (peer.isNotBlank()) {
+            cmd.addParameter("--peer")
+            cmd.addParameter(peer)
+         }
       }
       cmd.addParameter("--socket-name")
       cmd.addParameter(socket)
 
+      launchDaemon(cmd)
+   }
+
+   override fun startWithCustomCommandLine(commandLine: String) {
+      // TODO: splitting by " " is probably insufficient if there is an argument with spaces in it…
+      val cmd = GeneralCommandLine(commandLine.split(" "))
+
+      launchDaemon(cmd)
+   }
+
+   private fun launchDaemon(cmd: GeneralCommandLine) {
+      val projectDirectory = File(project.basePath!!)
+      val ethersyncDirectory = File(projectDirectory, ".ethersync")
+      cmd.workDirectory = projectDirectory
+
+      var socket: String? = null
+      if (cmd.parametersList.hasParameter("--socket-name") || cmd.parametersList.hasParameter("-s")) {
+         for (i in 0..(cmd.parametersList.parametersCount - 1)) {
+            val name = cmd.parametersList[i]
+
+            if (name == "--socket-name" || name == "-s") {
+               socket = cmd.parametersList[i + 1]
+               break
+            }
+         }
+      }
+
       cs.launch {
          shutdown()
+
+         if (!ethersyncDirectory.exists()) {
+            LOG.debug("Creating ethersync directory")
+            ethersyncDirectory.mkdir()
+         }
 
          withUiContext {
             daemonProcess = ColoredProcessHandler(cmd)
@@ -175,12 +202,21 @@ class EthersyncServiceImpl(
       }
    }
 
-   private fun launchEthersyncClient(socket: String, projectDirectory: File) {
+   private fun launchEthersyncClient(socket: String?, projectDirectory: File) {
       if (clientProcess != null) {
          return
       }
 
       cs.launch {
+         val cmd = GeneralCommandLine(AppSettings.getInstance().state.ethersyncBinaryPath)
+         cmd.workDirectory = projectDirectory
+         cmd.addParameter("client")
+
+         socket?.let {
+            cmd.addParameter("--socket-name")
+            cmd.addParameter(it)
+         }
+
          LOG.info("Starting ethersync client")
          // TODO: try catch not existing binary
          val clientProcessBuilder = ProcessBuilder(

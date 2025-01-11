@@ -27,6 +27,7 @@ class Changetracker(
    private val cs: CoroutineScope,
 ) : DocumentListener {
 
+   // TODO: remove because that seems brittle…
    private val ignoreChangeEvent = AtomicBoolean(false)
 
    private data class FileRevision(

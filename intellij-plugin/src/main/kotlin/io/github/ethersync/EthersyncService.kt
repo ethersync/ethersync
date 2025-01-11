@@ -2,5 +2,7 @@ package io.github.ethersync
 
 interface EthersyncService {
 
-   fun connectToPeer(peer: String)
+   fun start(peer: String?)
+
+   fun startWithCustomCommandLine(commandLine: String)
 }
