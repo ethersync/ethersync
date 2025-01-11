@@ -40,18 +40,18 @@ class Changetracker(
 
    var remoteProxy: RemoteEthersyncClientProtocol? = null
 
-   override fun documentChanged(event: DocumentEvent) {
+   override fun beforeDocumentChange(event: DocumentEvent) {
       if (ignoreChangeEvent.get()) {
          return
       }
 
       val file = FileDocumentManager.getInstance().getFile(event.document)!!
       val fileEditor = FileEditorManager.getInstance(project).getEditors(file)
+         .filter{ editor -> editor.file.canonicalFile != null }
          .filterIsInstance<TextEditor>()
-         .first()
+         .firstOrNull() ?: return
 
       val editor = fileEditor.editor
-
       val uri = file.canonicalFile!!.url
 
       val rev = revisions[uri]!!
@@ -79,34 +79,34 @@ class Changetracker(
    }
 
    fun handleRemoteEditEvent(editEvent: EditEvent) {
-      val revision = revisions[editEvent.documentUri]!!
+      val revision = revisions[editEvent.documentUri] ?: return
 
       // Check if operation is up-to-date to our content.
       // If it's not, ignore it! The daemon will send a transformed one later.
       if (editEvent.editorRevision == revision.editor) {
-         ignoreChangeEvent.set(true)
 
          val fileEditorManager = FileEditorManager.getInstance(project)
 
          val fileEditor = fileEditorManager.allEditors
-            .first { editor -> editor.file.canonicalFile!!.url == editEvent.documentUri } ?: return
+            .filter { editor -> editor.file.canonicalFile != null }
+            .filterIsInstance<TextEditor>()
+            .firstOrNull { editor -> editor.file.canonicalFile!!.url == editEvent.documentUri } ?: return
 
-         if (fileEditor is TextEditor) {
-            val editor = fileEditor.editor
+         val editor = fileEditor.editor
 
-            WriteCommandAction.runWriteCommandAction(project, {
-               for(delta in editEvent.delta) {
-                  val start = editor.logicalPositionToOffset(LogicalPosition(delta.range.start.line, delta.range.start.character))
-                  val end = editor.logicalPositionToOffset(LogicalPosition(delta.range.end.line, delta.range.end.character))
+         WriteCommandAction.runWriteCommandAction(project, {
+            ignoreChangeEvent.set(true)
+            for(delta in editEvent.delta) {
+               val start = editor.logicalPositionToOffset(LogicalPosition(delta.range.start.line, delta.range.start.character))
+               val end = editor.logicalPositionToOffset(LogicalPosition(delta.range.end.line, delta.range.end.character))
 
-                  editor.document.replaceString(start, end, delta.replacement)
-               }
-            })
-
-            revision.daemon += 1u
-
+               editor.document.replaceString(start, end, delta.replacement)
+            }
             ignoreChangeEvent.set(false)
-         }
+         })
+
+         revision.daemon += 1u
+
       }
    }
 

@@ -54,16 +54,22 @@ class EthersyncServiceImpl(
       val bus = project.messageBus.connect()
       bus.subscribe(FileEditorManagerListener.FILE_EDITOR_MANAGER, object : FileEditorManagerListener {
          override fun fileOpened(source: FileEditorManager, file: VirtualFile) {
-            launchDocumentOpenRequest(file.canonicalFile!!.url)
+            val canonicalFile = file.canonicalFile ?: return
+            launchDocumentOpenRequest(canonicalFile.url)
          }
 
          override fun fileClosed(source: FileEditorManager, file: VirtualFile) {
-            launchDocumentCloseNotification(file.canonicalFile!!.url)
+            val canonicalFile = file.canonicalFile ?: return
+            launchDocumentCloseNotification(canonicalFile.url)
          }
       })
 
       for (editor in FileEditorManager.getInstance(project).allEditors) {
          if (editor is TextEditor) {
+            val file = editor.file ?: continue
+            if (!file.exists()) {
+               continue
+            }
             editor.editor.caretModel.addCaretListener(cursortracker)
             editor.editor.document.addDocumentListener(changetracker)
          }
@@ -71,11 +77,21 @@ class EthersyncServiceImpl(
 
       EditorFactory.getInstance().addEditorFactoryListener(object : EditorFactoryListener {
          override fun editorCreated(event: EditorFactoryEvent) {
+            val file = event.editor.virtualFile ?: return
+            if (!file.exists()) {
+               return
+            }
+
             event.editor.caretModel.addCaretListener(cursortracker)
             event.editor.document.addDocumentListener(changetracker)
          }
 
          override fun editorReleased(event: EditorFactoryEvent) {
+            val file = event.editor.virtualFile ?: return
+            if (!file.exists()) {
+               return
+            }
+
             event.editor.caretModel.removeCaretListener(cursortracker)
             event.editor.document.removeDocumentListener(changetracker)
          }

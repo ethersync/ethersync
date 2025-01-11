@@ -32,61 +32,61 @@ class Cursortracker(
    var remoteProxy: RemoteEthersyncClientProtocol? = null
 
    fun handleRemoteCursorEvent(cursorEvent: CursorEvent) {
-      val fileEditorManager = FileEditorManager.getInstance(project)
-
-      val fileEditor = fileEditorManager.allEditors
+      val fileEditor = FileEditorManager.getInstance(project)
+         .allEditors
+         .filterIsInstance<TextEditor>()
+         .filter { editor -> editor.file.canonicalFile != null }
          .firstOrNull { editor -> editor.file.canonicalFile!!.url == cursorEvent.documentUri } ?: return
 
-      if (fileEditor is TextEditor) {
-         val editor = fileEditor.editor
+      val editor = fileEditor.editor
 
-         cs.launch {
-            withContext(Dispatchers.EDT) {
-               synchronized(highlighter) {
-                  val markupModel = editor.markupModel
+      cs.launch {
+         withContext(Dispatchers.EDT) {
+            synchronized(highlighter) {
+               val markupModel = editor.markupModel
 
-                  val previous = highlighter.remove(cursorEvent.userId)
-                  if (previous != null) {
-                     for (hl in previous) {
-                        markupModel.removeHighlighter(hl)
-                     }
+               val previous = highlighter.remove(cursorEvent.userId)
+               if (previous != null) {
+                  for (hl in previous) {
+                     markupModel.removeHighlighter(hl)
                   }
-
-                  val newHighlighter = LinkedList<RangeHighlighter>()
-                  for(range in cursorEvent.ranges) {
-                     val startPosition = editor.logicalPositionToOffset(LogicalPosition(range.start.line, range.start.character))
-                     val endPosition = editor.logicalPositionToOffset(LogicalPosition(range.end.line, range.end.character))
-
-                     val textAttributes = TextAttributes().apply {
-                        // foregroundColor = JBColor(JBColor.YELLOW, JBColor.DARK_GRAY)
-
-                        // TODO: unclear which is the best effect type
-                        effectType = EffectType.ROUNDED_BOX
-                        effectColor = JBColor(JBColor.YELLOW, JBColor.DARK_GRAY)
-                     }
-
-                     val hl = markupModel.addRangeHighlighter(
-                        startPosition,
-                        endPosition + 1,
-                        HighlighterLayer.ADDITIONAL_SYNTAX,
-                        textAttributes,
-                        HighlighterTargetArea.EXACT_RANGE
-                     )
-                     if (cursorEvent.name != null) {
-                        hl.errorStripeTooltip = cursorEvent.name
-                     }
-
-                     newHighlighter.add(hl)
-                  }
-                  highlighter[cursorEvent.userId] = newHighlighter
                }
+
+               val newHighlighter = LinkedList<RangeHighlighter>()
+               for(range in cursorEvent.ranges) {
+                  val startPosition = editor.logicalPositionToOffset(LogicalPosition(range.start.line, range.start.character))
+                  val endPosition = editor.logicalPositionToOffset(LogicalPosition(range.end.line, range.end.character))
+
+                  val textAttributes = TextAttributes().apply {
+                     // foregroundColor = JBColor(JBColor.YELLOW, JBColor.DARK_GRAY)
+
+                     // TODO: unclear which is the best effect type
+                     effectType = EffectType.ROUNDED_BOX
+                     effectColor = JBColor(JBColor.YELLOW, JBColor.DARK_GRAY)
+                  }
+
+                  val hl = markupModel.addRangeHighlighter(
+                     startPosition,
+                     endPosition + 1,
+                     HighlighterLayer.ADDITIONAL_SYNTAX,
+                     textAttributes,
+                     HighlighterTargetArea.EXACT_RANGE
+                  )
+                  if (cursorEvent.name != null) {
+                     hl.errorStripeTooltip = cursorEvent.name
+                  }
+
+                  newHighlighter.add(hl)
+               }
+               highlighter[cursorEvent.userId] = newHighlighter
             }
          }
       }
    }
 
    override fun caretPositionChanged(event: CaretEvent) {
-      val uri = event.editor.virtualFile.canonicalFile!!.url
+      val canonicalFile = event.editor.virtualFile?.canonicalFile ?: return
+      val uri = canonicalFile.url
       val pos = Position(event.newPosition.line, event.newPosition.column)
       val range = Range(pos, pos)
       launchCursorRequest(CursorRequest(uri, Collections.singletonList(range)))
