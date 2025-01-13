@@ -90,7 +90,7 @@ These should be sent as notifications, there is no need to reply to them.
 - If this is not the editor revision stored in the editor, the editor must ignore the edit. The daemon will send an updated version later.
 - After applying the received edit, the editor must increase its daemon revision.
 
-#### `"cursor" {userid: integer, name?: string, uri: DocumentUri, ranges: Range[]}`
+#### `"cursor" {userid: string, name?: string, uri: DocumentUri, ranges: Range[]}`
 
 - The daemon sends this message when user's cursor positions or selections change, regardless of whether the file has been opened in the editor. The editor can use this information to display in which files other people work.
 
