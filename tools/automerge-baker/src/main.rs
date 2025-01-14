@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: NONE
+//
+// SPDX-License-Identifier: CC0-1.0
+
 //! A helper tool to pre-bake the initial state of the Automerge document.
 //! See https://automerge.org/docs/cookbook/modeling-data/#setting-up-an-initial-document-structure
 
