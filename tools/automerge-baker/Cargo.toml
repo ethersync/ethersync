@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: NONE
+#
+# SPDX-License-Identifier: CC0-1.0
+
 [package]
 name = "automerge-baker"
 version = "0.1.0"
