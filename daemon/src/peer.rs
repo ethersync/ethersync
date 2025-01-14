@@ -37,7 +37,7 @@ const DEFAULT_PASSPHRASE: &str = "default-passphrase";
 
 /// Responsible for offering peer-to-peer connectivity to the outside world. Uses libp2p.
 /// For every new connection, spawns and runs a `SyncActor`.
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct PeerConnectionInfo {
     pub port: Option<u16>,
     pub peer: Option<String>,
@@ -62,6 +62,23 @@ impl PeerConnectionInfo {
             });
         } else {
             info!("No config file found, please provide everything through CLI options");
+            None
+        }
+    }
+
+    pub fn from_join_code(join_code: &str) -> Option<Self> {
+        let mut parts = join_code.trim().split('#');
+        if let Some(peer) = parts.next() {
+            if let Some(passphrase) = parts.next() {
+                Some(Self {
+                    port: None,
+                    peer: Some(peer.to_string()),
+                    passphrase: Some(passphrase.to_string()),
+                })
+            } else {
+                None
+            }
+        } else {
             None
         }
     }
@@ -157,6 +174,9 @@ impl P2PActor {
             swarm.dial(multiaddr)?;
         }
 
+        // For putting the join code in the clipboard.
+        let mut clipboard = arboard::Clipboard::new().unwrap();
+
         // Poll the swarm to make progress.
         loop {
             let event = swarm.next().await.expect("never terminates");
@@ -170,14 +190,15 @@ impl P2PActor {
                         .any(|component| component == Protocol::Ip4(Ipv4Addr::new(127, 0, 0, 1)));
                     if !is_localhost {
                         let secret_parameter = if is_default_passphrase {
-                            ""
+                            "".to_string()
                         } else {
-                            " (They need put secret = <your-secret> in the .ethersync/config file.)"
+                            format!("#{}", passphrase)
                         };
-                        info!(
-                            "Others can connect with:\n\n\tethersync daemon --peer {}{}\n",
-                            listen_address, secret_parameter
-                        );
+
+                        let join_code = format!("{}{}", listen_address, secret_parameter);
+                        clipboard.set_text(join_code).unwrap();
+
+                        info!( "Others can connect with:\n\n\tethersync join\n\n\tThey will need the join code (copied to your clipboard)");
                     }
                 }
                 libp2p::swarm::SwarmEvent::ConnectionEstablished {

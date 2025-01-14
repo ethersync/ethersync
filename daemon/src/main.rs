@@ -7,9 +7,12 @@ use anyhow::{Context, Result};
 use clap::{parser::ValueSource, CommandFactory, FromArgMatches, Parser, Subcommand};
 use ethersync::peer::PeerConnectionInfo;
 use ethersync::{daemon::Daemon, editor, logging, sandbox};
+use rand::distributions::{Alphanumeric, DistString};
+use std::io::Write;
 use std::path::{Path, PathBuf};
+use temp_dir::TempDir;
 use tokio::signal;
-use tracing::{error, info};
+use tracing::{error, info, warn};
 
 mod jsonrpc_forwarder;
 
@@ -53,6 +56,10 @@ enum Commands {
         #[arg(long)]
         init: bool,
     },
+    /// Share the current directory with a peer.
+    Share,
+    /// Join a shared project in a temporary directory.
+    Join,
     /// Open a JSON-RPC connection to the Ethersync daemon on stdin/stdout.
     Client,
 }
@@ -130,6 +137,68 @@ async fn main() -> Result<()> {
 
             info!("Starting Ethersync on {}", directory.display());
             Daemon::new(peer_connection_info, &socket_path, &directory, init);
+            match signal::ctrl_c().await {
+                Ok(()) => {}
+                Err(err) => {
+                    eprintln!("Unable to listen for shutdown signal: {err}");
+                    // still shut down.
+                }
+            }
+        }
+        Commands::Share => {
+            let directory = std::env::current_dir().expect("Could not access current directory");
+            if !has_ethersync_directory(&directory) {
+                warn!(
+                    "No {}/ found in {}, creating it",
+                    ETHERSYNC_CONFIG_DIR,
+                    directory.display()
+                );
+                let ethersync_dir = directory.join(ETHERSYNC_CONFIG_DIR);
+                sandbox::create_dir(&directory, &ethersync_dir)
+                    .expect("Failed to create ethersync directory");
+            }
+
+            let passphrase = Alphanumeric.sample_string(&mut rand::thread_rng(), 32);
+
+            let peer_connection_info = PeerConnectionInfo {
+                peer: None,
+                port: None,
+                passphrase: Some(passphrase),
+            };
+
+            Daemon::new(peer_connection_info, &socket_path, &directory, true);
+
+            match signal::ctrl_c().await {
+                Ok(()) => {}
+                Err(err) => {
+                    eprintln!("Unable to listen for shutdown signal: {err}");
+                    // still shut down.
+                }
+            }
+        }
+        Commands::Join => {
+            // Read configuration from stdin
+            print!("Enter the join code: ");
+            std::io::stdout().flush().unwrap();
+            let mut join_code = String::new();
+            std::io::stdin().read_line(&mut join_code).unwrap();
+            let peer_connection_info =
+                PeerConnectionInfo::from_join_code(&join_code).expect("Invalid join code");
+            dbg!(&peer_connection_info);
+
+            let directory =
+                TempDir::with_prefix("ethersync").expect("Could not create temporary directory");
+            let ethersync_dir = directory.path().join(ETHERSYNC_CONFIG_DIR);
+            sandbox::create_dir(directory.path(), &ethersync_dir)
+                .expect("Failed to create ethersync directory");
+
+            info!(
+                "Strarting Ethersync in temporary directory {}",
+                directory.path().display()
+            );
+
+            Daemon::new(peer_connection_info, &socket_path, directory.path(), true);
+
             match signal::ctrl_c().await {
                 Ok(()) => {}
                 Err(err) => {

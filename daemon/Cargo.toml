@@ -36,6 +36,7 @@ required-features = ["executable-deps"]
 
 [dependencies]
 anyhow = "1.0.81"
+arboard = "3.4.1"
 automerge = "0.5.9"
 clap = { version = "4.5.3", features = ["derive", "env"], optional = true }
 derive_more = { version = "1.0.0", features = ["as_ref", "deref", "display"] }
@@ -63,6 +64,7 @@ rust-ini = "0.21.1"
 serde = { version = "1.0.198", features = ["derive"] }
 serde_json = "1"
 sha2 = "0.10.8"
+temp-dir = "0.1.13"
 time = { version = "0.3.36", features = ["formatting"] }
 tokio-util = { version = "0.7.11", features = ["codec"] }
 tracing = "0.1.40"
@@ -82,7 +84,6 @@ default = ["executable-deps"]
 
 [dev-dependencies]
 pretty_assertions = "1.4.0"
-temp-dir = "0.1.13"
 tracing-test = "0.2.4"
 
 # Stripping symbols (not debuginfo) reduces binary size by ~1.5x.
