@@ -14,6 +14,7 @@ Ethersync enables real-time co-editing of local text files. You can use it for p
 -   ✒️ Local-first: You always have full access, even offline
 -   🇳 Fully-featured Neovim plugin
 -   🪟 VS Code plugin
+-   Experimental IntelliJ plugin
 -   🧩 Simple protocol for writing new editor plugins
 -   🌐 Peer-to-peer connections, no need for a server
 -   🔒 Encrypted connections secured by a shared password
