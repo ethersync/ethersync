@@ -1,3 +1,10 @@
+<!--
+SPDX-FileCopyrightText: 2024 blinry <mail@blinry.org>
+SPDX-FileCopyrightText: 2024 zormit <nt4u@kpvn.de>
+
+SPDX-License-Identifier: CC-BY-SA-4.0
+-->
+
 # Connection making
 
 In order to make sense of how Ethersync daemons connect to each other a little bit of Networking background (IP addresses, TCP ports) is helpful. You should still be able to get going within one local network (such as two computers in the same Wi-Fi) by just copy pasting things, but connecting to other peers over the internet might currently require some configurations. We're aiming to give you the right keywords to look for in case you've not encountered that yet.

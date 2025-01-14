@@ -1,3 +1,10 @@
+<!--
+SPDX-FileCopyrightText: 2024 blinry <mail@blinry.org>
+SPDX-FileCopyrightText: 2024 zormit <nt4u@kpvn.de>
+
+SPDX-License-Identifier: CC-BY-SA-4.0
+-->
+
 # Working with Git
 
 While Ethersync currently doesn't have dedicated "Git integration" features, you can use it together with Git pretty well.

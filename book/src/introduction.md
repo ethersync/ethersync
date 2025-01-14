@@ -1,3 +1,10 @@
+<!--
+SPDX-FileCopyrightText: 2024 blinry <mail@blinry.org>
+SPDX-FileCopyrightText: 2024 zormit <nt4u@kpvn.de>
+
+SPDX-License-Identifier: CC-BY-SA-4.0
+-->
+
 # Introduction
 
 Have you used software like Google Docs, Etherpad or Hedgedoc? It's a very direct way to collaborate – multiple people can type into a document at the same time, and you can see each other's cursors.

@@ -1,3 +1,10 @@
+<!--
+SPDX-FileCopyrightText: 2024 blinry <mail@blinry.org>
+SPDX-FileCopyrightText: 2024 zormit <nt4u@kpvn.de>
+
+SPDX-License-Identifier: CC-BY-SA-4.0
+-->
+
 # File Events
 
 Ethersync tries to sync not only file changes done by supported editors, but also by external tools.

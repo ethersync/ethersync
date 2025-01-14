@@ -1,3 +1,10 @@
+<!--
+SPDX-FileCopyrightText: 2024 blinry <mail@blinry.org>
+SPDX-FileCopyrightText: 2024 zormit <nt4u@kpvn.de>
+
+SPDX-License-Identifier: CC-BY-SA-4.0
+-->
+
 # Editor plugin development guide
 
 This document describes the protocol between the Ethersync daemon and the text editors. It should contain everything you need to implement a plugin for a new editor!
