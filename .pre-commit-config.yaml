@@ -24,7 +24,7 @@ repos:
     hooks:
     -   id: stylua
         args: ['--config-path', 'vim-plugin/.stylua.toml', '--check', 'vim-plugin']
--   repo: https://github.com/Wuestengecko/reuse-tool
-    rev: 7d19244ab46b6a125d1a4dbe4a3ebb9ca767ab1a
+-   repo: https://github.com/fsfe/reuse-tool
+    rev: v5.0.2
     hooks:
-    -   id: reuse
+    -   id: reuse-lint-file
