@@ -1,3 +1,9 @@
+# SPDX-FileCopyrightText: 2024 Danny McClanahan <dmcC2@hypnicjerk.ai>
+# SPDX-FileCopyrightText: 2024 blinry <mail@blinry.org>
+# SPDX-FileCopyrightText: 2024 zormit <nt4u@kpvn.de>
+#
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
 [package]
 name = "ethersync-integration-tests"
 description = "End-to-end testing of Ethersync."
