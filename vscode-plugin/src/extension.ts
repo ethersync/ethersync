@@ -1,3 +1,8 @@
+// SPDX-FileCopyrightText: 2024 blinry <mail@blinry.org>
+// SPDX-FileCopyrightText: 2024 zormit <nt4u@kpvn.de>
+//
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 import * as vscode from "vscode"
 import * as cp from "child_process"
 import * as rpc from "vscode-jsonrpc/node"
