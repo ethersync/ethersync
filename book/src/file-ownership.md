@@ -1,3 +1,10 @@
+<!--
+SPDX-FileCopyrightText: 2024 blinry <mail@blinry.org>
+SPDX-FileCopyrightText: 2024 zormit <nt4u@kpvn.de>
+
+SPDX-License-Identifier: CC-BY-SA-4.0
+-->
+
 # File ownership
 
 Ethersync synchronizes edits immediately to each peer. Sometimes the peer has the file already open in an editor, sometimes not. In order to deal with different situations, we are using a concept called "ownership". Either the daemon or the editor can have it, it's like a token who is allowed to change the file.

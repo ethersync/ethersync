@@ -1,3 +1,10 @@
+<!--
+SPDX-FileCopyrightText: 2024 blinry <mail@blinry.org>
+SPDX-FileCopyrightText: 2024 zormit <nt4u@kpvn.de>
+
+SPDX-License-Identifier: CC-BY-SA-4.0
+-->
+
 # Using Ethersync for pair programming
 
 One use case for Ethersync is to do a **short collaboration session** on an existing project. You could do this, for example, to pair program with another person, editing code together at the same time.

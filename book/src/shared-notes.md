@@ -1,3 +1,10 @@
+<!--
+SPDX-FileCopyrightText: 2024 blinry <mail@blinry.org>
+SPDX-FileCopyrightText: 2024 zormit <nt4u@kpvn.de>
+
+SPDX-License-Identifier: CC-BY-SA-4.0
+-->
+
 # Using Ethersync for writing shared notes
 
 Another use case for Ethersync is to have a **long-lasting collaboration session** on a directory of text files (over the span of months or years). This is similar to how you would use Google Docs, Ethersync or Hedgedoc to work on text. It would be suited for groups who want to write notes or documentation together.

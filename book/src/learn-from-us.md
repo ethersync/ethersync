@@ -1,3 +1,10 @@
+<!--
+SPDX-FileCopyrightText: 2024 blinry <mail@blinry.org>
+SPDX-FileCopyrightText: 2024 zormit <nt4u@kpvn.de>
+
+SPDX-License-Identifier: CC-BY-SA-4.0
+-->
+
 # What to learn from us (after Ethersync is dead)
 
 This page is written for people in the future, who discover Ethersync, and want to learn from it, to start their own project.

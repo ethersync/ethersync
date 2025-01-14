@@ -1,3 +1,10 @@
+<!--
+SPDX-FileCopyrightText: 2024 blinry <mail@blinry.org>
+SPDX-FileCopyrightText: 2024 zormit <nt4u@kpvn.de>
+
+SPDX-License-Identifier: CC-BY-SA-4.0
+-->
+
 # Related Projects
 
 There have been a number of attempts of enabling collaborative text editing! If you think a project is missing, feel free to [submit an issue or a PR](https://github.com/ethersync/ethersync) to add them to the list!
