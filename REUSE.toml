@@ -2,6 +2,6 @@ version = 1
 
 # Computer-generated files.
 [[annotations]]
-path = ["flake.lock", "**/Cargo.lock"]
+path = ["flake.lock", "**/Cargo.lock", "**/package-lock.json"]
 SPDX-FileCopyrightText = "NONE"
 SPDX-License-Identifier = "CC0-1.0"
