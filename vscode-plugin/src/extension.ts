@@ -81,11 +81,16 @@ const editType = new rpc.RequestType<Edit, string, void>("edit")
 const cursorType = new rpc.NotificationType<Cursor>("cursor")
 
 function uriToFname(uri: string): string {
-    const prefix = "file://"
-    if (!uri.startsWith(prefix)) {
-        console.error(`expected URI prefix for '${uri}'`)
+    let prefix = "file://"
+    if (uri.startsWith(prefix)) {
+        return uri.slice(prefix.length)
     }
-    return uri.slice(prefix.length)
+    prefix = "file:///"
+    if (uri.startsWith(prefix)) {
+        return uri.slice(prefix.length)
+    }
+    debug(`expected URI prefix for '${uri}'`)
+    return uri
 }
 
 // helpful: https://stackoverflow.com/a/54369605
@@ -178,13 +183,13 @@ function openCurrentTextDocuments() {
 }
 
 function documentForUri(uri: string): vscode.TextDocument | undefined {
-    return vscode.workspace.textDocuments.find((doc) => decodeURI(doc.uri.toString()) === uri)
+    return vscode.workspace.textDocuments.find((doc) => uriToFname(getDocumentUri(doc)) === uriToFname(cleanUriFormatting(uri)))
 }
 
 async function processEditFromDaemon(edit: Edit) {
     try {
         await mutex.runExclusive(async () => {
-            const filename = uriToFname(edit.uri)
+            const filename = cleanUriFormatting(uriToFname(edit.uri))
             let revision = revisions[filename]
             if (edit.revision !== revision.editor) {
                 debug(`Received edit for revision ${edit.revision} (!= ${revision.editor}), ignoring`)
@@ -221,7 +226,7 @@ async function processEditFromDaemon(edit: Edit) {
 }
 
 async function processCursorFromDaemon(cursor: CursorFromDaemon) {
-    let uri = cursor.uri
+    let uri = cleanUriFormatting(cursor.uri);
 
     const document = documentForUri(uri)
 
@@ -244,7 +249,7 @@ async function applyEdit(document: vscode.TextDocument, edit: Edit): Promise<boo
     for (const delta of edit.delta) {
         const range = ethersyncRangeToVSCodeRange(document, delta.range)
         let edit = new vscode.TextEdit(range, delta.replacement)
-        debug(`Edit applied to document ${decodeURI(document.uri.toString())}`)
+        debug(`Edit applied to document ${getDocumentUri(document)}`)
         edits.push(edit)
     }
     let workspaceEdit = new vscode.WorkspaceEdit()
@@ -262,12 +267,11 @@ async function applyEdit(document: vscode.TextDocument, edit: Edit): Promise<boo
 
 // TODO: check if belongs to project.
 async function processUserOpen(document: vscode.TextDocument) {
-    const fileUri = decodeURI(document.uri.toString())
-    debug("OPEN " + fileUri)
+    const fileUri = getDocumentUri(document)
     connection
         .sendRequest(openType, {uri: fileUri})
         .then(() => {
-            revisions[document.fileName] = new Revision()
+            revisions[getDocumentFileName(document)] = new Revision()
             updateContents(document)
             debug("Successfully opened. Tracking changes.")
         })
@@ -277,14 +281,14 @@ async function processUserOpen(document: vscode.TextDocument) {
 }
 
 function processUserClose(document: vscode.TextDocument) {
-    if (!(document.fileName in revisions)) {
+    if (!(getDocumentFileName(document) in revisions)) {
         // File is not currently tracked in ethersync.
         return
     }
-    const fileUri = decodeURI(document.uri.toString())
+    const fileUri = getDocumentUri(document)
     connection.sendRequest(closeType, {uri: fileUri})
 
-    delete revisions[document.fileName]
+    delete revisions[getDocumentFileName(document)]
 }
 
 function isTextEditsEqualToVSCodeContentChanges(
@@ -322,7 +326,7 @@ function isRemoteEdit(event: vscode.TextDocumentChangeEvent): boolean {
 // NOTE: We might get multiple events per document.version,
 // as the _state_ of the document might change (like isDirty).
 function processUserEdit(event: vscode.TextDocumentChangeEvent) {
-    if (!(event.document.fileName in revisions)) {
+    if (!(getDocumentFileName(event.document) in revisions)) {
         // File is not currently tracked in Ethersync.
         return
     }
@@ -343,7 +347,7 @@ function processUserEdit(event: vscode.TextDocumentChangeEvent) {
                 return
             }
 
-            const filename = document.fileName
+            const filename = getDocumentFileName(document)
             if (!isEthersyncEnabled(path.dirname(filename))) {
                 return
             }
@@ -376,12 +380,12 @@ function processUserEdit(event: vscode.TextDocumentChangeEvent) {
 }
 
 function processSelection(event: vscode.TextEditorSelectionChangeEvent) {
-    if (!(event.textEditor.document.fileName in revisions)) {
+    if (!(getDocumentFileName(event.textEditor.document) in revisions)) {
         // File is not currently tracked in ethersync.
         return
     }
-    let uri = decodeURI(event.textEditor.document.uri.toString())
-    let content = contents[event.textEditor.document.fileName]
+    let uri = getDocumentUri(event.textEditor.document)
+    let content = contents[getDocumentFileName(event.textEditor.document)]
     let ranges = event.selections.map((s) => {
         return vsCodeRangeToEthersyncRange(content, s)
     })
@@ -390,7 +394,7 @@ function processSelection(event: vscode.TextEditorSelectionChangeEvent) {
 
 function vsCodeChangeEventToEthersyncEdits(event: vscode.TextDocumentChangeEvent): Edit[] {
     let document = event.document
-    let filename = document.fileName
+    let filename = getDocumentFileName(document)
 
     let revision = revisions[filename]
 
@@ -399,7 +403,7 @@ function vsCodeChangeEventToEthersyncEdits(event: vscode.TextDocumentChangeEvent
 
     for (const change of event.contentChanges) {
         let delta = vsCodeChangeToEthersyncDelta(content, change)
-        let uri = decodeURI(document.uri.toString())
+        let uri = getDocumentUri(document)
         let theEdit: Edit = {uri, revision: revision.daemon, delta: [delta]}
         edits.push(theEdit)
     }
@@ -443,8 +447,21 @@ function debug(text: string) {
 }
 
 function updateContents(document: vscode.TextDocument) {
-    contents[document.fileName] = new Array(document.lineCount)
+    let filename = getDocumentFileName(document)
+    contents[filename] = new Array(document.lineCount)
     for (let line = 0; line < document.lineCount; line++) {
-        contents[document.fileName][line] = document.lineAt(line).text
+        contents[filename][line] = document.lineAt(line).text
     }
+}
+
+function getDocumentFileName(document: vscode.TextDocument){
+    return cleanUriFormatting(document.fileName.toString());
+}
+
+function getDocumentUri(document: vscode.TextDocument){
+    return cleanUriFormatting(document.uri.toString());
+}
+
+function cleanUriFormatting(uri: string){
+    return decodeURI(uri).replaceAll("%3A",":").replaceAll("\\","/");
 }
