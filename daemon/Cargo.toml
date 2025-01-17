@@ -36,7 +36,7 @@ required-features = ["executable-deps"]
 
 [dependencies]
 anyhow = "1.0.81"
-arboard = "3.4.1"
+arboard = { version = "3.4.1", features = ["wayland-data-control"] }
 automerge = "0.5.9"
 clap = { version = "4.5.3", features = ["derive", "env"], optional = true }
 derive_more = { version = "1.0.0", features = ["as_ref", "deref", "display"] }

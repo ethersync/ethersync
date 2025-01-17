@@ -188,6 +188,7 @@ async fn main() -> Result<()> {
 
             let directory =
                 TempDir::with_prefix("ethersync").expect("Could not create temporary directory");
+
             let ethersync_dir = directory.path().join(ETHERSYNC_CONFIG_DIR);
             sandbox::create_dir(directory.path(), &ethersync_dir)
                 .expect("Failed to create ethersync directory");
@@ -198,6 +199,9 @@ async fn main() -> Result<()> {
             );
 
             Daemon::new(peer_connection_info, &socket_path, directory.path(), true);
+
+            // Don't delete the directory when quitting.
+            directory.leak();
 
             match signal::ctrl_c().await {
                 Ok(()) => {}
