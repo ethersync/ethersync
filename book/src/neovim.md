@@ -7,7 +7,7 @@ SPDX-License-Identifier: CC-BY-SA-4.0
 
 # Neovim Plugin
 
-Again, we have several options of how to install the Neovim plugin:
+Make sure you have at least Neovim 0.7.0 installed. With that in place, you have several options of how to install the Neovim plugin:
 
 ## Lazy
 
@@ -54,4 +54,4 @@ ln -s $PWD/vim-plugin $HOME/.local/share/nvim/site/pack/plugins/start/ethersync
 
 ## Confirm the installation
 
-To confirm that the plugin is installed, try running the `:EthersyncInfo` command in Neovim. It should show a message like "Not connected to the Ethersync daemon".
+To confirm that the plugin is installed, try running the `:EthersyncInfo` command in Neovim. It should show the message "Not connected to Ethersync daemon."
