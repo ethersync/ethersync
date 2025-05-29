@@ -10,6 +10,7 @@ use anyhow::{Context, Result};
 use automerge::sync::{Message as AutomergeSyncMessage, State as SyncState};
 use ini::Ini;
 use iroh::SecretKey;
+use rand::Rng;
 use std::fs::{self, File, OpenOptions};
 use std::io::{Read, Write};
 use std::mem;
@@ -17,10 +18,7 @@ use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use tokio::sync::{broadcast, mpsc, oneshot};
-use tracing::{debug, error, info};
-
-// Used for "easy try out" purposes that are not security critical.
-const DEFAULT_PASSPHRASE: &str = "default-passphrase";
+use tracing::{debug, error, info, warn};
 
 /// Responsible for offering peer-to-peer connectivity to the outside world. Uses libp2p.
 /// For every new connection, spawns and runs a `SyncActor`.
@@ -91,25 +89,26 @@ impl P2PActor {
             .bind()
             .await?;
 
+        let mut rng = rand::rngs::OsRng;
+        let my_passphrase: String = (0..64)
+            .map(|_| rng.sample(rand::distributions::Alphanumeric) as char)
+            .collect();
+
         info!(
-            "Others can connect with:\n\n\tethersync daemon --peer {}\n",
-            endpoint.node_id()
+            "Others can connect with:\n\n\tethersync daemon --peer {}#{}\n",
+            endpoint.node_id(),
+            my_passphrase
         );
 
-        /*
-        let passphrase = self
-            .connection_info
-            .passphrase
-            .clone()
-            .unwrap_or(DEFAULT_PASSPHRASE.to_string());
-        let is_default_passphrase = passphrase == DEFAULT_PASSPHRASE;
-        if is_default_passphrase {
-            warn!("\n\n\tSECURITY WARNING: Running without a secret is only recommended when trying out this software locally.\n\tYou can put secret = <secret> in .ethersync/config.\n");
-        }
-        */
+        if let Some(ref peer) = self.connection_info.peer {
+            let parts: Vec<&str> = peer.split("#").collect();
+            if parts.len() != 2 {
+                panic!("Peer string must have format <node_id>#<passphrase>");
+            }
 
-        if let Some(ref address) = self.connection_info.peer {
-            let public_key = iroh::PublicKey::from_str(&address)?;
+            let public_key = iroh::PublicKey::from_str(&parts[0])?;
+            let peer_passphrase = parts[1];
+
             let node_addr: iroh::NodeAddr = public_key.into();
             let conn = endpoint.connect(node_addr, b"ethersync").await?;
 
@@ -119,7 +118,11 @@ impl P2PActor {
                     .expect("Connection should have a node ID")
             );
 
-            self.spawn_peer_sync(conn, true);
+            self.spawn_peer_sync(
+                conn,
+                my_passphrase.clone(),
+                Some(peer_passphrase.to_string()),
+            );
         }
 
         while let Some(incoming) = endpoint.accept().await {
@@ -131,7 +134,7 @@ impl P2PActor {
                     .expect("Connection should have a node ID")
             );
 
-            self.spawn_peer_sync(conn, false);
+            self.spawn_peer_sync(conn, my_passphrase.clone(), None);
         }
 
         Ok(())
@@ -174,7 +177,12 @@ impl P2PActor {
         }
     }
 
-    fn spawn_peer_sync(&self, conn: iroh::endpoint::Connection, open_connection: bool) {
+    fn spawn_peer_sync(
+        &self,
+        conn: iroh::endpoint::Connection,
+        my_passphrase: String,
+        peer_passphrase: Option<String>,
+    ) {
         let (to_peer_tx, to_peer_rx) = mpsc::channel(16);
         let (from_peer_tx, from_peer_rx) = mpsc::channel(16);
 
@@ -190,7 +198,14 @@ impl P2PActor {
 
             // This is a function that either runs forever, or errors.
             // But errors just mean that the connection was closed/interrupted, so we ignore them.
-            let _ = Self::protocol_handler(conn, from_peer_tx, to_peer_rx, open_connection).await;
+            let _ = Self::protocol_handler(
+                conn,
+                from_peer_tx,
+                to_peer_rx,
+                my_passphrase,
+                peer_passphrase,
+            )
+            .await;
 
             info!("Peer disconnected");
             // TODO: Do we still this abort? The syncer should stop anyway once it cannot use its
@@ -204,12 +219,33 @@ impl P2PActor {
         conn: iroh::endpoint::Connection,
         from_peer_tx: mpsc::Sender<AutomergeSyncMessage>,
         mut to_peer_rx: mpsc::Receiver<AutomergeSyncMessage>,
-        open_connection: bool,
+        my_passphrase: String,
+        peer_passphrase: Option<String>,
     ) -> Result<()> {
-        let (mut send, mut recv) = if open_connection {
-            conn.open_bi().await?
+        let (mut send, mut recv) = if let Some(peer_passphrase) = peer_passphrase {
+            let (mut send, recv) = conn.open_bi().await?;
+
+            send.write_all(&u32::try_from(peer_passphrase.len())?.to_be_bytes())
+                .await?;
+            send.write_all(&peer_passphrase.as_bytes()).await?;
+
+            (send, recv)
         } else {
-            conn.accept_bi().await?
+            let (send, mut recv) = conn.accept_bi().await?;
+
+            let mut message_len_buf = [0; 4];
+            recv.read_exact(&mut message_len_buf).await?;
+            let message_len = u32::from_be_bytes(message_len_buf);
+            let mut received_passphrase = vec![0; message_len as usize];
+            recv.read_exact(&mut received_passphrase).await?;
+
+            // Guard against timing attacks.
+            if !constant_time_eq::constant_time_eq(&received_passphrase, &my_passphrase.as_bytes())
+            {
+                warn!("Peer provided incorrect passphrase");
+            }
+
+            (send, recv)
         };
 
         loop {
