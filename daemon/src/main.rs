@@ -110,10 +110,7 @@ async fn main() -> Result<()> {
 
             // There's the option to put a user provided passphrase here, which is disabled for
             // now until we code a more secure way for user to provide it.
-            let mut peer_connection_info = PeerConnectionInfo {
-                peer,
-                passphrase: None,
-            };
+            let mut peer_connection_info = PeerConnectionInfo { peer };
 
             let config_file = directory
                 .join(ETHERSYNC_CONFIG_DIR)
