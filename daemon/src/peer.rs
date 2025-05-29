@@ -25,7 +25,6 @@ use tracing::{debug, error, info, warn};
 #[derive(Clone)]
 pub struct PeerConnectionInfo {
     pub peer: Option<String>,
-    pub passphrase: Option<String>,
 }
 
 impl PeerConnectionInfo {
@@ -38,7 +37,6 @@ impl PeerConnectionInfo {
             let general_section = conf.general_section();
             return Some(Self {
                 peer: general_section.get("peer").map(|p| p.to_string()),
-                passphrase: general_section.get("secret").map(|p| p.to_string()),
             });
         } else {
             info!("No config file found, please provide everything through CLI options");
@@ -49,7 +47,6 @@ impl PeerConnectionInfo {
     pub fn takes_precedence_over(self, other: Self) -> Self {
         Self {
             peer: self.peer.or(other.peer),
-            passphrase: self.passphrase.or(other.passphrase),
         }
     }
 
@@ -80,7 +77,7 @@ impl P2PActor {
     }
 
     pub async fn run(self) -> Result<()> {
-        let secret_key = self.get_keypair();
+        let (secret_key, my_passphrase) = self.get_keypair();
 
         let endpoint = iroh::Endpoint::builder()
             .secret_key(secret_key)
@@ -88,11 +85,6 @@ impl P2PActor {
             .discovery_n0()
             .bind()
             .await?;
-
-        let mut rng = rand::rngs::OsRng;
-        let my_passphrase: String = (0..64)
-            .map(|_| rng.sample(rand::distributions::Alphanumeric) as char)
-            .collect();
 
         info!(
             "Others can connect with:\n\n\tethersync daemon --peer {}#{}\n",
@@ -140,8 +132,8 @@ impl P2PActor {
         Ok(())
     }
 
-    /// Returns an existing keypair, or generates a new one.
-    fn get_keypair(&self) -> SecretKey {
+    /// Returns an existing secret key + passphrase, or generates new ones.
+    fn get_keypair(&self) -> (SecretKey, String) {
         let keyfile = self.base_dir.join(".ethersync").join("key");
         if keyfile.exists() {
             let current_permissions = fs::metadata(&keyfile)
@@ -157,12 +149,25 @@ impl P2PActor {
             let mut file = File::open(keyfile).expect("Failed to open key file");
             file.read_exact(&mut bytes)
                 .expect("Failed to read key file");
-            SecretKey::from_bytes(&bytes)
+
+            let mut passphrase = vec![];
+            file.read_to_end(&mut passphrase)
+                .expect("Failed to read from key file");
+
+            (
+                SecretKey::from_bytes(&bytes),
+                String::from_utf8(passphrase).expect("Passphrase should be valid UTF-8"),
+            )
         } else {
             info!("Generating new keypair");
             let secret_key = SecretKey::generate(rand::rngs::OsRng);
 
             let bytes = secret_key.to_bytes();
+
+            let mut rng = rand::rngs::OsRng;
+            let passphrase: String = (0..64)
+                .map(|_| rng.sample(rand::distributions::Alphanumeric) as char)
+                .collect();
 
             let mut file = OpenOptions::new()
                 .create(true)
@@ -171,9 +176,12 @@ impl P2PActor {
                 .mode(0o600)
                 .open(keyfile)
                 .expect("Should have been able to create key file that did not exist before");
-            file.write_all(&bytes).expect("Failed to write to key file");
 
-            secret_key
+            file.write_all(&bytes).expect("Failed to write to key file");
+            file.write_all(&passphrase.as_bytes())
+                .expect("Failed to write to key file");
+
+            (secret_key, passphrase)
         }
     }
 
