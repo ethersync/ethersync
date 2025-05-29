@@ -7,6 +7,7 @@ use anyhow::{Context, Result};
 use clap::{parser::ValueSource, CommandFactory, FromArgMatches, Parser, Subcommand};
 use ethersync::peer::PeerConnectionInfo;
 use ethersync::{daemon::Daemon, editor, logging, sandbox};
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use tokio::signal;
 use tracing::{error, info};
@@ -43,9 +44,9 @@ enum Commands {
     Daemon {
         /// The directory to sync. Defaults to current directory.
         directory: Option<PathBuf>,
-        /// Multiaddr of a peer to connect to.
+        /// Read <node_id>#<passphrase> from stdin.
         #[arg(long)]
-        peer: Option<String>,
+        peer: bool,
         /// Initialize the current contents of the directory as a new Ethersync directory.
         #[arg(long)]
         init: bool,
@@ -108,8 +109,15 @@ async fn main() -> Result<()> {
                 return Ok(());
             }
 
-            // There's the option to put a user provided passphrase here, which is disabled for
-            // now until we code a more secure way for user to provide it.
+            let peer = if peer {
+                let mut line = String::new();
+                print!("Enter peer: ");
+                std::io::stdout().flush()?;
+                std::io::stdin().read_line(&mut line)?;
+                Some(line.trim_end().to_string()) // Remove '\n'.
+            } else {
+                None
+            };
             let mut peer_connection_info = PeerConnectionInfo { peer };
 
             let config_file = directory
