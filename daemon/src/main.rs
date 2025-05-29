@@ -46,9 +46,6 @@ enum Commands {
         /// Multiaddr of a peer to connect to.
         #[arg(long)]
         peer: Option<String>,
-        /// Port to listen on as a hosting peer [default: assigned by OS].
-        #[arg(long)]
-        port: Option<u16>,
         /// Initialize the current contents of the directory as a new Ethersync directory.
         #[arg(long)]
         init: bool,
@@ -86,7 +83,6 @@ async fn main() -> Result<()> {
         Commands::Daemon {
             directory,
             peer,
-            port,
             init,
         } => {
             if matches.value_source("socket_name").unwrap() == ValueSource::EnvVariable {
@@ -116,7 +112,6 @@ async fn main() -> Result<()> {
             // now until we code a more secure way for user to provide it.
             let mut peer_connection_info = PeerConnectionInfo {
                 peer,
-                port,
                 passphrase: None,
             };
 
