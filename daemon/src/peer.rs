@@ -76,7 +76,7 @@ impl P2PActor {
         }
     }
 
-    pub async fn run(self) -> Result<()> {
+    pub async fn run(self, address_tx: oneshot::Sender<String>) -> Result<()> {
         let (secret_key, my_passphrase) = self.get_keypair();
 
         let endpoint = iroh::Endpoint::builder()
@@ -86,11 +86,15 @@ impl P2PActor {
             .bind()
             .await?;
 
+        let address = format!("{}#{}", endpoint.node_id(), my_passphrase);
+
         info!(
-            "Others can connect with:\n\n\tethersync daemon --peer\n{}#{}\n",
-            endpoint.node_id(),
-            my_passphrase
+            "Others can connect with:\n\n\tethersync daemon --peer\n{}\n",
+            address
         );
+
+        // TODO: Use the error?
+        let _ = address_tx.send(address);
 
         if let Some(ref peer) = self.connection_info.peer {
             let parts: Vec<&str> = peer.split("#").collect();
