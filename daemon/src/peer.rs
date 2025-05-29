@@ -8,20 +8,16 @@
 use crate::daemon::{DocMessage, DocumentActorHandle};
 use anyhow::{Context, Result};
 use automerge::sync::{Message as AutomergeSyncMessage, State as SyncState};
-use futures::StreamExt;
-use futures::{AsyncReadExt, AsyncWriteExt};
 use ini::Ini;
-use sha2::Sha256;
-use std::fs::{self, OpenOptions};
-use std::io::Write;
+use iroh::SecretKey;
+use std::fs::{self, File, OpenOptions};
+use std::io::{Read, Write};
 use std::mem;
-use std::net::Ipv4Addr;
 use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use tokio::sync::{broadcast, mpsc, oneshot};
-use tokio::time::Duration;
-use tracing::{debug, error, info, warn};
+use tracing::{debug, error, info};
 
 // Used for "easy try out" purposes that are not security critical.
 const DEFAULT_PASSPHRASE: &str = "default-passphrase";
@@ -85,11 +81,11 @@ impl P2PActor {
         }
     }
 
-    pub async fn run(mut self) -> Result<()> {
-        //let secret_key = SecretKey::generate(rand::rngs::OsRng);
+    pub async fn run(self) -> Result<()> {
+        let secret_key = self.get_keypair();
 
         let endpoint = iroh::Endpoint::builder()
-            //.secret_key(secret_key)
+            .secret_key(secret_key)
             .alpns(vec![b"ethersync".to_vec()])
             .discovery_n0()
             .bind()
@@ -101,7 +97,6 @@ impl P2PActor {
         );
 
         /*
-        let keypair = self.get_keypair();
         let passphrase = self
             .connection_info
             .passphrase
@@ -111,43 +106,6 @@ impl P2PActor {
         if is_default_passphrase {
             warn!("\n\n\tSECURITY WARNING: Running without a secret is only recommended when trying out this software locally.\n\tYou can put secret = <secret> in .ethersync/config.\n");
         }
-        let mut swarm = libp2p::SwarmBuilder::with_existing_identity(keypair)
-            .with_tokio()
-            .with_other_transport(|keypair| {
-                self.connection_info.passphrase = Some(passphrase.clone());
-
-                let psk = pnet::PreSharedKey::new(Self::passphrase_to_bytes(&passphrase));
-
-                let transport = tcp::tokio::Transport::new(tcp::Config::new())
-                    .and_then(move |socket, _| pnet::PnetConfig::new(psk).handshake(socket));
-                let auth = noise::Config::new(keypair)?;
-                let mux = yamux::Config::default();
-
-                let tcp_transport = transport
-                    .upgrade(Version::V1Lazy)
-                    .authenticate(auth)
-                    .multiplex(mux);
-
-                Ok(tcp_transport)
-            })?
-            .with_behaviour(|_| stream::Behaviour::new())?
-            .with_swarm_config(|c| c.with_idle_connection_timeout(Duration::from_secs(10)))
-            .build();
-
-        // When the port is 0, libp2p randomly assigns a port.
-        let listen_addr = format!(
-            "/ip4/0.0.0.0/tcp/{}",
-            self.connection_info.port.unwrap_or(0)
-        )
-        .parse()?;
-
-        swarm.listen_on(listen_addr)?;
-
-        let mut incoming_streams = swarm
-            .behaviour()
-            .new_control()
-            .accept(ETHERSYNC_PROTOCOL)
-            .unwrap();
         */
 
         if let Some(ref address) = self.connection_info.peer {
@@ -155,80 +113,32 @@ impl P2PActor {
             let node_addr: iroh::NodeAddr = public_key.into();
             let conn = endpoint.connect(node_addr, b"ethersync").await?;
 
-            dbg!(conn.peer_identity().unwrap());
-            dbg!(conn.remote_node_id());
+            info!(
+                "Connected to peer: {}",
+                conn.remote_node_id()
+                    .expect("Connection should have a node ID")
+            );
 
             self.spawn_peer_sync(conn, true);
         }
 
-        // Poll the swarm to make progress.
-        loop {
-            let conn = endpoint.accept().await.unwrap().await?;
+        while let Some(incoming) = endpoint.accept().await {
+            let conn = incoming.await?;
 
-            info!("Peer connected");
-            dbg!(conn.peer_identity().unwrap());
-            dbg!(conn.remote_node_id());
-            dbg!(conn.rtt());
+            info!(
+                "Peer connected: {}",
+                conn.remote_node_id()
+                    .expect("Connection should have a node ID")
+            );
 
             self.spawn_peer_sync(conn, false);
-
-            /*
-            match event {
-                libp2p::swarm::SwarmEvent::NewListenAddr { address, .. } => {
-                    let listen_address = address.with_p2p(*swarm.local_peer_id()).unwrap();
-                    // Filter for not useful address.
-                    let is_localhost = listen_address
-                        .iter()
-                        .any(|component| component == Protocol::Ip4(Ipv4Addr::new(127, 0, 0, 1)));
-                    if !is_localhost {
-                        let secret_parameter = if is_default_passphrase {
-                            ""
-                        } else {
-                            " (They need put secret = <your-secret> in the .ethersync/config file.)"
-                        };
-                    }
-                }
-                libp2p::swarm::SwarmEvent::ConnectionEstablished {
-                    peer_id,
-                    endpoint: ConnectedPoint::Dialer { .. },
-                    ..
-                } => {
-                    let mut control = swarm.behaviour().new_control();
-                    let stream = control
-                        .open_stream(peer_id, ETHERSYNC_PROTOCOL)
-                        .await
-                        .context("Failed to open stream")?;
-
-                    info!("Connected to peer {}", peer_id);
-
-                    self.spawn_peer_sync(stream);
-                }
-                libp2p::swarm::SwarmEvent::ConnectionEstablished {
-                    endpoint: ConnectedPoint::Listener { .. },
-                    ..
-                } => {
-                    if let Some((peer, stream)) = incoming_streams.next().await {
-                        info!("Peer connected: {}", peer);
-                        self.spawn_peer_sync(stream);
-                    }
-                }
-                libp2p::swarm::SwarmEvent::OutgoingConnectionError { error, .. } => {
-                    error!("Failed to connect, the peer multiaddress or secret you provided might be wrong?");
-                    debug!("{:?}", error);
-                }
-                libp2p::swarm::SwarmEvent::IncomingConnectionError { error, .. } => {
-                    error!("Someone tried to connect to you, but failed. The secret they provided might be wrong?");
-                    debug!("{:?}", error);
-                }
-                event => debug!(?event),
-            }
-            */
         }
+
+        Ok(())
     }
 
-    /*
     /// Returns an existing keypair, or generates a new one.
-    fn get_keypair(&self) -> Keypair {
+    fn get_keypair(&self) -> SecretKey {
         let keyfile = self.base_dir.join(".ethersync").join("key");
         if keyfile.exists() {
             let current_permissions = fs::metadata(&keyfile)
@@ -240,15 +150,16 @@ impl P2PActor {
                 panic!("For security reasons, please make sure to set the key file to user-readable only (set the permissions to 600).");
             }
             info!("Re-using existing keypair");
-            let bytes = std::fs::read(keyfile).expect("Failed to read key file");
-            Keypair::from_protobuf_encoding(&bytes).expect("Failed to deserialize key file")
+            let mut bytes = [0; 32];
+            let mut file = File::open(keyfile).expect("Failed to open key file");
+            file.read_exact(&mut bytes)
+                .expect("Failed to read key file");
+            SecretKey::from_bytes(&bytes)
         } else {
             info!("Generating new keypair");
-            // TODO: Is this the best algorithm?
-            let keypair = Keypair::generate_ed25519();
-            let bytes = keypair
-                .to_protobuf_encoding()
-                .expect("Failed to serialize keypair");
+            let secret_key = SecretKey::generate(rand::rngs::OsRng);
+
+            let bytes = secret_key.to_bytes();
 
             let mut file = OpenOptions::new()
                 .create(true)
@@ -259,22 +170,9 @@ impl P2PActor {
                 .expect("Should have been able to create key file that did not exist before");
             file.write_all(&bytes).expect("Failed to write to key file");
 
-            keypair
+            secret_key
         }
     }
-
-    // This "stretches" the passphrase to fill the 32 bytes required by the pnet crate.
-    fn passphrase_to_bytes(passphrase: &str) -> [u8; 32] {
-        let mut key = [0u8; 32];
-        pbkdf2_hmac::<Sha256>(
-            passphrase.as_bytes(),
-            b"ethersync", // TODO: Is it bad to re-use the salt here?
-            1000,         // TODO: How often should we iterate?
-            &mut key,
-        );
-        key
-    }
-    */
 
     fn spawn_peer_sync(&self, conn: iroh::endpoint::Connection, open_connection: bool) {
         let (to_peer_tx, to_peer_rx) = mpsc::channel(16);
@@ -303,7 +201,7 @@ impl P2PActor {
 
     /// Core low-level syncing protocol.
     async fn protocol_handler(
-        mut conn: iroh::endpoint::Connection,
+        conn: iroh::endpoint::Connection,
         from_peer_tx: mpsc::Sender<AutomergeSyncMessage>,
         mut to_peer_rx: mpsc::Receiver<AutomergeSyncMessage>,
         open_connection: bool,
@@ -313,9 +211,6 @@ impl P2PActor {
         } else {
             conn.accept_bi().await?
         };
-
-        // Kick off the connection
-        send.write_all(&0_u32.to_be_bytes());
 
         loop {
             let mut message_len_buf = [0; 4];
