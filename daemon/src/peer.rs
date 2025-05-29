@@ -87,7 +87,7 @@ impl P2PActor {
             .await?;
 
         info!(
-            "Others can connect with:\n\n\tethersync daemon --peer {}#{}\n",
+            "Others can connect with:\n\n\tethersync daemon --peer\n{}#{}\n",
             endpoint.node_id(),
             my_passphrase
         );
