@@ -11,15 +11,6 @@ use automerge::sync::{Message as AutomergeSyncMessage, State as SyncState};
 use futures::StreamExt;
 use futures::{AsyncReadExt, AsyncWriteExt};
 use ini::Ini;
-use libp2p::core::transport::upgrade::Version;
-use libp2p::core::ConnectedPoint;
-use libp2p::multiaddr::{Multiaddr, Protocol};
-use libp2p::Stream;
-use libp2p::StreamProtocol;
-use libp2p::Transport;
-use libp2p::{identity::Keypair, noise, pnet, tcp, yamux};
-use libp2p_stream as stream;
-use pbkdf2::pbkdf2_hmac;
 use sha2::Sha256;
 use std::fs::{self, OpenOptions};
 use std::io::Write;
@@ -27,11 +18,11 @@ use std::mem;
 use std::net::Ipv4Addr;
 use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
 use std::path::{Path, PathBuf};
+use std::str::FromStr;
 use tokio::sync::{broadcast, mpsc, oneshot};
 use tokio::time::Duration;
 use tracing::{debug, error, info, warn};
 
-const ETHERSYNC_PROTOCOL: StreamProtocol = StreamProtocol::new("/ethersync");
 // Used for "easy try out" purposes that are not security critical.
 const DEFAULT_PASSPHRASE: &str = "default-passphrase";
 
@@ -39,7 +30,6 @@ const DEFAULT_PASSPHRASE: &str = "default-passphrase";
 /// For every new connection, spawns and runs a `SyncActor`.
 #[derive(Clone)]
 pub struct PeerConnectionInfo {
-    pub port: Option<u16>,
     pub peer: Option<String>,
     pub passphrase: Option<String>,
 }
@@ -53,10 +43,6 @@ impl PeerConnectionInfo {
                 .expect("Could not access config file, even though it exists");
             let general_section = conf.general_section();
             return Some(Self {
-                port: general_section.get("port").map(|p| {
-                    p.parse()
-                        .expect("Failed to parse port in config file as an integer")
-                }),
                 peer: general_section.get("peer").map(|p| p.to_string()),
                 passphrase: general_section.get("secret").map(|p| p.to_string()),
             });
@@ -68,7 +54,6 @@ impl PeerConnectionInfo {
 
     pub fn takes_precedence_over(self, other: Self) -> Self {
         Self {
-            port: self.port.or(other.port),
             peer: self.peer.or(other.peer),
             passphrase: self.passphrase.or(other.passphrase),
         }
@@ -101,6 +86,21 @@ impl P2PActor {
     }
 
     pub async fn run(mut self) -> Result<()> {
+        //let secret_key = SecretKey::generate(rand::rngs::OsRng);
+
+        let endpoint = iroh::Endpoint::builder()
+            //.secret_key(secret_key)
+            .alpns(vec![b"ethersync".to_vec()])
+            .discovery_n0()
+            .bind()
+            .await?;
+
+        info!(
+            "Others can connect with:\n\n\tethersync daemon --peer {}\n",
+            endpoint.node_id()
+        );
+
+        /*
         let keypair = self.get_keypair();
         let passphrase = self
             .connection_info
@@ -148,19 +148,31 @@ impl P2PActor {
             .new_control()
             .accept(ETHERSYNC_PROTOCOL)
             .unwrap();
+        */
 
         if let Some(ref address) = self.connection_info.peer {
-            let multiaddr = address
-                .parse::<Multiaddr>()
-                .expect("Failed to parse argument as `Multiaddr`");
+            let public_key = iroh::PublicKey::from_str(&address)?;
+            let node_addr: iroh::NodeAddr = public_key.into();
+            let conn = endpoint.connect(node_addr, b"ethersync").await?;
 
-            swarm.dial(multiaddr)?;
+            dbg!(conn.peer_identity().unwrap());
+            dbg!(conn.remote_node_id());
+
+            self.spawn_peer_sync(conn, true);
         }
 
         // Poll the swarm to make progress.
         loop {
-            let event = swarm.next().await.expect("never terminates");
+            let conn = endpoint.accept().await.unwrap().await?;
 
+            info!("Peer connected");
+            dbg!(conn.peer_identity().unwrap());
+            dbg!(conn.remote_node_id());
+            dbg!(conn.rtt());
+
+            self.spawn_peer_sync(conn, false);
+
+            /*
             match event {
                 libp2p::swarm::SwarmEvent::NewListenAddr { address, .. } => {
                     let listen_address = address.with_p2p(*swarm.local_peer_id()).unwrap();
@@ -174,10 +186,6 @@ impl P2PActor {
                         } else {
                             " (They need put secret = <your-secret> in the .ethersync/config file.)"
                         };
-                        info!(
-                            "Others can connect with:\n\n\tethersync daemon --peer {}{}\n",
-                            listen_address, secret_parameter
-                        );
                     }
                 }
                 libp2p::swarm::SwarmEvent::ConnectionEstablished {
@@ -214,9 +222,11 @@ impl P2PActor {
                 }
                 event => debug!(?event),
             }
+            */
         }
     }
 
+    /*
     /// Returns an existing keypair, or generates a new one.
     fn get_keypair(&self) -> Keypair {
         let keyfile = self.base_dir.join(".ethersync").join("key");
@@ -264,12 +274,14 @@ impl P2PActor {
         );
         key
     }
+    */
 
-    fn spawn_peer_sync(&self, stream: Stream) {
+    fn spawn_peer_sync(&self, conn: iroh::endpoint::Connection, open_connection: bool) {
         let (to_peer_tx, to_peer_rx) = mpsc::channel(16);
         let (from_peer_tx, from_peer_rx) = mpsc::channel(16);
 
         let syncer = SyncActor::new(self.document_handle.clone(), from_peer_rx, to_peer_tx);
+
         tokio::spawn(async move {
             let syncer_handle = tokio::spawn(async move {
                 // The syncer can fail when the protocol_handler below has
@@ -280,7 +292,7 @@ impl P2PActor {
 
             // This is a function that either runs forever, or errors.
             // But errors just mean that the connection was closed/interrupted, so we ignore them.
-            let _ = Self::protocol_handler(stream, from_peer_tx, to_peer_rx).await;
+            let _ = Self::protocol_handler(conn, from_peer_tx, to_peer_rx, open_connection).await;
 
             info!("Peer disconnected");
             // TODO: Do we still this abort? The syncer should stop anyway once it cannot use its
@@ -291,10 +303,20 @@ impl P2PActor {
 
     /// Core low-level syncing protocol.
     async fn protocol_handler(
-        mut stream: Stream,
+        mut conn: iroh::endpoint::Connection,
         from_peer_tx: mpsc::Sender<AutomergeSyncMessage>,
         mut to_peer_rx: mpsc::Receiver<AutomergeSyncMessage>,
+        open_connection: bool,
     ) -> Result<()> {
+        let (mut send, mut recv) = if open_connection {
+            conn.open_bi().await?
+        } else {
+            conn.accept_bi().await?
+        };
+
+        // Kick off the connection
+        send.write_all(&0_u32.to_be_bytes());
+
         loop {
             let mut message_len_buf = [0; 4];
 
@@ -304,10 +326,10 @@ impl P2PActor {
                         Some(message) => {
                             let message = message.encode();
                             let message_len = u32::try_from(message.len());
-                            stream
+                            send
                                 .write_all(&message_len?.to_be_bytes())
                                 .await?;
-                            stream
+                            send
                                 .write_all(&message)
                                 .await?;
                             }
@@ -317,10 +339,10 @@ impl P2PActor {
                         }
                     }
                 }
-                _ = stream.read_exact(&mut message_len_buf) => {
+                _ = recv.read_exact(&mut message_len_buf) => {
                     let message_len = u32::from_be_bytes(message_len_buf);
                     let mut message_buf = vec![0; message_len as usize];
-                    stream.read_exact(&mut message_buf).await?;
+                    recv.read_exact(&mut message_buf).await?;
 
                     let message =
                         AutomergeSyncMessage::decode(&message_buf)?;
