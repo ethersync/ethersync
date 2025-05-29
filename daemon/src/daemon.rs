@@ -745,6 +745,8 @@ impl DocumentActorHandle {
 
 pub struct Daemon {
     pub document_handle: DocumentActorHandle,
+    address_rx: Option<oneshot::Receiver<String>>,
+    address: Option<String>,
 }
 
 impl Daemon {
@@ -758,6 +760,8 @@ impl Daemon {
         let is_host = peer_connection_info.is_host();
 
         let document_handle = DocumentActorHandle::new(base_dir, init, is_host);
+
+        let (address_tx, address_rx) = oneshot::channel();
 
         // Initialize file watcher.
         {
@@ -782,7 +786,7 @@ impl Daemon {
             tokio::spawn(async move {
                 let p2p_actor =
                     peer::P2PActor::new(peer_connection_info, document_handle, &base_dir);
-                let _ = p2p_actor.run().await;
+                let _ = p2p_actor.run(address_tx).await;
             });
         }
 
@@ -794,7 +798,26 @@ impl Daemon {
             });
         }
 
-        Self { document_handle }
+        Self {
+            document_handle,
+            address_rx: Some(address_rx),
+            address: None,
+        }
+    }
+
+    pub async fn address(&mut self) -> String {
+        if let Some(address) = self.address.clone() {
+            address
+        } else {
+            let address = self
+                .address_rx
+                .take()
+                .expect("Either address receiver or address should exist")
+                .await
+                .expect("Receiving address should work");
+            self.address = Some(address.clone());
+            address
+        }
     }
 }
 

@@ -61,17 +61,13 @@ async fn main() {
     // Set up the actors.
     let socket_name = Path::new("ethersync-fuzzer-peer-1");
     let socket_path = get_socket_path(socket_name);
-    let port = 42424;
-    let daemon = Daemon::new(
-        PeerConnectionInfo {
-            port: Some(port),
-            peer: None,
-            passphrase: Some("shared-secret".to_string()),
-        },
+    let mut daemon = Daemon::new(
+        PeerConnectionInfo { peer: None },
         &socket_path,
         dir.path(),
         true,
     );
+    let address = daemon.address().await;
 
     // Give the daemon time to boot.
     sleep(sleep_duration).await;
@@ -85,9 +81,7 @@ async fn main() {
     let socket_path_2 = get_socket_path(socket_name_2);
     let peer = Daemon::new(
         PeerConnectionInfo {
-            peer: Some(format!("/ip4/127.0.0.1/tcp/{}", port)),
-            port: Some(0),
-            passphrase: Some("shared-secret".to_string()),
+            peer: Some(address),
         },
         &socket_path_2,
         dir2.path(),
