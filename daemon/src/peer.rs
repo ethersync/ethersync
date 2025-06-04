@@ -20,6 +20,8 @@ use std::str::FromStr;
 use tokio::sync::{broadcast, mpsc, oneshot};
 use tracing::{debug, error, info, warn};
 
+const ALPN: &[u8] = b"/ethersync/0";
+
 /// Responsible for offering peer-to-peer connectivity to the outside world. Uses libp2p.
 /// For every new connection, spawns and runs a `SyncActor`.
 #[derive(Clone)]
@@ -81,7 +83,7 @@ impl P2PActor {
 
         let endpoint = iroh::Endpoint::builder()
             .secret_key(secret_key)
-            .alpns(vec![b"ethersync".to_vec()])
+            .alpns(vec![ALPN.to_vec()])
             .discovery_n0()
             .bind()
             .await?;
@@ -106,7 +108,7 @@ impl P2PActor {
             let peer_passphrase = parts[1];
 
             let node_addr: iroh::NodeAddr = public_key.into();
-            let conn = endpoint.connect(node_addr, b"ethersync").await?;
+            let conn = endpoint.connect(node_addr, ALPN).await?;
 
             info!(
                 "Connected to peer: {}",
