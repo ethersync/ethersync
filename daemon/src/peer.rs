@@ -10,7 +10,6 @@ use anyhow::{Context, Result};
 use automerge::sync::{Message as AutomergeSyncMessage, State as SyncState};
 use ini::Ini;
 use iroh::SecretKey;
-use rand::Rng;
 use std::fs::{self, File, OpenOptions};
 use std::io::{Read, Write};
 use std::mem;
@@ -105,7 +104,7 @@ impl P2PActor {
             }
 
             let public_key = iroh::PublicKey::from_str(&parts[0])?;
-            let peer_passphrase = parts[1];
+            let peer_passphrase = iroh::SecretKey::from_str(&parts[1])?;
 
             let node_addr: iroh::NodeAddr = public_key.into();
             let conn = endpoint.connect(node_addr, ALPN).await?;
@@ -116,11 +115,7 @@ impl P2PActor {
                     .expect("Connection should have a node ID")
             );
 
-            self.spawn_peer_sync(
-                conn,
-                my_passphrase.clone(),
-                Some(peer_passphrase.to_string()),
-            );
+            self.spawn_peer_sync(conn, my_passphrase.clone(), Some(peer_passphrase));
         }
 
         while let Some(incoming) = endpoint.accept().await {
@@ -139,7 +134,7 @@ impl P2PActor {
     }
 
     /// Returns an existing secret key + passphrase, or generates new ones.
-    fn get_keypair(&self) -> (SecretKey, String) {
+    fn get_keypair(&self) -> (SecretKey, SecretKey) {
         let keyfile = self.base_dir.join(".ethersync").join("key");
         if keyfile.exists() {
             let current_permissions = fs::metadata(&keyfile)
@@ -151,29 +146,24 @@ impl P2PActor {
                 panic!("For security reasons, please make sure to set the key file to user-readable only (set the permissions to 600).");
             }
             info!("Re-using existing keypair");
-            let mut bytes = [0; 32];
             let mut file = File::open(keyfile).expect("Failed to open key file");
-            file.read_exact(&mut bytes)
-                .expect("Failed to read key file");
 
-            let mut passphrase = vec![];
-            file.read_to_end(&mut passphrase)
+            let mut secret_key = [0; 32];
+            file.read_exact(&mut secret_key)
+                .expect("Failed to read from key file");
+
+            let mut passphrase = [0; 32];
+            file.read_exact(&mut passphrase)
                 .expect("Failed to read from key file");
 
             (
-                SecretKey::from_bytes(&bytes),
-                String::from_utf8(passphrase).expect("Passphrase should be valid UTF-8"),
+                SecretKey::from_bytes(&secret_key),
+                SecretKey::from_bytes(&passphrase),
             )
         } else {
             info!("Generating new keypair");
             let secret_key = SecretKey::generate(rand::rngs::OsRng);
-
-            let bytes = secret_key.to_bytes();
-
-            let mut rng = rand::rngs::OsRng;
-            let passphrase: String = (0..64)
-                .map(|_| rng.sample(rand::distributions::Alphanumeric) as char)
-                .collect();
+            let passphrase = SecretKey::generate(rand::rngs::OsRng);
 
             let mut file = OpenOptions::new()
                 .create(true)
@@ -182,8 +172,9 @@ impl P2PActor {
                 .open(keyfile)
                 .expect("Should have been able to create key file that did not exist before");
 
-            file.write_all(&bytes).expect("Failed to write to key file");
-            file.write_all(&passphrase.as_bytes())
+            file.write_all(&secret_key.to_bytes())
+                .expect("Failed to write to key file");
+            file.write_all(&passphrase.to_bytes())
                 .expect("Failed to write to key file");
 
             (secret_key, passphrase)
@@ -193,8 +184,8 @@ impl P2PActor {
     fn spawn_peer_sync(
         &self,
         conn: iroh::endpoint::Connection,
-        my_passphrase: String,
-        peer_passphrase: Option<String>,
+        my_passphrase: SecretKey,
+        peer_passphrase: Option<SecretKey>,
     ) {
         let (to_peer_tx, to_peer_rx) = mpsc::channel(16);
         let (from_peer_tx, from_peer_rx) = mpsc::channel(16);
@@ -232,30 +223,26 @@ impl P2PActor {
         conn: iroh::endpoint::Connection,
         from_peer_tx: mpsc::Sender<AutomergeSyncMessage>,
         mut to_peer_rx: mpsc::Receiver<AutomergeSyncMessage>,
-        my_passphrase: String,
-        peer_passphrase: Option<String>,
+        my_passphrase: SecretKey,
+        peer_passphrase: Option<SecretKey>,
     ) -> Result<()> {
         let (mut send, mut recv) = if let Some(peer_passphrase) = peer_passphrase {
             let (mut send, recv) = conn.open_bi().await?;
 
-            send.write_all(&u32::try_from(peer_passphrase.len())?.to_be_bytes())
-                .await?;
-            send.write_all(&peer_passphrase.as_bytes()).await?;
+            send.write_all(&peer_passphrase.to_bytes()).await?;
 
             (send, recv)
         } else {
             let (send, mut recv) = conn.accept_bi().await?;
 
-            let mut message_len_buf = [0; 4];
-            recv.read_exact(&mut message_len_buf).await?;
-            let message_len = u32::from_be_bytes(message_len_buf);
-            let mut received_passphrase = vec![0; message_len as usize];
+            let mut received_passphrase = [0; 32];
             recv.read_exact(&mut received_passphrase).await?;
 
             // Guard against timing attacks.
-            if !constant_time_eq::constant_time_eq(&received_passphrase, &my_passphrase.as_bytes())
+            if !constant_time_eq::constant_time_eq(&received_passphrase, &my_passphrase.to_bytes())
             {
                 warn!("Peer provided incorrect passphrase");
+                return Ok(());
             }
 
             (send, recv)
