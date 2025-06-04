@@ -176,7 +176,6 @@ impl P2PActor {
             let mut file = OpenOptions::new()
                 .create(true)
                 .write(true)
-                .truncate(true)
                 .mode(0o600)
                 .open(keyfile)
                 .expect("Should have been able to create key file that did not exist before");
