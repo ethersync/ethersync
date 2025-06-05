@@ -145,8 +145,9 @@ async fn assert_vim_deltas_yield_content(
     deltas: Vec<EditorTextOp>,
     expected_content: &str,
 ) {
-    let (nvim, file_path, socket_path) = Neovim::new_ethersync_enabled(initial_content).await;
-    let mut socket = MockSocket::new(&Path::new(&socket_path));
+    let (nvim, file_path, socket_path, _temp_dir) =
+        Neovim::new_ethersync_enabled(initial_content).await;
+    let mut socket = MockSocket::new(&socket_path);
     socket.acknowledge_open().await;
 
     for op in &deltas {
@@ -223,8 +224,8 @@ async fn assert_vim_input_yields_replacements(
     mut expected_replacements: Vec<EditorTextOp>,
 ) {
     timeout(Duration::from_millis(5000), async {
-                let (mut nvim, _file_path, socket_path) = Neovim::new_ethersync_enabled(initial_content).await;
-                let mut socket = MockSocket::new(&Path::new(&socket_path));
+                let (mut nvim, _file_path, socket_path, _temp_dir) = Neovim::new_ethersync_enabled(initial_content).await;
+                let mut socket = MockSocket::new(&socket_path);
                 socket.acknowledge_open().await;
 
                 {
