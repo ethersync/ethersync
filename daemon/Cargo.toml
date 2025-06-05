@@ -36,9 +36,9 @@ required-features = ["executable-deps"]
 
 [dependencies]
 anyhow = "1.0.81"
-automerge = "0.6.1"
+automerge = "1.0.0-beta"
 clap = { version = "4.5.3", features = ["derive", "env"], optional = true }
-constant_time_eq = "0.3.1"
+constant_time_eq = "0.4.2"
 derive_more = { version = "2.0.1", features = ["as_ref", "deref", "display"] }
 dissimilar = "1.0.9"
 futures = { version = "0.3.30", default-features = false }
