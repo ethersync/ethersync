@@ -47,6 +47,12 @@ function M.track_changes(buffer, callback)
             -- line/character indices in diff are zero-based.
             debug({ diff = diff })
 
+            -- Special case: If the entire file is deleted, undo the special treatment introduced in
+            -- https://github.com/neovim/neovim/pull/29904. We think it's incorrect. :P
+            if #curr_lines == 1 and curr_lines[1] == "" then
+                diff.range["start"].line = 0
+            end
+
             -- TODO: Simplify the solution?
             -- For example, pull tests into good variable names like "ends_with_newline".
             -- TODO: Update the following comment to describe the problem and the solution more clearly.
