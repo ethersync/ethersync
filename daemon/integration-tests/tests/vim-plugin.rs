@@ -350,6 +350,9 @@ async fn vim_sends_correct_delta() {
     )
     .await;
 
+    assert_vim_input_yields_replacements("a\nbcd", "ggdG", vec![replace_ed((0, 0), (1, 3), "")])
+        .await;
+
     assert_vim_input_yields_replacements(
         "a\n",
         "ddix<CR><BS>",
