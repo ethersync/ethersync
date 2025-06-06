@@ -40,7 +40,8 @@ To start the session, run:
 ethersync daemon
 ```
 
-This will print, among other initialization information, the [multiaddress](connection-making.md#multiaddress) which looks like `/ip4/192.168.23.42/tcp/58063/p2p/12D3KooWPNj7mom3X2D6NiSyxbFa5hHfzxDFP98ZL52yYnkEVmDv`.
+This will print, among other initialization information, the [peer identifier and key](connection-making.md#addressing-and-authenticating-with-the-peer)
+) which looks like `429e94b149fc1f7d88b2ce1d46cafe9af220bebf084ee6f8b468918d020e9819#32374e6846573354474e4b504b6742773662724e4f6b5a786c5477624f4a6789`.
 
 You need to share this with the other peers.
 
@@ -49,12 +50,13 @@ You need to share this with the other peers.
 To join a session, run:
 
 ```bash
-ethersync demon --peer <multiaddr>
+ethersync demon --peer
 ```
 
-This should show you a message like "Connected to peer ...". The hosting daemon should show a message like "Peer connected".
+This will query the user for the identifier and key combination with "Enter peer:".
+This should show you a message like "Connected to peer: ...". The hosting daemon should show a message like "Peer connected: ...".
 
- When used "in production" it's also possible and recommended to use the [configuration file](configuration.md) to provide the multiaddress and a secret for encryption.
+ When used "in production" it's also possible and recommended to use the [configuration file](configuration.md) to provide the peer identifier and key for encryption.
 
 ### 5. Collaborate!
 

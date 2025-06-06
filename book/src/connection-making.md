@@ -9,9 +9,9 @@ SPDX-License-Identifier: CC-BY-SA-4.0
 
 In order to make sense of how Ethersync daemons connect to each other a little bit of Networking background (IP addresses, TCP ports) is helpful. You should still be able to get going within one local network (such as two computers in the same Wi-Fi) by just copy pasting things, but connecting to other peers over the internet might currently require some configurations. We're aiming to give you the right keywords to look for in case you've not encountered that yet.
 
-## Multiaddress
+## Addressing and authenticating with the peer
 
-Ethersync uses libp2p for making a connection. To identify another daemon we're using a connection address like `/ip4/192.168.23.42/tcp/58063/p2p/12D3KooWPNj7mom3X2D6NiSyxbFa5hHfzxDFP98ZL52yYnkEVmDv`. This is what libp2p calls a [multiaddress](https://docs.libp2p.io/concepts/fundamentals/addressing/) – it contains your IP address, the TCP port, and a "peer ID" (which is used by connecting peers to make sure that they're actually connecting to the correct peer, and not to a "man in the middle").
+Since version 0.7.0 Ethersync uses iroh for making a connection. To identify another daemon we're using a combination of the iroh [Node Identifier](https://www.iroh.computer/docs/concepts/endpoint#node-identifiers) and a secret key which, smashed together, looks like `429e94...0e9819#32374e...4a6789`. Treat it like a password and share it with your peer through a secret channel. In the meantime, we're working on an approach which doesn't require sharing such a long random and sensitive string.
 
 ## Port
 

@@ -154,7 +154,7 @@ Do do that on a single machine, follow these steps:
 2. Create a new, empty shared directory (with an `.ethersync` directory in it) for the second daemon.
 3. Start the second daemon:
     - The directory should be the additional directory you created.
-    - Set the `--peer` option to the address of the first daemon.
+    - Set the `--peer` option and provide the peer identifier+key of the first daemon.
     - Set `--socket-path` to a new value like `/tmp/ethertwo`.
 4. Connect an editor to the first daemon by opening a file in the first directory.
 5. Connect an editor to the second daemon by setting the environment variable `ETHERSYNC_SOCKET` to the new value before opening a file in the second directory.

@@ -70,7 +70,8 @@ The first daemon will print the full command required to connect to it in its lo
 It will look like this:
 
 ```bash
-ethersync daemon --peer <multiaddress>
+ethersync daemon --peer
+<long peer id+secret string>
 ```
 
 The daemon might print lines like this multiple times.
