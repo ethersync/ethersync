@@ -66,17 +66,13 @@ cd playground
 
 ### 2. Start the daemon
 
-The first daemon will print the full command required to connect to it in its logs.
-It will look like this:
+To connect, run
 
 ```bash
 ethersync daemon --peer
-<long peer id+secret string>
 ```
 
-The daemon might print lines like this multiple times.
-If you're in the same local network, the one starting with "192.168" is probably the right one.
-If you're in different local network, see [these instructions](pair-programming.md).
+and then paste the long "ticket" (which has the format `<peer id>#<passphrase>`) when prompted.
 
 If a connection can be made, both sides will indicate success with a log message "Peer connected" and "Connected to peer" respectively. If you don't see it, double check the previous steps.
 

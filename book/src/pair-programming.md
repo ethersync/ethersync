@@ -40,7 +40,7 @@ To start the session, run:
 ethersync daemon
 ```
 
-This will print, among other initialization information, the [peer identifier and key](connection-making.md#addressing-and-authenticating-with-the-peer)
+This will print, among other initialization information, the [ticket](connection-making.md#addressing-and-authenticating-with-the-peer)
 ) which looks like `429e94b149fc1f7d88b2ce1d46cafe9af220bebf084ee6f8b468918d020e9819#32374e6846573354474e4b504b6742773662724e4f6b5a786c5477624f4a6789`.
 
 You need to share this with the other peers.
@@ -53,7 +53,7 @@ To join a session, run:
 ethersync demon --peer
 ```
 
-This will query the user for the identifier and key combination with "Enter peer:".
+This will query the user for the ticket with "Enter peer:".
 This should show you a message like "Connected to peer: ...". The hosting daemon should show a message like "Peer connected: ...".
 
  When used "in production" it's also possible and recommended to use the [configuration file](configuration.md) to provide the peer identifier and key for encryption.
