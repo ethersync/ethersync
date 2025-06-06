@@ -53,7 +53,7 @@ To join a session, run:
 ethersync demon --peer
 ```
 
-This will query the user for the ticket with "Enter peer:".
+This will query the user for the ticket with "Enter peer's ticket:".
 This should show you a message like "Connected to peer: ...". The hosting daemon should show a message like "Peer connected: ...".
 
  When used "in production" it's also possible and recommended to use the [configuration file](configuration.md) to provide the peer identifier and key for encryption.
