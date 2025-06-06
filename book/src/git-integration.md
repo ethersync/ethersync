@@ -35,24 +35,25 @@ However, any change to the `.git` directory and the staging area (which is in fa
 
 This means that most Git operations you might try will not have an effect on connected peers.
 
-### Git commands that are safe to run
+### Git commands that don't modify files
 
-These commands will not lead to inconsistent behaviour (however, changes in your index or in your commits will not be shared with peers):
+These commands will not modify files, so you can run them without affecting connected peers (note that changes in your index or in your commits will not be shared):
 
 - Checking what you have been doing so far with `git diff` / `git status`.
 - Use `git add` and the like to stage changes.
 - Use `git commit` to, well, create a commit in the current branch.
 
-### Git commands that are *not* safe to run
+### Git commands that modify files
 
-Because these commands might change file contents (without going through an editor), they might lead to different file contents, compared to your peers:
+These commands might change file contents (without going through an editor). The file watcher should pick them up, but currently, they might trigger a deletion and re-creation of the affected files.
+This is problematic if it happens in parallel to changes from other peers, or if they have them open in editors. We hope to build a smoother experience someday.
 
 - Synchronizing with a remote repository with `git push` and `git fetch`.
 - Use `git switch`/`git checkout` to switch to a different branch or get a specific file state from history.
 - Use `git reset --soft` or `git reset --mixed` to modify the staging area and the HEAD "manually".
 - Use `git restore`/`git checkout -- <pathspec>`/`git reset --hard HEAD` to undo your changes or get a different content of a file from the Git history.
 
-If you need to run these commands while pairing, temporarily turn off Ethersync, make the change, and then reconnect. The daemon will then pick up changes, as described in the section about [offline support](offline-support.md).
+If you notice any discrepancies between directory content of connected peers, you can turn off the daemon, and restart it. The daemon will then pick up changes, as described in the section about [offline support](offline-support.md).
 
 ## Recommended pair-programming workflow
 
