@@ -44,7 +44,7 @@ enum Commands {
     Daemon {
         /// The directory to sync. Defaults to current directory.
         directory: Option<PathBuf>,
-        /// Read <node_id>#<passphrase> from stdin.
+        /// Connect to another peer. Will ask for <node_id>#<passphrase> to connect to.
         #[arg(long)]
         peer: bool,
         /// Initialize the current contents of the directory as a new Ethersync directory.
@@ -111,7 +111,7 @@ async fn main() -> Result<()> {
 
             let peer = if peer {
                 let mut line = String::new();
-                print!("Enter peer: ");
+                print!("Enter peer's ticket: ");
                 std::io::stdout().flush()?;
                 std::io::stdin().read_line(&mut line)?;
                 Some(line.trim_end().to_string()) // Remove '\n'.
