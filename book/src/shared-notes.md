@@ -26,16 +26,7 @@ mkdir my-project/.ethersync
 cd my-project
 ```
 
-### 2. Configure the daemon
-
-You'll want to use a stable secret passphrase and a stable port on the server, so put those into the configuration file:
-
-```bash
-echo "secret=your-passphrase-here" >> .ethersync/config
-echo "port=4242" >> .ethersync/config
-```
-
-### 3. Start the daemon
+### 2. Start the daemon
 
 Launch the daemon in a way where it will keep running once you disconnect from your terminal session on the server. You could use `screen`, `tmux`, write a systemd service, or, in the easiest case, launch it with `nohup`:
 
@@ -43,13 +34,12 @@ Launch the daemon in a way where it will keep running once you disconnect from y
 nohup ethersync daemon &
 ```
 
-### 4. Collaborate!
+### 3. Collaborate!
 
 Other peers can now connect to the "cloud peer". It is most convenient for them to also use a configuration file like this:
 
 ```bash
-echo "secret=your-passphrase-here" >> .ethersync/config
-echo "peer=/ip4/<server ip>/tcp/<port>/p2p/<peerid>" >> .ethersync/config
+echo "peer=<ticket>" >> .ethersync/config
 ```
 
 Then, they can connect anytime using

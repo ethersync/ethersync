@@ -14,9 +14,9 @@ There are two ways to configure what an Ethersync daemon will do.
 You can provide the options on the command line, after `ethersync daemon`:
 
 - `--peer` specifies that you want to try connect to a peer (you'll be prompted for an identifier).
-- `--port <port for your daemon>` specifies which port the daemon should listen for incoming connections.
 
 For security reasons, it is not possible to provide the (sensitive) peer identifier via a command line flag.
+Otherwise, it might be visible to other users on the same system.
 
 ## Configuration files
 
@@ -24,5 +24,4 @@ If you keep starting Ethersync with the same options, you can also put the follo
 
 ```ini
 peer = <peer "id#secret" you want to try connecting to>
-port = <port for your daemon>
 ```
