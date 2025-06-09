@@ -745,117 +745,84 @@ impl DocumentActorHandle {
 
 pub struct Daemon {
     pub document_handle: DocumentActorHandle,
-    address_rx: Option<oneshot::Receiver<String>>,
-    address: Option<String>,
+    pub address: String,
 }
 
 impl Daemon {
     // Launch the daemon. Optionally, connect to given peer.
-    pub fn new(
+    pub async fn new(
         peer_connection_info: peer::PeerConnectionInfo,
         socket_path: &Path,
         base_dir: &Path,
         init: bool,
-    ) -> Self {
+    ) -> Result<Self> {
         let is_host = peer_connection_info.is_host();
 
         let document_handle = DocumentActorHandle::new(base_dir, init, is_host);
 
-        let (address_tx, address_rx) = oneshot::channel();
+        // Start file watcher.
+        let base_dir = base_dir.to_path_buf();
+        spawn_file_watcher(&base_dir, document_handle.clone()).await;
 
-        // Initialize file watcher.
-        {
-            let document_handle = document_handle.clone();
-            let base_dir = base_dir.to_path_buf();
-            tokio::spawn(async move {
-                spawn_file_watcher(&base_dir, document_handle).await;
-            });
-        }
+        // Start persister.
+        spawn_persister(document_handle.clone()).await;
 
-        // Initialize persister.
-        {
-            let document_handle = document_handle.clone();
-            tokio::spawn(async move {
-                spawn_persister(document_handle).await;
-            });
-        }
+        // Start p2p listener.
+        let base_dir = base_dir.to_path_buf();
+        let p2p_actor =
+            peer::P2PActor::new(peer_connection_info, document_handle.clone(), &base_dir);
+        let address = p2p_actor.run().await?;
 
-        {
-            let document_handle = document_handle.clone();
-            let base_dir = base_dir.to_path_buf();
-            tokio::spawn(async move {
-                let p2p_actor =
-                    peer::P2PActor::new(peer_connection_info, document_handle, &base_dir);
-                let _ = p2p_actor.run(address_tx).await;
-            });
-        }
+        // Start socket listener.
+        let socket_path = socket_path.to_path_buf();
+        editor::spawn_socket_listener(socket_path, document_handle.clone()).await?;
 
-        {
-            let socket_path = socket_path.to_path_buf();
-            let document_handle = document_handle.clone();
-            tokio::spawn(async move {
-                editor::make_editor_connection(socket_path, document_handle).await;
-            });
-        }
-
-        Self {
+        Ok(Self {
             document_handle,
-            address_rx: Some(address_rx),
-            address: None,
-        }
-    }
-
-    pub async fn address(&mut self) -> String {
-        if let Some(address) = self.address.clone() {
-            address
-        } else {
-            let address = self
-                .address_rx
-                .take()
-                .expect("Either address receiver or address should exist")
-                .await
-                .expect("Receiving address should work");
-            self.address = Some(address.clone());
-            address
-        }
+            address,
+        })
     }
 }
 
 async fn spawn_file_watcher(base_dir: &Path, document_handle: DocumentActorHandle) {
     let mut watcher = Watcher::new(base_dir);
-    while let Some(watcher_event) = watcher.next().await {
-        document_handle
-            .send_message(DocMessage::FromWatcher(watcher_event))
-            .await;
-    }
+    tokio::spawn(async move {
+        while let Some(watcher_event) = watcher.next().await {
+            document_handle
+                .send_message(DocMessage::FromWatcher(watcher_event))
+                .await;
+        }
+    });
 }
 
 async fn spawn_persister(document_handle: DocumentActorHandle) {
-    let mut doc_changed_ping_rx = document_handle.subscribe_document_changes();
-
-    document_handle.send_message(DocMessage::Persist).await;
-
-    loop {
-        match doc_changed_ping_rx.recv().await {
-            Ok(()) => {
-                // The document has changed.
-            }
-            Err(broadcast::error::RecvError::Closed) => {
-                panic!("Doc changed channel has been closed");
-            }
-            Err(broadcast::error::RecvError::Lagged(_)) => {
-                // This is fine, the messages in this channel are just pings.
-                // It's fine if we miss some.
-                debug!("Doc changed ping channel lagged (this is probably fine)");
-            }
-        }
+    tokio::spawn(async move {
+        let mut doc_changed_ping_rx = document_handle.subscribe_document_changes();
 
         document_handle.send_message(DocMessage::Persist).await;
 
-        // Alternatively to sleeping, we could use a "back channel" in the Persist
-        // message, so that the daemon tells us when it's done persisting.
-        tokio::time::sleep(Duration::from_secs(1)).await;
-    }
+        loop {
+            match doc_changed_ping_rx.recv().await {
+                Ok(()) => {
+                    // The document has changed.
+                }
+                Err(broadcast::error::RecvError::Closed) => {
+                    panic!("Doc changed channel has been closed");
+                }
+                Err(broadcast::error::RecvError::Lagged(_)) => {
+                    // This is fine, the messages in this channel are just pings.
+                    // It's fine if we miss some.
+                    debug!("Doc changed ping channel lagged (this is probably fine)");
+                }
+            }
+
+            document_handle.send_message(DocMessage::Persist).await;
+
+            // Alternatively to sleeping, we could use a "back channel" in the Persist
+            // message, so that the daemon tells us when it's done persisting.
+            tokio::time::sleep(Duration::from_secs(1)).await;
+        }
+    });
 }
 
 #[cfg(test)]

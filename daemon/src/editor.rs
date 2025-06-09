@@ -10,7 +10,7 @@ use crate::types::EditorProtocolObject;
 use anyhow::{bail, Context, Result};
 use futures::StreamExt;
 use std::{
-    fs, io,
+    fs,
     os::unix::fs::PermissionsExt,
     path::{Path, PathBuf},
 };
@@ -103,7 +103,10 @@ fn is_user_readable_only(socket_path: &Path) -> Result<()> {
 /// # Panics
 ///
 /// Will panic if we fail to listen on the socket, or if we fail to accept an incoming connection.
-pub async fn make_editor_connection(socket_path: PathBuf, document_handle: DocumentActorHandle) {
+pub async fn spawn_socket_listener(
+    socket_path: PathBuf,
+    document_handle: DocumentActorHandle,
+) -> Result<()> {
     // Make sure the parent directory of the socket is only accessible by the current user.
     if let Err(description) = is_user_readable_only(&socket_path) {
         panic!("{}", description);
@@ -117,55 +120,51 @@ pub async fn make_editor_connection(socket_path: PathBuf, document_handle: Docum
         sandbox::remove_file(Path::new("/"), &socket_path).expect("Could not remove socket");
     }
 
-    let result = accept_editor_loop(&socket_path, document_handle).await;
-    match result {
-        Ok(()) => {}
-        Err(err) => {
-            panic!("Failed to make editor connection: {err}");
-        }
-    }
-}
-
-async fn accept_editor_loop(
-    socket_path: &Path,
-    document_handle: DocumentActorHandle,
-) -> Result<(), io::Error> {
-    let listener = UnixListener::bind(socket_path)?;
+    let listener = UnixListener::bind(&socket_path)?;
     info!("Listening on UNIX socket: {}", socket_path.display());
 
-    loop {
-        let (stream, _addr) = listener.accept().await?;
+    tokio::spawn(async move {
+        loop {
+            match listener.accept().await {
+                Ok((stream, _addr)) => {
+                    let id = document_handle.clone().next_editor_id();
+                    let document_handle_clone = document_handle.clone();
+                    tokio::spawn(async move {
+                        handle_editor_connection(stream, document_handle_clone.clone(), id).await;
+                    })
+                }
+                Err(err) => {
+                    panic!("Error while accepting socket connection: {err}");
+                }
+            };
+        }
+    });
 
-        let id = document_handle.next_editor_id();
-
-        spawn_editor_connection(stream, document_handle.clone(), id);
-    }
+    Ok(())
 }
 
-fn spawn_editor_connection(
+async fn handle_editor_connection(
     stream: UnixStream,
     document_handle: DocumentActorHandle,
     editor_id: EditorId,
 ) {
-    tokio::spawn(async move {
-        let (stream_read, stream_write) = tokio::io::split(stream);
-        let mut reader = FramedRead::new(stream_read, LinesCodec::new());
-        let writer = FramedWrite::new(stream_write, EditorProtocolCodec);
+    let (stream_read, stream_write) = tokio::io::split(stream);
+    let mut reader = FramedRead::new(stream_read, LinesCodec::new());
+    let writer = FramedWrite::new(stream_write, EditorProtocolCodec);
 
+    document_handle
+        .send_message(DocMessage::NewEditorConnection(editor_id, writer))
+        .await;
+    info!("Client #{editor_id} connected");
+
+    while let Some(Ok(line)) = reader.next().await {
         document_handle
-            .send_message(DocMessage::NewEditorConnection(editor_id, writer))
+            .send_message(DocMessage::FromEditor(editor_id, line))
             .await;
-        info!("Client #{editor_id} connected");
+    }
 
-        while let Some(Ok(line)) = reader.next().await {
-            document_handle
-                .send_message(DocMessage::FromEditor(editor_id, line))
-                .await;
-        }
-
-        document_handle
-            .send_message(DocMessage::CloseEditorConnection(editor_id))
-            .await;
-        info!("Client #{editor_id} disconnected");
-    });
+    document_handle
+        .send_message(DocMessage::CloseEditorConnection(editor_id))
+        .await;
+    info!("Client #{editor_id} disconnected");
 }
