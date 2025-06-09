@@ -846,8 +846,10 @@ impl Daemon {
             Some(config::Peer::SecretAddress(addr)) => Some(addr),
             _ => None,
         };
-        let p2p_actor = peer::P2PActor::new(secret_address, document_handle.clone(), &base_dir);
-        let address = p2p_actor.run().await?;
+        let p2p_actor =
+            peer::P2PActor::new(secret_address, document_handle.clone(), &base_dir).await?;
+        let address = p2p_actor.address();
+        p2p_actor.run().await?;
 
         if app_config.emit_secret_address {
             info!(
