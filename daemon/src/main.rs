@@ -129,7 +129,7 @@ async fn main() -> Result<()> {
             }
 
             info!("Starting Ethersync on {}", directory.display());
-            Daemon::new(peer_connection_info, &socket_path, &directory, init);
+            let _daemon = Daemon::new(peer_connection_info, &socket_path, &directory, init).await?;
             match signal::ctrl_c().await {
                 Ok(()) => {}
                 Err(err) => {

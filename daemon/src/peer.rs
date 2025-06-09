@@ -77,7 +77,8 @@ impl P2PActor {
         }
     }
 
-    pub async fn run(self, address_tx: oneshot::Sender<String>) -> Result<()> {
+    // Returns the connection address.
+    pub async fn run(self) -> Result<String> {
         let (secret_key, my_passphrase) = self.get_keypair();
 
         let endpoint = iroh::Endpoint::builder()
@@ -93,9 +94,6 @@ impl P2PActor {
             "Others can connect with:\n\n\tethersync daemon --peer\n{}\n",
             address
         );
-
-        // TODO: Use the error?
-        let _ = address_tx.send(address);
 
         if let Some(ref peer) = self.connection_info.peer {
             let parts: Vec<&str> = peer.split("#").collect();
@@ -115,22 +113,49 @@ impl P2PActor {
                     .expect("Connection should have a node ID")
             );
 
-            self.spawn_peer_sync(conn, my_passphrase.clone(), Some(peer_passphrase));
+            let my_passphrase_clone = my_passphrase.clone();
+            let document_handle_clone = self.document_handle.clone();
+            tokio::spawn(async move {
+                Self::handle_peer(
+                    document_handle_clone,
+                    conn,
+                    my_passphrase_clone,
+                    Some(peer_passphrase),
+                )
+                .await;
+            });
         }
 
-        while let Some(incoming) = endpoint.accept().await {
-            let conn = incoming.await?;
+        tokio::spawn(async move {
+            while let Some(incoming) = endpoint.accept().await {
+                match incoming.await {
+                    Ok(conn) => {
+                        info!(
+                            "Peer connected: {}",
+                            conn.remote_node_id()
+                                .expect("Connection should have a node ID")
+                        );
 
-            info!(
-                "Peer connected: {}",
-                conn.remote_node_id()
-                    .expect("Connection should have a node ID")
-            );
+                        let my_passphrase_clone = my_passphrase.clone();
+                        let document_handle_clone = self.document_handle.clone();
+                        tokio::spawn(async move {
+                            Self::handle_peer(
+                                document_handle_clone,
+                                conn,
+                                my_passphrase_clone,
+                                None,
+                            )
+                            .await;
+                        });
+                    }
+                    Err(err) => {
+                        panic!("Error while accepting peer connection: {err}");
+                    }
+                }
+            }
+        });
 
-            self.spawn_peer_sync(conn, my_passphrase.clone(), None);
-        }
-
-        Ok(())
+        Ok(address)
     }
 
     /// Returns an existing secret key + passphrase, or generates new ones.
@@ -181,8 +206,8 @@ impl P2PActor {
         }
     }
 
-    fn spawn_peer_sync(
-        &self,
+    async fn handle_peer(
+        document_handle: DocumentActorHandle,
         conn: iroh::endpoint::Connection,
         my_passphrase: SecretKey,
         peer_passphrase: Option<SecretKey>,
@@ -190,32 +215,30 @@ impl P2PActor {
         let (to_peer_tx, to_peer_rx) = mpsc::channel(16);
         let (from_peer_tx, from_peer_rx) = mpsc::channel(16);
 
-        let syncer = SyncActor::new(self.document_handle.clone(), from_peer_rx, to_peer_tx);
+        let syncer = SyncActor::new(document_handle, from_peer_rx, to_peer_tx);
 
-        tokio::spawn(async move {
-            let syncer_handle = tokio::spawn(async move {
-                // The syncer can fail when the protocol_handler below has
-                // stopped. But in that case, both components will stop, so we can
-                // ignore the error.
-                let _ = syncer.run().await;
-            });
-
-            // This is a function that either runs forever, or errors.
-            // But errors just mean that the connection was closed/interrupted, so we ignore them.
-            let _ = Self::protocol_handler(
-                conn,
-                from_peer_tx,
-                to_peer_rx,
-                my_passphrase,
-                peer_passphrase,
-            )
-            .await;
-
-            info!("Peer disconnected");
-            // TODO: Do we still this abort? The syncer should stop anyway once it cannot use its
-            // to_peer_tx anymore.
-            syncer_handle.abort_handle().abort();
+        let syncer_handle = tokio::spawn(async move {
+            // The syncer can fail when the protocol_handler below has
+            // stopped. But in that case, both components will stop, so we can
+            // ignore the error.
+            let _ = syncer.run().await;
         });
+
+        // This is a function that either runs forever, or errors.
+        // But errors just mean that the connection was closed/interrupted, so we ignore them.
+        let _ = Self::protocol_handler(
+            conn,
+            from_peer_tx,
+            to_peer_rx,
+            my_passphrase,
+            peer_passphrase,
+        )
+        .await;
+
+        info!("Peer disconnected");
+        // TODO: Do we still this abort? The syncer should stop anyway once it cannot use its
+        // to_peer_tx anymore.
+        syncer_handle.abort_handle().abort();
     }
 
     /// Core low-level syncing protocol.

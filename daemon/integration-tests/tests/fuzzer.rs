@@ -11,6 +11,7 @@ use ethersync::logging;
 use ethersync::peer::PeerConnectionInfo;
 use ethersync::sandbox;
 
+use anyhow::Result;
 use futures::future::join_all;
 use pretty_assertions::assert_eq;
 use rand::Rng;
@@ -42,7 +43,7 @@ fn initialize_project() -> (temp_dir::TempDir, PathBuf) {
 }
 
 #[tokio::main]
-async fn main() {
+async fn main() -> Result<()> {
     let default_panic = std::panic::take_hook();
     std::panic::set_hook(Box::new(move |info| {
         default_panic(info);
@@ -52,8 +53,6 @@ async fn main() {
     let debug_logging = std::env::args().any(|arg| arg == "-v");
     logging::initialize(debug_logging);
 
-    let sleep_duration = std::time::Duration::from_millis(5000);
-
     // Set up files in project directories.
     let (dir, file) = initialize_project();
     let (dir2, file2) = initialize_project();
@@ -61,41 +60,43 @@ async fn main() {
     // Set up the actors.
     let socket_name = Path::new("ethersync-fuzzer-peer-1");
     let socket_path = get_socket_path(socket_name);
-    let mut daemon = Daemon::new(
+    let daemon = Daemon::new(
         PeerConnectionInfo { peer: None },
         &socket_path,
         dir.path(),
         true,
-    );
-    let address = daemon.address().await;
+    )
+    .await?;
 
-    // Give the daemon time to boot.
-    sleep(sleep_duration).await;
+    // Wait until iroh's DNS discovery (hopefully) works.
+    sleep(Duration::from_millis(1000)).await;
 
     std::env::set_var("ETHERSYNC_SOCKET", socket_name);
     let nvim = Neovim::new(file).await;
-    // Give the editor time to process the open.
-    sleep(sleep_duration).await;
 
     let socket_name_2 = Path::new("ethersync-fuzzer-peer-2");
     let socket_path_2 = get_socket_path(socket_name_2);
     let peer = Daemon::new(
         PeerConnectionInfo {
-            peer: Some(address),
+            peer: Some(daemon.address.clone()),
         },
         &socket_path_2,
         dir2.path(),
         false,
-    );
-    // Make sure peer has synced with the other daemon before connecting Vim!
-    // Otherwise, peer might not have a document yet.
-    sleep(sleep_duration).await;
+    )
+    .await?;
+
+    // Wait until file2 appears.
+    while !file2.exists() {
+        dbg!("{&file2} doesnt");
+        sleep(Duration::from_millis(100)).await;
+    }
 
     std::env::set_var("ETHERSYNC_SOCKET", socket_name_2);
     let nvim2 = Neovim::new(file2).await;
 
     // Give the second Neovim time to process the "open" call.
-    sleep(sleep_duration).await;
+    sleep(Duration::from_millis(1000)).await;
 
     let mut actors: HashMap<String, Box<dyn Actor>> = HashMap::new();
     actors.insert("daemon".to_string(), Box::new(daemon));

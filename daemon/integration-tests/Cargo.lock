@@ -866,6 +866,7 @@ dependencies = [
 name = "ethersync-integration-tests"
 version = "0.0.0"
 dependencies = [
+ "anyhow",
  "async-trait",
  "ethersync",
  "futures 0.3.31",
