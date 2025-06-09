@@ -6,7 +6,7 @@
 //! A peer is another daemon. This module is all about daemon to daemon communication.
 
 use crate::daemon::{DocMessage, DocumentActorHandle};
-use anyhow::{Context, Result};
+use anyhow::{bail, Context, Result};
 use automerge::sync::{Message as AutomergeSyncMessage, State as SyncState};
 use iroh::SecretKey;
 use std::fs::{self, File, OpenOptions};
@@ -56,14 +56,19 @@ impl P2PActor {
         if let Some(ref peer) = self.secret_address {
             let parts: Vec<&str> = peer.split("#").collect();
             if parts.len() != 2 {
-                panic!("Peer string must have format <node_id>#<passphrase>");
+                bail!("Peer string must have format <node_id>#<passphrase>");
             }
 
-            let public_key = iroh::PublicKey::from_str(parts[0])?;
-            let peer_passphrase = iroh::SecretKey::from_str(parts[1])?;
+            let public_key =
+                iroh::PublicKey::from_str(parts[0]).context("Could not parse node ID")?;
+            let peer_passphrase =
+                iroh::SecretKey::from_str(parts[1]).context("Could not parse passphrase")?;
 
             let node_addr: iroh::NodeAddr = public_key.into();
-            let conn = endpoint.connect(node_addr, ALPN).await?;
+            let conn = endpoint
+                .connect(node_addr, ALPN)
+                .await
+                .context("Connecting to peer failed")?;
 
             info!(
                 "Connected to peer: {}",
