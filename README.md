@@ -39,9 +39,9 @@ For more information about Ethersync's design, refer to the list of [decision re
 
 Thanks to [NLNet](https://nlnet.nl) for funding this project through the [NGI0 Core Fund](https://nlnet.nl/core/) in 2023/24.
 
-Thanks to the [Prototypefund](https://www.prototypefund.de/) and the [Federal Ministry of Research, Technology and Space](https://www.bmbf.de/en/) for funding this project in 2025.
+Thanks to the [Prototype Fund](https://www.prototypefund.de/) and the [Federal Ministry of Research, Technology and Space](https://www.bmbf.de/EN/) for funding this project in 2025.
 
-<a href="https://www.bmbf.de/en/"><img src="https://www.bmbf.de/SiteGlobals/Frontend/Images/images/logo.svg?__blob=normal&v=7" alt="Logo of the German Federal Ministry of Research, Technology and Space" height="100px"></a>&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; <a href="https://prototypefund.de/en/"><img src="https://media.licdn.com/dms/image/v2/D4D0BAQGaFA1e0zZtVg/company-logo_200_200/B4DZcRMgxgIEAM-/0/1748340182462/prototype_fund_logo?e=2147483647&v=beta&t=jeIT8pVQbd_aotin5ncMgAU_DH8VojF1xOT8-1i6s5s" alt="Logo of the Prototype Fund" height="100px"></a>&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; <a href="https://okfn.de/en/"><img src="https://upload.wikimedia.org/wikipedia/commons/4/4d/Open_Knowledge_Foundation_Deutschland_Logo.svg" alt="Logo of the Open Knowledge Foundation Germany" height="100px"></a>
+<a href="https://www.bmbf.de/EN/"><img src="https://www.bmbf.de/SiteGlobals/Frontend/Images/images/logo.svg?__blob=normal&v=7" alt="Logo of the German Federal Ministry of Research, Technology and Space" height="100px"></a>&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; <a href="https://prototypefund.de/en/"><img src="https://media.licdn.com/dms/image/v2/D4D0BAQGaFA1e0zZtVg/company-logo_200_200/B4DZcRMgxgIEAM-/0/1748340182462/prototype_fund_logo?e=2147483647&v=beta&t=jeIT8pVQbd_aotin5ncMgAU_DH8VojF1xOT8-1i6s5s" alt="Logo of the Prototype Fund" height="100px"></a>&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; <a href="https://okfn.de/en/"><img src="https://upload.wikimedia.org/wikipedia/commons/4/4d/Open_Knowledge_Foundation_Deutschland_Logo.svg" alt="Logo of the Open Knowledge Foundation Germany" height="100px"></a>
 
 ## License
 
