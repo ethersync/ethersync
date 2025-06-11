@@ -91,7 +91,7 @@ impl P2PActor {
         let address = format!("{}#{}", endpoint.node_id(), my_passphrase);
 
         info!(
-            "Others can connect with:\n\n\tethersync daemon --peer\n{}\n",
+            "Others can connect with `ethersync join` providing the following ticket\n\n\t{}\n",
             address
         );
 
