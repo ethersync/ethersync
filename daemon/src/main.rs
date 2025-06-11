@@ -3,14 +3,14 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-use anyhow::{Context, Result};
+use anyhow::{bail, Context, Result};
 use clap::{parser::ValueSource, CommandFactory, FromArgMatches, Parser, Subcommand};
 use ethersync::peer::PeerConnectionInfo;
 use ethersync::{daemon::Daemon, editor, logging, sandbox};
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use tokio::signal;
-use tracing::{error, info};
+use tracing::info;
 
 mod jsonrpc_forwarder;
 
@@ -40,16 +40,18 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
-    /// Launch Ethersync's background process that connects with clients and other nodes.
-    Daemon {
+    /// Share the a directory with a peer.
+    Share {
         /// The directory to sync. Defaults to current directory.
         directory: Option<PathBuf>,
-        /// Connect to another peer. Will ask for <node_id>#<passphrase> to connect to.
-        #[arg(long)]
-        peer: bool,
         /// Initialize the current contents of the directory as a new Ethersync directory.
         #[arg(long)]
         init: bool,
+    },
+    /// Join a shared project.
+    Join {
+        /// The directory to sync. Defaults to current directory.
+        directory: Option<PathBuf>,
     },
     /// Open a JSON-RPC connection to the Ethersync daemon on stdin/stdout.
     Client,
@@ -70,8 +72,8 @@ async fn main() -> Result<()> {
         std::process::exit(1);
     }));
 
-    let matches = Cli::command().get_matches();
-    let cli = match Cli::from_arg_matches(&matches) {
+    let arg_matches = Cli::command().get_matches();
+    let cli = match Cli::from_arg_matches(&arg_matches) {
         Ok(cli) => cli,
         Err(e) => e.exit(),
     };
@@ -81,45 +83,27 @@ async fn main() -> Result<()> {
     let socket_path = editor::get_socket_path(&cli.socket_name);
 
     match cli.command {
-        Commands::Daemon {
-            directory,
-            peer,
-            init,
-        } => {
-            if matches.value_source("socket_name").unwrap() == ValueSource::EnvVariable {
-                info!(
-                    "Using socket path {} from env var {}",
-                    socket_path.display(),
-                    ETHERSYNC_SOCKET_ENV_VAR
-                );
-            }
+        Commands::Share { directory, init } => {
+            let directory = get_directory(directory)?;
+            print_starting_info(arg_matches, &socket_path, &directory);
+            let _daemon = Daemon::new(
+                PeerConnectionInfo { peer: None },
+                &socket_path,
+                &directory,
+                init,
+            )
+            .await?;
+            wait_for_ctrl_c().await;
+        }
+        Commands::Join { directory } => {
+            let mut line = String::new();
+            print!("Enter peer's ticket: ");
+            std::io::stdout().flush()?;
+            std::io::stdin().read_line(&mut line)?;
+            let peer = line.trim_end().to_string(); // Remove '\n'.
+            let mut peer_connection_info = PeerConnectionInfo { peer: Some(peer) };
 
-            let directory = directory
-                .unwrap_or_else(|| {
-                    std::env::current_dir().expect("Could not access current directory")
-                })
-                .canonicalize()
-                .expect("Could not access given directory");
-            if !has_ethersync_directory(&directory) {
-                error!(
-                    "No {}/ found in {} (create that directory to Ethersync-enable the project)",
-                    ETHERSYNC_CONFIG_DIR,
-                    directory.display()
-                );
-                return Ok(());
-            }
-
-            let peer = if peer {
-                let mut line = String::new();
-                print!("Enter peer's ticket: ");
-                std::io::stdout().flush()?;
-                std::io::stdin().read_line(&mut line)?;
-                Some(line.trim_end().to_string()) // Remove '\n'.
-            } else {
-                None
-            };
-            let mut peer_connection_info = PeerConnectionInfo { peer };
-
+            let directory = get_directory(directory)?;
             let config_file = directory
                 .join(ETHERSYNC_CONFIG_DIR)
                 .join(ETHERSYNC_CONFIG_FILE);
@@ -128,15 +112,10 @@ async fn main() -> Result<()> {
                 peer_connection_info = peer_connection_info.takes_precedence_over(config_from_file);
             }
 
-            info!("Starting Ethersync on {}", directory.display());
-            let _daemon = Daemon::new(peer_connection_info, &socket_path, &directory, init).await?;
-            match signal::ctrl_c().await {
-                Ok(()) => {}
-                Err(err) => {
-                    eprintln!("Unable to listen for shutdown signal: {err}");
-                    // still shut down.
-                }
-            }
+            print_starting_info(arg_matches, &socket_path, &directory);
+            let _daemon =
+                Daemon::new(peer_connection_info, &socket_path, &directory, false).await?;
+            wait_for_ctrl_c().await;
         }
         Commands::Client => {
             jsonrpc_forwarder::connection(&socket_path)
@@ -145,4 +124,41 @@ async fn main() -> Result<()> {
         }
     }
     Ok(())
+}
+
+fn get_directory(directory: Option<PathBuf>) -> Result<PathBuf> {
+    let directory = directory
+        .unwrap_or_else(|| std::env::current_dir().expect("Could not access current directory"))
+        .canonicalize()
+        .expect("Could not access given directory");
+    if !has_ethersync_directory(&directory) {
+        bail!(
+            "No {}/ found in {} (create that directory to Ethersync-enable the project)",
+            ETHERSYNC_CONFIG_DIR,
+            directory.display()
+        );
+    }
+    Ok(directory)
+}
+
+fn print_starting_info(arg_matches: clap::ArgMatches, socket_path: &Path, directory: &Path) {
+    if arg_matches.value_source("socket_name").unwrap() == ValueSource::EnvVariable {
+        info!(
+            "Using socket path {} from env var {}",
+            socket_path.display(),
+            ETHERSYNC_SOCKET_ENV_VAR
+        );
+    }
+
+    info!("Starting Ethersync on {}", directory.display());
+}
+
+async fn wait_for_ctrl_c() {
+    match signal::ctrl_c().await {
+        Ok(()) => {}
+        Err(err) => {
+            eprintln!("Unable to listen for shutdown signal: {err}");
+            // still shut down.
+        }
+    }
 }
