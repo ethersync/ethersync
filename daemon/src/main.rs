@@ -6,6 +6,7 @@
 use anyhow::{bail, Context, Result};
 use clap::{parser::ValueSource, CommandFactory, FromArgMatches, Parser, Subcommand};
 use ethersync::peer::PeerConnectionInfo;
+use ethersync::wormhole::get_ticket_from_wormhole;
 use ethersync::{daemon::Daemon, editor, logging, sandbox};
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -104,7 +105,7 @@ async fn main() -> Result<()> {
             let peer_connection_info = match PeerConnectionInfo::from_config_file(&config_file) {
                 None | Some(PeerConnectionInfo { peer: None }) => {
                     // If no peer is configured, or no config exists, ask for it.
-                    let peer = read_ticket()?;
+                    let peer = read_ticket().await?;
                     PeerConnectionInfo { peer: Some(peer) }
                 }
                 Some(peer_connection_info) => {
@@ -127,12 +128,14 @@ async fn main() -> Result<()> {
     Ok(())
 }
 
-fn read_ticket() -> Result<String> {
+async fn read_ticket() -> Result<String> {
     let mut line = String::new();
-    print!("Enter peer's ticket: ");
+    print!("Enter peer's magic connection code: ");
     std::io::stdout().flush()?;
     std::io::stdin().read_line(&mut line)?;
-    Ok(line.trim().to_string())
+    let code = line.trim();
+    let ticket = get_ticket_from_wormhole(&code).await?;
+    Ok(ticket)
 }
 
 fn get_directory(directory: Option<PathBuf>) -> Result<PathBuf> {
