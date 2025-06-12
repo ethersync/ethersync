@@ -5,11 +5,11 @@
 
 //! A peer is another daemon. This module is all about daemon to daemon communication.
 
+use crate::config::PeerConnectionInfo;
 use crate::daemon::{DocMessage, DocumentActorHandle};
 use crate::wormhole::put_ticket_into_wormhole;
 use anyhow::{Context, Result};
 use automerge::sync::{Message as AutomergeSyncMessage, State as SyncState};
-use ini::Ini;
 use iroh::SecretKey;
 use std::fs::{self, File, OpenOptions};
 use std::io::{Read, Write};
@@ -21,35 +21,6 @@ use tokio::sync::{broadcast, mpsc, oneshot};
 use tracing::{debug, error, info, warn};
 
 const ALPN: &[u8] = b"/ethersync/0";
-
-/// Responsible for offering peer-to-peer connectivity to the outside world. Uses libp2p.
-/// For every new connection, spawns and runs a `SyncActor`.
-#[derive(Clone)]
-pub struct PeerConnectionInfo {
-    pub peer: Option<String>,
-}
-
-impl PeerConnectionInfo {
-    // TODO: It feels like this function would fit better into main.rs.
-    // Should the whole type live there?
-    pub fn from_config_file(config_file: &Path) -> Option<Self> {
-        if config_file.exists() {
-            let conf = Ini::load_from_file(config_file)
-                .expect("Could not access config file, even though it exists");
-            let general_section = conf.general_section();
-            Some(Self {
-                peer: general_section.get("peer").map(|p| p.to_string()),
-            })
-        } else {
-            None
-        }
-    }
-
-    #[must_use]
-    pub const fn is_host(&self) -> bool {
-        self.peer.is_none()
-    }
-}
 
 #[derive(Clone)]
 pub struct P2PActor {
