@@ -36,18 +36,11 @@ impl PeerConnectionInfo {
             let conf = Ini::load_from_file(config_file)
                 .expect("Could not access config file, even though it exists");
             let general_section = conf.general_section();
-            return Some(Self {
+            Some(Self {
                 peer: general_section.get("peer").map(|p| p.to_string()),
-            });
+            })
         } else {
-            info!("No config file found, please provide everything through CLI options");
             None
-        }
-    }
-
-    pub fn takes_precedence_over(self, other: Self) -> Self {
-        Self {
-            peer: self.peer.or(other.peer),
         }
     }
 

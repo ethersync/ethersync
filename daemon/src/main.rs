@@ -96,21 +96,22 @@ async fn main() -> Result<()> {
             wait_for_ctrl_c().await;
         }
         Commands::Join { directory } => {
-            let mut line = String::new();
-            print!("Enter peer's ticket: ");
-            std::io::stdout().flush()?;
-            std::io::stdin().read_line(&mut line)?;
-            let peer = line.trim_end().to_string(); // Remove '\n'.
-            let mut peer_connection_info = PeerConnectionInfo { peer: Some(peer) };
-
             let directory = get_directory(directory)?;
             let config_file = directory
                 .join(ETHERSYNC_CONFIG_DIR)
                 .join(ETHERSYNC_CONFIG_FILE);
 
-            if let Some(config_from_file) = PeerConnectionInfo::from_config_file(&config_file) {
-                peer_connection_info = peer_connection_info.takes_precedence_over(config_from_file);
-            }
+            let peer_connection_info = match PeerConnectionInfo::from_config_file(&config_file) {
+                None | Some(PeerConnectionInfo { peer: None }) => {
+                    // If no peer is configured, or no config exists, ask for it.
+                    let peer = read_ticket()?;
+                    PeerConnectionInfo { peer: Some(peer) }
+                }
+                Some(peer_connection_info) => {
+                    info!("Using peer from config file");
+                    peer_connection_info
+                }
+            };
 
             print_starting_info(arg_matches, &socket_path, &directory);
             let _daemon =
@@ -124,6 +125,14 @@ async fn main() -> Result<()> {
         }
     }
     Ok(())
+}
+
+fn read_ticket() -> Result<String> {
+    let mut line = String::new();
+    print!("Enter peer's ticket: ");
+    std::io::stdout().flush()?;
+    std::io::stdin().read_line(&mut line)?;
+    Ok(line.trim().to_string())
 }
 
 fn get_directory(directory: Option<PathBuf>) -> Result<PathBuf> {
