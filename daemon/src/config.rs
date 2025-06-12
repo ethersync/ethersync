@@ -11,11 +11,11 @@ use std::path::Path;
 use tracing::info;
 
 #[derive(Clone)]
-pub struct PeerConnectionInfo {
+pub struct AppConfig {
     pub peer: Option<String>,
 }
 
-impl PeerConnectionInfo {
+impl AppConfig {
     pub fn from_config_file(config_file: &Path) -> Option<Self> {
         if config_file.exists() {
             let conf = Ini::load_from_file(config_file)

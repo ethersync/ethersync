@@ -5,7 +5,7 @@
 
 use anyhow::{bail, Context, Result};
 use clap::{parser::ValueSource, CommandFactory, FromArgMatches, Parser, Subcommand};
-use ethersync::config::{store_peer_in_config, PeerConnectionInfo};
+use ethersync::config::{store_peer_in_config, AppConfig};
 use ethersync::wormhole::get_ticket_from_wormhole;
 use ethersync::{daemon::Daemon, editor, logging, sandbox};
 use std::path::{Path, PathBuf};
@@ -87,13 +87,8 @@ async fn main() -> Result<()> {
         Commands::Share { directory, init } => {
             let directory = get_directory(directory)?;
             print_starting_info(arg_matches, &socket_path, &directory);
-            let _daemon = Daemon::new(
-                PeerConnectionInfo { peer: None },
-                &socket_path,
-                &directory,
-                init,
-            )
-            .await?;
+            let _daemon =
+                Daemon::new(AppConfig { peer: None }, &socket_path, &directory, init).await?;
             wait_for_ctrl_c().await;
         }
         Commands::Join {
@@ -105,26 +100,25 @@ async fn main() -> Result<()> {
                 .join(ETHERSYNC_CONFIG_DIR)
                 .join(ETHERSYNC_CONFIG_FILE);
 
-            let peer_connection_info = match join_code {
+            let app_config = match join_code {
                 Some(join_code) => {
                     let peer = get_ticket_from_wormhole(&join_code).await?;
                     store_peer_in_config(&directory, &config_file, &peer)?;
-                    PeerConnectionInfo { peer: Some(peer) }
+                    AppConfig { peer: Some(peer) }
                 }
-                None => match PeerConnectionInfo::from_config_file(&config_file) {
-                    None | Some(PeerConnectionInfo { peer: None }) => {
+                None => match AppConfig::from_config_file(&config_file) {
+                    None | Some(AppConfig { peer: None }) => {
                         bail!("Missing join code, and no peer=<node ticket> in .ethersync/config");
                     }
-                    Some(peer_connection_info) => {
+                    Some(app_config) => {
                         info!("Using peer from config file.");
-                        peer_connection_info
+                        app_config
                     }
                 },
             };
 
             print_starting_info(arg_matches, &socket_path, &directory);
-            let _daemon =
-                Daemon::new(peer_connection_info, &socket_path, &directory, false).await?;
+            let _daemon = Daemon::new(app_config, &socket_path, &directory, false).await?;
             wait_for_ctrl_c().await;
         }
         Commands::Client => {

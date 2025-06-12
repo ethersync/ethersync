@@ -5,10 +5,10 @@
 
 use ethersync_integration_tests::actors::{Actor, Neovim};
 
+use ethersync::config::AppConfig;
 use ethersync::daemon::{Daemon, TEST_FILE_PATH};
 use ethersync::editor::get_socket_path;
 use ethersync::logging;
-use ethersync::peer::PeerConnectionInfo;
 use ethersync::sandbox;
 
 use anyhow::Result;
@@ -59,13 +59,7 @@ async fn main() -> Result<()> {
     // Set up the actors.
     let socket_name = Path::new("ethersync-fuzzer-peer-1");
     let socket_path = get_socket_path(socket_name);
-    let daemon = Daemon::new(
-        PeerConnectionInfo { peer: None },
-        &socket_path,
-        dir.path(),
-        true,
-    )
-    .await?;
+    let daemon = Daemon::new(AppConfig { peer: None }, &socket_path, dir.path(), true).await?;
 
     // Wait until iroh's DNS discovery (hopefully) works.
     sleep(Duration::from_millis(1000)).await;
@@ -76,7 +70,7 @@ async fn main() -> Result<()> {
     let socket_name_2 = Path::new("ethersync-fuzzer-peer-2");
     let socket_path_2 = get_socket_path(socket_name_2);
     let peer = Daemon::new(
-        PeerConnectionInfo {
+        AppConfig {
             peer: Some(daemon.address.clone()),
         },
         &socket_path_2,

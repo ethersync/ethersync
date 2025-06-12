@@ -5,7 +5,6 @@
 
 //! A peer is another daemon. This module is all about daemon to daemon communication.
 
-use crate::config::PeerConnectionInfo;
 use crate::daemon::{DocMessage, DocumentActorHandle};
 use crate::wormhole::put_ticket_into_wormhole;
 use anyhow::{Context, Result};
@@ -24,19 +23,19 @@ const ALPN: &[u8] = b"/ethersync/0";
 
 #[derive(Clone)]
 pub struct P2PActor {
-    connection_info: PeerConnectionInfo,
+    secret_address: Option<String>,
     document_handle: DocumentActorHandle,
     base_dir: PathBuf,
 }
 
 impl P2PActor {
     pub fn new(
-        connection_info: PeerConnectionInfo,
+        secret_address: Option<String>,
         document_handle: DocumentActorHandle,
         base_dir: &Path,
     ) -> Self {
         Self {
-            connection_info,
+            secret_address,
             document_handle,
             base_dir: base_dir.to_path_buf(),
         }
@@ -62,7 +61,7 @@ impl P2PActor {
 
         put_ticket_into_wormhole(&address).await;
 
-        if let Some(ref peer) = self.connection_info.peer {
+        if let Some(ref peer) = self.secret_address {
             let parts: Vec<&str> = peer.split("#").collect();
             if parts.len() != 2 {
                 panic!("Peer string must have format <node_id>#<passphrase>");

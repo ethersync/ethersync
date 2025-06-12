@@ -752,12 +752,12 @@ pub struct Daemon {
 impl Daemon {
     // Launch the daemon. Optionally, connect to given peer.
     pub async fn new(
-        peer_connection_info: config::PeerConnectionInfo,
+        app_config: config::AppConfig,
         socket_path: &Path,
         base_dir: &Path,
         init: bool,
     ) -> Result<Self> {
-        let is_host = peer_connection_info.is_host();
+        let is_host = app_config.is_host();
 
         let document_handle = DocumentActorHandle::new(base_dir, init, is_host);
 
@@ -770,8 +770,8 @@ impl Daemon {
 
         // Start p2p listener.
         let base_dir = base_dir.to_path_buf();
-        let p2p_actor =
-            peer::P2PActor::new(peer_connection_info, document_handle.clone(), &base_dir);
+        let secret_address = app_config.peer;
+        let p2p_actor = peer::P2PActor::new(secret_address, document_handle.clone(), &base_dir);
         let address = p2p_actor.run().await?;
 
         // Start socket listener.
