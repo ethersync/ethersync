@@ -8,7 +8,6 @@ use clap::{parser::ValueSource, CommandFactory, FromArgMatches, Parser, Subcomma
 use ethersync::peer::PeerConnectionInfo;
 use ethersync::wormhole::get_ticket_from_wormhole;
 use ethersync::{daemon::Daemon, editor, logging, sandbox};
-use std::io::Write;
 use std::path::{Path, PathBuf};
 use tokio::signal;
 use tracing::info;
@@ -41,20 +40,24 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
-    /// Share the a directory with a peer.
+    /// Share a directory with a new peer.
     Share {
-        /// The directory to sync. Defaults to current directory.
-        directory: Option<PathBuf>,
-        /// Initialize the current contents of the directory as a new Ethersync directory.
+        /// Re-initialize the history of the shared project.
         #[arg(long)]
         init: bool,
-    },
-    /// Join a shared project.
-    Join {
-        /// The directory to sync. Defaults to current directory.
+        /// The directory to share. Defaults to current directory.
+        #[arg(long)]
         directory: Option<PathBuf>,
     },
-    /// Open a JSON-RPC connection to the Ethersync daemon on stdin/stdout.
+    /// Join a shared project via join code.
+    Join {
+        /// Specify to connect to a new peer. Otherwise, try to connect to the most recent peer.
+        join_code: Option<String>,
+        /// The directory to sync. Defaults to current directory.
+        #[arg(long)]
+        directory: Option<PathBuf>,
+    },
+    /// Open a JSON-RPC connection to the Ethersync daemon on stdin/stdout. Used by text editor plugins.
     Client,
 }
 
@@ -96,22 +99,30 @@ async fn main() -> Result<()> {
             .await?;
             wait_for_ctrl_c().await;
         }
-        Commands::Join { directory } => {
+        Commands::Join {
+            join_code,
+            directory,
+        } => {
             let directory = get_directory(directory)?;
             let config_file = directory
                 .join(ETHERSYNC_CONFIG_DIR)
                 .join(ETHERSYNC_CONFIG_FILE);
 
-            let peer_connection_info = match PeerConnectionInfo::from_config_file(&config_file) {
-                None | Some(PeerConnectionInfo { peer: None }) => {
-                    // If no peer is configured, or no config exists, ask for it.
-                    let peer = read_ticket().await?;
+            let peer_connection_info = match join_code {
+                Some(join_code) => {
+                    let peer = get_ticket_from_wormhole(&join_code).await?;
+                    store_peer_in_config(&directory, &config_file, &peer)?;
                     PeerConnectionInfo { peer: Some(peer) }
                 }
-                Some(peer_connection_info) => {
-                    info!("Using peer from config file");
-                    peer_connection_info
-                }
+                None => match PeerConnectionInfo::from_config_file(&config_file) {
+                    None | Some(PeerConnectionInfo { peer: None }) => {
+                        bail!("Missing join code, and no peer=<node ticket> in .ethersync/config");
+                    }
+                    Some(peer_connection_info) => {
+                        info!("Using peer from config file");
+                        peer_connection_info
+                    }
+                },
             };
 
             print_starting_info(arg_matches, &socket_path, &directory);
@@ -126,16 +137,6 @@ async fn main() -> Result<()> {
         }
     }
     Ok(())
-}
-
-async fn read_ticket() -> Result<String> {
-    let mut line = String::new();
-    print!("Enter peer's magic connection code: ");
-    std::io::stdout().flush()?;
-    std::io::stdin().read_line(&mut line)?;
-    let code = line.trim();
-    let ticket = get_ticket_from_wormhole(&code).await?;
-    Ok(ticket)
 }
 
 fn get_directory(directory: Option<PathBuf>) -> Result<PathBuf> {
@@ -163,6 +164,14 @@ fn print_starting_info(arg_matches: clap::ArgMatches, socket_path: &Path, direct
     }
 
     info!("Starting Ethersync on {}", directory.display());
+}
+
+fn store_peer_in_config(directory: &Path, config_file: &Path, peer: &str) -> Result<()> {
+    info!("Storing peer's address in .ethersync/config");
+
+    let content = format!("peer={peer}\n");
+    sandbox::write_file(&directory, &config_file, &content.as_bytes())
+        .context("Failed to write to config file")
 }
 
 async fn wait_for_ctrl_c() {
