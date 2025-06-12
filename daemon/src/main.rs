@@ -5,7 +5,7 @@
 
 use anyhow::{bail, Context, Result};
 use clap::{parser::ValueSource, CommandFactory, FromArgMatches, Parser, Subcommand};
-use ethersync::peer::PeerConnectionInfo;
+use ethersync::config::{store_peer_in_config, PeerConnectionInfo};
 use ethersync::wormhole::get_ticket_from_wormhole;
 use ethersync::{daemon::Daemon, editor, logging, sandbox};
 use std::path::{Path, PathBuf};
@@ -161,14 +161,6 @@ fn print_starting_info(arg_matches: clap::ArgMatches, socket_path: &Path, direct
     }
 
     debug!("Starting Ethersync on {}.", directory.display());
-}
-
-fn store_peer_in_config(directory: &Path, config_file: &Path, peer: &str) -> Result<()> {
-    info!("Storing peer's address in .ethersync/config.");
-
-    let content = format!("peer={peer}\n");
-    sandbox::write_file(&directory, &config_file, &content.as_bytes())
-        .context("Failed to write to config file")
 }
 
 async fn wait_for_ctrl_c() {

@@ -3,6 +3,7 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+use crate::config;
 use crate::document::Document;
 use crate::editor::{self, EditorId, EditorWriter};
 use crate::editor_connection::EditorConnection;
@@ -751,7 +752,7 @@ pub struct Daemon {
 impl Daemon {
     // Launch the daemon. Optionally, connect to given peer.
     pub async fn new(
-        peer_connection_info: peer::PeerConnectionInfo,
+        peer_connection_info: config::PeerConnectionInfo,
         socket_path: &Path,
         base_dir: &Path,
         init: bool,
