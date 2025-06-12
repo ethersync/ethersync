@@ -136,7 +136,7 @@ impl OTServer {
         );
         let seen_operations = self.editor_queue.len() - daemon_operations_to_transform;
         debug!(
-            "Editor is confirming {} operations, there are still {} unconfirmed operations",
+            "Editor is confirming {} operations, there are still {} unconfirmed operations.",
             seen_operations, daemon_operations_to_transform,
         );
         let confirmed_queue = self.editor_queue.drain(..seen_operations);

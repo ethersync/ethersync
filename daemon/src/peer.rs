@@ -166,7 +166,7 @@ impl P2PActor {
             if current_permissions != allowed_permissions {
                 panic!("For security reasons, please make sure to set the key file to user-readable only (set the permissions to 600).");
             }
-            info!("Re-using existing keypair");
+            debug!("Re-using existing keypair.");
             let mut file = File::open(keyfile).expect("Failed to open key file");
 
             let mut secret_key = [0; 32];
@@ -182,7 +182,7 @@ impl P2PActor {
                 SecretKey::from_bytes(&passphrase),
             )
         } else {
-            info!("Generating new keypair");
+            debug!("Generating new keypair.");
             let secret_key = SecretKey::generate(rand::rngs::OsRng);
             let passphrase = SecretKey::generate(rand::rngs::OsRng);
 
@@ -231,7 +231,7 @@ impl P2PActor {
         )
         .await;
 
-        info!("Peer disconnected");
+        info!("Peer disconnected.");
         // TODO: Do we still this abort? The syncer should stop anyway once it cannot use its
         // to_peer_tx anymore.
         syncer_handle.abort_handle().abort();
@@ -260,7 +260,7 @@ impl P2PActor {
             // Guard against timing attacks.
             if !constant_time_eq::constant_time_eq(&received_passphrase, &my_passphrase.to_bytes())
             {
-                warn!("Peer provided incorrect passphrase");
+                warn!("Peer provided incorrect passphrase.");
                 return Ok(());
             }
 
@@ -382,7 +382,7 @@ impl SyncActor {
                         Err(broadcast::error::RecvError::Lagged(_)) => {
                             // This is fine, the messages in this channel are just pings.
                             // It's fine if we miss some.
-                            debug!("Doc changed ping channel lagged (this is probably fine)");
+                            debug!("Doc changed ping channel lagged (this is probably fine).");
                         }
                     }
                 }

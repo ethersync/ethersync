@@ -154,14 +154,13 @@ impl Document {
             self.apply_delta_to_doc(&text_delta, file_path);
         } else {
             // The file doesn't exist in the CRDT yet, so we need to initialize it.
-            info!("Creating {file_path} in CRDT.");
             self.initialize_text(desired_text, file_path);
         }
     }
 
     pub fn remove_text(&mut self, file_path: &RelativePath) {
         if self.text_obj(file_path).is_err() {
-            debug!("Failed to get {file_path} Text object, so I can't remove it from the CRDT");
+            debug!("Failed to get {file_path} Text object, so I can't remove it from the CRDT.");
             return;
         };
 

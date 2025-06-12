@@ -10,7 +10,7 @@ use ethersync::wormhole::get_ticket_from_wormhole;
 use ethersync::{daemon::Daemon, editor, logging, sandbox};
 use std::path::{Path, PathBuf};
 use tokio::signal;
-use tracing::info;
+use tracing::{debug, info};
 
 mod jsonrpc_forwarder;
 
@@ -119,7 +119,7 @@ async fn main() -> Result<()> {
                         bail!("Missing join code, and no peer=<node ticket> in .ethersync/config");
                     }
                     Some(peer_connection_info) => {
-                        info!("Using peer from config file");
+                        info!("Using peer from config file.");
                         peer_connection_info
                     }
                 },
@@ -157,17 +157,17 @@ fn get_directory(directory: Option<PathBuf>) -> Result<PathBuf> {
 fn print_starting_info(arg_matches: clap::ArgMatches, socket_path: &Path, directory: &Path) {
     if arg_matches.value_source("socket_name").unwrap() == ValueSource::EnvVariable {
         info!(
-            "Using socket path {} from env var {}",
+            "Using socket path {} from environment variable {}.",
             socket_path.display(),
             ETHERSYNC_SOCKET_ENV_VAR
         );
     }
 
-    info!("Starting Ethersync on {}", directory.display());
+    debug!("Starting Ethersync on {}.", directory.display());
 }
 
 fn store_peer_in_config(directory: &Path, config_file: &Path, peer: &str) -> Result<()> {
-    info!("Storing peer's address in .ethersync/config");
+    info!("Storing peer's address in .ethersync/config.");
 
     let content = format!("peer={peer}\n");
     sandbox::write_file(&directory, &config_file, &content.as_bytes())
