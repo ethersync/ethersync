@@ -456,7 +456,7 @@ impl TryFrom<Patch> for PatchEffect {
                             let path = RelativePath::new(&key);
                             if conflict {
                                 warn!(
-                                    "Resolved conflict for file {path} by overwriting your version"
+                                    "Resolved conflict for file {path} by overwriting your version."
                                 );
                             }
                             Ok(PatchEffect::FileChange(FileTextDelta::new(path, delta)))
@@ -473,7 +473,7 @@ impl TryFrom<Patch> for PatchEffect {
                                 automerge::Prop::Map(file_name) => {
                                     // We assume that conflict resolution works the way, that the
                                     // side that gets the PatchAction is the one that "wins".
-                                    warn!("Conflict for file '{file_name}' resolved. Taking your version");
+                                    warn!("Conflict for file '{file_name}' resolved. Taking your version.");
                                     Ok(PatchEffect::NoEffect)
                                 }
                                 other_prop => Err(anyhow::anyhow!(

@@ -22,7 +22,7 @@ use tokio_util::{
     bytes::BytesMut,
     codec::{Encoder, FramedRead, FramedWrite, LinesCodec},
 };
-use tracing::info;
+use tracing::{debug, info};
 
 pub type EditorId = usize;
 
@@ -121,7 +121,7 @@ pub async fn spawn_socket_listener(
     }
 
     let listener = UnixListener::bind(&socket_path)?;
-    info!("Listening on UNIX socket: {}", socket_path.display());
+    debug!("Listening on UNIX socket: {}", socket_path.display());
 
     tokio::spawn(async move {
         loop {
@@ -155,7 +155,7 @@ async fn handle_editor_connection(
     document_handle
         .send_message(DocMessage::NewEditorConnection(editor_id, writer))
         .await;
-    info!("Client #{editor_id} connected");
+    info!("Client #{editor_id} connected.");
 
     while let Some(Ok(line)) = reader.next().await {
         document_handle
@@ -166,5 +166,5 @@ async fn handle_editor_connection(
     document_handle
         .send_message(DocMessage::CloseEditorConnection(editor_id))
         .await;
-    info!("Client #{editor_id} disconnected");
+    info!("Client #{editor_id} disconnected.");
 }

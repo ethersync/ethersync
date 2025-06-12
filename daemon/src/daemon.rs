@@ -113,8 +113,8 @@ impl DocumentActor {
             .expect("Could not check for the existence of the persistence file");
 
         let crdt_doc = if persistence_file_exists && !init {
-            info!(
-                "Loading persisted CRDT document from '{}'",
+            debug!(
+                "Loading persisted CRDT document from '{}'.",
                 persistence_file.display()
             );
             let bytes = sandbox::read_file(&base_dir, &persistence_file)
@@ -123,7 +123,7 @@ impl DocumentActor {
         } else {
             Document::default()
         };
-        info!("Done.");
+        debug!("Loading CRDT document completed.");
 
         let mut s = Self {
             doc_message_rx,
@@ -177,14 +177,14 @@ impl DocumentActor {
             DocMessage::Persist => {
                 let persistence_file = self.base_dir.join(".ethersync/doc");
                 if self.save_fully {
-                    debug!("Persisting fully!");
+                    debug!("Persisting CRDT document fully.");
                     let bytes = self.crdt_doc.save();
                     sandbox::write_file(&self.base_dir, &persistence_file, &bytes).unwrap_or_else(
                         |_| panic!("Failed to persist to '{}'", persistence_file.display()),
                     );
                     self.save_fully = false
                 } else {
-                    debug!("Persisting incrementally!");
+                    debug!("Persisting CRDT document incrementally.");
                     let bytes = self.crdt_doc.save_incremental();
                     sandbox::append_file(&self.base_dir, &persistence_file, &bytes).unwrap_or_else(
                         |_| panic!("Failed to persist to '{}'", persistence_file.display()),
@@ -272,7 +272,7 @@ impl DocumentActor {
                 self.editor_connections.remove(&editor_id);
 
                 let cursor_id = self.cursor_id(editor_id);
-                debug!("Deleting cursor {cursor_id}");
+                debug!("Deleting cursor {cursor_id}.");
                 self.maybe_delete_cursor_position(&cursor_id).await;
             }
         }
@@ -508,7 +508,7 @@ impl DocumentActor {
                 if !sandbox::exists(&self.base_dir, &abs_path)
                     .expect("Failed to check for file existence before writing to it")
                 {
-                    info!("Creating {file_path}.");
+                    info!("Creating file {file_path}.");
                 }
 
                 sandbox::write_file(&self.base_dir, &abs_path, &text.into_bytes())
@@ -668,7 +668,7 @@ impl DocumentActor {
         while let Some(message) = self.doc_message_rx.recv().await {
             self.handle_message(message).await;
         }
-        debug!("Channel towards document handle has been closed (probably shutting down)");
+        debug!("Channel towards document handle has been closed (probably shutting down).");
     }
 }
 
@@ -812,7 +812,7 @@ async fn spawn_persister(document_handle: DocumentActorHandle) {
                 Err(broadcast::error::RecvError::Lagged(_)) => {
                     // This is fine, the messages in this channel are just pings.
                     // It's fine if we miss some.
-                    debug!("Doc changed ping channel lagged (this is probably fine)");
+                    debug!("Doc changed ping channel lagged (this is probably fine).");
                 }
             }
 
