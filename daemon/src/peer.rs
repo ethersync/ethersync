@@ -6,6 +6,7 @@
 //! A peer is another daemon. This module is all about daemon to daemon communication.
 
 use crate::daemon::{DocMessage, DocumentActorHandle};
+use crate::wormhole::put_ticket_to_wormhole;
 use anyhow::{Context, Result};
 use automerge::sync::{Message as AutomergeSyncMessage, State as SyncState};
 use ini::Ini;
@@ -84,9 +85,11 @@ impl P2PActor {
         let address = format!("{}#{}", endpoint.node_id(), my_passphrase);
 
         info!(
-            "Others can connect with `ethersync join` providing the following ticket\n\n\t{}\n",
+            "\n\n\tOthers can connect by putting the following ticket in their .ethersync/config:\n\n\t{}\n",
             address
         );
+
+        put_ticket_to_wormhole(&address).await;
 
         if let Some(ref peer) = self.connection_info.peer {
             let parts: Vec<&str> = peer.split("#").collect();
