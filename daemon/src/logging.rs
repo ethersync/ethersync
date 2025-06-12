@@ -4,10 +4,9 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 use anyhow::Result;
-use time;
-
+use time::macros::format_description;
 use tracing::level_filters::LevelFilter;
-use tracing_subscriber::{fmt, EnvFilter, FmtSubscriber};
+use tracing_subscriber::{fmt::time::UtcTime, EnvFilter, FmtSubscriber};
 
 pub fn initialize() -> Result<()> {
     let simplified_logging = std::env::var("RUST_LOG").is_err();
@@ -23,11 +22,7 @@ pub fn initialize() -> Result<()> {
         tracing::subscriber::set_global_default(subscriber)
             .expect("Setting default log subscriber failed");
     } else {
-        let timer = time::format_description::parse("[hour]:[minute]:[second]")
-            .expect("Could not create time format description");
-        let time_offset = time::UtcOffset::current_local_offset().unwrap_or(time::UtcOffset::UTC);
-        let timer = fmt::time::OffsetTime::new(time_offset, timer);
-
+        let timer = UtcTime::new(format_description!("[hour]:[minute]:[second]Z"));
         let filter = EnvFilter::builder()
             .with_default_directive(LevelFilter::DEBUG.into())
             .from_env()?;
