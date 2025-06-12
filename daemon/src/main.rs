@@ -33,9 +33,6 @@ struct Cli {
       env = ETHERSYNC_SOCKET_ENV_VAR,
     )]
     socket_name: PathBuf,
-    /// Enable verbose debug output.
-    #[arg(short, long, global = true)]
-    debug: bool,
 }
 
 #[derive(Subcommand)]
@@ -82,7 +79,7 @@ async fn main() -> Result<()> {
         Err(e) => e.exit(),
     };
 
-    logging::initialize(cli.debug);
+    logging::initialize()?;
 
     let socket_path = editor::get_socket_path(&cli.socket_name);
 

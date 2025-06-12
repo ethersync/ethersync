@@ -50,8 +50,7 @@ async fn main() -> Result<()> {
         std::process::exit(1);
     }));
 
-    let debug_logging = std::env::args().any(|arg| arg == "-v");
-    logging::initialize(debug_logging);
+    logging::initialize()?;
 
     // Set up files in project directories.
     let (dir, file) = initialize_project();
