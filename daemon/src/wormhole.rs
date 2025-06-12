@@ -15,7 +15,7 @@ pub async fn put_ticket_into_wormhole(address: &str) {
     let code = mailbox_connection.code().clone();
 
     info!(
-        "\n\n\tTo connect to you, another person can run:\n\n\tethersync join {}\n",
+        "\n\tTo connect to you, another person can run:\n\n\tethersync join {}\n",
         &code
     );
 
