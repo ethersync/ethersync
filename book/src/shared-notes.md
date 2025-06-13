@@ -31,19 +31,21 @@ cd my-project
 Launch the daemon in a way where it will keep running once you disconnect from your terminal session on the server. You could use `screen`, `tmux`, write a systemd service, or, in the easiest case, launch it with `nohup`:
 
 ```bash
-nohup ethersync daemon &
+nohup ethersync share --show-secret-address &
 ```
+
+Check the output of the command (written to the file `nohup.out` when using `nohup`) for the node's secret address.
 
 ### 3. Collaborate!
 
-Other peers can now connect to the "cloud peer". It is most convenient for them to also use a configuration file like this:
+Other peers can now connect to the "cloud peer". It is most convenient for them to put the secret address into their configuration file:
 
 ```bash
-echo "peer=<ticket>" >> .ethersync/config
+echo "peer=<secret address>" >> .ethersync/config
 ```
 
 Then, they can connect anytime using
 
 ```bash
-ethersync daemon
+ethersync join
 ```

@@ -37,26 +37,23 @@ Note that this directory, similar to a `.git` directory will *not* be synchroniz
 To start the session, run:
 
 ```bash
-ethersync daemon
+ethersync share
 ```
 
-This will print, among other initialization information, the [ticket](connection-making.md#addressing-and-authenticating-with-the-peer)
-) which looks like `429e94b149fc1f7d88b2ce1d46cafe9af220bebf084ee6f8b468918d020e9819#32374e6846573354474e4b504b6742773662724e4f6b5a786c5477624f4a6789`.
+This will print, among other initialization information, a [join code](connection-making.md#join code)
+) which looks like `3-exhausted-bananas`.
 
-You need to share this with the other peers.
+You can share this with one other person, to allow them to connect.
 
 ### 4. Other peers
 
-To join a session, run:
+To join a session, run a command like this:
 
 ```bash
-ethersync demon --peer
+ethersync join 3-exhausted-bananas
 ```
 
-This will query the user for the ticket with "Enter peer's ticket:".
 This should show you a message like "Connected to peer: ...". The hosting daemon should show a message like "Peer connected: ...".
-
- When used "in production" it's also possible and recommended to use the [configuration file](configuration.md) to provide the peer identifier and key for encryption.
 
 ### 5. Collaborate!
 

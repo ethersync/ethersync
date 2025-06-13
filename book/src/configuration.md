@@ -7,21 +7,9 @@ SPDX-License-Identifier: CC-BY-SA-4.0
 
 # Configuration
 
-There are two ways to configure what an Ethersync daemon will do.
-
-## Command line flags
-
-You can provide the options on the command line, after `ethersync daemon`:
-
-- `--peer` specifies that you want to try connect to a peer (you'll be prompted for an identifier).
-
-For security reasons, it is not possible to provide the (sensitive) peer identifier via a command line flag.
-Otherwise, it might be visible to other users on the same system.
-
-## Configuration files
-
-If you keep starting Ethersync with the same options, you can also put the following options into a configuration file at `.ethersync/config`:
+After a successful `ethersync join`, the peer's secret address is stored in your `.ethersync/config` in the following format:
 
 ```ini
-peer = <peer "id#secret" you want to try connecting to>
+peer = <node id>#<passphrase>
 ```
+In the future, can then use `ethersync join` without a join code, to reconnect to the same peer.

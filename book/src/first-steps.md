@@ -9,9 +9,7 @@ SPDX-License-Identifier: CC-BY-SA-4.0
 
 Here's how to try out Ethersync!
 
-## 🖥 Try Ethersync on your own computer
-
-### 1. Create an example project directory
+## 🎬 1. Set up a project to share
 
 Our current convention is to have a subdirectory called `.ethersync` in an Ethersync-enabled directory. So create them both:
 
@@ -21,15 +19,16 @@ cd playground
 touch file
 ```
 
-### 2. Start the Ethersync daemon in the project directory
+Then, start the Ethersync daemon in the project directory:
 
 ```bash
-ethersync daemon
+ethersync share
 ```
+This will print a "join code" that others can use to connect.
 
-You should see some log output indicating that things are initialized etc.
+## 🖥 2. Try Ethersync on your own computer
 
-### 3. See changes across editors
+First, let's see changes across two different text editors!
 
 Open the file in a new terminal:
 
@@ -53,30 +52,28 @@ The edits you make in one editor should now appear in both!
 Note that using two editors is not the main use-case of Ethersync. We show it here for demonstrating purposes.
 
 
-## 🧑‍🤝‍🧑 Invite other people
+## 🧑‍🤝‍🧑 3. Collaborate with other people
 
 If a friend now wants to join the collaboration from another computer, they need to follow these steps:
 
-### 1. Prepare the project directory
+### Prepare the project directory
 
 ```bash
 mkdir -p playground/.ethersync
 cd playground
 ```
 
-### 2. Start the daemon
+### Start the daemon
 
-To connect, run
+To connect, run a command like this, with the "join code" output by the daemon on the first computer:
 
 ```bash
-ethersync daemon --peer
+ethersync join 3-exhausted-bananas
 ```
 
-and then paste the long "ticket" (which has the format `<peer id>#<passphrase>`) when prompted.
+Both sides will indicate success with a log message "Peer connected" and "Connected to peer" respectively. If you don't see it, double-check the previous steps.
 
-If a connection can be made, both sides will indicate success with a log message "Peer connected" and "Connected to peer" respectively. If you don't see it, double check the previous steps.
-
-### 3. Start collaborating in real-time!
+### Start collaborating in real-time!
 
 If everything worked, connected peers can now collaborate on existing files by opening them in their editors.
 Type somethings and the changes will be transferred over!
