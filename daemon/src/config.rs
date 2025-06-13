@@ -59,6 +59,6 @@ pub fn store_peer_in_config(directory: &Path, config_file: &Path, peer: &str) ->
     info!("Storing peer's address in .ethersync/config.");
 
     let content = format!("peer={peer}\n");
-    sandbox::write_file(&directory, &config_file, &content.as_bytes())
+    sandbox::write_file(directory, config_file, content.as_bytes())
         .context("Failed to write to config file")
 }

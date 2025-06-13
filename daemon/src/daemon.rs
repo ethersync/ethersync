@@ -613,7 +613,7 @@ impl DocumentActor {
                 self.crdt_doc.store_cursor_position(
                     cursor_id,
                     name.clone(),
-                    &file_path,
+                    file_path,
                     ranges.clone(),
                 );
                 let _ = self.doc_changed_ping_tx.send(());
@@ -866,7 +866,7 @@ mod tests {
             }
             fn assert_file_content(&self, file_path: &RelativePath, content: &str) {
                 // unfortunately anyhow::Error doesn't implement PartialEq, so we'll rather unwrap.
-                assert_eq!(self.current_file_content(&file_path).unwrap(), content);
+                assert_eq!(self.current_file_content(file_path).unwrap(), content);
             }
         }
 

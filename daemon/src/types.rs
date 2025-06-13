@@ -418,7 +418,7 @@ impl TryFrom<Patch> for PatchEffect {
             }
             let (_obj_id, prop) = &path[1];
             if let automerge::Prop::Map(file_path) = prop {
-                return Ok(RelativePath::new(&file_path));
+                return Ok(RelativePath::new(file_path));
             }
             Err(anyhow::anyhow!(
                 "Unexpected path in Automerge patch: Prop is not a map"
@@ -665,7 +665,7 @@ impl TextDelta {
     }
 }
 
-impl<'a> From<Vec<Chunk<'a>>> for TextDelta {
+impl From<Vec<Chunk<'_>>> for TextDelta {
     fn from(chunks: Vec<Chunk>) -> Self {
         let mut delta = TextDelta::default();
         for chunk in chunks {

@@ -271,7 +271,7 @@ mod tests {
     impl Document {
         fn assert_file_content(&self, file_path: &RelativePath, content: &str) {
             // unfortunately anyhow::Error doesn't implement PartialEq, so we'll rather unwrap.
-            assert_eq!(self.current_file_content(&file_path).unwrap(), content);
+            assert_eq!(self.current_file_content(file_path).unwrap(), content);
         }
     }
 
