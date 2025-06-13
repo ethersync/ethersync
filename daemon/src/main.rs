@@ -39,9 +39,16 @@ struct Cli {
 enum Commands {
     /// Share a directory with a new peer.
     Share {
-        /// Re-initialize the history of the shared project.
+        /// Re-initialize the history of the shared project. You will loose previous history.
         #[arg(long)]
         init: bool,
+        /// Do not generate a join code. To prevent unintended sharing or simply if you want to
+        /// keep Magic Wormhole out of the loop.
+        #[arg(long)]
+        no_join_code: bool,
+        /// Do print the ticket. Useful for bulk sharing.
+        #[arg(long)]
+        show_ticket: bool,
         /// The directory to share. Defaults to current directory.
         #[arg(long)]
         directory: Option<PathBuf>,
@@ -84,11 +91,25 @@ async fn main() -> Result<()> {
     let socket_path = editor::get_socket_path(&cli.socket_name);
 
     match cli.command {
-        Commands::Share { directory, init } => {
+        Commands::Share {
+            directory,
+            init,
+            no_join_code,
+            show_ticket,
+        } => {
             let directory = get_directory(directory)?;
             print_starting_info(arg_matches, &socket_path, &directory);
-            let _daemon =
-                Daemon::new(AppConfig { peer: None }, &socket_path, &directory, init).await?;
+            let _daemon = Daemon::new(
+                AppConfig {
+                    peer: None,
+                    emit_join_code: Some(!no_join_code),
+                    emit_secret_address: Some(show_ticket),
+                },
+                &socket_path,
+                &directory,
+                init,
+            )
+            .await?;
             wait_for_ctrl_c().await;
         }
         Commands::Join {
@@ -104,10 +125,14 @@ async fn main() -> Result<()> {
                 Some(join_code) => {
                     let peer = get_ticket_from_wormhole(&join_code).await?;
                     store_peer_in_config(&directory, &config_file, &peer)?;
-                    AppConfig { peer: Some(peer) }
+                    AppConfig {
+                        peer: Some(peer),
+                        emit_join_code: None,
+                        emit_secret_address: None,
+                    }
                 }
                 None => match AppConfig::from_config_file(&config_file) {
-                    None | Some(AppConfig { peer: None }) => {
+                    None | Some(AppConfig { peer: None, .. }) => {
                         bail!("Missing join code, and no peer=<node ticket> in .ethersync/config");
                     }
                     Some(app_config) => {

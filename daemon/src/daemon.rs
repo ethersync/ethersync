@@ -17,6 +17,7 @@ use crate::types::{
 };
 use crate::watcher::Watcher;
 use crate::watcher::WatcherEvent;
+use crate::wormhole::put_ticket_into_wormhole;
 use anyhow::Result;
 use automerge::{
     sync::{Message as AutomergeSyncMessage, State as SyncState},
@@ -770,9 +771,19 @@ impl Daemon {
 
         // Start p2p listener.
         let base_dir = base_dir.to_path_buf();
-        let secret_address = app_config.peer;
+        let secret_address = app_config.peer.clone();
         let p2p_actor = peer::P2PActor::new(secret_address, document_handle.clone(), &base_dir);
         let address = p2p_actor.run().await?;
+
+        if app_config.emit_secret_address() {
+            info!(
+            "\n\n\tOthers can connect by putting the following ticket in their .ethersync/config:\n\n\t{}\n",
+            address
+            );
+        }
+        if app_config.emit_join_code() {
+            put_ticket_into_wormhole(&address).await;
+        }
 
         // Start socket listener.
         let socket_path = socket_path.to_path_buf();
