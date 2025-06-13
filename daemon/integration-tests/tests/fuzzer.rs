@@ -59,7 +59,17 @@ async fn main() -> Result<()> {
     // Set up the actors.
     let socket_name = Path::new("ethersync-fuzzer-peer-1");
     let socket_path = get_socket_path(socket_name);
-    let daemon = Daemon::new(AppConfig { peer: None }, &socket_path, dir.path(), true).await?;
+    let daemon = Daemon::new(
+        AppConfig {
+            peer: None,
+            emit_join_code: Some(false),
+            emit_secret_address: Some(false),
+        },
+        &socket_path,
+        dir.path(),
+        true,
+    )
+    .await?;
 
     // Wait until iroh's DNS discovery (hopefully) works.
     sleep(Duration::from_millis(1000)).await;
@@ -72,6 +82,8 @@ async fn main() -> Result<()> {
     let peer = Daemon::new(
         AppConfig {
             peer: Some(daemon.address.clone()),
+            emit_join_code: Some(false),
+            emit_secret_address: Some(false),
         },
         &socket_path_2,
         dir2.path(),
