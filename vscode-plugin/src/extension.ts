@@ -12,19 +12,19 @@ var Mutex = require("async-mutex").Mutex
 
 import {setCursor, getCursorInfo} from "./cursor"
 
-function isEthersyncEnabled(dir: string) {
+function findEthersyncDirectory(dir: string) {
     if (fs.existsSync(path.join(dir, ".ethersync"))) {
-        return true
+        return dir
     }
 
     const parentDir = path.resolve(dir, "..")
 
     // If we are at the root directory, stop the recursion.
     if (parentDir === dir) {
-        return false
+        return null
     }
 
-    return isEthersyncEnabled(parentDir)
+    return findEthersyncDirectory(parentDir)
 }
 
 interface Position {
@@ -65,6 +65,7 @@ class Revision {
     editor = 0
 }
 
+let ethersyncClient: cp.ChildProcess | null = null
 let connection: rpc.MessageConnection
 
 let revisions: {[filename: string]: Revision} = {}
@@ -150,8 +151,8 @@ function vsCodeRangeToSelection(range: vscode.Range): vscode.Selection {
     return new vscode.Selection(anchor, active)
 }
 
-function connect() {
-    const ethersyncClient = cp.spawn("ethersync", ["client"])
+function connect(directory: string) {
+    ethersyncClient = cp.spawn("ethersync", ["client", "--directory", directory])
 
     ethersyncClient.on("error", (err) => {
         vscode.window.showErrorMessage(`Failed to start ethersync client: ${err.message}`)
@@ -160,6 +161,11 @@ function connect() {
     ethersyncClient.on("exit", () => {
         vscode.window.showErrorMessage("Connection to Ethersync daemon lost.")
     })
+
+    if (!ethersyncClient.stdout || !ethersyncClient.stdin) {
+        vscode.window.showErrorMessage("Connection to Ethersync daemon has no stdin/stdout.")
+        return
+    }
 
     connection = rpc.createMessageConnection(
         new rpc.StreamMessageReader(ethersyncClient.stdout),
@@ -260,8 +266,17 @@ async function applyEdit(document: vscode.TextDocument, edit: Edit): Promise<boo
     return worked
 }
 
-// TODO: check if belongs to project.
 async function processUserOpen(document: vscode.TextDocument) {
+    const filename = document.fileName
+    const directory = findEthersyncDirectory(path.dirname(filename))
+    if (!directory) {
+        return
+    }
+
+    if (!ethersyncClient) {
+        connect(directory)
+    }
+
     const fileUri = decodeURI(document.uri.toString())
     debug("OPEN " + fileUri)
     connection
@@ -344,7 +359,7 @@ function processUserEdit(event: vscode.TextDocumentChangeEvent) {
             }
 
             const filename = document.fileName
-            if (!isEthersyncEnabled(path.dirname(filename))) {
+            if (!findEthersyncDirectory(path.dirname(filename))) {
                 return
             }
 
@@ -419,8 +434,6 @@ function showCursorNotification() {
 
 export function activate(context: vscode.ExtensionContext) {
     debug("Ethersync extension activated!")
-
-    connect()
 
     context.subscriptions.push(
         vscode.workspace.onDidChangeTextDocument(processUserEdit),
