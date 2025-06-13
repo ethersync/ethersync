@@ -107,7 +107,7 @@ These should be sent as notifications, there is no need to reply to them.
 
 To send messages to the daemon manually, you can try the following. Assuming you can start the daemon on a playground as described in the [first steps](first-steps.md), now we add some debugging output:
 ```bash
-ethersync daemon playground -d
+RUST_LOG=debug ethersync share playground
 # Note for below: You will see some output like "Listening on UNIX socket: /tmp/ethersync"
 ```
 You can then start the client, in another terminal:
@@ -154,10 +154,10 @@ Do do that on a single machine, follow these steps:
 2. Create a new, empty shared directory (with an `.ethersync` directory in it) for the second daemon.
 3. Start the second daemon:
     - The directory should be the additional directory you created.
-    - Set the `--peer` option and provide the peer identifier+key of the first daemon.
-    - Set `--socket-path` to a new value like `/tmp/ethertwo`.
+    - Use `ethersync join <join code>`.
+    - Set `--socket-name` to a new value like `ethertwo`.
 4. Connect an editor to the first daemon by opening a file in the first directory.
 5. Connect an editor to the second daemon by setting the environment variable `ETHERSYNC_SOCKET` to the new value before opening a file in the second directory.
-    - Example: `ETHERSYNC_SOCKET=/tmp/ethertwo nvim directory2/file`
+    - Example: `ETHERSYNC_SOCKET=ethertwo nvim directory2/file`
 
 Things you type into the first editor should now appear in the second editor, and vice versa.
