@@ -59,8 +59,8 @@ impl P2PActor {
                 panic!("Peer string must have format <node_id>#<passphrase>");
             }
 
-            let public_key = iroh::PublicKey::from_str(&parts[0])?;
-            let peer_passphrase = iroh::SecretKey::from_str(&parts[1])?;
+            let public_key = iroh::PublicKey::from_str(parts[0])?;
+            let peer_passphrase = iroh::SecretKey::from_str(parts[1])?;
 
             let node_addr: iroh::NodeAddr = public_key.into();
             let conn = endpoint.connect(node_addr, ALPN).await?;
@@ -149,7 +149,7 @@ impl P2PActor {
             let passphrase = SecretKey::generate(rand::rngs::OsRng);
 
             let mut file = OpenOptions::new()
-                .create(true)
+                .create_new(true)
                 .write(true)
                 .mode(0o600)
                 .open(keyfile)

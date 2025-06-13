@@ -78,7 +78,7 @@ fn is_valid_socket_name(socket_name: &Path) -> Result<()> {
 pub fn get_socket_path(socket_name: &Path) -> PathBuf {
     let socket_dir = std::env::var("XDG_RUNTIME_DIR").unwrap_or_else(|_| get_fallback_socket_dir());
     let socket_dir = Path::new(&socket_dir);
-    if let Err(description) = is_valid_socket_name(&socket_name) {
+    if let Err(description) = is_valid_socket_name(socket_name) {
         panic!("{}", description);
     }
     socket_dir.join(socket_name)
