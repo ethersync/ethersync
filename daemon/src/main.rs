@@ -4,23 +4,22 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 use anyhow::{bail, Context, Result};
-use clap::{parser::ValueSource, CommandFactory, FromArgMatches, Parser, Subcommand};
+use clap::{CommandFactory, FromArgMatches, Parser, Subcommand};
 use ethersync::{
     config::{self, AppConfig},
     daemon::Daemon,
-    editor, logging, sandbox,
+    logging, sandbox,
 };
 use std::path::{Path, PathBuf};
 use tokio::signal;
-use tracing::{debug, info};
+use tracing::debug;
 
 mod jsonrpc_forwarder;
 
 // TODO: Define these constants in the ethersync crate, and use them here.
-const DEFAULT_SOCKET_NAME: &str = "ethersync";
+const DEFAULT_SOCKET_NAME: &str = "socket";
 const ETHERSYNC_CONFIG_DIR: &str = ".ethersync";
 const ETHERSYNC_CONFIG_FILE: &str = "config";
-const ETHERSYNC_SOCKET_ENV_VAR: &str = "ETHERSYNC_SOCKET";
 
 #[derive(Parser)]
 #[command(version, about, long_about = None)]
@@ -28,13 +27,9 @@ const ETHERSYNC_SOCKET_ENV_VAR: &str = "ETHERSYNC_SOCKET";
 struct Cli {
     #[command(subcommand)]
     command: Commands,
-    /// Path to the Unix domain socket to use for communication between daemon and editors.
-    #[arg(
-      short, long, global = true,
-      default_value = DEFAULT_SOCKET_NAME,
-      env = ETHERSYNC_SOCKET_ENV_VAR,
-    )]
-    socket_name: PathBuf,
+    /// The shared directory. Defaults to current directory.
+    #[arg(long, global = true)]
+    directory: Option<PathBuf>,
 }
 
 #[derive(Subcommand)]
@@ -51,17 +46,11 @@ enum Commands {
         /// Do print the secret address. Useful for bulk sharing.
         #[arg(long)]
         show_secret_address: bool,
-        /// The directory to share. Defaults to current directory.
-        #[arg(long)]
-        directory: Option<PathBuf>,
     },
     /// Join a shared project via join code.
     Join {
         /// Specify to connect to a new peer. Otherwise, try to connect to the most recent peer.
         join_code: Option<String>,
-        /// The directory to sync. Defaults to current directory.
-        #[arg(long)]
-        directory: Option<PathBuf>,
     },
     /// Open a JSON-RPC connection to the Ethersync daemon on stdin/stdout. Used by text editor plugins.
     Client,
@@ -90,16 +79,21 @@ async fn main() -> Result<()> {
 
     logging::initialize()?;
 
-    let socket_path = editor::get_socket_path(&cli.socket_name);
+    let directory = get_directory(cli.directory)?;
+
+    let config_file = directory
+        .join(ETHERSYNC_CONFIG_DIR)
+        .join(ETHERSYNC_CONFIG_FILE);
+
+    let socket_path = directory
+        .join(ETHERSYNC_CONFIG_DIR)
+        .join(DEFAULT_SOCKET_NAME);
 
     match cli.command {
-        Commands::Share { ref directory, .. } | Commands::Join { ref directory, .. } => {
-            let directory = get_directory(directory.clone())?;
-            let config_file = directory
-                .join(ETHERSYNC_CONFIG_DIR)
-                .join(ETHERSYNC_CONFIG_FILE);
+        Commands::Share { .. } | Commands::Join { .. } => {
             let mut init_doc = false;
             let mut app_config;
+
             match cli.command {
                 Commands::Share {
                     init,
@@ -134,7 +128,7 @@ async fn main() -> Result<()> {
                 }
             }
 
-            print_starting_info(arg_matches, &socket_path, &directory);
+            print_starting_info(&directory);
             let _daemon = Daemon::new(app_config, &socket_path, &directory, init_doc).await?;
             wait_for_ctrl_c().await;
         }
@@ -162,15 +156,7 @@ fn get_directory(directory: Option<PathBuf>) -> Result<PathBuf> {
     Ok(directory)
 }
 
-fn print_starting_info(arg_matches: clap::ArgMatches, socket_path: &Path, directory: &Path) {
-    if arg_matches.value_source("socket_name").unwrap() == ValueSource::EnvVariable {
-        info!(
-            "Using socket path {} from environment variable {}.",
-            socket_path.display(),
-            ETHERSYNC_SOCKET_ENV_VAR
-        );
-    }
-
+fn print_starting_info(directory: &Path) {
     debug!("Starting Ethersync on {}.", directory.display());
 }
 
