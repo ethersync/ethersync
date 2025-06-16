@@ -5,9 +5,11 @@
 
 use anyhow::{bail, Context, Result};
 use clap::{parser::ValueSource, CommandFactory, FromArgMatches, Parser, Subcommand};
-use ethersync::config::{store_peer_in_config, AppConfig};
-use ethersync::wormhole::get_ticket_from_wormhole;
-use ethersync::{daemon::Daemon, editor, logging, sandbox};
+use ethersync::{
+    config::{self, AppConfig},
+    daemon::Daemon,
+    editor, logging, sandbox,
+};
 use std::path::{Path, PathBuf};
 use tokio::signal;
 use tracing::{debug, info};
@@ -91,59 +93,46 @@ async fn main() -> Result<()> {
     let socket_path = editor::get_socket_path(&cli.socket_name);
 
     match cli.command {
-        Commands::Share {
-            directory,
-            init,
-            no_join_code,
-            show_ticket,
-        } => {
-            let directory = get_directory(directory)?;
-            print_starting_info(arg_matches, &socket_path, &directory);
-            let _daemon = Daemon::new(
-                AppConfig {
-                    peer: None,
-                    emit_join_code: Some(!no_join_code),
-                    emit_secret_address: Some(show_ticket),
-                },
-                &socket_path,
-                &directory,
-                init,
-            )
-            .await?;
-            wait_for_ctrl_c().await;
-        }
-        Commands::Join {
-            join_code,
-            directory,
-        } => {
-            let directory = get_directory(directory)?;
+        Commands::Share { ref directory, .. } | Commands::Join { ref directory, .. } => {
+            let directory = get_directory(directory.clone())?;
             let config_file = directory
                 .join(ETHERSYNC_CONFIG_DIR)
                 .join(ETHERSYNC_CONFIG_FILE);
-
-            let app_config = match join_code {
-                Some(join_code) => {
-                    let peer = get_ticket_from_wormhole(&join_code).await?;
-                    store_peer_in_config(&directory, &config_file, &peer)?;
-                    AppConfig {
-                        peer: Some(peer),
-                        emit_join_code: None,
-                        emit_secret_address: None,
-                    }
+            let mut init_doc = false;
+            let mut app_config;
+            match cli.command {
+                Commands::Share {
+                    init,
+                    no_join_code,
+                    show_ticket,
+                    ..
+                } => {
+                    init_doc = init;
+                    let app_config_cli = AppConfig {
+                        peer: None,
+                        emit_join_code: !no_join_code,
+                        emit_secret_address: show_ticket,
+                    };
+                    app_config = app_config_cli.merge(AppConfig::from_config_file(&config_file));
                 }
-                None => match AppConfig::from_config_file(&config_file) {
-                    None | Some(AppConfig { peer: None, .. }) => {
-                        bail!("Missing join code, and no peer=<node ticket> in .ethersync/config");
-                    }
-                    Some(app_config) => {
-                        info!("Using peer from config file.");
-                        app_config
-                    }
-                },
-            };
+                Commands::Join { join_code, .. } => {
+                    let app_config_cli = AppConfig {
+                        peer: join_code.map(config::Peer::JoinCode),
+                        emit_join_code: false,
+                        emit_secret_address: false,
+                    };
+
+                    app_config = app_config_cli.merge(AppConfig::from_config_file(&config_file));
+
+                    app_config = app_config.resolve_peer(&directory, &config_file).await?;
+                }
+                Commands::Client => {
+                    panic!("This can't happen, as we earlier matched on Share|Join.")
+                }
+            }
 
             print_starting_info(arg_matches, &socket_path, &directory);
-            let _daemon = Daemon::new(app_config, &socket_path, &directory, false).await?;
+            let _daemon = Daemon::new(app_config, &socket_path, &directory, init_doc).await?;
             wait_for_ctrl_c().await;
         }
         Commands::Client => {

@@ -5,16 +5,26 @@
 
 //! Data structures and helper methods around influencing the configuration of the application.
 use crate::sandbox;
-use anyhow::{Context, Result};
+use crate::wormhole::get_ticket_from_wormhole;
+use anyhow::{bail, Context, Result};
 use ini::Ini;
 use std::path::Path;
 use tracing::info;
 
+const EMIT_JOIN_CODE_DEFAULT: bool = true;
+const EMIT_SECRET_ADDRESS_DEFAULT: bool = false;
+
+#[derive(Clone)]
+pub enum Peer {
+    SecretAddress(String),
+    JoinCode(String),
+}
+
 #[derive(Clone)]
 pub struct AppConfig {
-    pub peer: Option<String>,
-    pub emit_join_code: Option<bool>,
-    pub emit_secret_address: Option<bool>,
+    pub peer: Option<Peer>,
+    pub emit_join_code: bool,
+    pub emit_secret_address: bool,
 }
 
 impl AppConfig {
@@ -24,19 +34,56 @@ impl AppConfig {
                 .expect("Could not access config file, even though it exists");
             let general_section = conf.general_section();
             Some(Self {
-                peer: general_section.get("peer").map(|p| p.to_string()),
-                emit_join_code: general_section.get("emit_join_code").map(|p| {
-                    p.parse()
-                        .expect("Failed to parse config parameter `emit_join_code` as bool")
-                }),
-                emit_secret_address: general_section.get("emit_secret_address").map(|p| {
-                    p.parse()
-                        .expect("Failed to parse config parameter `emit_secret_address` as bool")
-                }),
+                peer: general_section
+                    .get("peer")
+                    .map(|p| Peer::SecretAddress(p.to_string())),
+                emit_join_code: general_section.get("emit_join_code").map_or(
+                    EMIT_JOIN_CODE_DEFAULT,
+                    |p| {
+                        p.parse()
+                            .expect("Failed to parse config parameter `emit_join_code` as bool")
+                    },
+                ),
+                emit_secret_address: general_section.get("emit_secret_address").map_or(
+                    EMIT_SECRET_ADDRESS_DEFAULT,
+                    |p| {
+                        p.parse().expect(
+                            "Failed to parse config parameter `emit_secret_address` as bool",
+                        )
+                    },
+                ),
             })
         } else {
             None
         }
+    }
+
+    /// If we have a join code, try to use that and overwrite the config file.
+    /// If we don't have a join code, try to use the configured peer.
+    /// Otherwise, fail.
+    pub async fn resolve_peer(self, directory: &Path, config_file: &Path) -> Result<Self> {
+        let peer = match self.peer {
+            Some(Peer::JoinCode(join_code)) => {
+                let secret_address = get_ticket_from_wormhole(&join_code).await?;
+                info!(
+                    "Derived peer from join code. Storing in config (overwriting previous config)."
+                );
+                store_peer_in_config(directory, config_file, &secret_address)?;
+                Peer::SecretAddress(secret_address)
+            }
+            Some(Peer::SecretAddress(secret_address)) => {
+                info!("Using peer from config file.");
+                Peer::SecretAddress(secret_address)
+            }
+            None => {
+                bail!("Missing join code, and no peer=<node ticket> in .ethersync/config");
+            }
+        };
+        Ok(AppConfig {
+            peer: Some(peer),
+            emit_join_code: self.emit_join_code,
+            emit_secret_address: self.emit_secret_address,
+        })
     }
 
     #[must_use]
@@ -44,14 +91,20 @@ impl AppConfig {
         self.peer.is_none()
     }
 
-    pub fn emit_join_code(&self) -> bool {
-        // defaults to true if not configured/provided
-        self.emit_join_code.unwrap_or(true)
-    }
-
-    pub fn emit_secret_address(&self) -> bool {
-        // defaults to false if not configured/provided
-        self.emit_secret_address.unwrap_or(false)
+    /// Merges two configurations by taking the "superset" of them.
+    ///
+    /// It depends on the attribute how we're merging it:
+    /// - For strings, the existing (calling) attribute has precedence.
+    /// - For booleans, if a value deviates from the default, it "wins".
+    pub fn merge(self, other: Option<Self>) -> Self {
+        match other {
+            None => self,
+            Some(other) => Self {
+                peer: self.peer.or(other.peer),
+                emit_join_code: self.emit_join_code && other.emit_join_code,
+                emit_secret_address: self.emit_secret_address || other.emit_secret_address,
+            },
+        }
     }
 }
 

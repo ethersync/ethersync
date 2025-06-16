@@ -771,17 +771,20 @@ impl Daemon {
 
         // Start p2p listener.
         let base_dir = base_dir.to_path_buf();
-        let secret_address = app_config.peer.clone();
+        let secret_address = match app_config.peer {
+            Some(config::Peer::SecretAddress(addr)) => Some(addr),
+            _ => None,
+        };
         let p2p_actor = peer::P2PActor::new(secret_address, document_handle.clone(), &base_dir);
         let address = p2p_actor.run().await?;
 
-        if app_config.emit_secret_address() {
+        if app_config.emit_secret_address {
             info!(
             "\n\n\tOthers can connect by putting the following ticket in their .ethersync/config:\n\n\t{}\n",
             address
             );
         }
-        if app_config.emit_join_code() {
+        if app_config.emit_join_code {
             put_ticket_into_wormhole(&address).await;
         }
 
