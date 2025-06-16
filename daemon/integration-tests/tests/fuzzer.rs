@@ -5,7 +5,7 @@
 
 use ethersync_integration_tests::actors::{Actor, Neovim};
 
-use ethersync::config::AppConfig;
+use ethersync::config::{self, AppConfig};
 use ethersync::daemon::{Daemon, TEST_FILE_PATH};
 use ethersync::editor::get_socket_path;
 use ethersync::logging;
@@ -62,8 +62,8 @@ async fn main() -> Result<()> {
     let daemon = Daemon::new(
         AppConfig {
             peer: None,
-            emit_join_code: Some(false),
-            emit_secret_address: Some(false),
+            emit_join_code: false,
+            emit_secret_address: false,
         },
         &socket_path,
         dir.path(),
@@ -81,9 +81,9 @@ async fn main() -> Result<()> {
     let socket_path_2 = get_socket_path(socket_name_2);
     let peer = Daemon::new(
         AppConfig {
-            peer: Some(daemon.address.clone()),
-            emit_join_code: Some(false),
-            emit_secret_address: Some(false),
+            peer: Some(config::Peer::SecretAddress(daemon.address.clone())),
+            emit_join_code: false,
+            emit_secret_address: false,
         },
         &socket_path_2,
         dir2.path(),
