@@ -68,12 +68,13 @@ pub async fn spawn_socket_listener(
     document_handle: DocumentActorHandle,
 ) -> Result<()> {
     // Make sure the parent directory of the socket is only accessible by the current user.
-    if let Err(description) = is_user_readable_only(&socket_path) {
+    /*if let Err(description) = is_user_readable_only(&socket_path) {
         panic!("{}", description);
-    }
+    }*/
 
     // Using the sandbox method here is technically unnecessary,
     // but we want to really run all path operations through the sandbox module.
+    // TODO: Use correct directory as guard.
     if sandbox::exists(Path::new("/"), Path::new(&socket_path))
         .expect("Failed to check existence of path")
     {

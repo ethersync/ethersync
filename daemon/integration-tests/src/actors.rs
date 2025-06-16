@@ -159,15 +159,18 @@ fn rand_usize_inclusive(start: usize, end: usize) -> usize {
 }
 
 impl Neovim {
-    pub async fn new_ethersync_enabled(initial_content: &str) -> (Self, PathBuf) {
+    pub async fn new_ethersync_enabled(initial_content: &str) -> (Self, PathBuf, PathBuf) {
         let dir = TempDir::new().unwrap();
         let ethersync_dir = dir.child(".ethersync");
         sandbox::create_dir(dir.path(), &ethersync_dir).unwrap();
+
         let mut file_path = dir.child("test");
         sandbox::write_file(dir.path(), &file_path, initial_content.as_bytes())
             .expect("Failed to write initial file content");
         file_path = fs::canonicalize(file_path).expect("Could not canonicalize");
 
-        (Self::new(file_path.clone()).await, file_path)
+        let socket_path = dir.child("socket");
+
+        (Self::new(file_path.clone()).await, file_path, socket_path)
     }
 }
