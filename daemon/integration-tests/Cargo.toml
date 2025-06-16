@@ -22,6 +22,7 @@ nvim-rs = { version = "0.7.0", features = ["use_tokio"] }
 rand = "0.8.5"
 temp-dir = "0.1.13"
 tokio = { version = "1", default-features = false, features = ["process"] }
+serde_json = "1"
 
 [dependencies.ethersync]
 path = ".."
@@ -30,7 +31,6 @@ default-features = false
 [dev-dependencies]
 futures = { version = "0.3.30", default-features = false }
 pretty_assertions = "1.4.0"
-serde_json = "1"
 serial_test = "3.1.1"
 tracing = "0.1.40"
 anyhow = "1.0.81"
