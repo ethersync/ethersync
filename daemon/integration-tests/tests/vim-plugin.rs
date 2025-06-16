@@ -4,7 +4,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 use ethersync_integration_tests::actors::*;
-use ethersync_integration_tests::socket::*;
 
 use ethersync::types::{
     factories::*, EditorProtocolMessageFromEditor, EditorProtocolMessageToEditor,
@@ -41,14 +40,23 @@ async fn ethersync_executable_from_vim() {
     );
 }
 
+#[tokio::test]
+async fn vim_sends_something_to_socket() {
+    let (nvim, file_path, mut socket, _dir) = Neovim::new_ethersync_enabled("hi").await;
+    dbg!(nvim.content().await);
+    timeout(Duration::from_millis(1000), async {
+        socket.acknowledge_open().await;
+    })
+    .await
+    .expect("sends_somthing test timed out");
+}
+
 async fn assert_vim_deltas_yield_content(
     initial_content: &str,
     deltas: Vec<EditorTextOp>,
     expected_content: &str,
 ) {
-    let (nvim, file_path, socket_path, _temp_dir) =
-        Neovim::new_ethersync_enabled(initial_content).await;
-    let mut socket = MockSocket::new(&socket_path);
+    let (nvim, file_path, mut socket, _dir) = Neovim::new_ethersync_enabled(initial_content).await;
     socket.acknowledge_open().await;
 
     for op in &deltas {
@@ -125,8 +133,7 @@ async fn assert_vim_input_yields_replacements(
     mut expected_replacements: Vec<EditorTextOp>,
 ) {
     timeout(Duration::from_millis(5000), async {
-                let (mut nvim, _file_path, socket_path, _temp_dir) = Neovim::new_ethersync_enabled(initial_content).await;
-                let mut socket = MockSocket::new(&socket_path);
+                let (mut nvim, _file_path, mut socket, _dir) = Neovim::new_ethersync_enabled(initial_content).await;
                 socket.acknowledge_open().await;
 
                 {

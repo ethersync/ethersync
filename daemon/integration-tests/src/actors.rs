@@ -3,6 +3,8 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+use crate::socket::*;
+
 use ethersync::daemon::Daemon;
 use ethersync::sandbox;
 
@@ -42,6 +44,7 @@ impl Neovim {
         nvim.command(&format!("edit! {}", file_path.display()))
             .await
             .expect("Opening file in nvim failed");
+
         let buffer = nvim.get_current_buf().await.unwrap();
 
         Self { nvim, buffer }
@@ -160,7 +163,9 @@ fn rand_usize_inclusive(start: usize, end: usize) -> usize {
 
 impl Neovim {
     // The caller should store the TempDir, so that it is not garbage collected.
-    pub async fn new_ethersync_enabled(initial_content: &str) -> (Self, PathBuf, PathBuf, TempDir) {
+    pub async fn new_ethersync_enabled(
+        initial_content: &str,
+    ) -> (Self, PathBuf, MockSocket, TempDir) {
         let dir = TempDir::new().unwrap();
         let ethersync_dir = dir.child(".ethersync");
         let file_path = dir.child("test");
@@ -173,10 +178,12 @@ impl Neovim {
 
         let canonicalized_file_path = fs::canonicalize(&file_path).expect("Could not canonicalize");
 
+        let socket = MockSocket::new(&socket_path);
+
         (
             Self::new(file_path.clone()).await,
             canonicalized_file_path,
-            socket_path,
+            socket,
             dir,
         )
     }
