@@ -48,9 +48,9 @@ enum Commands {
         /// keep Magic Wormhole out of the loop.
         #[arg(long)]
         no_join_code: bool,
-        /// Do print the ticket. Useful for bulk sharing.
+        /// Do print the secret address. Useful for bulk sharing.
         #[arg(long)]
-        show_ticket: bool,
+        show_secret_address: bool,
         /// The directory to share. Defaults to current directory.
         #[arg(long)]
         directory: Option<PathBuf>,
@@ -104,14 +104,14 @@ async fn main() -> Result<()> {
                 Commands::Share {
                     init,
                     no_join_code,
-                    show_ticket,
+                    show_secret_address,
                     ..
                 } => {
                     init_doc = init;
                     let app_config_cli = AppConfig {
                         peer: None,
                         emit_join_code: !no_join_code,
-                        emit_secret_address: show_ticket,
+                        emit_secret_address: show_secret_address,
                     };
                     app_config = app_config_cli.merge(AppConfig::from_config_file(&config_file));
                 }
