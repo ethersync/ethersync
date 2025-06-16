@@ -13,7 +13,7 @@ pub fn initialize() -> Result<()> {
 
     if simplified_logging {
         let subscriber = FmtSubscriber::builder()
-            .with_env_filter(EnvFilter::new("ethersync=info"))
+            .with_env_filter(EnvFilter::new("ethersync=info,fuzzer=info"))
             .without_time()
             .with_level(false)
             .with_target(false)

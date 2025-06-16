@@ -5,7 +5,6 @@
 
 use ethersync_integration_tests::actors::*;
 
-use ethersync::editor::get_socket_path;
 use ethersync::sandbox;
 use ethersync::types::{
     factories::*, EditorProtocolMessageFromEditor, EditorProtocolMessageToEditor,
@@ -30,8 +29,7 @@ struct MockSocket {
 }
 
 impl MockSocket {
-    fn new(socket_name: &Path) -> Self {
-        let socket_path = get_socket_path(socket_name);
+    fn new(socket_path: &Path) -> Self {
         let socket_dir = socket_path
             .parent()
             .expect("The constructed socket paths should be in a directory");
@@ -147,10 +145,8 @@ async fn assert_vim_deltas_yield_content(
     deltas: Vec<EditorTextOp>,
     expected_content: &str,
 ) {
-    let socket_name = "ethersync-vim-integration-test-deltas";
-    let mut socket = MockSocket::new(Path::new(socket_name));
-    std::env::set_var("ETHERSYNC_SOCKET", socket_name);
-    let (nvim, file_path) = Neovim::new_ethersync_enabled(initial_content).await;
+    let (nvim, file_path, socket_path) = Neovim::new_ethersync_enabled(initial_content).await;
+    let mut socket = MockSocket::new(&Path::new(&socket_path));
     socket.acknowledge_open().await;
 
     for op in &deltas {
@@ -227,10 +223,8 @@ async fn assert_vim_input_yields_replacements(
     mut expected_replacements: Vec<EditorTextOp>,
 ) {
     timeout(Duration::from_millis(5000), async {
-                let socket_name = "ethersync-vim-integration-test-replacements";
-                let mut socket = MockSocket::new(Path::new(socket_name));
-                std::env::set_var("ETHERSYNC_SOCKET", socket_name);
-                let (mut nvim, _file_path) = Neovim::new_ethersync_enabled(initial_content).await;
+                let (mut nvim, _file_path, socket_path) = Neovim::new_ethersync_enabled(initial_content).await;
+                let mut socket = MockSocket::new(&Path::new(&socket_path));
                 socket.acknowledge_open().await;
 
                 {
