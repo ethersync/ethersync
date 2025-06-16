@@ -114,6 +114,9 @@ async fn main() -> Result<()> {
                         emit_secret_address: show_secret_address,
                     };
                     app_config = app_config_cli.merge(AppConfig::from_config_file(&config_file));
+
+                    // Because of the "share" subcommand, explicitly don't connect anywhere.
+                    app_config.peer = None;
                 }
                 Commands::Join { join_code, .. } => {
                     let app_config_cli = AppConfig {
