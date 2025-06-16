@@ -17,7 +17,7 @@ use crate::types::{
 };
 use crate::watcher::Watcher;
 use crate::watcher::WatcherEvent;
-use crate::wormhole::put_ticket_into_wormhole;
+use crate::wormhole::put_secret_address_into_wormhole;
 use anyhow::Result;
 use automerge::{
     sync::{Message as AutomergeSyncMessage, State as SyncState},
@@ -780,12 +780,12 @@ impl Daemon {
 
         if app_config.emit_secret_address {
             info!(
-            "\n\n\tOthers can connect by putting the following ticket in their .ethersync/config:\n\n\t{}\n",
+            "\n\n\tOthers can connect by putting the following secret address in their .ethersync/config:\n\n\t{}\n",
             address
             );
         }
         if app_config.emit_join_code {
-            put_ticket_into_wormhole(&address).await;
+            put_secret_address_into_wormhole(&address).await;
         }
 
         // Start socket listener.

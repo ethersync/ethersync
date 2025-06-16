@@ -8,7 +8,7 @@ use magic_wormhole::{transfer, AppID, Code, MailboxConnection, Wormhole};
 use std::str::FromStr;
 use tracing::info;
 
-pub async fn put_ticket_into_wormhole(address: &str) {
+pub async fn put_secret_address_into_wormhole(address: &str) {
     let config = transfer::APP_CONFIG.id(AppID::new("ethersync"));
 
     let mailbox_connection = MailboxConnection::create(config.clone(), 2).await.unwrap();
@@ -28,7 +28,7 @@ pub async fn put_ticket_into_wormhole(address: &str) {
     });
 }
 
-pub async fn get_ticket_from_wormhole(code: &str) -> Result<String> {
+pub async fn get_secret_address_from_wormhole(code: &str) -> Result<String> {
     let config = transfer::APP_CONFIG.id(AppID::new("ethersync"));
 
     let mut wormhole =

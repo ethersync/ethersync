@@ -5,7 +5,7 @@
 
 //! Data structures and helper methods around influencing the configuration of the application.
 use crate::sandbox;
-use crate::wormhole::get_ticket_from_wormhole;
+use crate::wormhole::get_secret_address_from_wormhole;
 use anyhow::{bail, Context, Result};
 use ini::Ini;
 use std::path::Path;
@@ -64,7 +64,7 @@ impl AppConfig {
     pub async fn resolve_peer(self, directory: &Path, config_file: &Path) -> Result<Self> {
         let peer = match self.peer {
             Some(Peer::JoinCode(join_code)) => {
-                let secret_address = get_ticket_from_wormhole(&join_code).await?;
+                let secret_address = get_secret_address_from_wormhole(&join_code).await?;
                 info!(
                     "Derived peer from join code. Storing in config (overwriting previous config)."
                 );
@@ -76,7 +76,7 @@ impl AppConfig {
                 Peer::SecretAddress(secret_address)
             }
             None => {
-                bail!("Missing join code, and no peer=<node ticket> in .ethersync/config");
+                bail!("Missing join code, and no peer=<secret address> in .ethersync/config");
             }
         };
         Ok(AppConfig {
