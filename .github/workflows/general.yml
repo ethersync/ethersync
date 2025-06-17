@@ -25,6 +25,7 @@ jobs:
   build_and_test:
     name: Run tests
     strategy:
+      fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest]
         nvim-version: [v0.9.5, v0.10.1]
