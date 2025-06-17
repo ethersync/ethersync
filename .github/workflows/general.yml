@@ -20,6 +20,7 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
+  CARGO_PROFILE_TEST_DEBUG: 0 # See https://corrode.dev/blog/tips-for-faster-ci-builds/
 
 defaults:
   run:
