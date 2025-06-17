@@ -20,7 +20,6 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
-  CARGO_INCREMENTAL: 0 # See https://corrode.dev/blog/tips-for-faster-rust-compile-times/
 
 jobs:
   build_and_test:
@@ -39,7 +38,10 @@ jobs:
         run: rustup toolchain install stable --profile minimal
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: "daemon"
+          workspaces: |
+            daemon
+            daemon/integration-tests
+          cache-on-failure: true
       - name: Build Ethersync
         run: cargo build --release
       - name: Add ethersync binary to PATH
