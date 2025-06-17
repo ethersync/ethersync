@@ -21,6 +21,10 @@ on:
 env:
   CARGO_TERM_COLOR: always
 
+defaults:
+  run:
+    working-directory: ./daemon
+
 jobs:
   build_and_test:
     name: Run tests
@@ -30,9 +34,6 @@ jobs:
         os: [ubuntu-latest, macos-latest]
         nvim-version: [v0.9.5, v0.10.1]
     runs-on: ${{ matrix.os }}
-    defaults:
-      run:
-        working-directory: ./daemon
     steps:
       - uses: actions/checkout@v4
       - name: Set up Rust toolchain
@@ -76,9 +77,6 @@ jobs:
   check_formatting:
     name: Check Rust formatting
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: ./daemon
     steps:
       - uses: actions/checkout@v4
       - run: cargo fmt --check
