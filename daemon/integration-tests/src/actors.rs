@@ -41,6 +41,9 @@ impl Neovim {
         cmd.arg("--headless").arg("--embed");
         let (nvim, _, _) = new_child_cmd(&mut cmd, handler).await.unwrap();
 
+        // We canonicalize the path here, because on macOS, TempDir gives us paths in /var/, which
+        // symlinks to /private/var/. But the paths in the file events are always in /private/var/.
+        let file_path = file_path.canonicalize().unwrap();
         nvim.command(&format!("edit! {}", file_path.display()))
             .await
             .expect("Opening file in nvim failed");
@@ -181,7 +184,7 @@ impl Neovim {
         let socket = MockSocket::new(&socket_path);
 
         (
-            Self::new(file_path.clone()).await,
+            Self::new(canonicalized_file_path.clone()).await,
             canonicalized_file_path,
             socket,
             dir,
