@@ -23,9 +23,8 @@ impl MockSocket {
         let socket_dir = socket_path
             .parent()
             .expect("The constructed socket paths should be in a directory");
-        if sandbox::exists(socket_dir, &socket_path).expect("Could not check for socket existence")
-        {
-            sandbox::remove_file(socket_dir, &socket_path).expect("Could not remove socket");
+        if sandbox::exists(socket_dir, socket_path).expect("Could not check for socket existence") {
+            sandbox::remove_file(socket_dir, socket_path).expect("Could not remove socket");
         }
 
         let listener = UnixListener::bind(socket_path).expect("Could not bind to socket");
