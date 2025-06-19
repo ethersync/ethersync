@@ -120,7 +120,7 @@ impl P2PActor {
                         });
                     }
                     Err(err) => {
-                        panic!("Error while accepting peer connection: {err}");
+                        error!("Error while accepting peer connection: {err}");
                     }
                 }
             }
