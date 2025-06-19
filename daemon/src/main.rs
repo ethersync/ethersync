@@ -128,7 +128,7 @@ async fn main() -> Result<()> {
                 }
             }
 
-            print_starting_info(&directory);
+            debug!("Starting Ethersync on {}.", directory.display());
             let _daemon = Daemon::new(app_config, &socket_path, &directory, init_doc).await?;
             wait_for_ctrl_c().await;
         }
@@ -154,10 +154,6 @@ fn get_directory(directory: Option<PathBuf>) -> Result<PathBuf> {
         );
     }
     Ok(directory)
-}
-
-fn print_starting_info(directory: &Path) {
-    debug!("Starting Ethersync on {}.", directory.display());
 }
 
 async fn wait_for_ctrl_c() {
