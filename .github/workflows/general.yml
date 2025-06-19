@@ -39,15 +39,12 @@ jobs:
       - uses: actions/checkout@v4
       - name: Set up Rust toolchain
         run: rustup toolchain install stable --profile minimal
-      - uses: actions/cache@v4
+      - uses: Swatinem/rust-cache@v2
         with:
-          path: |
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-            daemon/target/
-            daemon/integration-tests/target/
-          key: ${{ runner.os }}-cargo
+          workspaces: |
+            daemon
+            daemon/integration-tests
+          cache-on-failure: true
       - name: Build Ethersync
         run: cargo build --release
       - name: Add ethersync binary to PATH
