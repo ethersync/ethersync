@@ -12,7 +12,7 @@ use automerge::{
     patches::TextRepresentation,
     sync::{Message as AutomergeSyncMessage, State as SyncState, SyncDoc},
     transaction::Transactable,
-    AutoCommit, ObjType, Patch, PatchLog, ReadDoc,
+    AutoCommit, ObjType, Patch, PatchLog, ReadDoc, TextEncoding,
 };
 use dissimilar::Chunk;
 use tracing::{debug, info};
@@ -71,7 +71,7 @@ impl Document {
         message: AutomergeSyncMessage,
         peer_state: &mut SyncState,
     ) -> Vec<Patch> {
-        let mut patch_log = PatchLog::active(TextRepresentation::String);
+        let mut patch_log = PatchLog::active(TextRepresentation::String(TextEncoding::default()));
         self.doc
             .sync()
             .receive_sync_message_log_patches(peer_state, message, &mut patch_log)
