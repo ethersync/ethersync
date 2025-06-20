@@ -6,14 +6,14 @@
 //! A peer is another daemon. This module is all about daemon to daemon communication.
 
 use crate::daemon::{DocMessage, DocumentActorHandle};
-use anyhow::{Context, Result};
+use anyhow::{bail, Context, Result};
 use automerge::sync::{Message as AutomergeSyncMessage, State as SyncState};
 use iroh::SecretKey;
 use std::fs::{self, File, OpenOptions};
 use std::io::{Read, Write};
 use std::mem;
 use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::str::FromStr;
 use tokio::sync::{broadcast, mpsc, oneshot};
 use tracing::{debug, error, info, warn};
@@ -24,26 +24,17 @@ const ALPN: &[u8] = b"/ethersync/0";
 pub struct P2PActor {
     secret_address: Option<String>,
     document_handle: DocumentActorHandle,
-    base_dir: PathBuf,
+    endpoint: iroh::Endpoint,
+    passphrase: SecretKey,
 }
 
 impl P2PActor {
-    pub fn new(
+    pub async fn new(
         secret_address: Option<String>,
         document_handle: DocumentActorHandle,
         base_dir: &Path,
-    ) -> Self {
-        Self {
-            secret_address,
-            document_handle,
-            base_dir: base_dir.to_path_buf(),
-        }
-    }
-
-    // Returns the connection address.
-    pub async fn run(self) -> Result<String> {
-        let (secret_key, my_passphrase) = self.get_keypair();
-
+    ) -> Result<Self> {
+        let (secret_key, my_passphrase) = Self::get_keypair(&base_dir);
         let endpoint = iroh::Endpoint::builder()
             .secret_key(secret_key)
             .alpns(vec![ALPN.to_vec()])
@@ -51,41 +42,27 @@ impl P2PActor {
             .bind()
             .await?;
 
-        let address = format!("{}#{}", endpoint.node_id(), my_passphrase);
+        let actor = Self {
+            secret_address,
+            document_handle,
+            endpoint,
+            passphrase: my_passphrase,
+        };
 
+        Ok(actor)
+    }
+
+    pub fn address(&self) -> String {
+        format!("{}#{}", self.endpoint.node_id(), self.passphrase)
+    }
+
+    pub async fn run(self) -> Result<()> {
         if let Some(ref peer) = self.secret_address {
-            let parts: Vec<&str> = peer.split("#").collect();
-            if parts.len() != 2 {
-                panic!("Peer string must have format <node_id>#<passphrase>");
-            }
-
-            let public_key = iroh::PublicKey::from_str(parts[0])?;
-            let peer_passphrase = iroh::SecretKey::from_str(parts[1])?;
-
-            let node_addr: iroh::NodeAddr = public_key.into();
-            let conn = endpoint.connect(node_addr, ALPN).await?;
-
-            info!(
-                "Connected to peer: {}",
-                conn.remote_node_id()
-                    .expect("Connection should have a node ID")
-            );
-
-            let my_passphrase_clone = my_passphrase.clone();
-            let document_handle_clone = self.document_handle.clone();
-            tokio::spawn(async move {
-                Self::handle_peer(
-                    document_handle_clone,
-                    conn,
-                    my_passphrase_clone,
-                    Some(peer_passphrase),
-                )
-                .await;
-            });
+            self.connect(peer).await?;
         }
 
         tokio::spawn(async move {
-            while let Some(incoming) = endpoint.accept().await {
+            while let Some(incoming) = self.endpoint.accept().await {
                 match incoming.await {
                     Ok(conn) => {
                         info!(
@@ -94,31 +71,27 @@ impl P2PActor {
                                 .expect("Connection should have a node ID")
                         );
 
-                        let my_passphrase_clone = my_passphrase.clone();
-                        let document_handle_clone = self.document_handle.clone();
-                        tokio::spawn(async move {
-                            Self::handle_peer(
-                                document_handle_clone,
-                                conn,
-                                my_passphrase_clone,
-                                None,
-                            )
-                            .await;
-                        });
+                        {
+                            let document_handle = self.document_handle.clone();
+                            let passphrase = self.passphrase.clone();
+                            tokio::spawn(async move {
+                                Self::handle_peer(document_handle, conn, passphrase, None).await;
+                            });
+                        }
                     }
                     Err(err) => {
-                        panic!("Error while accepting peer connection: {err}");
+                        error!("Error while accepting peer connection: {err}");
                     }
                 }
             }
         });
 
-        Ok(address)
+        Ok(())
     }
 
     /// Returns an existing secret key + passphrase, or generates new ones.
-    fn get_keypair(&self) -> (SecretKey, SecretKey) {
-        let keyfile = self.base_dir.join(".ethersync").join("key");
+    fn get_keypair(base_dir: &Path) -> (SecretKey, SecretKey) {
+        let keyfile = base_dir.join(".ethersync").join("key");
         if keyfile.exists() {
             let current_permissions = fs::metadata(&keyfile)
                 .expect("Expected to have access to metadata of the keyfile")
@@ -173,7 +146,7 @@ impl P2PActor {
         let (to_peer_tx, to_peer_rx) = mpsc::channel(16);
         let (from_peer_tx, from_peer_rx) = mpsc::channel(16);
 
-        let syncer = SyncActor::new(document_handle, from_peer_rx, to_peer_tx);
+        let syncer = SyncActor::new(document_handle.clone(), from_peer_rx, to_peer_tx);
 
         let syncer_handle = tokio::spawn(async move {
             // The syncer can fail when the protocol_handler below has
@@ -197,6 +170,51 @@ impl P2PActor {
         // TODO: Do we still this abort? The syncer should stop anyway once it cannot use its
         // to_peer_tx anymore.
         syncer_handle.abort_handle().abort();
+    }
+
+    async fn connect(&self, peer: &str) -> Result<()> {
+        let parts: Vec<&str> = peer.split("#").collect();
+        if parts.len() != 2 {
+            bail!("Peer string must have format <node_id>#<passphrase>");
+        }
+
+        let public_key = iroh::PublicKey::from_str(&parts[0]).context("Could not parse node ID")?;
+        let peer_passphrase =
+            iroh::SecretKey::from_str(&parts[1]).context("Could not parse passphrase")?;
+
+        let node_addr: iroh::NodeAddr = public_key.into();
+        let conn = self
+            .endpoint
+            .connect(node_addr.clone(), ALPN)
+            .await
+            .context("Connecting to peer failed")?;
+
+        info!(
+            "Connected to peer: {}",
+            conn.remote_node_id()
+                .expect("Connection should have a node ID")
+        );
+
+        {
+            let document_handle = self.document_handle.clone();
+            let passphrase = self.passphrase.clone();
+            tokio::spawn(async move {
+                Self::handle_peer(document_handle, conn, passphrase, Some(peer_passphrase)).await;
+
+                //let document_handle_clone = self.document_handle.clone();
+                //tokio::spawn(async move {
+                //    loop {
+                //        info!("Will attempt to reconnect in 30 seconds...");
+
+                //        sleep(Duration::from_secs(30)).await;
+
+                //        self.connect(peer).await;
+                //    }
+                //});
+            });
+        }
+
+        Ok(())
     }
 
     /// Core low-level syncing protocol.
