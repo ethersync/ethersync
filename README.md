@@ -35,9 +35,13 @@ If you're interested in building new editor plugins, read the specification for 
 
 For more information about Ethersync's design, refer to the list of [decision records](docs/decisions/).
 
-## Sponsors
+## Funded by
 
-Thanks to [NLNet](https://nlnet.nl) for funding this project through the [NGI0 Core Fund](https://nlnet.nl/core/).
+Thanks to [NLNet](https://nlnet.nl) for funding this project through the [NGI0 Core Fund](https://nlnet.nl/core/) in 2023/24.
+
+Thanks to the [Prototype Fund](https://www.prototypefund.de/) and the [Federal Ministry of Research, Technology and Space](https://www.bmbf.de/EN/) for funding this project in 2025.
+
+<a href="https://www.bmbf.de/EN/"><img src="./docs/assets/BMFTR-en.webp" alt="Logo of the German Federal Ministry of Research, Technology and Space" height="100px"></a>&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; <a href="https://prototypefund.de/en/"><img src="./docs/assets/PrototypeFund_logo_icon_dark.png" alt="Logo of the Prototype Fund" height="100px"></a>&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; <a href="https://okfn.de/en/"><img src="./docs/assets/Logo_okfde_black.png" alt="Logo of the Open Knowledge Foundation Germany" height="100px"></a>
 
 ## License
 
