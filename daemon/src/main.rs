@@ -17,10 +17,6 @@ use tracing::debug;
 mod jsonrpc_forwarder;
 
 // TODO: Define these constants in the ethersync crate, and use them here.
-const DEFAULT_SOCKET_NAME: &str = "socket";
-const ETHERSYNC_CONFIG_DIR: &str = ".ethersync";
-const ETHERSYNC_CONFIG_FILE: &str = "config";
-
 #[derive(Parser)]
 #[command(version, about, long_about = None)]
 #[command(propagate_version = true)]
@@ -57,7 +53,7 @@ enum Commands {
 }
 
 fn has_ethersync_directory(dir: &Path) -> bool {
-    let ethersync_dir = dir.join(ETHERSYNC_CONFIG_DIR);
+    let ethersync_dir = dir.join(config::CONFIG_DIR);
     // Using the sandbox method here is technically unnecessary,
     // but we want to really run all path operations through the sandbox module.
     sandbox::exists(dir, &ethersync_dir).expect("Failed to check") && ethersync_dir.is_dir()
@@ -81,13 +77,11 @@ async fn main() -> Result<()> {
 
     let directory = get_directory(cli.directory)?;
 
-    let config_file = directory
-        .join(ETHERSYNC_CONFIG_DIR)
-        .join(ETHERSYNC_CONFIG_FILE);
+    let config_file = directory.join(config::CONFIG_DIR).join(config::CONFIG_FILE);
 
     let socket_path = directory
-        .join(ETHERSYNC_CONFIG_DIR)
-        .join(DEFAULT_SOCKET_NAME);
+        .join(config::CONFIG_DIR)
+        .join(config::DEFAULT_SOCKET_NAME);
 
     match cli.command {
         Commands::Share { .. } | Commands::Join { .. } => {
@@ -149,7 +143,7 @@ fn get_directory(directory: Option<PathBuf>) -> Result<PathBuf> {
     if !has_ethersync_directory(&directory) {
         bail!(
             "No {}/ found in {} (create that directory to Ethersync-enable the project)",
-            ETHERSYNC_CONFIG_DIR,
+            config::CONFIG_DIR,
             directory.display()
         );
     }
