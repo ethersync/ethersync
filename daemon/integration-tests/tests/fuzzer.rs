@@ -7,7 +7,6 @@ use ethersync_integration_tests::actors::{Actor, Neovim};
 
 use ethersync::config::{self, AppConfig};
 use ethersync::daemon::{Daemon, TEST_FILE_PATH};
-use ethersync::editor::get_socket_path;
 use ethersync::logging;
 use ethersync::sandbox;
 
@@ -19,7 +18,7 @@ use tokio::time::{sleep, timeout, Duration};
 use tracing::{error, info};
 
 use std::collections::HashMap;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 async fn perform_random_edits(actor: &mut (impl Actor + ?Sized)) {
     for _ in 1..500 {
@@ -30,7 +29,7 @@ async fn perform_random_edits(actor: &mut (impl Actor + ?Sized)) {
     }
 }
 
-fn initialize_project() -> (temp_dir::TempDir, PathBuf) {
+fn initialize_project() -> (temp_dir::TempDir, PathBuf, PathBuf) {
     let dir = temp_dir::TempDir::new().expect("Failed to create temp directory");
     let mut ethersync_dir = dir.path().to_path_buf();
     ethersync_dir.push(".ethersync");
@@ -39,7 +38,10 @@ fn initialize_project() -> (temp_dir::TempDir, PathBuf) {
     let file = dir.child(TEST_FILE_PATH);
     sandbox::write_file(dir.path(), &file, b"").expect("Failed to create file in temp directory");
 
-    (dir, file)
+    let mut socket_path = dir.child(".ethersync");
+    socket_path.push("socket");
+
+    (dir, file, socket_path)
 }
 
 #[tokio::main]
@@ -53,12 +55,10 @@ async fn main() -> Result<()> {
     logging::initialize()?;
 
     // Set up files in project directories.
-    let (dir, file) = initialize_project();
-    let (dir2, file2) = initialize_project();
+    let (dir, file, socket_path) = initialize_project();
+    let (dir2, file2, socket_path2) = initialize_project();
 
     // Set up the actors.
-    let socket_name = Path::new("ethersync-fuzzer-peer-1");
-    let socket_path = get_socket_path(socket_name);
     let daemon = Daemon::new(
         AppConfig {
             peer: None,
@@ -74,18 +74,15 @@ async fn main() -> Result<()> {
     // Wait until iroh's DNS discovery (hopefully) works.
     sleep(Duration::from_millis(1000)).await;
 
-    std::env::set_var("ETHERSYNC_SOCKET", socket_name);
     let nvim = Neovim::new(file).await;
 
-    let socket_name_2 = Path::new("ethersync-fuzzer-peer-2");
-    let socket_path_2 = get_socket_path(socket_name_2);
     let peer = Daemon::new(
         AppConfig {
             peer: Some(config::Peer::SecretAddress(daemon.address.clone())),
             emit_join_code: false,
             emit_secret_address: false,
         },
-        &socket_path_2,
+        &socket_path2,
         dir2.path(),
         false,
     )
@@ -97,7 +94,6 @@ async fn main() -> Result<()> {
         sleep(Duration::from_millis(100)).await;
     }
 
-    std::env::set_var("ETHERSYNC_SOCKET", socket_name_2);
     let nvim2 = Neovim::new(file2).await;
 
     // Give the second Neovim time to process the "open" call.

@@ -44,46 +44,6 @@ impl Encoder<EditorProtocolObject> for EditorProtocolCodec {
     }
 }
 
-fn get_fallback_socket_dir() -> String {
-    let socket_dir = format!(
-        "/tmp/ethersync-{}",
-        std::env::var("USER").expect("$USER should be set")
-    );
-    if !fs::exists(&socket_dir).expect("Should be able to test for existence of directory in /tmp")
-    {
-        fs::create_dir(&socket_dir).expect("Should be able to create a directory in /tmp");
-        let permissions = fs::Permissions::from_mode(0o700);
-        fs::set_permissions(&socket_dir, permissions)
-            .expect("Should be able to set permissions for a directory we just created");
-    }
-    socket_dir
-}
-
-fn is_valid_socket_name(socket_name: &Path) -> Result<()> {
-    if socket_name.components().count() != 1 {
-        bail!("The socket name must be a single path component");
-    }
-    if let std::path::Component::Normal(_) = socket_name
-        .components()
-        .next()
-        .expect("The component count of socket_name was previously checked to be non-empty")
-    {
-        // All good :)
-    } else {
-        bail!("The socket name must be a plain filename");
-    }
-    Ok(())
-}
-
-pub fn get_socket_path(socket_name: &Path) -> PathBuf {
-    let socket_dir = std::env::var("XDG_RUNTIME_DIR").unwrap_or_else(|_| get_fallback_socket_dir());
-    let socket_dir = Path::new(&socket_dir);
-    if let Err(description) = is_valid_socket_name(socket_name) {
-        panic!("{}", description);
-    }
-    socket_dir.join(socket_name)
-}
-
 fn is_user_readable_only(socket_path: &Path) -> Result<()> {
     let parent_dir = socket_path
         .parent()
@@ -108,12 +68,13 @@ pub async fn spawn_socket_listener(
     document_handle: DocumentActorHandle,
 ) -> Result<()> {
     // Make sure the parent directory of the socket is only accessible by the current user.
-    if let Err(description) = is_user_readable_only(&socket_path) {
+    /*if let Err(description) = is_user_readable_only(&socket_path) {
         panic!("{}", description);
-    }
+    }*/
 
     // Using the sandbox method here is technically unnecessary,
     // but we want to really run all path operations through the sandbox module.
+    // TODO: Use correct directory as guard.
     if sandbox::exists(Path::new("/"), Path::new(&socket_path))
         .expect("Failed to check existence of path")
     {

@@ -5,116 +5,14 @@
 
 use ethersync_integration_tests::actors::*;
 
-use ethersync::editor::get_socket_path;
-use ethersync::sandbox;
 use ethersync::types::{
     factories::*, EditorProtocolMessageFromEditor, EditorProtocolMessageToEditor,
     EditorProtocolObject, EditorTextDelta, EditorTextOp, JSONRPCFromEditor,
 };
 
 use pretty_assertions::assert_eq;
-use serde_json::Value as JSONValue;
 use serial_test::serial;
 use tokio::time::{timeout, Duration};
-use tokio::{
-    io::{split, AsyncBufReadExt, AsyncWriteExt, BufReader, BufWriter},
-    net::UnixListener,
-    sync::mpsc,
-};
-
-use std::path::Path;
-
-struct MockSocket {
-    writer_tx: tokio::sync::mpsc::Sender<String>,
-    reader_rx: tokio::sync::mpsc::Receiver<String>,
-}
-
-impl MockSocket {
-    fn new(socket_name: &Path) -> Self {
-        let socket_path = get_socket_path(socket_name);
-        let socket_dir = socket_path
-            .parent()
-            .expect("The constructed socket paths should be in a directory");
-        if sandbox::exists(socket_dir, &socket_path).expect("Could not check for socket existence")
-        {
-            sandbox::remove_file(socket_dir, &socket_path).expect("Could not remove socket");
-        }
-
-        let listener = UnixListener::bind(socket_path).expect("Could not bind to socket");
-        let (writer_tx, mut writer_rx) = mpsc::channel::<String>(1);
-        let (reader_tx, reader_rx) = mpsc::channel::<String>(1);
-
-        tokio::spawn(async move {
-            let (socket, _) = listener
-                .accept()
-                .await
-                .expect("Could not accept connection");
-
-            let (reader, writer) = split(socket);
-            let mut writer = BufWriter::new(writer);
-            let mut reader = BufReader::new(reader);
-
-            tokio::spawn(async move {
-                while let Some(message) = writer_rx.recv().await {
-                    writer
-                        .write_all(message.as_bytes())
-                        .await
-                        .expect("Could not write to socket");
-                    writer.flush().await.expect("Could not flush socket");
-                }
-            });
-
-            tokio::spawn(async move {
-                let mut buffer = String::new();
-                while reader.read_line(&mut buffer).await.is_ok() {
-                    reader_tx
-                        .send(buffer.clone())
-                        .await
-                        .expect("Could not send message to reader channel");
-                    buffer.clear();
-                }
-            });
-        });
-
-        Self {
-            writer_tx,
-            reader_rx,
-        }
-    }
-
-    async fn send(&mut self, message: &str) {
-        self.writer_tx
-            .send(message.to_string())
-            .await
-            .expect("Could not send message");
-    }
-
-    async fn recv(&mut self) -> JSONValue {
-        let line = self
-            .reader_rx
-            .recv()
-            .await
-            .expect("Could not receive message");
-        serde_json::from_str(&line).expect("Could not parse JSON")
-    }
-
-    async fn acknowledge_open(&mut self) -> JSONValue {
-        let json = self.recv().await;
-        if json.get("method").unwrap() == "open" {
-            let id = json.get("id").unwrap();
-            let response = serde_json::json!({
-                "jsonrpc": "2.0",
-                "id": id,
-                "result": "success"
-            });
-            self.send(&response.to_string()).await;
-            self.send("\n").await;
-            // Wait a bit so that Neovim can boot up its change tracking.
-            tokio::time::sleep(Duration::from_millis(100)).await;
-        }
-        json
-    }
-}
 
 #[tokio::test]
 async fn plugin_loaded() {
@@ -142,15 +40,23 @@ async fn ethersync_executable_from_vim() {
     );
 }
 
+#[tokio::test]
+async fn vim_sends_something_to_socket() {
+    let (nvim, _file_path, mut socket, _dir) = Neovim::new_ethersync_enabled("hi").await;
+    dbg!(nvim.content().await);
+    timeout(Duration::from_millis(1000), async {
+        socket.acknowledge_open().await;
+    })
+    .await
+    .expect("sends_somthing test timed out");
+}
+
 async fn assert_vim_deltas_yield_content(
     initial_content: &str,
     deltas: Vec<EditorTextOp>,
     expected_content: &str,
 ) {
-    let socket_name = "ethersync-vim-integration-test-deltas";
-    let mut socket = MockSocket::new(Path::new(socket_name));
-    std::env::set_var("ETHERSYNC_SOCKET", socket_name);
-    let (nvim, file_path) = Neovim::new_ethersync_enabled(initial_content).await;
+    let (nvim, file_path, mut socket, _dir) = Neovim::new_ethersync_enabled(initial_content).await;
     socket.acknowledge_open().await;
 
     for op in &deltas {
@@ -227,10 +133,7 @@ async fn assert_vim_input_yields_replacements(
     mut expected_replacements: Vec<EditorTextOp>,
 ) {
     timeout(Duration::from_millis(5000), async {
-                let socket_name = "ethersync-vim-integration-test-replacements";
-                let mut socket = MockSocket::new(Path::new(socket_name));
-                std::env::set_var("ETHERSYNC_SOCKET", socket_name);
-                let (mut nvim, _file_path) = Neovim::new_ethersync_enabled(initial_content).await;
+                let (mut nvim, _file_path, mut socket, _dir) = Neovim::new_ethersync_enabled(initial_content).await;
                 socket.acknowledge_open().await;
 
                 {

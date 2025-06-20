@@ -3,6 +3,8 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+use crate::socket::*;
+
 use ethersync::daemon::Daemon;
 use ethersync::sandbox;
 
@@ -39,9 +41,13 @@ impl Neovim {
         cmd.arg("--headless").arg("--embed");
         let (nvim, _, _) = new_child_cmd(&mut cmd, handler).await.unwrap();
 
+        // We canonicalize the path here, because on macOS, TempDir gives us paths in /var/, which
+        // symlinks to /private/var/. But the paths in the file events are always in /private/var/.
+        let file_path = file_path.canonicalize().unwrap();
         nvim.command(&format!("edit! {}", file_path.display()))
             .await
             .expect("Opening file in nvim failed");
+
         let buffer = nvim.get_current_buf().await.unwrap();
 
         Self { nvim, buffer }
@@ -159,15 +165,29 @@ fn rand_usize_inclusive(start: usize, end: usize) -> usize {
 }
 
 impl Neovim {
-    pub async fn new_ethersync_enabled(initial_content: &str) -> (Self, PathBuf) {
+    // The caller should store the TempDir, so that it is not garbage collected.
+    pub async fn new_ethersync_enabled(
+        initial_content: &str,
+    ) -> (Self, PathBuf, MockSocket, TempDir) {
         let dir = TempDir::new().unwrap();
         let ethersync_dir = dir.child(".ethersync");
+        let file_path = dir.child("test");
+        let socket_path = ethersync_dir.clone().join("socket");
+
         sandbox::create_dir(dir.path(), &ethersync_dir).unwrap();
-        let mut file_path = dir.child("test");
+
         sandbox::write_file(dir.path(), &file_path, initial_content.as_bytes())
             .expect("Failed to write initial file content");
-        file_path = fs::canonicalize(file_path).expect("Could not canonicalize");
 
-        (Self::new(file_path.clone()).await, file_path)
+        let canonicalized_file_path = fs::canonicalize(&file_path).expect("Could not canonicalize");
+
+        let socket = MockSocket::new(&socket_path);
+
+        (
+            Self::new(canonicalized_file_path.clone()).await,
+            canonicalized_file_path,
+            socket,
+            dir,
+        )
     }
 }
