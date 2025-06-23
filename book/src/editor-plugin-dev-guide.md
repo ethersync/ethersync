@@ -107,15 +107,15 @@ These should be sent as notifications, there is no need to reply to them.
 
 To send messages to the daemon manually, you can try the following. Assuming you can start the daemon on a playground as described in the [first steps](first-steps.md), now we add some debugging output:
 ```bash
-RUST_LOG=debug ethersync share playground
-# Note for below: You will see some output like "Listening on UNIX socket: /tmp/ethersync"
+RUST_LOG=ethersync=debug ethersync share playground
+# Note for below: You will see some output like "Listening on UNIX socket: <dir>/.ethersync/socket"
 ```
-You can then start the client, in another terminal:
+You can then start the client, in another terminal, but in the same directory:
 ```bash
 ethersync client
 ```
 This will already produce an output in the daemon which indicates that an Editor connected.
-This happens because the client connects to the `/tmp/ethersync` socket.
+This happens because the client connects to the daemon's socket.
 Killing it shows the opposite: "Editor disconnected".
 
 Next, you could manually send some JSON-RPC. We included a Python script to help you create messages in the correct format: Run it to see what an open message could look like:
@@ -136,7 +136,7 @@ On the other hand, not running any daemon, you can see what the plugin "wants" t
 In the demon console (stop it), we now just plainly listen on the socket for incoming data:
 ```bash
 # nc can only bind to existing sockets, so we'll drop potentially existing ones
-rm /tmp/ethersync; nc -lk -U /tmp/ethersync
+rm <dir>/.ethersync/socket; nc -lk -U <dir>/.ethersync/socket
 ```
 
 In the client console, start nvim on a file, move the cursor and edit something:
@@ -155,9 +155,8 @@ Do do that on a single machine, follow these steps:
 3. Start the second daemon:
     - The directory should be the additional directory you created.
     - Use `ethersync join <join code>`.
-    - Set `--socket-name` to a new value like `ethertwo`.
 4. Connect an editor to the first daemon by opening a file in the first directory.
-5. Connect an editor to the second daemon by setting the environment variable `ETHERSYNC_SOCKET` to the new value before opening a file in the second directory.
-    - Example: `ETHERSYNC_SOCKET=ethertwo nvim directory2/file`
+5. Connect an editor to the second daemon.
+    - Example: `nvim directory2/file`
 
 Things you type into the first editor should now appear in the second editor, and vice versa.

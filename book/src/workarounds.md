@@ -9,24 +9,6 @@ SPDX-License-Identifier: CC-BY-SA-4.0
 
 Some things about Ethersync are currently still a bit annoying. Let us show you how to work around them!
 
-## Sharing multiple projects requires configuring the socket
-
-Ethersync currently only supports sharing a single project directory per daemon. If you want to sync more than one project, you can do so by starting a second daemon. The trick is to use a different socket for the editors to connect to.
-
-1. When starting the second daemon, use the `--socket-name` option, like this:
-
-    ```bash
-    ethersync join --socket-name ethersync2
-    ```
-
-2. Before opening a file in the second project directory, set the `ETHERSYNC_SOCKET` environment variable to the correct path, like this:
-
-    ```bash
-    export ETHERSYNC_SOCKET=ethersync2
-    ```
-
-It can be convenient to set this environment variable using [direnv](https://direnv.net). The `ethersync` commands will all observe it.
-
 ## Restarting the daemon requires restarting the editor
 
 The editor plugins currently only try to connect to Ethersync when they first start. If you need to restart the daemon for any reason, you will also need to restart all open editors to reconnect.
