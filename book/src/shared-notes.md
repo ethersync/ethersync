@@ -19,10 +19,10 @@ You need to have access to a server on the Internet, and install the Ethersync d
 
 ### 1. Set up the directory
 
-On the server, create a new directory for your shared project, as well as an `.ethersync` directory inside it:
+On the server, create a new directory for your shared project:
 
 ```bash
-mkdir my-project/.ethersync
+mkdir my-project
 cd my-project
 ```
 

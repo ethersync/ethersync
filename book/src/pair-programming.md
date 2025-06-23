@@ -23,16 +23,7 @@ Make sure you're both inside the project directory on the command line.
 
 Also this guide assumes you're in the same local network. For other connections consider reading the section on [connection making](connection-making.md).
 
-### 2. Create the `.ethersync` directory
-
-This is our convention to mark a project as shareable: It needs to have a directory called `.ethersync` in it. So both peers should make sure that it exists:
-
-```bash
-mkdir .ethersync
-```
-Note that this directory, similar to a `.git` directory will *not* be synchronized.
-
-### 3. First peer
+### 2. First peer
 
 To start the session, run:
 
@@ -40,12 +31,11 @@ To start the session, run:
 ethersync share
 ```
 
-This will print, among other initialization information, a [join code](connection-making.md#join code)
-) which looks like `3-exhausted-bananas`.
+This will print, among other initialization information, a [join code](connection-making.md#join-codes), which looks like `3-exhausted-bananas`.
 
 You can share this with one other person, to allow them to connect.
 
-### 4. Other peers
+### 3. Other peers
 
 To join a session, run a command like this:
 
@@ -55,14 +45,14 @@ ethersync join 3-exhausted-bananas
 
 This should show you a message like "Connected to peer: ...". The hosting daemon should show a message like "Peer connected: ...".
 
-### 5. Collaborate!
+### 4. Collaborate!
 
 Connected peers can now open files and edit them together. Note the [common pitfalls](workarounds.md).
 
-### 6. Stop Ethersync
+### 5. Stop Ethersync
 
 To stop collaborating, stop the daemon (by pressing Ctrl-C in its terminal). Both peers will still have the code they worked on, and can continue their work independently.
 
-### 7. Reconnect later
+### 6. Reconnect later
 
 If you later want to do another pairing session, make sure that you understand Ethersync's [offline support](offline-support.md) feature and the [local first](local-first.md) concept. When you re-start Ethersync, it will scan for changes you've made in the meantime, and try to send them to the other peer. It is probably safest if you delete the CRDT state in `.ethersync/doc` as a joining peer. The hosting peer doesn't need to do that, it will simply update their state to the latest file content and share that with others.
