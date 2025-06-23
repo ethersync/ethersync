@@ -180,11 +180,11 @@ async fn wait_for_ctrl_c() {
 }
 
 fn ask(question: &str) -> Result<bool> {
-    print!("{} (y/n): ", question);
+    print!("{} (y/N): ", question);
     std::io::stdout().flush()?;
     let mut lines = std::io::stdin().lines();
     if let Some(Ok(line)) = lines.next() {
-        match line.as_str() {
+        match line.to_lowercase().as_str() {
             "y" | "yes" => Ok(true),
             _ => Ok(false),
         }
