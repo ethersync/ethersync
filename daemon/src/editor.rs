@@ -55,7 +55,7 @@ fn is_user_readable_only(socket_path: &Path) -> Result<()> {
     // Group and others should not have any permissions.
     let allowed_permissions = 0o77700u32;
     if current_permissions | allowed_permissions != allowed_permissions {
-        bail!("For security reasons, the parent directory of the socket must only be accessible by the current user");
+        bail!("For security reasons, the parent directory of the socket must only be accessible by the current user. Please run `chmod go-rwx {:?}`", parent_dir);
     }
     Ok(())
 }
@@ -68,9 +68,9 @@ pub async fn spawn_socket_listener(
     document_handle: DocumentActorHandle,
 ) -> Result<()> {
     // Make sure the parent directory of the socket is only accessible by the current user.
-    /*if let Err(description) = is_user_readable_only(&socket_path) {
+    if let Err(description) = is_user_readable_only(&socket_path) {
         panic!("{}", description);
-    }*/
+    }
 
     // Using the sandbox method here is technically unnecessary,
     // but we want to really run all path operations through the sandbox module.

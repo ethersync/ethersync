@@ -762,6 +762,10 @@ impl Daemon {
 
         let document_handle = DocumentActorHandle::new(base_dir, init, is_host);
 
+        // Start socket listener.
+        let socket_path = socket_path.to_path_buf();
+        editor::spawn_socket_listener(socket_path, document_handle.clone()).await?;
+
         // Start file watcher.
         let base_dir = base_dir.to_path_buf();
         spawn_file_watcher(&base_dir, document_handle.clone()).await;
@@ -787,10 +791,6 @@ impl Daemon {
         if app_config.emit_join_code {
             put_secret_address_into_wormhole(&address).await;
         }
-
-        // Start socket listener.
-        let socket_path = socket_path.to_path_buf();
-        editor::spawn_socket_listener(socket_path, document_handle.clone()).await?;
 
         Ok(Self {
             document_handle,
