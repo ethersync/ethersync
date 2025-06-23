@@ -10,9 +10,12 @@ use ethersync::{
     daemon::Daemon,
     logging, sandbox,
 };
-use std::path::{Path, PathBuf};
+use std::{
+    io::Write,
+    path::{Path, PathBuf},
+};
 use tokio::signal;
-use tracing::debug;
+use tracing::{debug, info, warn};
 
 mod jsonrpc_forwarder;
 
@@ -141,11 +144,22 @@ fn get_directory(directory: Option<PathBuf>) -> Result<PathBuf> {
         .canonicalize()
         .expect("Could not access given directory");
     if !has_ethersync_directory(&directory) {
-        bail!(
-            "No {}/ found in {} (create that directory to Ethersync-enable the project)",
-            config::CONFIG_DIR,
-            directory.display()
+        let ethersync_dir = directory.join(config::CONFIG_DIR);
+
+        warn!(
+            "{:?} hasn't been used as an Ethersync directory before.",
+            &directory
         );
+
+        if ask(&format!(
+            "Create an {}/ directory to allow live collaboration?",
+            config::CONFIG_DIR
+        ))? {
+            sandbox::create_dir(&directory, &ethersync_dir)?;
+            info!("Created! Resuming launch.");
+        } else {
+            panic!("Aborting launch.");
+        }
     }
     Ok(directory)
 }
@@ -157,5 +171,19 @@ async fn wait_for_ctrl_c() {
             eprintln!("Unable to listen for shutdown signal: {err}");
             // still shut down.
         }
+    }
+}
+
+fn ask(question: &str) -> Result<bool> {
+    print!("{} (y/n): ", question);
+    std::io::stdout().flush()?;
+    let mut lines = std::io::stdin().lines();
+    if let Some(Ok(line)) = lines.next() {
+        match line.as_str() {
+            "y" | "yes" => Ok(true),
+            _ => Ok(false),
+        }
+    } else {
+        bail!("Failed to read answer");
     }
 }
