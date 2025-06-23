@@ -12,6 +12,7 @@ use ignore::WalkBuilder;
 use path_clean::PathClean;
 use std::fs::{self, OpenOptions};
 use std::io::Write;
+use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 
 pub fn read_file(absolute_base_dir: &Path, absolute_file_path: &Path) -> Result<Vec<u8>> {
@@ -67,7 +68,9 @@ pub fn remove_file(absolute_base_dir: &Path, absolute_file_path: &Path) -> Resul
 pub fn create_dir(absolute_base_dir: &Path, absolute_dir_path: &Path) -> Result<()> {
     let canonical_dir_path =
         check_inside_base_dir_and_canonicalize(absolute_base_dir, absolute_dir_path)?;
-    std::fs::create_dir(canonical_dir_path)?;
+    std::fs::create_dir(&canonical_dir_path)?;
+    let permissions = fs::Permissions::from_mode(0o700);
+    std::fs::set_permissions(canonical_dir_path, permissions)?;
     Ok(())
 }
 
