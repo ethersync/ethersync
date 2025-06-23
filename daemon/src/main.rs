@@ -76,9 +76,9 @@ async fn main() -> Result<()> {
         Err(e) => e.exit(),
     };
 
-    logging::initialize()?;
+    logging::initialize().context("Failed to initialize logging")?;
 
-    let directory = get_directory(cli.directory)?;
+    let directory = get_directory(cli.directory).context("Failed to find .ethersync/ directory")?;
 
     let config_file = directory.join(config::CONFIG_DIR).join(config::CONFIG_FILE);
 
@@ -118,7 +118,10 @@ async fn main() -> Result<()> {
 
                     app_config = app_config_cli.merge(AppConfig::from_config_file(&config_file));
 
-                    app_config = app_config.resolve_peer(&directory, &config_file).await?;
+                    app_config = app_config
+                        .resolve_peer(&directory, &config_file)
+                        .await
+                        .context("Failed to resolve peer")?;
                 }
                 Commands::Client => {
                     panic!("This can't happen, as we earlier matched on Share|Join.")
@@ -126,7 +129,9 @@ async fn main() -> Result<()> {
             }
 
             debug!("Starting Ethersync on {}.", directory.display());
-            let _daemon = Daemon::new(app_config, &socket_path, &directory, init_doc).await?;
+            let _daemon = Daemon::new(app_config, &socket_path, &directory, init_doc)
+                .await
+                .context("Failed to launch the daemon")?;
             wait_for_ctrl_c().await;
         }
         Commands::Client => {
@@ -158,7 +163,7 @@ fn get_directory(directory: Option<PathBuf>) -> Result<PathBuf> {
             sandbox::create_dir(&directory, &ethersync_dir)?;
             info!("Created! Resuming launch.");
         } else {
-            panic!("Aborting launch.");
+            bail!("Aborting launch. Ethersync needs an .ethersync/ directory to function");
         }
     }
     Ok(directory)
