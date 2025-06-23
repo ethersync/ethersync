@@ -151,7 +151,7 @@ For testing purposes, it can be useful to simulate having two peers connecting t
 Do do that on a single machine, follow these steps:
 
 1. Start one daemon regularly, we will call its directory the "first directory".
-2. Create a new, empty shared directory (with an `.ethersync` directory in it) for the second daemon.
+2. Create a new, empty directory for the second daemon.
 3. Start the second daemon:
     - The directory should be the additional directory you created.
     - Use `ethersync join <join code>`.
