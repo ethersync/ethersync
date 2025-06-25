@@ -31,7 +31,7 @@ local function send_request(method, params, result_callback, err_callback)
             if err.data and err.data ~= "" then
                 error_msg = error_msg .. " (" .. err.data .. ")"
             end
-            vim.api.nvim_err_writeln(error_msg)
+            vim.api.nvim_echo({ { error_msg } }, true, { err = true })
             err_callback(err)
         end
         if result then
