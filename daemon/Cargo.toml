@@ -50,6 +50,7 @@ notify = { version = "8.0.0", default-features = false, features = [
 ] }
 operational-transform = "0.6.1"
 path-clean = "1.0.1"
+postcard = { version = "1.1.1", features = ["alloc"] }
 rand = "0.8.5"
 ropey = "1.6.1"
 rust-ini = "0.21.1"
