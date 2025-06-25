@@ -9,6 +9,8 @@ use crate::daemon::{DocMessage, DocumentActorHandle};
 use anyhow::{Context, Result};
 use automerge::sync::{Message as AutomergeSyncMessage, State as SyncState};
 use iroh::SecretKey;
+use postcard::{from_bytes, to_allocvec};
+use serde::{Deserialize, Serialize};
 use std::fs::{self, File, OpenOptions};
 use std::io::{Read, Write};
 use std::mem;
@@ -19,6 +21,11 @@ use tokio::sync::{broadcast, mpsc, oneshot};
 use tracing::{debug, error, info, warn};
 
 const ALPN: &[u8] = b"/ethersync/0";
+
+#[derive(Deserialize, Serialize)]
+enum PeerMessage {
+    Sync(Vec<u8>),
+}
 
 #[derive(Clone)]
 pub struct P2PActor {
@@ -179,7 +186,9 @@ impl P2PActor {
             // The syncer can fail when the protocol_handler below has
             // stopped. But in that case, both components will stop, so we can
             // ignore the error.
-            let _ = syncer.run().await;
+            if let Err(e) = syncer.run().await {
+                error!("Syncing failed with: {e}");
+            }
         });
 
         // This is a function that either runs forever, or errors.
@@ -202,8 +211,8 @@ impl P2PActor {
     /// Core low-level syncing protocol.
     async fn protocol_handler(
         conn: iroh::endpoint::Connection,
-        from_peer_tx: mpsc::Sender<AutomergeSyncMessage>,
-        mut to_peer_rx: mpsc::Receiver<AutomergeSyncMessage>,
+        from_peer_tx: mpsc::Sender<PeerMessage>,
+        mut to_peer_rx: mpsc::Receiver<PeerMessage>,
         my_passphrase: SecretKey,
         peer_passphrase: Option<SecretKey>,
     ) -> Result<()> {
@@ -236,13 +245,13 @@ impl P2PActor {
                 message_maybe = to_peer_rx.recv() => {
                     match message_maybe {
                         Some(message) => {
-                            let message = message.encode();
-                            let message_len = u32::try_from(message.len());
+                            let bytes: Vec<u8> = to_allocvec(&message)?;
+                            let byte_count = u32::try_from(bytes.len());
                             send
-                                .write_all(&message_len?.to_be_bytes())
+                                .write_all(&byte_count?.to_be_bytes())
                                 .await?;
                             send
-                                .write_all(&message)
+                                .write_all(&bytes)
                                 .await?;
                             }
                         None => {
@@ -252,12 +261,12 @@ impl P2PActor {
                     }
                 }
                 _ = recv.read_exact(&mut message_len_buf) => {
-                    let message_len = u32::from_be_bytes(message_len_buf);
-                    let mut message_buf = vec![0; message_len as usize];
-                    recv.read_exact(&mut message_buf).await?;
+                    let byte_count = u32::from_be_bytes(message_len_buf);
+                    let mut bytes = vec![0; byte_count as usize];
+                    recv.read_exact(&mut bytes).await?;
 
-                    let message =
-                        AutomergeSyncMessage::decode(&message_buf)?;
+                    let message = from_bytes(&bytes)?;
+
                     from_peer_tx.send(message).await?;
                 }
             }
@@ -271,15 +280,15 @@ impl P2PActor {
 struct SyncActor {
     peer_state: SyncState,
     document_handle: DocumentActorHandle,
-    syncer_receiver: mpsc::Receiver<AutomergeSyncMessage>,
-    syncer_sender: mpsc::Sender<AutomergeSyncMessage>,
+    syncer_receiver: mpsc::Receiver<PeerMessage>,
+    syncer_sender: mpsc::Sender<PeerMessage>,
 }
 
 impl SyncActor {
     fn new(
         document_handle: DocumentActorHandle,
-        syncer_receiver: mpsc::Receiver<AutomergeSyncMessage>,
-        syncer_sender: mpsc::Sender<AutomergeSyncMessage>,
+        syncer_receiver: mpsc::Receiver<PeerMessage>,
+        syncer_sender: mpsc::Sender<PeerMessage>,
     ) -> Self {
         Self {
             peer_state: SyncState::new(),
@@ -289,18 +298,24 @@ impl SyncActor {
         }
     }
 
-    async fn receive_sync_message(&mut self, message: AutomergeSyncMessage) {
+    async fn receive_sync_message(&mut self, message: PeerMessage) -> Result<()> {
         let (reponse_tx, response_rx) = oneshot::channel();
-        self.document_handle
-            .send_message(DocMessage::ReceiveSyncMessage {
-                message,
-                state: mem::take(&mut self.peer_state),
-                response_tx: reponse_tx,
-            })
-            .await;
-        self.peer_state = response_rx
-            .await
-            .expect("Couldn't read response from Document channel");
+        match message {
+            PeerMessage::Sync(message_buf) => {
+                let message = AutomergeSyncMessage::decode(&message_buf)?;
+                self.document_handle
+                    .send_message(DocMessage::ReceiveSyncMessage {
+                        message,
+                        state: mem::take(&mut self.peer_state),
+                        response_tx: reponse_tx,
+                    })
+                    .await;
+                self.peer_state = response_rx
+                    .await
+                    .expect("Couldn't read response from Document channel");
+            }
+        }
+        Ok(())
     }
 
     async fn generate_sync_message(&mut self) -> Result<()> {
@@ -317,7 +332,7 @@ impl SyncActor {
         self.peer_state = ps;
         if let Some(message) = message {
             self.syncer_sender
-                .send(message)
+                .send(PeerMessage::Sync(message.encode()))
                 .await
                 .context("Failed to send on syncer_sender channel")?;
         }
@@ -349,7 +364,7 @@ impl SyncActor {
                     }
                 }
                 Some(message) = self.syncer_receiver.recv() => {
-                    self.receive_sync_message(message).await;
+                    self.receive_sync_message(message).await?;
                 }
             }
         }
