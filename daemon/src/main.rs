@@ -180,7 +180,7 @@ async fn wait_for_ctrl_c() {
 }
 
 fn ask(question: &str) -> Result<bool> {
-    print!("{} (y/N): ", question);
+    print!("{question} (y/N): ");
     std::io::stdout().flush()?;
     let mut lines = std::io::stdin().lines();
     if let Some(Ok(line)) = lines.next() {

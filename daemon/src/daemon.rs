@@ -347,7 +347,7 @@ impl DocumentActor {
                     id: None,
                     error: EditorProtocolMessageError {
                         code: -32700,
-                        message: format!("Invalid request: {}", e),
+                        message: format!("Invalid request: {e}"),
                         data: None,
                     },
                 };
