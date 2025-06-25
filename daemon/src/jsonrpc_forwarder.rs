@@ -56,7 +56,7 @@ impl Encoder<String> for ContentLengthCodec {
 
     fn encode(&mut self, item: String, dst: &mut BytesMut) -> Result<(), Self::Error> {
         let content_length = item.len();
-        dst.extend_from_slice(format!("Content-Length: {}\r\n\r\n", content_length).as_bytes());
+        dst.extend_from_slice(format!("Content-Length: {content_length}\r\n\r\n").as_bytes());
         dst.extend_from_slice(item.as_bytes());
         Ok(())
     }
