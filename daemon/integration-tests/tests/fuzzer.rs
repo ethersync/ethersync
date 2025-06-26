@@ -24,7 +24,7 @@ async fn perform_random_edits(actor: &mut (impl Actor + ?Sized)) {
     for _ in 1..500 {
         actor.apply_random_delta().await;
 
-        let random_millis = rand::thread_rng().gen_range(0..5);
+        let random_millis = rand::thread_rng().gen_range(10..20);
         sleep(Duration::from_millis(random_millis)).await;
     }
 }
