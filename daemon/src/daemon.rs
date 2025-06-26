@@ -11,7 +11,7 @@ use crate::path::{AbsolutePath, RelativePath};
 use crate::peer;
 use crate::sandbox;
 use crate::types::{
-    ComponentMessage, EditorProtocolMessageError, EditorProtocolMessageFromEditor,
+    ComponentMessage, CursorState, EditorProtocolMessageError, EditorProtocolMessageFromEditor,
     EditorProtocolObject, FileTextDelta, JSONRPCFromEditor, JSONRPCResponse, PatchEffect,
     TextDelta,
 };
@@ -61,8 +61,10 @@ pub enum DocMessage {
     },
     NewEditorConnection(EditorId, EditorWriter),
     CloseEditorConnection(EditorId),
+    ReceiveEphemeral(CursorState),
 }
 
+// TODO: Refactor this, to make use of sub-debug traits (default match).
 impl fmt::Debug for DocMessage {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let repr = match self {
@@ -77,6 +79,7 @@ impl fmt::Debug for DocMessage {
             DocMessage::GenerateSyncMessage { .. } => "<automerge internal sync gen>".to_string(),
             DocMessage::NewEditorConnection(..) => "editor connected".to_string(),
             DocMessage::CloseEditorConnection(id) => format!("editor #{id} disconnected"),
+            DocMessage::ReceiveEphemeral(..) => "receive ephemeral".to_string(),
         };
         write!(f, "{repr}")
     }
@@ -203,15 +206,11 @@ impl DocumentActor {
                 let patch_effects = PatchEffect::from_crdt_patches(patches);
 
                 let mut file_deltas = vec![];
-                let mut cursor_states = vec![];
 
                 for patch_effect in patch_effects {
                     match patch_effect {
                         PatchEffect::FileChange(file_text_delta) => {
                             file_deltas.push(file_text_delta);
-                        }
-                        PatchEffect::CursorChange(cursor_state) => {
-                            cursor_states.push(cursor_state);
                         }
                         PatchEffect::FileRemoval(file_path) => {
                             info!("Removing file {file_path}.");
@@ -233,15 +232,6 @@ impl DocumentActor {
                     let message = ComponentMessage::Edit {
                         file_path: file_text_delta.file_path.clone(),
                         delta: file_text_delta.delta.clone(),
-                    };
-                    self.broadcast_to_editors(None, &message).await;
-                }
-                for cursor_state in &cursor_states {
-                    let message = ComponentMessage::Cursor {
-                        cursor_id: cursor_state.cursor_id.clone(),
-                        name: cursor_state.name.clone(),
-                        file_path: cursor_state.file_path.clone(),
-                        ranges: cursor_state.ranges.clone(),
                     };
                     self.broadcast_to_editors(None, &message).await;
                 }
@@ -276,6 +266,10 @@ impl DocumentActor {
                 let cursor_id = self.cursor_id(editor_id);
                 debug!("Deleting cursor {cursor_id}.");
                 self.maybe_delete_cursor_position(&cursor_id).await;
+            }
+            DocMessage::ReceiveEphemeral(cursor) => {
+                self.broadcast_to_editors(None, &ComponentMessage::Cursor(cursor))
+                    .await;
             }
         }
     }
@@ -604,20 +598,9 @@ impl DocumentActor {
                 let _ = self.doc_changed_ping_tx.send(());
                 self.maybe_write_file(file_path);
             }
-            ComponentMessage::Cursor {
-                cursor_id,
-                name,
-                file_path,
-                ranges,
-            } => {
-                self.crdt_doc.store_cursor_position(
-                    cursor_id,
-                    name.clone(),
-                    file_path,
-                    ranges.clone(),
-                );
-                let _ = self.doc_changed_ping_tx.send(());
-            }
+            ComponentMessage::Cursor { .. } => {} // Cursor changes aren't stored in the doc, so
+                                                  // have no effect here.
+                                                  // TODO: Or should we trigger something here?
         }
     }
 
@@ -656,12 +639,12 @@ impl DocumentActor {
         // Send cursor delete to local peers.
         self.broadcast_to_editors(
             None,
-            &ComponentMessage::Cursor {
+            &ComponentMessage::Cursor(CursorState {
                 cursor_id: cursor_id.to_string(),
                 name: None,
                 file_path: RelativePath::new(""), // TODO: Fix by changing the "cursor" message?
                 ranges: vec![],
-            },
+            }),
         )
         .await;
     }

@@ -10,7 +10,7 @@ use dissimilar::Chunk;
 use operational_transform::{Operation as OTOperation, OperationSeq};
 use ropey::Rope;
 use serde::{Deserialize, Serialize};
-use tracing::{debug, error, warn};
+use tracing::{debug, warn};
 
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct TextDelta(pub Vec<TextOp>);
@@ -95,7 +95,7 @@ impl FileTextDelta {
 type DocumentUri = String;
 type CursorId = String;
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, PartialEq, Clone, Debug)]
 pub struct CursorState {
     pub cursor_id: CursorId,
     pub name: Option<String>,
@@ -106,7 +106,6 @@ pub struct CursorState {
 pub enum PatchEffect {
     FileChange(FileTextDelta),
     FileRemoval(RelativePath),
-    CursorChange(CursorState),
     NoEffect,
 }
 
@@ -183,12 +182,7 @@ pub enum ComponentMessage {
         file_path: RelativePath,
         delta: TextDelta,
     },
-    Cursor {
-        cursor_id: CursorId,
-        name: Option<String>,
-        file_path: RelativePath,
-        ranges: Vec<Range>,
-    },
+    Cursor(CursorState),
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -513,43 +507,6 @@ impl TryFrom<Patch> for PatchEffect {
                 } else {
                     Err(anyhow::anyhow!(
                         "Unexpected path action for path 'files/**', expected it to be of length 1 or 2"
-                    ))
-                }
-            }
-            (_, automerge::Prop::Map(key)) if key == "states" => {
-                if patch.path.len() == 2 {
-                    match patch.action {
-                        PatchAction::SpliceText { index, value, .. } => {
-                            assert_eq!(index, 0);
-                            if let Ok(cursor_state) = serde_json::from_str(&value.make_string()) {
-                                Ok(PatchEffect::CursorChange(cursor_state))
-                            } else {
-                                // Reasoning why we're not returning an error here:
-                                // The content of the "states" entries is unstructured text not
-                                // under our control. If peers don't put valid JSON for a
-                                // CursorState there, we don't want to crash.
-                                error!(
-                                    "Failed to parse cursor state from Automerge patch, ignoring"
-                                );
-                                Ok(PatchEffect::NoEffect)
-                            }
-                        }
-                        other_action => Err(anyhow::anyhow!(
-                            "Unsupported patch action for path 'states/*': {}",
-                            other_action
-                        )),
-                    }
-                } else if patch.path.len() == 1 {
-                    match patch.action {
-                        PatchAction::PutMap { .. } => Ok(PatchEffect::NoEffect),
-                        other_action => Err(anyhow::anyhow!(
-                            "Unsupported patch action for path 'states': {}",
-                            other_action
-                        )),
-                    }
-                } else {
-                    Err(anyhow::anyhow!(
-                        "Unexpected path action for path 'states/...', path length is not 1 or 2"
                     ))
                 }
             }
