@@ -7,7 +7,7 @@
 
 use crate::types::{EditorTextDelta, RevisionedEditorTextDelta, RevisionedTextDelta, TextDelta};
 use operational_transform::OperationSeq;
-use tracing::debug;
+use tracing::{debug, warn};
 
 ///    `OTServer` receives operations from both the CRDT world, and one editor and makes sure that
 ///    the editor operations (which might be based on an older document) are applicable to the
@@ -139,6 +139,12 @@ impl OTServer {
             "Editor is confirming {} operations, there are still {} unconfirmed operations.",
             seen_operations, daemon_operations_to_transform,
         );
+        if daemon_operations_to_transform > 50 {
+            warn!(
+                "Editor is {} operations behind, it might have trouble catching up?",
+                daemon_operations_to_transform
+            );
+        }
         let confirmed_queue = self.editor_queue.drain(..seen_operations);
         for confirmed_editor_op in confirmed_queue {
             debug!(
