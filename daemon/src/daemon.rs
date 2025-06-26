@@ -88,6 +88,8 @@ impl fmt::Debug for DocMessage {
 type DocMessageSender = mpsc::Sender<DocMessage>;
 type DocChangedSender = broadcast::Sender<()>;
 type DocChangedReceiver = broadcast::Receiver<()>;
+type EphemeralMessageSender = broadcast::Sender<CursorState>;
+type EphemeralMessageReceiver = broadcast::Receiver<CursorState>;
 
 /// This Actor is responsible for applying changes to the document asynchronously.
 ///
@@ -95,6 +97,7 @@ type DocChangedReceiver = broadcast::Receiver<()>;
 pub struct DocumentActor {
     doc_message_rx: mpsc::Receiver<DocMessage>,
     doc_changed_ping_tx: DocChangedSender,
+    ephemeral_message_tx: EphemeralMessageSender,
     editor_connections: HashMap<EditorId, (EditorConnection, EditorWriter)>,
     /// The Document is the main I/O managed resource of this actor.
     crdt_doc: Document,
@@ -107,6 +110,7 @@ impl DocumentActor {
     fn new(
         doc_message_rx: mpsc::Receiver<DocMessage>,
         doc_changed_ping_tx: DocChangedSender,
+        ephemeral_message_tx: EphemeralMessageSender,
         base_dir: PathBuf,
         init: bool,
         is_host: bool,
@@ -133,6 +137,7 @@ impl DocumentActor {
         let mut s = Self {
             doc_message_rx,
             doc_changed_ping_tx,
+            ephemeral_message_tx,
             editor_connections: HashMap::default(),
             base_dir,
             crdt_doc,
@@ -580,6 +585,7 @@ impl DocumentActor {
         self.crdt_doc.current_file_content(file_path)
     }
 
+    // TODO: Give this method a better name.
     async fn inside_message_to_doc(&mut self, message: &ComponentMessage) {
         match message {
             ComponentMessage::Open { file_path } => {
@@ -598,9 +604,9 @@ impl DocumentActor {
                 let _ = self.doc_changed_ping_tx.send(());
                 self.maybe_write_file(file_path);
             }
-            ComponentMessage::Cursor { .. } => {} // Cursor changes aren't stored in the doc, so
-                                                  // have no effect here.
-                                                  // TODO: Or should we trigger something here?
+            ComponentMessage::Cursor(cursor_state) => {
+                let _ = self.ephemeral_message_tx.send(cursor_state.clone());
+            }
         }
     }
 
@@ -667,6 +673,7 @@ impl DocumentActor {
 pub struct DocumentActorHandle {
     doc_message_tx: DocMessageSender,
     doc_changed_ping_tx: DocChangedSender,
+    ephemeral_message_tx: EphemeralMessageSender,
     next_id: Arc<AtomicUsize>,
 }
 
@@ -679,9 +686,13 @@ impl DocumentActorHandle {
         // The sync tasks will subscribe to it, and react to it by syncing with the peers.
         let (doc_changed_ping_tx, _doc_changed_ping_rx) = broadcast::channel::<()>(1);
 
+        // The document actor will send ephemeral messages for other peers to this channel.
+        let (ephemeral_message_tx, _ephemeral_message_rx) = broadcast::channel::<CursorState>(100);
+
         let mut actor = DocumentActor::new(
             doc_message_rx,
             doc_changed_ping_tx.clone(),
+            ephemeral_message_tx.clone(),
             base_dir.into(),
             init,
             is_host,
@@ -692,6 +703,7 @@ impl DocumentActorHandle {
         Self {
             doc_message_tx,
             doc_changed_ping_tx,
+            ephemeral_message_tx,
             next_id: Arc::default(),
         }
     }
@@ -705,6 +717,10 @@ impl DocumentActorHandle {
 
     pub fn subscribe_document_changes(&self) -> DocChangedReceiver {
         self.doc_changed_ping_tx.subscribe()
+    }
+
+    pub fn subscribe_ephemeral_messages(&self) -> EphemeralMessageReceiver {
+        self.ephemeral_message_tx.subscribe()
     }
 
     pub async fn content(&self) -> Result<String> {
@@ -834,6 +850,7 @@ mod tests {
         //use tracing_test::traced_test;
 
         impl DocumentActor {
+            // TODO: Refactor, to reuse stuff from DocumentActorHandle constructor.
             fn setup_for_testing(directory: &TempDir) -> Self {
                 // The document task will receive messages on this channel.
                 let (_doc_message_tx, doc_message_rx) = mpsc::channel(1);
@@ -842,9 +859,14 @@ mod tests {
                 // The sync tasks will subscribe to it, and react to it by syncing with the peers.
                 let (doc_changed_ping_tx, _doc_changed_ping_rx) = broadcast::channel::<()>(1);
 
+                // The document actor will send ephemeral messages for other peers to this channel.
+                let (ephemeral_message_tx, _ephemeral_message_rx) =
+                    broadcast::channel::<CursorState>(100);
+
                 DocumentActor::new(
                     doc_message_rx,
                     doc_changed_ping_tx.clone(),
+                    ephemeral_message_tx.clone(),
                     directory.path().to_path_buf(),
                     true,
                     true,
