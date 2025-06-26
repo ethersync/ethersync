@@ -13,7 +13,7 @@ use crate::{
     path::{AbsolutePath, FileUri, RelativePath},
     sandbox,
     types::{
-        ComponentMessage, EditorProtocolMessageError, EditorProtocolMessageFromEditor,
+        ComponentMessage, CursorState, EditorProtocolMessageError, EditorProtocolMessageFromEditor,
         EditorProtocolMessageToEditor, RevisionedEditorTextDelta,
     },
 };
@@ -65,12 +65,12 @@ impl EditorConnection {
                     vec![]
                 }
             }
-            ComponentMessage::Cursor {
+            ComponentMessage::Cursor(CursorState {
                 file_path,
                 ranges,
                 name,
                 cursor_id,
-            } => {
+            }) => {
                 let uri = AbsolutePath::from_parts(&self.base_dir, file_path)
                     .expect("Should be able to construct absolute URI")
                     .to_file_uri();
@@ -228,12 +228,12 @@ impl EditorConnection {
                     .map_err(anyhow_err_to_protocol_err)?;
 
                 Ok((
-                    ComponentMessage::Cursor {
+                    ComponentMessage::Cursor(CursorState {
                         cursor_id: self.id.clone(),
                         name: env::var("USER").ok(),
                         file_path: relative_path,
                         ranges: ranges.clone(),
-                    },
+                    }),
                     vec![],
                 ))
             }

@@ -6,6 +6,7 @@
 //! A peer is another daemon. This module is all about daemon to daemon communication.
 
 use crate::daemon::{DocMessage, DocumentActorHandle};
+use crate::types::CursorState;
 use anyhow::{Context, Result};
 use automerge::sync::{Message as AutomergeSyncMessage, State as SyncState};
 use iroh::SecretKey;
@@ -23,8 +24,13 @@ use tracing::{debug, error, info, warn};
 const ALPN: &[u8] = b"/ethersync/0";
 
 #[derive(Deserialize, Serialize)]
+/// The PeerMessage is used for peer to peer data exchange.
 enum PeerMessage {
+    /// The Sync message contains the changes to the CRDT
     Sync(Vec<u8>),
+    /// The Ephemeral message currently is used for cursor messages, but can later be used for
+    /// other things that should not be persisted.
+    Ephemeral(CursorState),
 }
 
 #[derive(Clone)]
@@ -298,7 +304,7 @@ impl SyncActor {
         }
     }
 
-    async fn receive_sync_message(&mut self, message: PeerMessage) -> Result<()> {
+    async fn receive_peer_message(&mut self, message: PeerMessage) -> Result<()> {
         let (reponse_tx, response_rx) = oneshot::channel();
         match message {
             PeerMessage::Sync(message_buf) => {
@@ -313,6 +319,11 @@ impl SyncActor {
                 self.peer_state = response_rx
                     .await
                     .expect("Couldn't read response from Document channel");
+            }
+            PeerMessage::Ephemeral(cursor) => {
+                self.document_handle
+                    .send_message(DocMessage::ReceiveEphemeral(cursor))
+                    .await;
             }
         }
         Ok(())
@@ -364,7 +375,7 @@ impl SyncActor {
                     }
                 }
                 Some(message) = self.syncer_receiver.recv() => {
-                    self.receive_sync_message(message).await?;
+                    self.receive_peer_message(message).await?;
                 }
             }
         }
