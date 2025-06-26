@@ -639,20 +639,18 @@ impl DocumentActor {
     }
 
     async fn maybe_delete_cursor_position(&mut self, cursor_id: &str) {
-        self.crdt_doc.maybe_delete_cursor_position(cursor_id);
-        let _ = self.doc_changed_ping_tx.send(());
+        let message = ComponentMessage::Cursor(CursorState {
+            cursor_id: cursor_id.to_string(),
+            name: None,
+            file_path: RelativePath::new(""), // TODO: Fix by changing the "cursor" message?
+            ranges: vec![],
+        });
+
+        // Send cursor delete to remote peers.
+        self.inside_message_to_doc(&message).await;
 
         // Send cursor delete to local peers.
-        self.broadcast_to_editors(
-            None,
-            &ComponentMessage::Cursor(CursorState {
-                cursor_id: cursor_id.to_string(),
-                name: None,
-                file_path: RelativePath::new(""), // TODO: Fix by changing the "cursor" message?
-                ranges: vec![],
-            }),
-        )
-        .await;
+        self.broadcast_to_editors(None, &message).await;
     }
 
     async fn run(&mut self) {

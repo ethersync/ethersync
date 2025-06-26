@@ -215,41 +215,6 @@ impl Document {
         self.text_obj(file_path).is_ok()
     }
 
-    pub fn store_cursor_position(
-        &mut self,
-        cursor_id: &str,
-        name: Option<String>,
-        file_path: &RelativePath,
-        ranges: Vec<Range>,
-    ) {
-        let state_map = self
-            .top_level_map_obj("states")
-            .expect("Failed to get states Map object");
-        let user_obj = self
-            .doc
-            .put_object(state_map, cursor_id, ObjType::Text)
-            .expect("Failed to initialize user state Map object in Automerge document");
-        let cursor_state = CursorState {
-            cursor_id: cursor_id.to_owned(),
-            name,
-            file_path: file_path.clone(),
-            ranges,
-        };
-        let data = serde_json::to_string(&cursor_state).expect("Could not serialize cursor state");
-        self.doc
-            .splice_text(user_obj, 0, 0, &data)
-            .expect("Failed to splice text into Automerge text object");
-        debug!("Stored user state for '{cursor_id}': {data}");
-    }
-
-    pub fn maybe_delete_cursor_position(&mut self, cursor_id: &str) {
-        // We try to set an empty cursor position, but in case we don't have any file in the
-        // project its not a big deal if it stays.
-        if let Some(file_path) = self.get_valid_file_path() {
-            self.store_cursor_position(cursor_id, None, &file_path, vec![]);
-        }
-    }
-
     fn get_valid_file_path(&self) -> Option<RelativePath> {
         let file_map = self.top_level_map_obj("files");
         if let Ok(file_map) = file_map {
