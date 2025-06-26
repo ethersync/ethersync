@@ -345,13 +345,14 @@ impl SyncActor {
             self.syncer_sender
                 .send(PeerMessage::Sync(message.encode()))
                 .await
-                .context("Failed to send on syncer_sender channel")?;
+                .context("Failed to send sync message on syncer_sender channel")?;
         }
         Ok(())
     }
 
     async fn run(mut self) -> Result<()> {
         let mut doc_changed_ping_rx = self.document_handle.subscribe_document_changes();
+        let mut ephemeral_messages_rx = self.document_handle.subscribe_ephemeral_messages();
 
         // Kick off initial synchronization with peer.
         self.generate_sync_message().await?;
@@ -371,6 +372,22 @@ impl SyncActor {
                             // This is fine, the messages in this channel are just pings.
                             // It's fine if we miss some.
                             debug!("Doc changed ping channel lagged (this is probably fine).");
+                        }
+                    }
+                }
+                ephemeral_message = ephemeral_messages_rx.recv() => {
+                    match ephemeral_message {
+                        Ok(ephemeral_message) => { self.syncer_sender.send(PeerMessage::Ephemeral(ephemeral_message))
+                                    .await
+                                    .context("Failed to send ephemeral message on syncer_sender channel")?;
+                        }
+                        Err(broadcast::error::RecvError::Closed) => {
+                            panic!("Ephemeral message channel has been closed");
+                        }
+                        Err(broadcast::error::RecvError::Lagged(_)) => {
+                            // We missed some cursor states, because of the limited
+                            // capacity of the channel.
+                            debug!("Ephemeral message channel lagged (this is unfortunate, but okay).");
                         }
                     }
                 }
