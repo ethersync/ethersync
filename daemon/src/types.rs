@@ -424,11 +424,11 @@ impl TryFrom<Patch> for PatchEffect {
         if patch.path.is_empty() {
             return match patch.action {
                 PatchAction::PutMap { key, .. } => {
-                    if key == "files" || key == "states" {
+                    if key == "files" {
                         Ok(PatchEffect::NoEffect)
                     } else {
                         Err(anyhow::anyhow!(
-                            "Path is empty and action is PutMap, but key is not 'files' or 'states'",
+                            "Path is empty and action is PutMap, but key is not 'files'",
                         ))
                     }
                 }
@@ -511,7 +511,7 @@ impl TryFrom<Patch> for PatchEffect {
                 }
             }
             (_, _) => Err(anyhow::anyhow!(
-                "Unexpected path in Automerge patch, expected it to begin with 'files' or 'states'"
+                "Unexpected path in Automerge patch, expected it to begin with 'files'"
             )),
         }
     }
