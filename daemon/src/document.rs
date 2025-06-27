@@ -5,7 +5,7 @@
 
 use crate::{
     path::RelativePath,
-    types::{CursorState, EditorTextDelta, Range, TextDelta},
+    types::{EditorTextDelta, TextDelta},
 };
 use anyhow::Result;
 use automerge::{
@@ -213,18 +213,6 @@ impl Document {
 
     pub fn file_exists(&self, file_path: &RelativePath) -> bool {
         self.text_obj(file_path).is_ok()
-    }
-
-    fn get_valid_file_path(&self) -> Option<RelativePath> {
-        let file_map = self.top_level_map_obj("files");
-        if let Ok(file_map) = file_map {
-            self.doc
-                .keys(file_map)
-                .next()
-                .map(|k| RelativePath::new(&k))
-        } else {
-            None
-        }
     }
 }
 
