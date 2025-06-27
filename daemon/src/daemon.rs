@@ -266,6 +266,15 @@ impl DocumentActor {
                         editor_writer,
                     ),
                 );
+
+                // Send all known cursor states to editor.
+                for (cursor_id, ephemeral_message) in self.ephemeral_states.clone() {
+                    let message = ComponentMessage::Cursor {
+                        cursor_id: cursor_id.clone(),
+                        cursor_state: ephemeral_message.cursor_state.clone(),
+                    };
+                    self.send_to_editor(id, &message).await;
+                }
             }
             DocMessage::CloseEditorConnection(editor_id) => {
                 self.editor_connections.remove(&editor_id);
@@ -650,20 +659,24 @@ impl DocumentActor {
                 continue;
             }
 
-            let messages_to_editor = self
-                .editor_connections
-                .get_mut(&editor_id)
-                .expect("Could not get editor connection")
-                .0
-                .message_from_daemon(message);
+            self.send_to_editor(editor_id, message).await;
+        }
+    }
 
-            for message_to_editor in messages_to_editor {
-                self.send_to_editor_client(
-                    &editor_id,
-                    EditorProtocolObject::Request(message_to_editor),
-                )
-                .await;
-            }
+    async fn send_to_editor(&mut self, editor_id: EditorId, message: &ComponentMessage) {
+        let messages_to_editor = self
+            .editor_connections
+            .get_mut(&editor_id)
+            .expect("Could not get editor connection")
+            .0
+            .message_from_daemon(message);
+
+        for message_to_editor in messages_to_editor {
+            self.send_to_editor_client(
+                &editor_id,
+                EditorProtocolObject::Request(message_to_editor),
+            )
+            .await;
         }
     }
 
@@ -681,8 +694,6 @@ impl DocumentActor {
     }
 
     async fn maybe_delete_cursor_position(&mut self, cursor_id: &CursorId) {
-        self.ephemeral_states.remove(cursor_id);
-
         let message = ComponentMessage::Cursor {
             cursor_id: cursor_id.clone(),
             cursor_state: CursorState {
