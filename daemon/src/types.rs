@@ -93,14 +93,20 @@ impl FileTextDelta {
 }
 
 type DocumentUri = String;
-type CursorId = String;
+pub type CursorId = String;
 
 #[derive(Serialize, Deserialize, PartialEq, Clone, Debug)]
 pub struct CursorState {
-    pub cursor_id: CursorId,
     pub name: Option<String>,
     pub file_path: RelativePath,
     pub ranges: Vec<Range>,
+}
+
+#[derive(Serialize, Deserialize, PartialEq, Clone, Debug)]
+pub struct EphemeralMessage {
+    pub cursor_id: CursorId,
+    pub sequence_number: usize,
+    pub cursor_state: CursorState,
 }
 
 pub enum PatchEffect {
@@ -182,7 +188,10 @@ pub enum ComponentMessage {
         file_path: RelativePath,
         delta: TextDelta,
     },
-    Cursor(CursorState),
+    Cursor {
+        cursor_id: CursorId,
+        cursor_state: CursorState,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

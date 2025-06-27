@@ -220,6 +220,8 @@ function M.track_cursor(bufnr, callback)
             callback(ranges)
         end,
     })
+    -- Trigger the callback above once, to send initial cursor position.
+    vim.api.nvim_exec_autocmds("CursorMoved", {})
 end
 
 function M.jump_to_cursor()
