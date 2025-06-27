@@ -286,14 +286,6 @@ impl DocumentActor {
             DocMessage::ReceiveEphemeral(ephemeral_message) => {
                 self.react_to_ephemeral_message(ephemeral_message.clone())
                     .await;
-                self.broadcast_to_editors(
-                    None,
-                    &ComponentMessage::Cursor {
-                        cursor_id: ephemeral_message.cursor_id,
-                        cursor_state: ephemeral_message.cursor_state.clone(),
-                    },
-                )
-                .await;
             }
         }
     }
@@ -690,7 +682,21 @@ impl DocumentActor {
         }
         self.ephemeral_states
             .insert(cursor_id.clone(), new_ephemeral_message.clone());
-        let _ = self.ephemeral_message_tx.send(new_ephemeral_message);
+
+        // Broadcast to peers.
+        let _ = self
+            .ephemeral_message_tx
+            .send(new_ephemeral_message.clone());
+
+        // Broadcast to editors.
+        self.broadcast_to_editors(
+            None,
+            &ComponentMessage::Cursor {
+                cursor_id: new_ephemeral_message.cursor_id,
+                cursor_state: new_ephemeral_message.cursor_state.clone(),
+            },
+        )
+        .await;
     }
 
     async fn maybe_delete_cursor_position(&mut self, cursor_id: &CursorId) {
