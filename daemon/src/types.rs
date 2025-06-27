@@ -93,7 +93,7 @@ impl FileTextDelta {
 }
 
 type DocumentUri = String;
-type CursorId = String;
+pub type CursorId = String;
 
 #[derive(Serialize, Deserialize, PartialEq, Clone, Debug)]
 pub struct CursorState {
@@ -101,6 +101,12 @@ pub struct CursorState {
     pub name: Option<String>,
     pub file_path: RelativePath,
     pub ranges: Vec<Range>,
+}
+
+#[derive(Serialize, Deserialize, PartialEq, Clone, Debug)]
+pub struct CursorStateWithSequenceNumber {
+    pub cursor_state: CursorState,
+    pub sequence_number: usize,
 }
 
 pub enum PatchEffect {
