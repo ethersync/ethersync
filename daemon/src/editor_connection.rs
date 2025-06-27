@@ -65,21 +65,19 @@ impl EditorConnection {
                     vec![]
                 }
             }
-            ComponentMessage::Cursor(CursorState {
-                file_path,
-                ranges,
-                name,
+            ComponentMessage::Cursor {
                 cursor_id,
-            }) => {
-                let uri = AbsolutePath::from_parts(&self.base_dir, file_path)
+                cursor_state,
+            } => {
+                let uri = AbsolutePath::from_parts(&self.base_dir, &cursor_state.file_path)
                     .expect("Should be able to construct absolute URI")
                     .to_file_uri();
 
                 vec![EditorProtocolMessageToEditor::Cursor {
-                    name: name.clone(),
                     userid: cursor_id.clone(),
+                    name: cursor_state.name.clone(),
                     uri: uri.to_string(),
-                    ranges: ranges.clone(),
+                    ranges: cursor_state.ranges.clone(),
                 }]
             }
             _ => {
@@ -228,12 +226,14 @@ impl EditorConnection {
                     .map_err(anyhow_err_to_protocol_err)?;
 
                 Ok((
-                    ComponentMessage::Cursor(CursorState {
+                    ComponentMessage::Cursor {
                         cursor_id: self.id.clone(),
-                        name: env::var("USER").ok(),
-                        file_path: relative_path,
-                        ranges: ranges.clone(),
-                    }),
+                        cursor_state: CursorState {
+                            name: env::var("USER").ok(),
+                            file_path: relative_path.clone(),
+                            ranges: ranges.clone(),
+                        },
+                    },
                     vec![],
                 ))
             }
