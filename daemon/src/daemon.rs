@@ -11,9 +11,9 @@ use crate::path::{AbsolutePath, RelativePath};
 use crate::peer;
 use crate::sandbox;
 use crate::types::{
-    ComponentMessage, CursorId, CursorStateWithSequenceNumber, EditorProtocolMessageError,
-    EditorProtocolMessageFromEditor, EditorProtocolObject, FileTextDelta, JSONRPCFromEditor,
-    JSONRPCResponse, PatchEffect, TextDelta,
+    ComponentMessage, CursorId, CursorState, EditorProtocolMessageError,
+    EditorProtocolMessageFromEditor, EditorProtocolObject, EphemeralMessage, FileTextDelta,
+    JSONRPCFromEditor, JSONRPCResponse, PatchEffect, TextDelta,
 };
 use crate::watcher::Watcher;
 use crate::watcher::WatcherEvent;
@@ -61,7 +61,7 @@ pub enum DocMessage {
     },
     NewEditorConnection(EditorId, EditorWriter),
     CloseEditorConnection(EditorId),
-    ReceiveEphemeral(CursorStateWithSequenceNumber),
+    ReceiveEphemeral(EphemeralMessage),
 }
 
 // TODO: Refactor this, to make use of sub-debug traits (default match).
@@ -88,8 +88,8 @@ impl fmt::Debug for DocMessage {
 type DocMessageSender = mpsc::Sender<DocMessage>;
 type DocChangedSender = broadcast::Sender<()>;
 type DocChangedReceiver = broadcast::Receiver<()>;
-type EphemeralMessageSender = broadcast::Sender<CursorStateWithSequenceNumber>;
-type EphemeralMessageReceiver = broadcast::Receiver<CursorStateWithSequenceNumber>;
+type EphemeralMessageSender = broadcast::Sender<EphemeralMessage>;
+type EphemeralMessageReceiver = broadcast::Receiver<EphemeralMessage>;
 
 /// This Actor is responsible for applying changes to the document asynchronously.
 ///
@@ -99,7 +99,7 @@ pub struct DocumentActor {
     doc_changed_ping_tx: DocChangedSender,
     ephemeral_message_tx: EphemeralMessageSender,
     editor_connections: HashMap<EditorId, (EditorConnection, EditorWriter)>,
-    cursor_states: HashMap<CursorId, CursorStateWithSequenceNumber>,
+    ephemeral_states: HashMap<CursorId, EphemeralMessage>,
     /// The Document is the main I/O managed resource of this actor.
     crdt_doc: Document,
     base_dir: PathBuf,
@@ -140,7 +140,7 @@ impl DocumentActor {
             doc_changed_ping_tx,
             ephemeral_message_tx,
             editor_connections: HashMap::default(),
-            cursor_states: HashMap::default(),
+            ephemeral_states: HashMap::default(),
             base_dir,
             crdt_doc,
             save_fully: true,
@@ -274,10 +274,17 @@ impl DocumentActor {
                 debug!("Deleting cursor {cursor_id}.");
                 self.maybe_delete_cursor_position(&cursor_id).await;
             }
-            DocMessage::ReceiveEphemeral(cursor) => {
-                self.react_to_ephemeral_message(cursor.clone()).await;
-                self.broadcast_to_editors(None, &ComponentMessage::Cursor(cursor.cursor_state))
+            DocMessage::ReceiveEphemeral(ephemeral_message) => {
+                self.react_to_ephemeral_message(ephemeral_message.clone())
                     .await;
+                self.broadcast_to_editors(
+                    None,
+                    &ComponentMessage::Cursor {
+                        cursor_id: ephemeral_message.cursor_id,
+                        cursor_state: ephemeral_message.cursor_state.clone(),
+                    },
+                )
+                .await;
             }
         }
     }
@@ -607,22 +614,25 @@ impl DocumentActor {
                 let _ = self.doc_changed_ping_tx.send(());
                 self.maybe_write_file(file_path);
             }
-            ComponentMessage::Cursor(cursor_state) => {
-                let next_sequence_number = if let Some(old_cursor_state) =
-                    self.cursor_states.get_mut(&cursor_state.cursor_id)
-                {
-                    old_cursor_state.sequence_number + 1
-                } else {
-                    0
-                };
+            ComponentMessage::Cursor {
+                cursor_id,
+                cursor_state,
+            } => {
+                let next_sequence_number =
+                    if let Some(old_cursor_state) = self.ephemeral_states.get_mut(cursor_id) {
+                        old_cursor_state.sequence_number + 1
+                    } else {
+                        0
+                    };
 
-                let new_cursor_state = CursorStateWithSequenceNumber {
-                    cursor_state: cursor_state.clone(),
+                let new_cursor_state = EphemeralMessage {
+                    cursor_id: cursor_id.to_string(),
                     sequence_number: next_sequence_number,
+                    cursor_state: cursor_state.clone(),
                 };
 
-                self.cursor_states
-                    .insert(cursor_state.cursor_id.clone(), new_cursor_state.clone());
+                self.ephemeral_states
+                    .insert(cursor_id.clone(), new_cursor_state.clone());
 
                 let _ = self.ephemeral_message_tx.send(new_cursor_state);
             }
@@ -657,29 +667,36 @@ impl DocumentActor {
         }
     }
 
-    async fn react_to_ephemeral_message(&mut self, new_state: CursorStateWithSequenceNumber) {
-        let cursor_id = new_state.cursor_state.cursor_id.clone();
-        if let Some(existing_state) = self.cursor_states.get_mut(&cursor_id) {
-            if new_state.sequence_number <= existing_state.sequence_number {
+    async fn react_to_ephemeral_message(&mut self, new_ephemeral_message: EphemeralMessage) {
+        let cursor_id = new_ephemeral_message.cursor_id.clone();
+        if let Some(existing_state) = self.ephemeral_states.get_mut(&cursor_id) {
+            if new_ephemeral_message.sequence_number <= existing_state.sequence_number {
                 // We've already seen an older ephemeral message for this cursor_id.
                 return;
             }
         }
-        self.cursor_states
-            .insert(cursor_id.clone(), new_state.clone());
-        let _ = self.ephemeral_message_tx.send(new_state);
+        self.ephemeral_states
+            .insert(cursor_id.clone(), new_ephemeral_message.clone());
+        let _ = self.ephemeral_message_tx.send(new_ephemeral_message);
     }
 
-    async fn maybe_delete_cursor_position(&mut self, cursor_id: &str) {
-        if let Some(existing_state) = self.cursor_states.get_mut(cursor_id) {
-            let message = ComponentMessage::Cursor(existing_state.cursor_state.clone());
+    async fn maybe_delete_cursor_position(&mut self, cursor_id: &CursorId) {
+        self.ephemeral_states.remove(cursor_id);
 
-            // Send cursor delete to remote peers.
-            self.inside_message_to_doc(&message).await;
+        let message = ComponentMessage::Cursor {
+            cursor_id: cursor_id.clone(),
+            cursor_state: CursorState {
+                name: None,
+                file_path: RelativePath::new(""),
+                ranges: vec![],
+            },
+        };
 
-            // Send cursor delete to local peers.
-            self.broadcast_to_editors(None, &message).await;
-        }
+        // Send cursor delete to remote peers.
+        self.inside_message_to_doc(&message).await;
+
+        // Send cursor delete to local peers.
+        self.broadcast_to_editors(None, &message).await;
     }
 
     async fn run(&mut self) {
@@ -715,7 +732,7 @@ impl DocumentActorHandle {
 
         // The document actor will send ephemeral messages for other peers to this channel.
         let (ephemeral_message_tx, _ephemeral_message_rx) =
-            broadcast::channel::<CursorStateWithSequenceNumber>(100);
+            broadcast::channel::<EphemeralMessage>(100);
 
         let mut actor = DocumentActor::new(
             doc_message_rx,
@@ -889,7 +906,7 @@ mod tests {
 
                 // The document actor will send ephemeral messages for other peers to this channel.
                 let (ephemeral_message_tx, _ephemeral_message_rx) =
-                    broadcast::channel::<CursorStateWithSequenceNumber>(100);
+                    broadcast::channel::<EphemeralMessage>(100);
 
                 DocumentActor::new(
                     doc_message_rx,

@@ -6,7 +6,7 @@
 //! A peer is another daemon. This module is all about daemon to daemon communication.
 
 use crate::daemon::{DocMessage, DocumentActorHandle};
-use crate::types::CursorStateWithSequenceNumber;
+use crate::types::EphemeralMessage;
 use anyhow::{Context, Result};
 use automerge::sync::{Message as AutomergeSyncMessage, State as SyncState};
 use iroh::SecretKey;
@@ -30,7 +30,7 @@ enum PeerMessage {
     Sync(Vec<u8>),
     /// The Ephemeral message currently is used for cursor messages, but can later be used for
     /// other things that should not be persisted.
-    Ephemeral(CursorStateWithSequenceNumber),
+    Ephemeral(EphemeralMessage),
 }
 
 #[derive(Clone)]
@@ -377,9 +377,10 @@ impl SyncActor {
                 }
                 ephemeral_message = ephemeral_messages_rx.recv() => {
                     match ephemeral_message {
-                        Ok(ephemeral_message) => { self.syncer_sender.send(PeerMessage::Ephemeral(ephemeral_message))
-                                    .await
-                                    .context("Failed to send ephemeral message on syncer_sender channel")?;
+                        Ok(ephemeral_message) => {
+                            self.syncer_sender.send(PeerMessage::Ephemeral(ephemeral_message))
+                                .await
+                                .context("Failed to send ephemeral message on syncer_sender channel")?;
                         }
                         Err(broadcast::error::RecvError::Closed) => {
                             panic!("Ephemeral message channel has been closed");
