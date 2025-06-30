@@ -11,7 +11,7 @@ Ethersync tries to sync not only file changes done by supported editors, but als
 
 > ⚠️ **Warning:**
 >
-> When one peer edits a file from an editor, and another peer changes it with an external tool at the same time, the latter change might get lost.  
+> When one peer edits a file from an editor, and another peer changes it with an external tool at the same time, the latter change might get lost.
 > This is a restriction that seems hard to avoid. If you want to make sure changes by external tools are recorded correctly, do them while the daemon is not running, and make use of Ethersync's [offline support](offline-support.md).
 
 ## Creating files

@@ -13,7 +13,7 @@ Ethersync enables a workflow like that, but for **local text files, using your f
 
 > ⚠️ **Warning:**
 >
-> Ethersync is still in active development. At this point in time it is usable (we use it every day!) but has a lot of subtle things to know about and things that you might expect to work that do not yet work. Consider it as a proof of concept, and make sure to have backups.  
+> Ethersync is still in active development. At this point in time it is usable (we use it every day!) but has a lot of subtle things to know about and things that you might expect to work that do not yet work. Consider it as a proof of concept, and make sure to have backups.
 >
 > A main reason we have written a lot of documentation is to give you the ability to learn about this system and with that allow you to use it smoothly despite the caveats.
 
