@@ -78,7 +78,7 @@ git push
     ```
 
 2. Now each peer can update the HEAD. The easiest option is to run:
-    
+
     ```bash
     git reset @{u}
     ```
