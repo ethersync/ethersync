@@ -18,7 +18,7 @@ local ignore_edits = false
 function M.track_changes(buffer, callback)
     -- Used to remember the previous content of the buffer, so that we can
     -- calculate the difference between the previous and the current content.
-    local prev_lines = vim.api.nvim_buf_get_lines(buffer, 0, -1, true)
+    local prev_lines = get_all_lines_respecting_eol(buffer)
 
     vim.api.nvim_buf_attach(buffer, false, {
         on_lines = function(
@@ -32,9 +32,17 @@ function M.track_changes(buffer, callback)
             -- Line counts that we get called with are zero-based.
             -- last_line and new_last_line are exclusive
 
-            debug({ first_line = first_line, last_line = last_line, new_last_line = new_last_line })
             -- TODO: optimize with a cache
-            local curr_lines = vim.api.nvim_buf_get_lines(buffer, 0, -1, true)
+            local curr_lines = get_all_lines_respecting_eol(buffer)
+
+            -- Special case: When deleting the entire content, when of 'eol' is on, there
+            -- will still be a "virtual line" after the current empty line: The file content will be "\n".
+            -- So new_last_line should not be 0, but 1!
+            if vim.bo[buffer].eol and #curr_lines == 2 and curr_lines[1] == "" and last_line == 1 then
+                new_last_line = 1
+            end
+
+            debug({ first_line = first_line, last_line = last_line, new_last_line = new_last_line })
 
             -- Are we currently ignoring edits?
             if ignore_edits then
@@ -47,7 +55,7 @@ function M.track_changes(buffer, callback)
             -- line/character indices in diff are zero-based.
             debug({ diff = diff })
 
-            -- Special case: If the entire file is deleted, undo the special treatment introduced in
+            -- Special case: If the entire content is deleted, undo the special treatment introduced in
             -- https://github.com/neovim/neovim/pull/29904. We think it's incorrect. :P
             if #curr_lines == 1 and curr_lines[1] == "" then
                 diff.range["start"].line = 0
@@ -101,10 +109,22 @@ function M.track_changes(buffer, callback)
                         )
                     end
                 end
-            elseif diff.range["end"].line < #prev_lines then
-                -- The range ends before the line after the last visible buffer line.
+            else
                 -- We might still want to make the delta prettier.
-                -- TODO: Integrate this case in the above if branches somehow?
+                -- TODO: Integrate these cases in the above if branches somehow?
+                if
+                    diff.range["end"].character == 0
+                    and string.sub(diff.text, 1, 1) == "\n"
+                    and diff.range["start"].character == vim.fn.strchars(prev_lines[diff.range["start"].line + 1])
+                    and diff.range["start"].line < diff.range["end"].line
+                then
+                    -- Range starts at the end of a line, and spans the newline after it, but also begins with a newline.
+                    -- This newline is redundant, and leads to less-pretty diffs. Remove it.
+                    diff.text = string.sub(diff.text, 2, -1)
+                    diff.range["start"].line = diff.range["start"].line + 1
+                    diff.range["start"].character = 0
+                end
+
                 if
                     diff.range["end"].character == 0
                     and string.sub(diff.text, -1) == "\n"
@@ -112,6 +132,7 @@ function M.track_changes(buffer, callback)
                 then
                     -- Range ends on the beginning of a line, but the replacement ends with a newline.
                     -- This newline is redundant, and leads to less-pretty diffs. Remove it.
+
                     diff.text = string.sub(diff.text, 1, -2)
                     diff.range["end"].line = diff.range["end"].line - 1
                     diff.range["end"].character = vim.fn.strchars(prev_lines[diff.range["end"].line + 1])
@@ -147,6 +168,17 @@ function M.apply_delta(buffer, delta)
     ignore_edits = true
     utils.apply_text_edits(text_edits, buffer, "utf-32")
     ignore_edits = false
+end
+
+function get_all_lines_respecting_eol(buffer)
+    local lines = vim.api.nvim_buf_get_lines(buffer, 0, -1, true)
+
+    -- If eol is on, that's like a virtual empty line after the current lines.
+    if vim.bo[buffer].eol then
+        table.insert(lines, "")
+    end
+
+    return lines
 end
 
 return M
