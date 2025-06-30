@@ -714,6 +714,8 @@ impl DocumentActor {
 
         // Send cursor delete to local peers.
         self.broadcast_to_editors(None, &message).await;
+
+        self.ephemeral_states.remove(cursor_id);
     }
 
     async fn run(&mut self) {
