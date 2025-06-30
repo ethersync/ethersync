@@ -12,6 +12,17 @@ local M = {}
 -- Used to note that changes to the buffer should be ignored, and not be sent out as deltas.
 local ignore_edits = false
 
+local function get_all_lines_respecting_eol(buffer)
+    local lines = vim.api.nvim_buf_get_lines(buffer, 0, -1, true)
+
+    -- If eol is on, that's like a virtual empty line after the current lines.
+    if vim.bo[buffer].eol then
+        table.insert(lines, "")
+    end
+
+    return lines
+end
+
 -- Subscribes the callback to changes for a given buffer id and reports with a delta.
 --
 -- The delta can be expected to be in the format as specified in the daemon-editor protocol.
@@ -168,17 +179,6 @@ function M.apply_delta(buffer, delta)
     ignore_edits = true
     utils.apply_text_edits(text_edits, buffer, "utf-32")
     ignore_edits = false
-end
-
-function get_all_lines_respecting_eol(buffer)
-    local lines = vim.api.nvim_buf_get_lines(buffer, 0, -1, true)
-
-    -- If eol is on, that's like a virtual empty line after the current lines.
-    if vim.bo[buffer].eol then
-        table.insert(lines, "")
-    end
-
-    return lines
 end
 
 return M
