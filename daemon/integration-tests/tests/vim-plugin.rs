@@ -193,7 +193,7 @@ async fn vim_sends_correct_delta() {
     .await;
     assert_vim_input_yields_replacements("a\nb\n", "dd", vec![replace_ed((0, 0), (1, 0), "")])
         .await;
-    assert_vim_input_yields_replacements("a\nb\n", "jdd", vec![replace_ed((0, 1), (1, 1), "")])
+    assert_vim_input_yields_replacements("a\nb\n", "jdd", vec![replace_ed((1, 0), (2, 0), "")])
         .await;
     // Also works without \n at the end.
     assert_vim_input_yields_replacements("a\nb", "jdd", vec![replace_ed((0, 1), (1, 1), "")]).await;
@@ -265,7 +265,7 @@ async fn vim_sends_correct_delta() {
             replace_ed((0, 1), (0, 1), "\n"), // d: "x\n\n"
             // no-op: Copy nothing to previous line.
             replace_ed((0, 1), (0, 1), ""),
-            replace_ed((0, 1), (1, 0), ""),
+            replace_ed((1, 0), (2, 0), ""),
         ],
     )
     .await;
@@ -277,7 +277,7 @@ async fn vim_sends_correct_delta() {
             replace_ed((0, 2), (0, 5), ""), // d: llo
             replace_ed((1, 0), (1, 3), ""), // d: wor
             replace_ed((0, 2), (0, 2), "ld"),
-            replace_ed((0, 4), (1, 2), ""), // d: \nld
+            replace_ed((1, 0), (2, 0), ""), // d: ld\n
         ],
     )
     .await;
@@ -297,12 +297,12 @@ async fn vim_sends_correct_delta() {
         "ddo",
         vec![
             replace_ed((0, 0), (0, 1), ""), // 'eol' is still on, so we keep the newline.
-            replace_ed((0, 0), (0, 0), "\n"),
+            replace_ed((1, 0), (1, 0), "\n"),
         ],
     )
     .await;
 
-    assert_vim_input_yields_replacements("a\n", "o", vec![replace_ed((0, 1), (0, 1), "\n")]).await;
+    assert_vim_input_yields_replacements("a\n", "o", vec![replace_ed((1, 0), (1, 0), "\n")]).await;
 
     // Unicode tests
     assert_vim_input_yields_replacements("ä\nü\n", "dd", vec![replace_ed((0, 0), (1, 0), "")])
@@ -311,16 +311,16 @@ async fn vim_sends_correct_delta() {
         .await;
     assert_vim_input_yields_replacements("ä", "dd", vec![replace_ed((0, 0), (0, 1), "")]).await;
 
-    assert_vim_input_yields_replacements("a\n", "yyp", vec![replace_ed((0, 1), (0, 1), "\na")])
+    assert_vim_input_yields_replacements("a\n", "yyp", vec![replace_ed((1, 0), (1, 0), "a\n")])
         .await;
-    assert_vim_input_yields_replacements("🥕\n", "yyp", vec![replace_ed((0, 1), (0, 1), "\n🥕")])
+    assert_vim_input_yields_replacements("🥕\n", "yyp", vec![replace_ed((1, 0), (1, 0), "🥕\n")])
         .await;
     assert_vim_input_yields_replacements("a", "yyp", vec![replace_ed((0, 1), (0, 1), "\na")]).await;
 
     assert_vim_input_yields_replacements(
         "a\n🥕\n",
         "jyyp",
-        vec![replace_ed((1, 1), (1, 1), "\n🥕")],
+        vec![replace_ed((2, 0), (2, 0), "🥕\n")],
     )
     .await;
 
@@ -332,16 +332,12 @@ async fn vim_sends_correct_delta() {
     assert_vim_input_yields_replacements(
         "eins\ntwo\n",
         "jo",
-        vec![replace_ed((1, 3), (1, 3), "\n")],
+        vec![replace_ed((2, 0), (2, 0), "\n")],
     )
     .await;
 
-    assert_vim_input_yields_replacements(
-        "eins\ntwo\nthree",
-        "jo",
-        vec![replace_ed((1, 3), (1, 3), "\n")],
-    )
-    .await;
+    assert_vim_input_yields_replacements("eins\ntwo", "jo", vec![replace_ed((1, 3), (1, 3), "\n")])
+        .await;
 
     // Tests where Vim behaves a bit weirdly.
 
@@ -351,7 +347,7 @@ async fn vim_sends_correct_delta() {
         "J",
         vec![
             replace_ed((0, 1), (0, 1), " b"),
-            replace_ed((0, 3), (1, 1), ""),
+            replace_ed((1, 0), (2, 0), ""),
         ],
     )
     .await;
@@ -366,9 +362,17 @@ async fn vim_sends_correct_delta() {
     )
     .await;
 
-    // Visual on multiple lines
+    // Visual on multiple lines.
     assert_vim_input_yields_replacements(
         "abc\nde\nf\n",
+        "jVjd",
+        vec![replace_ed((1, 0), (3, 0), "")],
+    )
+    .await;
+
+    // Same test without eol.
+    assert_vim_input_yields_replacements(
+        "abc\nde\nf",
         "jVjd",
         vec![replace_ed((0, 3), (2, 1), "")],
     )
