@@ -28,3 +28,4 @@ repos:
     rev: v5.0.2
     hooks:
     -   id: reuse-lint-file
+exclude: ^LICENSES
