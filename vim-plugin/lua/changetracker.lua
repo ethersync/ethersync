@@ -46,7 +46,7 @@ function M.track_changes(buffer, callback)
             -- TODO: optimize with a cache
             local curr_lines = get_all_lines_respecting_eol(buffer)
 
-            -- Special case: When deleting the entire content, when of 'eol' is on, there
+            -- Special case: When deleting the entire content, when 'eol' is on, there
             -- will still be a "virtual line" after the current empty line: The file content will be "\n".
             -- So new_last_line should not be 0, but 1!
             if vim.bo[buffer].eol and #curr_lines == 2 and curr_lines[1] == "" and last_line == 1 then
@@ -121,6 +121,7 @@ function M.track_changes(buffer, callback)
                     end
                 end
             else
+                -- The range does not extend past the visible buffer lines (diff.range["end"].line < #prev_lines).
                 -- We might still want to make the delta prettier.
                 -- TODO: Integrate these cases in the above if branches somehow?
                 if
@@ -143,7 +144,6 @@ function M.track_changes(buffer, callback)
                 then
                     -- Range ends on the beginning of a line, but the replacement ends with a newline.
                     -- This newline is redundant, and leads to less-pretty diffs. Remove it.
-
                     diff.text = string.sub(diff.text, 1, -2)
                     diff.range["end"].line = diff.range["end"].line - 1
                     diff.range["end"].character = vim.fn.strchars(prev_lines[diff.range["end"].line + 1])

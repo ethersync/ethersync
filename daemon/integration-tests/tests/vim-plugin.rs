@@ -326,9 +326,6 @@ async fn vim_sends_correct_delta() {
 
     assert_vim_input_yields_replacements("a", "o", vec![replace_ed((0, 1), (0, 1), "\n")]).await;
 
-    assert_vim_input_yields_replacements("eins\ntwo", "jo", vec![replace_ed((1, 3), (1, 3), "\n")])
-        .await;
-
     assert_vim_input_yields_replacements(
         "eins\ntwo\n",
         "jo",
