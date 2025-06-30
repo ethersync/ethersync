@@ -676,7 +676,8 @@ impl DocumentActor {
         let cursor_id = new_ephemeral_message.cursor_id.clone();
         if let Some(existing_state) = self.ephemeral_states.get_mut(&cursor_id) {
             if new_ephemeral_message.sequence_number <= existing_state.sequence_number {
-                // We've already seen an older ephemeral message for this cursor_id.
+                // We've already seen a newer ephemeral message for this cursor_id, thus ignoring
+                // this older one.
                 return;
             }
         }
@@ -693,7 +694,7 @@ impl DocumentActor {
             None,
             &ComponentMessage::Cursor {
                 cursor_id: new_ephemeral_message.cursor_id,
-                cursor_state: new_ephemeral_message.cursor_state.clone(),
+                cursor_state: new_ephemeral_message.cursor_state,
             },
         )
         .await;
@@ -704,6 +705,9 @@ impl DocumentActor {
             cursor_id: cursor_id.clone(),
             cursor_state: CursorState {
                 name: None,
+                // NOTE: The "cursor" message doesn't have a specific
+                // deletion mechanism. We get around this by setting it to an empty file path,
+                // which means it will disappear from any previous file path.
                 file_path: RelativePath::new(""),
                 ranges: vec![],
             },
