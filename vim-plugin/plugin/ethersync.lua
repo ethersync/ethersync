@@ -7,9 +7,6 @@ local changetracker = require("changetracker")
 local cursor = require("cursor")
 local debug = require("logging").debug
 
--- We only want to communicate a possibly annoying info once.
-local did_print_autoread_info = false
-
 -- JSON-RPC connection.
 local client
 
@@ -151,10 +148,6 @@ end
 -- For the conflicting case, we prevent a popup dialog by setting the FileChangedShell autocommand below.
 local function ensure_autoread_is_off()
     if vim.o.autoread then
-        if not did_print_autoread_info then
-            print("Ethersync works better when autoread is off, so we're disabling it for you (in Ethersync buffers).")
-            did_print_autoread_info = true
-        end
         vim.bo.autoread = false
     end
 end
