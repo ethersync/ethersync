@@ -414,12 +414,12 @@ impl TryFrom<Patch> for PatchEffect {
         fn file_path_from_path_default(
             path: &[(automerge::ObjId, automerge::Prop)],
         ) -> Result<RelativePath, anyhow::Error> {
-            if path.len() != 2 {
+            if path.len() != 1 {
                 return Err(anyhow::anyhow!(
-                    "Unexpected path in Automerge patch, length is not 2"
+                    "Unexpected path in Automerge patch, length is not 1"
                 ));
             }
-            let (_obj_id, prop) = &path[1];
+            let (_obj_id, prop) = &path[0];
             if let automerge::Prop::Map(file_path) = prop {
                 return Ok(RelativePath::new(file_path));
             }
@@ -432,65 +432,47 @@ impl TryFrom<Patch> for PatchEffect {
 
         if patch.path.is_empty() {
             return match patch.action {
-                PatchAction::PutMap { key, .. } => {
-                    if key == "files" {
-                        Ok(PatchEffect::NoEffect)
-                    } else {
-                        Err(anyhow::anyhow!(
-                            "Path is empty and action is PutMap, but key is not 'files'",
-                        ))
+                PatchAction::PutMap { key, conflict, .. } => {
+                    // This action happens when a new file is created.
+                    // We return an empty delta on the new file, so that the file is created on disk when
+                    // synced over to another peer. TODO: Is this the best way to solve this?
+                    let path = RelativePath::new(&key);
+                    if conflict {
+                        warn!("Resolved conflict for file {path} by overwriting your version.");
+                    }
+                    Ok(PatchEffect::FileChange(FileTextDelta::new(path, delta)))
+                }
+                PatchAction::DeleteMap { key } => {
+                    // This action happens when a file is deleted.
+                    debug!("Got file removal from patch: {key}");
+                    let path = RelativePath::new(&key);
+                    Ok(PatchEffect::FileRemoval(path))
+                }
+                PatchAction::Conflict { prop } => {
+                    // This can happen when both sides create the same file.
+                    match prop {
+                        automerge::Prop::Map(file_name) => {
+                            // We assume that conflict resolution works the way, that the
+                            // side that gets the PatchAction is the one that "wins".
+                            warn!("Conflict for file '{file_name}' resolved. Taking your version.");
+                            Ok(PatchEffect::NoEffect)
+                        }
+                        other_prop => Err(anyhow::anyhow!(
+                            "Got a Seq-type prop as a conflict, expected Map: {}",
+                            other_prop
+                        )),
                     }
                 }
                 other_action => Err(anyhow::anyhow!(
-                    "Unsupported patch action for empty path: {}",
+                    "Unsupported patch action: {}",
                     other_action
                 )),
             };
         }
 
         match &patch.path[0] {
-            (_, automerge::Prop::Map(key)) if key == "files" => {
+            (_obj_id, automerge::Prop::Map(..)) => {
                 if patch.path.len() == 1 {
-                    match patch.action {
-                        PatchAction::PutMap { key, conflict, .. } => {
-                            // This action happens when a new file is created.
-                            // We return an empty delta on the new file, so that the file is created on disk when
-                            // synced over to another peer. TODO: Is this the best way to solve this?
-                            let path = RelativePath::new(&key);
-                            if conflict {
-                                warn!(
-                                    "Resolved conflict for file {path} by overwriting your version."
-                                );
-                            }
-                            Ok(PatchEffect::FileChange(FileTextDelta::new(path, delta)))
-                        }
-                        PatchAction::DeleteMap { key } => {
-                            // This action happens when a file is deleted.
-                            debug!("Got file removal from patch: {key}");
-                            let path = RelativePath::new(&key);
-                            Ok(PatchEffect::FileRemoval(path))
-                        }
-                        PatchAction::Conflict { prop } => {
-                            // This can happen when both sides create the same file.
-                            match prop {
-                                automerge::Prop::Map(file_name) => {
-                                    // We assume that conflict resolution works the way, that the
-                                    // side that gets the PatchAction is the one that "wins".
-                                    warn!("Conflict for file '{file_name}' resolved. Taking your version.");
-                                    Ok(PatchEffect::NoEffect)
-                                }
-                                other_prop => Err(anyhow::anyhow!(
-                                    "Got a Seq-type prop as a conflict, expected Map: {}",
-                                    other_prop
-                                )),
-                            }
-                        }
-                        other_action => Err(anyhow::anyhow!(
-                            "Unsupported patch action for path 'files': {}",
-                            other_action
-                        )),
-                    }
-                } else if patch.path.len() == 2 {
                     match patch.action {
                         PatchAction::SpliceText { index, value, .. } => {
                             delta.retain(index);
@@ -509,18 +491,18 @@ impl TryFrom<Patch> for PatchEffect {
                             )))
                         }
                         other_action => Err(anyhow::anyhow!(
-                            "Unsupported patch action for path 'files/*': {}",
+                            "Unsupported patch action for path '*': {}",
                             other_action
                         )),
                     }
                 } else {
                     Err(anyhow::anyhow!(
-                        "Unexpected path action for path 'files/**', expected it to be of length 1 or 2"
+                        "Unexpected path action for path '**', expected it to be of length 0 or 1"
                     ))
                 }
             }
-            (_, _) => Err(anyhow::anyhow!(
-                "Unexpected path in Automerge patch, expected it to begin with 'files'"
+            (_obj_id, _prop) => Err(anyhow::anyhow!(
+                "Unexpected prop in Automerge patch, expected it to be a Map"
             )),
         }
     }

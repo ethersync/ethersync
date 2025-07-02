@@ -12,7 +12,7 @@ use automerge::{
     patches::TextRepresentation,
     sync::{Message as AutomergeSyncMessage, State as SyncState, SyncDoc},
     transaction::Transactable,
-    AutoCommit, ObjType, Patch, PatchLog, ReadDoc, TextEncoding,
+    AutoCommit, ObjType, Patch, PatchLog, ReadDoc, TextEncoding, ROOT,
 };
 use dissimilar::Chunk;
 use tracing::{debug, info};
@@ -32,18 +32,9 @@ pub struct Document {
 
 impl Default for Document {
     fn default() -> Self {
-        // We hard-code the initial change here to make documents that were created by independent peers.
-        // See https://automerge.org/docs/cookbook/modeling-data/#setting-up-an-initial-document-structure
-        let initial_doc = [
-            133, 111, 74, 131, 61, 157, 231, 85, 0, 118, 1, 16, 120, 107, 104, 47, 215, 9, 76, 32,
-            132, 136, 60, 124, 152, 120, 144, 182, 1, 143, 164, 31, 13, 102, 61, 139, 125, 246,
-            189, 135, 97, 16, 167, 63, 30, 215, 249, 60, 227, 113, 111, 61, 55, 138, 234, 94, 30,
-            142, 166, 78, 250, 6, 1, 2, 3, 2, 19, 2, 35, 2, 64, 2, 86, 2, 7, 21, 14, 33, 2, 35, 2,
-            52, 1, 66, 2, 86, 2, 128, 1, 2, 127, 0, 127, 1, 127, 2, 127, 0, 127, 0, 127, 7, 126, 5,
-            102, 105, 108, 101, 115, 6, 115, 116, 97, 116, 101, 115, 2, 0, 2, 1, 2, 2, 0, 2, 0, 2,
-            0, 0,
-        ];
-        Self::load(&initial_doc)
+        Self {
+            doc: AutoCommit::default(),
+        }
     }
 }
 
@@ -122,14 +113,9 @@ impl Document {
     pub fn initialize_text(&mut self, text: &str, file_path: &RelativePath) {
         info!("Initializing {file_path} in CRDT.");
 
-        // Now it should definitely work?
-        let file_map = self
-            .top_level_map_obj("files")
-            .expect("Failed to get files Map object");
-
         let text_obj = self
             .doc
-            .put_object(file_map, file_path, ObjType::Text)
+            .put_object(&ROOT, file_path, ObjType::Text)
             .expect("Failed to initialize text object in Automerge document");
         self.doc
             .splice_text(text_obj, 0, 0, text)
@@ -166,30 +152,15 @@ impl Document {
 
         info!("Removing {file_path} from CRDT.");
         // TODO: Also remove it from ot server, if applicable
-        let file_map = self
-            .top_level_map_obj("files")
-            .expect("Failed to get files Map object");
         self.doc
-            .delete(file_map, file_path)
+            .delete(&ROOT, file_path)
             .expect("Failed to delete text object");
     }
 
-    fn top_level_map_obj(&self, name: &str) -> Result<automerge::ObjId> {
-        let file_map = self.doc.get(automerge::ROOT, name);
-        if let Ok(Some((automerge::Value::Object(ObjType::Map), file_map))) = file_map {
-            Ok(file_map)
-        } else {
-            Err(anyhow::anyhow!(
-                "Automerge document doesn't have a {name} Map object"
-            ))
-        }
-    }
-
     fn text_obj(&self, file_path: &RelativePath) -> Result<automerge::ObjId> {
-        let file_map = self.top_level_map_obj("files")?;
         let text_obj = self
             .doc
-            .get(file_map, file_path)
+            .get(&ROOT, file_path)
             .unwrap_or_else(|_| panic!("Failed to get {file_path} key from Automerge document"));
         if let Some((automerge::Value::Object(ObjType::Text), text_obj)) = text_obj {
             Ok(text_obj)
@@ -201,14 +172,10 @@ impl Document {
     }
 
     pub fn files(&self) -> Vec<RelativePath> {
-        if let Ok(file_map) = self.top_level_map_obj("files") {
-            self.doc
-                .keys(file_map)
-                .map(|k| RelativePath::new(&k))
-                .collect()
-        } else {
-            vec![]
-        }
+        self.doc
+            .keys(&ROOT)
+            .map(|k| RelativePath::new(&k))
+            .collect()
     }
 
     pub fn file_exists(&self, file_path: &RelativePath) -> bool {
