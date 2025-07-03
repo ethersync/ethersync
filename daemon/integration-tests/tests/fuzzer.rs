@@ -68,6 +68,7 @@ async fn main() -> Result<()> {
         &socket_path,
         dir.path(),
         true,
+        false,
     )
     .await?;
 
@@ -84,6 +85,7 @@ async fn main() -> Result<()> {
         },
         &socket_path2,
         dir2.path(),
+        false,
         false,
     )
     .await?;

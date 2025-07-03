@@ -943,6 +943,7 @@ mod tests {
                     directory.path().to_path_buf(),
                     true,
                     true,
+                    false,
                 )
             }
             fn assert_file_content(&self, file_path: &RelativePath, content: &str) {
