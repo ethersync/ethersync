@@ -147,7 +147,7 @@ impl DocumentActor {
             save_fully: true,
         };
 
-        if persistence_file_exists {
+        if persistence_file_exists && persist {
             s.read_current_content_from_dir(init);
         } else if is_host {
             s.read_current_content_from_dir(true);
@@ -553,6 +553,7 @@ impl DocumentActor {
     }
 
     fn read_current_content_from_dir(&mut self, init: bool) {
+        debug!("Reading current contents from disk (init: {init}).");
         self.build_walk()
             .filter_map(Result::ok)
             .filter(|dir_entry| {
