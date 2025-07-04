@@ -86,7 +86,7 @@ async fn main() -> Result<()> {
         .join(config::CONFIG_DIR)
         .join(config::DEFAULT_SOCKET_NAME);
 
-    let persist = !has_git_remote(&directory);
+    let persist = !config::has_git_remote(&directory);
 
     if !persist {
         info!(
@@ -199,13 +199,4 @@ fn ask(question: &str) -> Result<bool> {
     } else {
         bail!("Failed to read answer");
     }
-}
-
-fn has_git_remote(path: &Path) -> bool {
-    if let Ok(repo) = git2::Repository::open(path) {
-        if let Ok(remotes) = repo.remotes() {
-            return !remotes.is_empty();
-        }
-    }
-    false
 }
