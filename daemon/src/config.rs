@@ -121,7 +121,7 @@ pub fn store_peer_in_config(directory: &Path, config_file: &Path, peer: &str) ->
 }
 
 pub fn has_git_remote(path: &Path) -> bool {
-    if let Ok(repo) = git2::Repository::open(path) {
+    if let Ok(repo) = git2::Repository::discover(path) {
         if let Ok(remotes) = repo.remotes() {
             return !remotes.is_empty();
         }
