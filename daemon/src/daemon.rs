@@ -123,7 +123,8 @@ impl DocumentActor {
         let persistence_file_exists = sandbox::exists(&base_dir, &persistence_file)
             .expect("Could not check for the existence of the persistence file");
 
-        let crdt_doc = if persistence_file_exists && !init && persist {
+        let load_crdt_doc = persistence_file_exists && !init && persist;
+        let crdt_doc = if load_crdt_doc {
             debug!(
                 "Loading persisted CRDT document from '{}'.",
                 persistence_file.display()
