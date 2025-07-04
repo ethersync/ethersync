@@ -86,6 +86,14 @@ async fn main() -> Result<()> {
         .join(config::CONFIG_DIR)
         .join(config::DEFAULT_SOCKET_NAME);
 
+    let persist = !config::has_git_remote(&directory);
+
+    if !persist {
+        info!(
+            "Detected a Git remote: Assuming a pair-programming use-case and starting a new history."
+        );
+    }
+
     match cli.command {
         Commands::Share { .. } | Commands::Join { .. } => {
             let mut init_doc = false;
@@ -129,7 +137,7 @@ async fn main() -> Result<()> {
             }
 
             debug!("Starting Ethersync on {}.", directory.display());
-            let _daemon = Daemon::new(app_config, &socket_path, &directory, init_doc)
+            let _daemon = Daemon::new(app_config, &socket_path, &directory, init_doc, persist)
                 .await
                 .context("Failed to launch the daemon")?;
             wait_for_ctrl_c().await;

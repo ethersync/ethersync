@@ -115,6 +115,7 @@ impl DocumentActor {
         base_dir: PathBuf,
         init: bool,
         is_host: bool,
+        persist: bool,
     ) -> Self {
         // If there is a persisted version in base_dir/.ethersync/doc, load it.
         // TODO: Pull out ".ethersync" string into a constant.
@@ -122,7 +123,8 @@ impl DocumentActor {
         let persistence_file_exists = sandbox::exists(&base_dir, &persistence_file)
             .expect("Could not check for the existence of the persistence file");
 
-        let crdt_doc = if persistence_file_exists && !init {
+        let load_crdt_doc = persistence_file_exists && !init && persist;
+        let crdt_doc = if load_crdt_doc {
             debug!(
                 "Loading persisted CRDT document from '{}'.",
                 persistence_file.display()
@@ -146,7 +148,7 @@ impl DocumentActor {
             save_fully: true,
         };
 
-        if persistence_file_exists {
+        if persistence_file_exists && persist {
             s.read_current_content_from_dir(init);
         } else if is_host {
             s.read_current_content_from_dir(true);
@@ -552,6 +554,7 @@ impl DocumentActor {
     }
 
     fn read_current_content_from_dir(&mut self, init: bool) {
+        debug!("Reading current contents from disk (init: {init}).");
         self.build_walk()
             .filter_map(Result::ok)
             .filter(|dir_entry| {
@@ -745,7 +748,7 @@ pub struct DocumentActorHandle {
 }
 
 impl DocumentActorHandle {
-    pub fn new(base_dir: &Path, init: bool, is_host: bool) -> Self {
+    pub fn new(base_dir: &Path, init: bool, is_host: bool, persist: bool) -> Self {
         // The document task will receive messages on this channel.
         let (doc_message_tx, doc_message_rx) = mpsc::channel(1);
 
@@ -764,6 +767,7 @@ impl DocumentActorHandle {
             base_dir.into(),
             init,
             is_host,
+            persist,
         );
 
         tokio::spawn(async move { actor.run().await });
@@ -824,10 +828,11 @@ impl Daemon {
         socket_path: &Path,
         base_dir: &Path,
         init: bool,
+        persist: bool,
     ) -> Result<Self> {
         let is_host = app_config.is_host();
 
-        let document_handle = DocumentActorHandle::new(base_dir, init, is_host);
+        let document_handle = DocumentActorHandle::new(base_dir, init, is_host, persist);
 
         // Start socket listener.
         let socket_path = socket_path.to_path_buf();
@@ -837,8 +842,10 @@ impl Daemon {
         let base_dir = base_dir.to_path_buf();
         spawn_file_watcher(&base_dir, document_handle.clone()).await;
 
-        // Start persister.
-        spawn_persister(document_handle.clone()).await;
+        if persist {
+            // Start persister.
+            spawn_persister(document_handle.clone()).await;
+        }
 
         // Start p2p listener.
         let base_dir = base_dir.to_path_buf();
@@ -938,6 +945,7 @@ mod tests {
                     directory.path().to_path_buf(),
                     true,
                     true,
+                    false,
                 )
             }
             fn assert_file_content(&self, file_path: &RelativePath, content: &str) {
