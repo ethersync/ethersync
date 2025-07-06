@@ -113,8 +113,6 @@ impl DocumentActor {
         doc_changed_ping_tx: DocChangedSender,
         ephemeral_message_tx: EphemeralMessageSender,
         base_dir: PathBuf,
-        init: bool,
-        is_host: bool,
         persist: bool,
     ) -> Self {
         // If there is a persisted version in base_dir/.ethersync/doc, load it.
@@ -123,7 +121,7 @@ impl DocumentActor {
         let persistence_file_exists = sandbox::exists(&base_dir, &persistence_file)
             .expect("Could not check for the existence of the persistence file");
 
-        let load_crdt_doc = persistence_file_exists && !init && persist;
+        let load_crdt_doc = persistence_file_exists && persist;
         let crdt_doc = if load_crdt_doc {
             debug!(
                 "Loading persisted CRDT document from '{}'.",
@@ -148,11 +146,7 @@ impl DocumentActor {
             save_fully: true,
         };
 
-        if persistence_file_exists && persist {
-            s.read_current_content_from_dir(init);
-        } else if is_host {
-            s.read_current_content_from_dir(true);
-        }
+        s.read_current_content_from_dir();
 
         s
     }
@@ -553,8 +547,8 @@ impl DocumentActor {
             .build()
     }
 
-    fn read_current_content_from_dir(&mut self, init: bool) {
-        debug!("Reading current contents from disk (init: {init}).");
+    fn read_current_content_from_dir(&mut self) {
+        debug!("Reading current contents from disk.");
         self.build_walk()
             .filter_map(Result::ok)
             .filter(|dir_entry| {
@@ -571,11 +565,7 @@ impl DocumentActor {
                             RelativePath::try_from_path(&self.base_dir, file_path)
                                 .expect("Walked file path should be within base directory");
                         if let Ok(text) = String::from_utf8(bytes) {
-                            if init {
-                                self.crdt_doc.initialize_text(&text, &relative_file_path);
-                            } else {
-                                self.crdt_doc.update_text(&text, &relative_file_path);
-                            }
+                            self.crdt_doc.update_text(&text, &relative_file_path);
                         } else {
                             warn!("Ignoring non-UTF-8 file {relative_file_path}",)
                         }
@@ -748,7 +738,7 @@ pub struct DocumentActorHandle {
 }
 
 impl DocumentActorHandle {
-    pub fn new(base_dir: &Path, init: bool, is_host: bool, persist: bool) -> Self {
+    pub fn new(base_dir: &Path, persist: bool) -> Self {
         // The document task will receive messages on this channel.
         let (doc_message_tx, doc_message_rx) = mpsc::channel(1);
 
@@ -765,8 +755,6 @@ impl DocumentActorHandle {
             doc_changed_ping_tx.clone(),
             ephemeral_message_tx.clone(),
             base_dir.into(),
-            init,
-            is_host,
             persist,
         );
 
@@ -827,12 +815,9 @@ impl Daemon {
         app_config: config::AppConfig,
         socket_path: &Path,
         base_dir: &Path,
-        init: bool,
         persist: bool,
     ) -> Result<Self> {
-        let is_host = app_config.is_host();
-
-        let document_handle = DocumentActorHandle::new(base_dir, init, is_host, persist);
+        let document_handle = DocumentActorHandle::new(base_dir, persist);
 
         // Start socket listener.
         let socket_path = socket_path.to_path_buf();
