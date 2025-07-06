@@ -35,9 +35,6 @@ struct Cli {
 enum Commands {
     /// Share a directory with a new peer.
     Share {
-        /// Re-initialize the history of the shared project. You will loose previous history.
-        #[arg(long)]
-        init: bool,
         /// Do not generate a join code. To prevent unintended sharing or simply if you want to
         /// keep Magic Wormhole out of the loop.
         #[arg(long)]
@@ -96,17 +93,14 @@ async fn main() -> Result<()> {
 
     match cli.command {
         Commands::Share { .. } | Commands::Join { .. } => {
-            let mut init_doc = false;
             let mut app_config;
 
             match cli.command {
                 Commands::Share {
-                    init,
                     no_join_code,
                     show_secret_address,
                     ..
                 } => {
-                    init_doc = init;
                     let app_config_cli = AppConfig {
                         peer: None,
                         emit_join_code: !no_join_code,
@@ -137,7 +131,7 @@ async fn main() -> Result<()> {
             }
 
             debug!("Starting Ethersync on {}.", directory.display());
-            let _daemon = Daemon::new(app_config, &socket_path, &directory, init_doc, persist)
+            let _daemon = Daemon::new(app_config, &socket_path, &directory, persist)
                 .await
                 .context("Failed to launch the daemon")?;
             wait_for_ctrl_c().await;
