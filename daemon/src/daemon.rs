@@ -733,22 +733,47 @@ impl DocumentActor {
     }
 }
 
-/// This handle knows how to talk to the `DocumentActor` and provides an interface for doing so.
-///
-/// The main iterfaces for doing so is through through sending `DocMessage`s with `send_message`.
-/// An alternative pathway is to subscribe to documents changes through `subscribe_document_changes`.
-///
-/// The rest of the methods are used for instrumentation (e.g. by the fuzzer).
-#[derive(Clone)]
-pub struct DocumentActorHandle {
-    doc_message_tx: DocMessageSender,
-    doc_changed_ping_tx: DocChangedSender,
-    ephemeral_message_tx: EphemeralMessageSender,
-    next_id: Arc<AtomicUsize>,
+pub struct DocumentActorHandleBuilder {
+    base_dir: Option<PathBuf>,
+    init: bool,
+    is_host: bool,
+    persist: bool,
 }
 
-impl DocumentActorHandle {
+impl Default for DocumentActorHandleBuilder {
+    fn default() -> Self {
+        Self {
+            base_dir: None,
+            init: false,
+            is_host: true,
+            persist: true,
+        }
+    }
+}
+
+impl DocumentActorHandleBuilder {
     pub fn new(base_dir: &Path, init: bool, is_host: bool, persist: bool) -> Self {
+        Self {
+            base_dir: Some(base_dir.into()),
+            init,
+            is_host,
+            persist,
+        }
+    }
+
+    fn init(&mut self) {
+        self.init = true;
+    }
+
+    fn is_host(&mut self) {
+        self.is_host = true;
+    }
+
+    fn persist(&mut self) {
+        self.persist = true;
+    }
+
+    pub fn build(self) -> DocumentActorHandle {
         // The document task will receive messages on this channel.
         let (doc_message_tx, doc_message_rx) = mpsc::channel(1);
 
@@ -764,21 +789,43 @@ impl DocumentActorHandle {
             doc_message_rx,
             doc_changed_ping_tx.clone(),
             ephemeral_message_tx.clone(),
-            base_dir.into(),
-            init,
-            is_host,
-            persist,
+            self.base_dir
+                .expect("Should have set base_dir before building DocumentActorHandle"),
+            self.init,
+            self.is_host,
+            self.persist,
         );
 
         tokio::spawn(async move { actor.run().await });
 
-        Self {
+        DocumentActorHandle {
             doc_message_tx,
             doc_changed_ping_tx,
             ephemeral_message_tx,
             next_id: Arc::default(),
         }
     }
+}
+
+/// This handle knows how to talk to the `DocumentActor` and provides an interface for doing so.
+///
+/// The main iterfaces for doing so is through through sending `DocMessage`s with `send_message`.
+/// An alternative pathway is to subscribe to documents changes through `subscribe_document_changes`.
+///
+/// The rest of the methods are used for instrumentation (e.g. by the fuzzer).
+#[derive(Clone)]
+pub struct DocumentActorHandle {
+    doc_message_tx: DocMessageSender,
+    doc_changed_ping_tx: DocChangedSender,
+    ephemeral_message_tx: EphemeralMessageSender,
+    next_id: Arc<AtomicUsize>,
+}
+
+impl DocumentActorHandle {
+    pub fn builder() -> DocumentActorHandleBuilder {
+        DocumentActorHandleBuilder::default()
+    }
+
     /// The TCP and socket connections will send messages through this when they receive something.
     pub async fn send_message(&self, message: DocMessage) {
         self.doc_message_tx
@@ -832,7 +879,17 @@ impl Daemon {
     ) -> Result<Self> {
         let is_host = app_config.is_host();
 
-        let document_handle = DocumentActorHandle::new(base_dir, init, is_host, persist);
+        let mut document_handle_builder = DocumentActorHandle::builder();
+        if init {
+            document_handle_builder.init();
+        }
+        if is_host {
+            document_handle_builder.is_host();
+        }
+        if persist {
+            document_handle_builder.persist();
+        }
+        let document_handle = document_handle_builder.build();
 
         // Start socket listener.
         let socket_path = socket_path.to_path_buf();
