@@ -42,17 +42,17 @@ Thanks to [NLNet](https://nlnet.nl) for funding this project through the [NGI0 C
 Thanks to the [Prototype Fund](https://www.prototypefund.de/) and the [Federal Ministry of Research, Technology and Space](https://www.bmbf.de/EN/) for funding this project in 2025.
 
 <a href="https://nlnet.nl/">
-    <img src="https://upload.wikimedia.org/wikipedia/en/a/a4/NLnet_Foundation_logo.svg" alt="Logo of the NLnet Foundation" width="214px">
+    <img src="https://upload.wikimedia.org/wikipedia/en/a/a4/NLnet_Foundation_logo.svg" alt="Logo of the NLnet Foundation" style="height: 80px;">
 </a>
 &nbsp;&nbsp;&nbsp;&nbsp;
 <a href="https://www.bmbf.de/EN/">
-    <img src="https://upload.wikimedia.org/wikipedia/commons/d/df/BMFTR_Logo.svg" alt="Logo of the German Federal Ministry of Research, Technology and Space" width="194px">
+    <img src="https://upload.wikimedia.org/wikipedia/commons/d/df/BMFTR_Logo.svg" alt="Logo of the German Federal Ministry of Research, Technology and Space" style="height: 100px;">
 </a>&nbsp;&nbsp;&nbsp;&nbsp;
 <a href="https://prototypefund.de/en/">
-    <img src="https://upload.wikimedia.org/wikipedia/commons/1/10/PrototypeFund_Logo.svg" alt="Logo of the Prototype Fund" width="60px">
+    <img src="https://upload.wikimedia.org/wikipedia/commons/1/10/PrototypeFund_Logo.svg" alt="Logo of the Prototype Fund" style="height: 100px;">
 </a>&nbsp;&nbsp;&nbsp;&nbsp;
 <a href="https://okfn.de/en/">
-    <img src="https://upload.wikimedia.org/wikipedia/commons/4/4d/Open_Knowledge_Foundation_Deutschland_Logo.svg" alt="Logo of the Open Knowledge Foundation Germany" width="212px">
+    <img src="https://upload.wikimedia.org/wikipedia/commons/4/4d/Open_Knowledge_Foundation_Deutschland_Logo.svg" alt="Logo of the Open Knowledge Foundation Germany" style="height: 100px;">
 </a>
 
 ## License
