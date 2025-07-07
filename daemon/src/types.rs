@@ -112,6 +112,7 @@ pub struct EphemeralMessage {
 pub enum PatchEffect {
     FileChange(FileTextDelta),
     FileRemoval(RelativePath),
+    Conflict(RelativePath),
     NoEffect,
 }
 
@@ -461,6 +462,7 @@ impl TryFrom<Patch> for PatchEffect {
                                 warn!(
                                     "Resolved conflict for file {path} by overwriting your version."
                                 );
+                                return Ok(PatchEffect::Conflict(path));
                             }
                             Ok(PatchEffect::FileChange(FileTextDelta::new(path, delta)))
                         }

@@ -174,6 +174,33 @@ impl Document {
             .expect("Failed to delete text object");
     }
 
+    pub fn has_true_conflict(&self, file_path: &RelativePath) -> bool {
+        let file_map = self
+            .top_level_map_obj("files")
+            .expect("Failed to get files Map object");
+        let text_objs = self.doc.get_all(file_map, file_path).unwrap_or_else(|_| {
+            panic!("Failed to get_all {file_path} key from Automerge document")
+        });
+        if text_objs.len() == 1 {
+            false
+        } else if text_objs.len() == 2 {
+            let mut texts = text_objs.into_iter().map(|to| {
+                if let (automerge::Value::Object(ObjType::Text), to) = to {
+                    self.doc
+                        .text(to)
+                        .expect("Failed to get string from Automerge text object")
+                } else {
+                    "".into()
+                }
+            });
+            let t1 = texts.next().unwrap();
+            let t2 = texts.next().unwrap();
+            let conflicting = t1 != t2;
+            conflicting
+        } else {
+            panic!("more than 2, whatsthat? :-O");
+        }
+    }
     fn top_level_map_obj(&self, name: &str) -> Result<automerge::ObjId> {
         let file_map = self.doc.get(automerge::ROOT, name);
         if let Ok(Some((automerge::Value::Object(ObjType::Map), file_map))) = file_map {
