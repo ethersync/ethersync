@@ -218,6 +218,13 @@ impl DocumentActor {
                                 warn!("Failed to remove file {file_path}: {err}");
                             });
                         }
+                        PatchEffect::Conflict(file_path) => {
+                            if self.crdt_doc.has_true_conflict(&file_path) {
+                                panic!("FOUND A CONFLICT. ABORT!");
+                            } else {
+                                debug!("Resolving conflict that was not a real difference.")
+                            }
+                        }
                         PatchEffect::NoEffect => {}
                     }
                 }
