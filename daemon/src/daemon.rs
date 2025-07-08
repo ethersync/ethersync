@@ -236,7 +236,7 @@ impl DocumentActor {
                     }
                 }
 
-                self.maybe_write_files_changed_in_file_deltas(&file_deltas);
+                self.write_files_changed_in_file_deltas(&file_deltas);
                 for file_text_delta in &file_deltas {
                     let message = ComponentMessage::Edit {
                         file_path: file_text_delta.file_path.clone(),
@@ -492,7 +492,7 @@ impl DocumentActor {
         });
     }
 
-    fn maybe_write_files_changed_in_file_deltas(&mut self, file_deltas: &Vec<FileTextDelta>) {
+    fn write_files_changed_in_file_deltas(&mut self, file_deltas: &Vec<FileTextDelta>) {
         // Collect file paths into a set, so we don't write files multiple times on complex
         // patches.
         let mut file_paths = HashSet::new();
@@ -501,35 +501,32 @@ impl DocumentActor {
         }
 
         for file_path in file_paths {
-            self.maybe_write_file(file_path);
+            self.write_file(file_path);
         }
     }
 
-    fn maybe_write_file(&mut self, file_path: &RelativePath) {
-        // Only write to the file if editor *doesn't* have the file open.
-        if self.owns(file_path) {
-            if let Ok(text) = self.current_file_content(file_path) {
-                let abs_path = self.absolute_path_for_file_path(file_path);
-                debug!("Writing to {abs_path}.");
+    fn write_file(&mut self, file_path: &RelativePath) {
+        if let Ok(text) = self.current_file_content(file_path) {
+            let abs_path = self.absolute_path_for_file_path(file_path);
+            debug!("Writing to {abs_path}.");
 
-                // Create the parent directorie(s), if neccessary.
-                let parent_dir = abs_path.parent().unwrap();
-                sandbox::create_dir_all(&self.base_dir, parent_dir).unwrap_or_else(|_| {
-                    panic!("Could not create parent directory {}", parent_dir.display())
-                });
+            // Create the parent directorie(s), if neccessary.
+            let parent_dir = abs_path.parent().unwrap();
+            sandbox::create_dir_all(&self.base_dir, parent_dir).unwrap_or_else(|_| {
+                panic!("Could not create parent directory {}", parent_dir.display())
+            });
 
-                // If the file didn't exist before, log it.
-                if !sandbox::exists(&self.base_dir, &abs_path)
-                    .expect("Failed to check for file existence before writing to it")
-                {
-                    info!("Creating file {file_path}.");
-                }
-
-                sandbox::write_file(&self.base_dir, &abs_path, &text.into_bytes())
-                    .unwrap_or_else(|_| panic!("Could not write to file {abs_path}"));
-            } else {
-                warn!("Failed to get content of file '{file_path}' when writing to disk. Key should have existed?");
+            // If the file didn't exist before, log it.
+            if !sandbox::exists(&self.base_dir, &abs_path)
+                .expect("Failed to check for file existence before writing to it")
+            {
+                info!("Creating file {file_path}.");
             }
+
+            sandbox::write_file(&self.base_dir, &abs_path, &text.into_bytes())
+                .unwrap_or_else(|_| panic!("Could not write to file {abs_path}"));
+        } else {
+            warn!("Failed to get content of file '{file_path}' when writing to disk. Key should have existed?");
         }
     }
 
@@ -611,12 +608,12 @@ impl DocumentActor {
                 });
             }
             ComponentMessage::Close { file_path } => {
-                self.maybe_write_file(file_path);
+                self.write_file(file_path);
             }
             ComponentMessage::Edit { file_path, delta } => {
                 self.crdt_doc.apply_delta_to_doc(delta, file_path);
                 let _ = self.doc_changed_ping_tx.send(());
-                self.maybe_write_file(file_path);
+                self.write_file(file_path);
             }
             ComponentMessage::Cursor {
                 cursor_id,
