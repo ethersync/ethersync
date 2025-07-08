@@ -46,6 +46,10 @@ function M.track_changes(buffer, callback)
             last_line,
             new_last_line
         )
+            -- First, clear the "modified" option, so that the buffer is not displayed as dirty.
+            -- Being modified doesn't have meaning for ethersync-ed files.
+            vim.api.nvim_buf_set_option(buffer, "modified", false)
+
             -- Line counts that we get called with are zero-based.
             -- last_line and new_last_line are exclusive
 
