@@ -152,6 +152,24 @@ local function ensure_autoread_is_off()
     end
 end
 
+-- In ethersync-ed buffers, "writing" is no longer a concept. We also want to avoid error messages
+-- when the file has changed on disk, so make all writing operations a no-op.
+local function disable_writing()
+    local buf = vim.api.nvim_get_current_buf()
+    local autocmd_arg = {
+        buffer = buf,
+        callback = function()
+            -- Trigger this autocommand so that plugins like autoformatters still work.
+            vim.api.nvim_exec_autocmds("BufWritePre", {
+                buffer = buf,
+            })
+        end,
+    }
+    vim.api.nvim_create_autocmd("BufWriteCmd", autocmd_arg)
+    vim.api.nvim_create_autocmd("FileWriteCmd", autocmd_arg)
+    vim.api.nvim_create_autocmd("FileAppendCmd", autocmd_arg)
+end
+
 -- Forward buffer edits to daemon as well as subscribe to daemon events ("open").
 local function on_buffer_open()
     local filename = vim.fn.expand("%:p")
@@ -177,6 +195,7 @@ local function on_buffer_open()
     send_request("open", { uri = uri }, function()
         debug("Tracking Edits")
         ensure_autoread_is_off()
+        disable_writing()
         track_edits(filename, uri)
     end)
 end
