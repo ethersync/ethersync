@@ -246,8 +246,6 @@ async fn vim_sends_correct_delta() {
         "i<CR><BS>",
         vec![
             replace_ed((0, 0), (0, 0), "\n"),
-            // no-op: Copy nothing to previous line.
-            replace_ed((0, 0), (0, 0), ""),
             replace_ed((0, 0), (1, 0), ""),
         ],
     )
@@ -263,8 +261,6 @@ async fn vim_sends_correct_delta() {
             replace_ed((0, 0), (0, 1), ""),
             replace_ed((0, 0), (0, 0), "x"),  // d: "x\n"
             replace_ed((0, 1), (0, 1), "\n"), // d: "x\n\n"
-            // no-op: Copy nothing to previous line.
-            replace_ed((0, 1), (0, 1), ""),
             replace_ed((1, 0), (2, 0), ""),
         ],
     )

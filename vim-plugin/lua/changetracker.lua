@@ -23,6 +23,12 @@ local function get_all_lines_respecting_eol(buffer)
     return lines
 end
 
+local function is_empty(diff)
+    return diff.text == ""
+        and diff.range["start"].line == diff.range["end"].line
+        and diff.range["start"].character == diff.range["end"].character
+end
+
 -- Subscribes the callback to changes for a given buffer id and reports with a delta.
 --
 -- The delta can be expected to be in the format as specified in the daemon-editor protocol.
@@ -151,6 +157,10 @@ function M.track_changes(buffer, callback)
             end
 
             prev_lines = curr_lines
+
+            if is_empty(diff) then
+                return
+            end
 
             local delta = {
                 {
