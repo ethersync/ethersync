@@ -157,14 +157,6 @@ impl DocumentActor {
         s
     }
 
-    /// If any editor owns the file, it means that the daemon doesn't have ownership.
-    fn owns(&mut self, file_path: &RelativePath) -> bool {
-        !self
-            .editor_connections
-            .values()
-            .any(|connection| connection.0.owns(file_path))
-    }
-
     async fn handle_message(&mut self, message: DocMessage) {
         debug!("Handling doc message: {message:?}");
         match message {
@@ -375,64 +367,52 @@ impl DocumentActor {
             WatcherEvent::Created { file_path } => {
                 let relative_file_path = RelativePath::try_from_path(&self.base_dir, &file_path)
                     .expect("Watcher event should have a path within the base directory");
-                if self.owns(&relative_file_path) {
-                    if !self.crdt_doc.file_exists(&relative_file_path) {
-                        let content = match sandbox::read_file(
-                            &self.base_dir,
-                            Path::new(&file_path),
-                        ) {
-                            Ok(content) => content,
-                            Err(e) => {
-                                warn!(
+                if !self.crdt_doc.file_exists(&relative_file_path) {
+                    let content = match sandbox::read_file(&self.base_dir, Path::new(&file_path)) {
+                        Ok(content) => content,
+                        Err(e) => {
+                            warn!(
                                     "The file watcher noticed a file creation for {relative_file_path}, \
                                     but we couldn't read it: {e} (probably it disappeared again already?)"
                                 );
-                                return;
-                            }
-                        };
-                        if let Ok(content) = String::from_utf8(content) {
-                            self.crdt_doc.initialize_text(&content, &relative_file_path);
-                        } else {
-                            warn!("Ignoring newly created non-UTF-8 file {relative_file_path}");
+                            return;
                         }
+                    };
+                    if let Ok(content) = String::from_utf8(content) {
+                        self.crdt_doc.initialize_text(&content, &relative_file_path);
                     } else {
-                        debug!("Received watcher creation event, but file already exists in CRDT.")
+                        warn!("Ignoring newly created non-UTF-8 file {relative_file_path}");
                     }
-                    let _ = self.doc_changed_ping_tx.send(());
+                } else {
+                    debug!("Received watcher creation event, but file already exists in CRDT.")
                 }
+                let _ = self.doc_changed_ping_tx.send(());
             }
             WatcherEvent::Removed { file_path } => {
                 let relative_file_path = RelativePath::try_from_path(&self.base_dir, &file_path)
                     .expect("Watcher event should have a path within the base directory");
-                if self.owns(&relative_file_path) {
-                    self.crdt_doc.remove_text(&relative_file_path);
-                    let _ = self.doc_changed_ping_tx.send(());
-                }
+                self.crdt_doc.remove_text(&relative_file_path);
+                let _ = self.doc_changed_ping_tx.send(());
             }
             WatcherEvent::Changed { file_path } => {
                 // Only update if we own the file.
                 let relative_file_path = RelativePath::try_from_path(&self.base_dir, &file_path)
                     .expect("Watcher event should have a path within the base directory");
-                if self.owns(&relative_file_path) {
-                    let new_content = match sandbox::read_file(
-                        &self.base_dir,
-                        Path::new(&file_path),
-                    ) {
-                        Ok(content) => content,
-                        Err(e) => {
-                            warn!(
+                let new_content = match sandbox::read_file(&self.base_dir, Path::new(&file_path)) {
+                    Ok(content) => content,
+                    Err(e) => {
+                        warn!(
                                     "The file watcher noticed a file change for {relative_file_path}, \
                                     but we couldn't read it: {e} (probably it was deleted after the change?)"
                             );
-                            return;
-                        }
-                    };
-                    if let Ok(new_content) = String::from_utf8(new_content) {
-                        self.crdt_doc.update_text(&new_content, &relative_file_path);
-                        let _ = self.doc_changed_ping_tx.send(());
-                    } else {
-                        warn!("Ignoring changed non-UTF-8 file {relative_file_path}");
+                        return;
                     }
+                };
+                if let Ok(new_content) = String::from_utf8(new_content) {
+                    self.crdt_doc.update_text(&new_content, &relative_file_path);
+                    let _ = self.doc_changed_ping_tx.send(());
+                } else {
+                    warn!("Ignoring changed non-UTF-8 file {relative_file_path}");
                 }
             }
         }

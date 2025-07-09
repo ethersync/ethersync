@@ -37,10 +37,6 @@ impl EditorConnection {
         }
     }
 
-    pub fn owns(&self, file_path: &RelativePath) -> bool {
-        self.ot_servers.contains_key(file_path)
-    }
-
     pub fn message_from_daemon(
         &mut self,
         message: &ComponentMessage,
