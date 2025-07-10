@@ -10,7 +10,7 @@ use dissimilar::Chunk;
 use operational_transform::{Operation as OTOperation, OperationSeq};
 use ropey::Rope;
 use serde::{Deserialize, Serialize};
-use tracing::{debug, warn};
+use tracing::debug;
 
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct TextDelta(pub Vec<TextOp>);
@@ -459,8 +459,8 @@ impl TryFrom<Patch> for PatchEffect {
                             // synced over to another peer. TODO: Is this the best way to solve this?
                             let path = RelativePath::new(&key);
                             if conflict {
-                                warn!(
-                                    "Resolved conflict for file {path} by overwriting your version."
+                                debug!(
+                                    "Automerge conflict for file {path} resolved by overwriting your version."
                                 );
                                 return Ok(PatchEffect::Conflict(path));
                             }
@@ -478,7 +478,7 @@ impl TryFrom<Patch> for PatchEffect {
                                 automerge::Prop::Map(file_name) => {
                                     // We assume that conflict resolution works the way, that the
                                     // side that gets the PatchAction is the one that "wins".
-                                    warn!("Conflict for file '{file_name}' resolved. Taking your version.");
+                                    debug!("Automerge conflict for file '{file_name}' resolved. Taking your version.");
                                     Ok(PatchEffect::NoEffect)
                                 }
                                 other_prop => Err(anyhow::anyhow!(

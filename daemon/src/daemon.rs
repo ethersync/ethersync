@@ -935,8 +935,6 @@ mod tests {
                     doc_changed_ping_tx.clone(),
                     ephemeral_message_tx.clone(),
                     directory.path().to_path_buf(),
-                    true,
-                    true,
                     false,
                 )
             }
@@ -964,7 +962,7 @@ mod tests {
             let dir = setup_filesystem_for_testing();
             let mut actor = DocumentActor::setup_for_testing(&dir);
 
-            actor.read_current_content_from_dir(true);
+            actor.read_current_content_from_dir();
 
             actor.assert_file_content(&RelativePath::new("file1"), "content1");
             actor.assert_file_content(&RelativePath::new("file2"), "content2");
