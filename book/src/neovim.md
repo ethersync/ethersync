@@ -7,7 +7,13 @@ SPDX-License-Identifier: CC-BY-SA-4.0
 
 # Neovim Plugin
 
-Make sure you have at least Neovim 0.7.0 installed. With that in place, you have several options of how to install the Neovim plugin:
+> ℹ️ **Info:**
+>
+> This plugin requires at least Neovim 0.7.0.
+
+The Neovim plugin is located at <https://github.com/ethersync/ethersync-vim>, so you would usually add the string `"ethersync/ethersync-vim"` to your plugin manager.
+
+We recommend creating a mapping for the `:EthersyncJumpToCursor` command, which jumps to another user's cursor.
 
 ## Lazy
 
@@ -15,15 +21,29 @@ If you're using the [Lazy](https://github.com/folke/lazy.nvim) plugin manager, y
 
 ```lua
 {
-  "ethersync/ethersync",
-  config = function(plugin)
-      -- Load the plugin from a subfolder:
-      vim.opt.rtp:append(plugin.dir .. "/vim-plugin")
-      require("lazy.core.loader").packadd(plugin.dir .. "/vim-plugin")
-  end,
+  "ethersync/ethersync-vim",
   keys = { { "<leader>j", "<cmd>EthersyncJumpToCursor<cr>" } },
   lazy = false,
 }
+```
+
+## pckr.nvim
+
+```lua
+{
+  "ethersync/ethersync-vim",
+  config = function()
+    vim.keymap.set('n', '<leader>j', '<cmd>EthersyncJumpToCursor<cr>')
+  end
+}
+```
+
+## Manual installation
+
+If you're not using a plugin manager, here's a "quick and dirty" way to install the plugin:
+
+```
+git clone git@github.com:ethersync/ethersync-vim $HOME/.local/share/nvim/site/pack/plugins/start/ethersync
 ```
 
 ## Nix
@@ -32,24 +52,6 @@ For testing purposes, you can run an Ethersync-enabled Neovim like this:
 
 ```bash
 nix run github:ethersync/ethersync#neovim
-```
-
-## Manual installation
-
-If you're not using a plugin manager, here's a "quick and dirty" way to install the plugin:
-
-Clone the Ethersync repository:
-
-```bash
-git clone git@github.com:ethersync/ethersync
-```
-
-Link to the plugin directory from nvim:
-
-```bash
-mkdir -p $HOME/.local/share/nvim/site/pack/plugins/start
-cd ethersync # make sure you're in the root of the project
-ln -s $PWD/vim-plugin $HOME/.local/share/nvim/site/pack/plugins/start/ethersync
 ```
 
 ## Confirm the installation
