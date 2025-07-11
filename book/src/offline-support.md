@@ -7,14 +7,19 @@ SPDX-License-Identifier: CC-BY-SA-4.0
 
 # Offline Support
 
-A core idea of Ethersync is that you can still work on a shared project, even when disconnected from your peers.
+> ℹ️ **Note:**
+>
+> Ethersync only makes use of the features mentioned on this page in a [note-taking](shared-notes.md) context, *not* in a [pair-programming](pair-programming.md) context where Git is used in parallel. In that case, consider Git your "offline support".
+> 
+> Ethersync detects whether the directory is inside a Git repository with a configured remote, and disables the offline support.
+
+In Ethersync, you can still work on a shared project, even when disconnected from your peers.
 
 Ethersync uses a data structure called "Conflict-free replicated data type" (CRDT) to enable this, specifically, the [Automerge library](https://automerge.org). The CRDT describes the current file contents, and the edits that were made to it, and allows smoothly syncing with other peers later.
 
-
 ## Making changes while disconnected to peers
 
-You can make changes to a project while disconnected from the Internet. If the daemon is running, the changes you make to files will already be put into the CRDT as you type them. If you then connect to other peers which worked on the same project, your changes will smoothly be integrated with theirs.
+You can make changes to a project while disconnected from your peers. If the daemon is running, the changes you make to files will already be put into the CRDT as you type them. If you then connect to other peers which worked on the same project, your changes will smoothly be integrated with theirs.
 
 ## Making changes while the Ethersync daemon is not running
 
