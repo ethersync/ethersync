@@ -395,7 +395,6 @@ impl DocumentActor {
                 let _ = self.doc_changed_ping_tx.send(());
             }
             WatcherEvent::Changed { file_path } => {
-                // Only update if we own the file.
                 let relative_file_path = RelativePath::try_from_path(&self.base_dir, &file_path)
                     .expect("Watcher event should have a path within the base directory");
                 let new_content = match sandbox::read_file(&self.base_dir, Path::new(&file_path)) {
@@ -409,7 +408,15 @@ impl DocumentActor {
                     }
                 };
                 if let Ok(new_content) = String::from_utf8(new_content) {
-                    self.crdt_doc.update_text(&new_content, &relative_file_path);
+                    if let Some(delta_for_editors) =
+                        self.crdt_doc.update_text(&new_content, &relative_file_path)
+                    {
+                        let message = ComponentMessage::Edit {
+                            file_path: relative_file_path,
+                            delta: delta_for_editors,
+                        };
+                        self.broadcast_to_editors(None, &message).await;
+                    }
                     let _ = self.doc_changed_ping_tx.send(());
                 } else {
                     warn!("Ignoring changed non-UTF-8 file {relative_file_path}");
