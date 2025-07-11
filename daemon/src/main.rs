@@ -88,14 +88,14 @@ async fn main() -> Result<()> {
 
     let persist = !config::has_git_remote(&directory);
 
-    if !persist {
-        info!(
-            "Detected a Git remote: Assuming a pair-programming use-case and starting a new history."
-        );
-    }
-
     match cli.command {
         Commands::Share { .. } | Commands::Join { .. } => {
+            if !persist {
+                info!(
+                    "Detected a Git remote: Assuming a pair-programming use-case and starting a new history."
+                );
+            }
+
             let mut init_doc = false;
             let mut app_config;
 
