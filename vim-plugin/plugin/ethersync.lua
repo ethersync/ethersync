@@ -128,14 +128,16 @@ local function track_edits(filename, uri)
         editor_revision = 0,
     }
 
-    changetracker.track_changes(0, function(delta)
+    local bufnr = vim.uri_to_bufnr(uri)
+
+    changetracker.track_changes(bufnr, function(delta)
         files[filename].editor_revision = files[filename].editor_revision + 1
 
         local params = { uri = uri, delta = delta, revision = files[filename].daemon_revision }
 
         send_request("edit", params)
     end)
-    cursor.track_cursor(0, function(ranges)
+    cursor.track_cursor(bufnr, function(ranges)
         local params = { uri = uri, ranges = ranges }
         -- Even though it's not "needed" we're sending requests in this case
         -- to ensure we're processing/seeing potential errors.
