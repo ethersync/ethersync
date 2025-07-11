@@ -138,7 +138,11 @@ impl Document {
 
     // This function is used to integrate text that was changed while the daemon was offline.
     // We need to calculate the patches compared to the current CRDT content, and apply them.
-    pub fn update_text(&mut self, desired_text: &str, file_path: &RelativePath) {
+    pub fn update_text(
+        &mut self,
+        desired_text: &str,
+        file_path: &RelativePath,
+    ) -> Option<TextDelta> {
         if self.text_obj(file_path).is_ok() {
             let current_text = self
                 .current_file_content(file_path)
@@ -146,15 +150,17 @@ impl Document {
 
             let chunks = dissimilar::diff(&current_text, desired_text);
             if let [] | [Chunk::Equal(_)] = chunks.as_slice() {
-                return;
+                return None;
             }
 
             let text_delta: TextDelta = chunks.into();
             info!("Updating {file_path} in CRDT with delta: {text_delta:?}");
             self.apply_delta_to_doc(&text_delta, file_path);
+            Some(text_delta)
         } else {
             // The file doesn't exist in the CRDT yet, so we need to initialize it.
             self.initialize_text(desired_text, file_path);
+            None
         }
     }
 
