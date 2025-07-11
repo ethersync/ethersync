@@ -57,7 +57,3 @@ nix run github:ethersync/ethersync#neovim
 ## Confirm the installation
 
 To confirm that the plugin is installed, try running the `:EthersyncInfo` command in Neovim. It should show the message "Not connected to Ethersync daemon."
-
-## Note: The plugin will set the 'autoread' option to "off".
-
-This is because in Ethersync's current model, once an editor opens a file, it takes "ownership" of it – external edits should not be taken into account. Thus, re-loading external changes into the buffer is not desirable.
