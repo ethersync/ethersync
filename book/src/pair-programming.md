@@ -21,8 +21,6 @@ An alternative is that the joining peer starts from scratch, with an empty direc
 
 Make sure you're both inside the project directory on the command line.
 
-Also this guide assumes you're in the same local network. For other connections consider reading the section on [connection making](connection-making.md).
-
 ### 2. First peer
 
 To start the session, run:
@@ -55,4 +53,6 @@ To stop collaborating, stop the daemon (by pressing Ctrl-C in its terminal). Bot
 
 ### 6. Reconnect later
 
-If you later want to do another pairing session, make sure that you understand Ethersync's [offline support](offline-support.md) feature and the [local first](local-first.md) concept. When you re-start Ethersync, it will scan for changes you've made in the meantime, and try to send them to the other peer. It is probably safest if you delete the CRDT state in `.ethersync/doc` as a joining peer. The hosting peer doesn't need to do that, it will simply update their state to the latest file content and share that with others.
+Note that if the shared folder is **inside a Git repository with a remote**, your daemon will start a new history every time you start it. This is because when you're using Ethersync in parallel with Git fetches, updating your local files from the previous history doesn't make sense anymore.
+
+If you don't have a Git remote, Ethersync uses the [offline support](offline-support.md) feature. When you re-start Ethersync, it will scan for changes you've made in the meantime, and try to send them to the other peer. If you don't want this, you can delete the CRDT state in `.ethersync/doc` as a joining peer, to receive the history from your peer. The hosting peer doesn't need to do that, it will simply update their state to the latest file content and share that with others.
