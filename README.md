@@ -11,6 +11,8 @@ SPDX-License-Identifier: CC-BY-SA-4.0
 
 Ethersync enables real-time collaborative editing of local text files. You can use it for pair programming or note-taking, for example. It's the missing real-time complement to Git!
 
+![](https://files.blinry.org/ethersync-demo.gif)
+
 ## Features
 
 - 👥 Edit files at the same time, across different text editors
@@ -92,27 +94,37 @@ Connected to peer: 5e6b787fff79074735eb9b56939269100de1e37bc7f7a4d29c277cc24f7ee
 
 The directories are now connected, and changes will be synced instantly. You can open text files (using editors with an Ethersync plugin), and start collaborating in real time! :sparkles:
 
-## 🔗 Further resources
+## 🎓 Learn more
 
-Learn more about Ethersync in [the documentation](https://ethersync.github.io/ethersync).
+- Learn more about Ethersync in [the documentation](https://ethersync.github.io/ethersync).
+- Watch a [10-minute talk](https://fosdem.org/2025/schedule/event/fosdem-2025-4890-ethersync-real-time-collaboration-in-your-text-editor-/) given at FOSDEM 2025.
+- Watch a (German) [1-hour talk](https://media.ccc.de/v/2024-355-ethersync-echtzeit-kollaboration-in-deinem-texteditor-) given at MRMCD 2024.
 
-### Community projects
+## 🚧 Community projects
+
+(These are all work-in-progress!)
 
 - @schrieveslaach's [Jetbrains plugin](https://github.com/ethersync/ethersync-jetbrains)
-- @winniehell's [web editor](https://github.com/ethersync/ethersync-web)
 - @sohalt's [Emacs plugin](https://github.com/sohalt/ethersync.el)
+- @winniehell's [web editor](https://github.com/ethersync/ethersync-web)
 
 ## 🔨 Contributing
 
-If you're interested in building new editor plugins, read the specification for the [daemon-editor protocol](https://ethersync.github.io/ethersync/editor-plugin-dev-guide).
+We'd love to receive your patches and other contributions! Small patches are very welcome as PRs. Before starting to implement a new big feature, please briefly check in with us so we can discuss how it fits in with our ideas for the project.
 
+If you're interested in building new editor plugins, read the [editor plugin development guide](https://ethersync.github.io/ethersync/editor-plugin-dev-guide).
 For more information about Ethersync's design, refer to the list of [decision records](docs/decisions/).
 
 If you find bugs, please [open an issue](https://github.com/ethersync/ethersync/issues) on Github, or [open a discussion](https://github.com/ethersync/ethersync/discussions) to ask us anything!
 
+## ☎️ Contact
+
+- Mastodon: [@ethersync@fosstodon.org](https://fosstodon.org/@ethersync)
+- Email: <span>e<span title="ihate@spam.com&lt;/span&gt;">t</span>hersync</span>@zormit<i title="&lt;/i&gt;mailto:">.</i>de
+
 ## 💚 Funded by
 
-Thanks to [NLNet](https://nlnet.nl) for funding this project through the [NGI0 Core Fund](https://nlnet.nl/core/) in 2023/24.
+Ethersync received funding from [NLNet](https://nlnet.nl)'s [NGI0 Core Fund](https://nlnet.nl/core/) throughout 2024.
 
 Thanks to the [Prototype Fund](https://www.prototypefund.de/) and the [Federal Ministry of Research, Technology and Space](https://www.bmbf.de/EN/) for funding this project in 2025.
 
@@ -124,7 +136,7 @@ Thanks to the [Prototype Fund](https://www.prototypefund.de/) and the [Federal M
 &nbsp;&nbsp;
 <a href="https://www.bmbf.de/EN/"><img src="https://upload.wikimedia.org/wikipedia/commons/d/df/BMFTR_Logo.svg" alt="Logo of the German Federal Ministry of Research, Technology and Space" style="height: 110px;"></a>
 
-## License
+## 📜 License
 
 This program is free software: you can redistribute it and/or modify it under the terms of the GNU Affero General Public License as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.
 
