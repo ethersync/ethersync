@@ -7,61 +7,66 @@ SPDX-License-Identifier: CC-BY-SA-4.0
 
 # 🍃 Ethersync
 
-Ethersync enables real-time co-editing of local text files. You can use it for pair programming or note-taking, for example! Think Google Docs, but from the comfort of your favorite text editor!
+*Multiplayer mode for your text editor!*
 
-> [!CAUTION]
-> The project is under active development right now. Everything might change, break, or move around quickly.
+Ethersync enables real-time collaborative editing of local text files. You can use it for pair programming or note-taking, for example. It's the missing real-time complement to Git!
 
 ## Features
 
--   👥 Real-time collaborative text editing
--   📍 See other people's cursors
--   🗃️ Work on entire projects
--   🛠️ Sync changes done by text editors and external tools
--   ✒️ Local-first: You always have full access, even offline
--   🇳 Official plugins for Neovim and VS Code
--   🪟 VS Code plugin
--   🧩 Simple protocol for writing new editor plugins
--   🌐 Peer-to-peer connections, no need for a server
--   🔒 Encrypted connections secured by a shared password
+- 👥 Edit files at the same time, across different text editors
+- 📍 See your peers' cursors and selections
+- 🗃️ Work on entire projects, the way you're used to
+- 🔒 Encrypted peer-to-peer connections, no need for a server
+- ✒️ Local-first: You always have full access, even offline
+- 🧩 [Simple JSON-RPC protocol](https://ethersync.github.io/ethersync/editor-plugin-dev-guide.html) for writing new editor plugins
 
-## Install the daemon
+## 🚦 Project status
+
+The project is under active development right now. We use it every day, but there's still some [bugs](https://github.com/ethersync/ethersync/issues?q=sort%3Aupdated-desc+is%3Aissue+is%3Aopen+%28label%3Abug+OR+type%3ABug%29) to be aware of.
+
+## 📥 Installation
+
+### 1. Install the `ethersync` command
 
 <details>
-<summary>Arch Linux</summary>
-<br>
-Install the [ethersync-bin](https://aur.archlinux.org/packages/ethersync-bin) package from the AUR.
+<summary>Arch Linux (btw)</summary>
+    
+```
+yay -S ethersync-bin
+```
 </details>
 
 <details>
 <summary>Nix</summary>
-<br>
-This repository provides a Nix flake. You can temporarily put it in your `PATH` like this:
 
-```bash
+This repository provides a Nix flake. To put `ethersync` in your PATH temporarily, run:
+
+```
 nix shell github:ethersync/ethersync
 ```
-
-If you want to install it permanently, you probably know what your favorite approach is.
 </details>
 
 <details>
 <summary>Binary releases</summary>
-<br>
-The releases on GitHub come with [precompiled static binaries](https://github.com/ethersync/ethersync/releases/latest) for Linux and macOS. Download one and put it somewhere in your shell's [`PATH`](https://en.wikipedia.org/wiki/PATH_(variable)), so that you can run it with `ethersync`.
+
+The [releases on GitHub](https://github.com/ethersync/ethersync/releases/latest) come with precompiled static binaries for Linux and macOS. Download one and put it somewhere in your shell's [`PATH`](https://en.wikipedia.org/wiki/PATH_(variable)).
 </details>
 
 <details>
 <summary>Via Cargo</summary>
-<br>
-If you have a [Rust](https://www.rust-lang.org) installation, you can install Ethersync with `cargo`:
 
 ```bash
 cargo install ethersync
 ```
 </details>
 
-## Basic usage
+### 2. Install an editor plugin
+
+- [Neovim](https://github.com/ethersync/ethersync-vim)
+- [VS Code](https://marketplace.visualstudio.com/items?itemName=ethersync.ethersync)
+- [VS Codium](https://open-vsx.org/extension/ethersync/ethersync)
+ 
+## 📖 Basic usage
 
 In one directory:
 
@@ -87,17 +92,25 @@ Connected to peer: 5e6b787fff79074735eb9b56939269100de1e37bc7f7a4d29c277cc24f7ee
 
 The directories are now connected, and changes will be synced instantly. You can open text files (using editors with an Ethersync plugin), and start collaborating in real time! :sparkles:
 
-## Documentation
+## 🔗 Further resources
 
-**Learn how to install, use, and understand Ethersync in [the documentation](https://ethersync.github.io/ethersync).**
+Learn more about Ethersync in [the documentation](https://ethersync.github.io/ethersync).
 
-## Development
+### Community projects
+
+- @schrieveslaach's [Jetbrains plugin](https://github.com/ethersync/ethersync-jetbrains)
+- @winniehell's [web editor](https://github.com/ethersync/ethersync-web)
+- @sohalt's [Emacs plugin](https://github.com/sohalt/ethersync.el)
+
+## 🔨 Contributing
 
 If you're interested in building new editor plugins, read the specification for the [daemon-editor protocol](https://ethersync.github.io/ethersync/editor-plugin-dev-guide).
 
 For more information about Ethersync's design, refer to the list of [decision records](docs/decisions/).
 
-## Funded by
+If you find bugs, please [open an issue](https://github.com/ethersync/ethersync/issues) on Github, or [open a discussion](https://github.com/ethersync/ethersync/discussions) to ask us anything!
+
+## 💚 Funded by
 
 Thanks to [NLNet](https://nlnet.nl) for funding this project through the [NGI0 Core Fund](https://nlnet.nl/core/) in 2023/24.
 
