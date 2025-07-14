@@ -36,6 +36,15 @@ local function is_forward(start_row, end_row, start_col, end_col)
     return (start_row < end_row) or (start_row == end_row and start_col <= end_col)
 end
 
+local function jump(location)
+    -- In Neovim 0.11, jump_to_location was deprecated.
+    if vim.version().api_level < 13 then
+        vim.lsp.util.jump_to_location(location, offset_encoding, true)
+    else
+        vim.lsp.util.show_document(location, offset_encoding)
+    end
+end
+
 -- A new set of ranges means, we delete all existing ones for that user.
 function M.set_cursor(uri, user_id, name, ranges)
     -- Find correct buffer to apply edits to.
@@ -252,7 +261,7 @@ function M.jump_to_cursor()
         return
     elseif #locations == 1 then
         -- Jump immediately.
-        vim.lsp.util.jump_to_location(locations[1], offset_encoding, true)
+        jump(locations[1])
         return
     end
 
@@ -277,7 +286,7 @@ function M.jump_to_cursor()
             local line_number = vim.fn.line(".")
             local location = locations[line_number]
             vim.api.nvim_win_close(win, true)
-            vim.lsp.util.jump_to_location(location, offset_encoding, true)
+            jump(location)
         end,
     })
     vim.api.nvim_buf_set_keymap(buf, "n", "<Esc>", "", {
