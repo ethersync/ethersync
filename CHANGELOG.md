@@ -5,7 +5,7 @@ SPDX-FileCopyrightText: 2024 zormit <nt4u@kpvn.de>
 SPDX-License-Identifier: CC-BY-SA-4.0
 -->
 
-# 0.7.0 (unreleased)
+# 0.7.0-beta.0 (unreleased)
 
 Breaking changes:
 
