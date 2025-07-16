@@ -14,6 +14,7 @@ SPDX-License-Identifier: CC-BY-SA-4.0
 - [Getting started](getting-started.md)
 - [Concepts](concepts.md)
     - [System overview](system-overview.md)
+    - [File ownership](file-ownership.md)
     - [Connection making](connection-making.md)
     - [Local first](local-first.md)
 - [Features](features.md)
