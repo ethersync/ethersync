@@ -19,6 +19,14 @@ To make this as easy as possible for your plugin, we're using the same protocol 
 
 The editor plugin will need to spawn the command `ethersync client` (which is our helper tool to connect to a running Ethersync daemon), and speak JSON-RPC (with Content-Length headers) with the standard input/output of that process. Think of `ethersync client` as the LSP Server when looking at it from the editor's perspective.
 
+## File ownership
+
+Ethersync has the concept of file ownership. By default, the daemon has ownership, which means that, as external tools make changes to files, the daemon will pick up those changes.
+
+But when an editor sends an "open" message, it takes ownership; changes by external tools will be ignored.
+
+When the last editor gives up ownership by sending a "close" message, the daemon takes ownership again.
+
 ## Editor revision and daemon revision
 
 For each open file, editors store two integers:
@@ -61,7 +69,7 @@ These should be sent as JSON-RPC requests, so that the daemon can send back erro
 #### `"open" {uri: DocumentUri}`
 
 - Sent when the editor opens a document. The daemon will respond either with a success, or with an error describing why the file could not be opened (for example, because it is an ignored file, or if it's not part of the daemons shared project).
-- When an open succeeds, the daemon will start sending updates for it as they come in.
+- When an open succeeds, the editor gets ownership of the file, and the daemon will start sending updates for it as they come in.
 - The editor has to initialize its editor revision and daemon revision for that document to 0.
 
 #### `"close" {uri: DocumentUri}`
