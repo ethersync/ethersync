@@ -15,8 +15,9 @@ SPDX-License-Identifier: CC-BY-SA-4.0
 
 ## How to release on the Visual Studio Marketplace and Open VSX
 
-1. Bump the version in `package.json`.
+1. Bump the version in `package.json` and `package-lock.json`
     - Use an odd minor number (e.g. 0.3.0) for a pre-release version.
 2. Run `vsce publish`.
     - Use `--pre-release` for a pre-release version.
 3. Run `npx ovsx publish --pat <token>` (or provide the token via `OVSX_PAT`).
+    - Use `--pre-release` for a pre-release version.
