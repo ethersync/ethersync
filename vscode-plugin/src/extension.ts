@@ -10,7 +10,7 @@ import * as path from "path"
 import * as fs from "fs"
 var Mutex = require("async-mutex").Mutex
 
-import {setCursor, getCursorInfo} from "./cursor"
+import {setCursor, getCursorInfo, drawCursors} from "./cursor"
 
 function findEthersyncDirectory(dir: string) {
     if (fs.existsSync(path.join(dir, ".ethersync"))) {
@@ -54,7 +54,7 @@ interface Cursor {
 }
 
 interface CursorFromDaemon {
-    userid: number
+    userid: string
     name?: string
     uri: string
     ranges: Range[]
@@ -440,6 +440,7 @@ export function activate(context: vscode.ExtensionContext) {
         vscode.workspace.onDidOpenTextDocument(processUserOpen),
         vscode.workspace.onDidCloseTextDocument(processUserClose),
         vscode.window.onDidChangeTextEditorSelection(processSelection),
+        vscode.window.onDidChangeActiveTextEditor(drawCursors),
         vscode.commands.registerCommand("ethersync.showCursors", showCursorNotification),
     )
 
