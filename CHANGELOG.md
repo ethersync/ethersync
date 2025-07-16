@@ -5,6 +5,29 @@ SPDX-FileCopyrightText: 2024 zormit <nt4u@kpvn.de>
 SPDX-License-Identifier: CC-BY-SA-4.0
 -->
 
+# 0.7.0 (unreleased)
+
+Breaking changes:
+
+- Switched from libp2p to iroh as our peer-to-peer transport library. This changes the format of the connection addresess.
+- Redesigning the CLI UI: Remove the `daemon` subcommand, instead use `share` and `join`.
+- Use `.ethersync/socket` as the location for the daemon's socket. This makes it possible to easily run multiple daemons at the same time.
+- Remove `--socket-name` command-line option.
+- The canonical location of the Vim plugin is now at <https://github.com/ethersync/ethersync-vim>. The directory from this repository is mirrored there.
+
+Bug fixes:
+
+- Neovim plugin: When pressing `o` on a line, place edit in the new line, instead of after the old one. This avoids moving other people in the old line down.
+- Neovim plugin: Don't send out deltas that don't change anything
+
+New features:
+
+- Make cursor messages ephemeral, and don't store them in the CRDT document. This makes the document smaller, and loading and syncing faster.
+- Infer pair-programming use-case when there are configured Git remotes. In that case, always start a new history.
+- Always write current content to files, instead of respecting editor ownership. This allows better paring on Rust and web projects.
+- Neovim plugin: Add support for Neovim 11
+- Add global `--directory` command-line option to `ethersync`, which allows you to set the shared directory without changing your current path there.
+
 # 0.6.0 (2024-12-13)
 
 Breaking changes:
