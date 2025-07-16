@@ -30,8 +30,16 @@ The project is under active development right now. We use it every day, but ther
 
 ### 1. Install the `ethersync` command
 
+Ethersync works on Linux, macOS, and on the Windows Subsystem for Linux.
+
 <details>
-<summary>Arch Linux (btw)</summary>
+<summary>Binary releases</summary>
+
+The [releases on GitHub](https://github.com/ethersync/ethersync/releases/latest) come with precompiled static binaries for Linux and macOS. Download one and put it somewhere in your shell's [`PATH`](https://en.wikipedia.org/wiki/PATH_(variable)).
+</details>
+
+<details>
+<summary>Arch Linux</summary>
     
 ```
 yay -S ethersync-bin
@@ -46,12 +54,8 @@ This repository provides a Nix flake. To put `ethersync` in your PATH temporaril
 ```
 nix shell github:ethersync/ethersync
 ```
-</details>
 
-<details>
-<summary>Binary releases</summary>
-
-The [releases on GitHub](https://github.com/ethersync/ethersync/releases/latest) come with precompiled static binaries for Linux and macOS. Download one and put it somewhere in your shell's [`PATH`](https://en.wikipedia.org/wiki/PATH_(variable)).
+Make sure to also have it in your PATH when you run the editors.
 </details>
 
 <details>
@@ -110,14 +114,16 @@ The directories are now connected, and changes will be synced instantly. You can
 
 ## 🔨 Contributing
 
-We'd love to receive your patches and other contributions! Small patches are very welcome as PRs. Before starting to implement a new big feature, please briefly check in with us so we can discuss how it fits in with our ideas for the project.
+We'd love to receive your patches and other contributions! Small patches are very welcome as PRs. Before starting to implement a new big feature, please briefly [check in with us](#contact) so we can discuss how it fits in with our ideas for the project.
 
 If you're interested in building new editor plugins, read the [editor plugin development guide](https://ethersync.github.io/ethersync/editor-plugin-dev-guide).
 For more information about Ethersync's design, refer to the list of [decision records](docs/decisions/).
 
-If you find bugs, please [open an issue](https://github.com/ethersync/ethersync/issues) on Github, or [open a discussion](https://github.com/ethersync/ethersync/discussions) to ask us anything!
+If you find bugs, please [open an issue](https://github.com/ethersync/ethersync/issues) on Github!
 
 ## ☎️ Contact
+
+Feel free to [open a discussion on Github](https://github.com/ethersync/ethersync/discussions) to ask us anything! Other good channels:
 
 - Mastodon: [@ethersync@fosstodon.org](https://fosstodon.org/@ethersync)
 - Email: <span>e<span title="ihate@spam.com&lt;/span&gt;">t</span>hersync</span>@zormit<i title="&lt;/i&gt;mailto:">.</i>de

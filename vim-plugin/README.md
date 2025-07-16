@@ -7,7 +7,7 @@ SPDX-License-Identifier: CC-BY-SA-4.0
 
 # Neovim plugin for 🍃 [Ethersync](https://github.com/ethersync/ethersync)
 
-> ![IMPORTANT]
+> [!IMPORTANT]
 >
 > This plugin requires at least Neovim 0.7.0.
 
