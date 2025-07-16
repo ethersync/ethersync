@@ -23,16 +23,18 @@ interface RemoteCursor {
     selection: vscode.Selection
 }
 
-let cursors: Map<number, RemoteCursor[]> = new Map()
+let cursors: Map<string, RemoteCursor[]> = new Map()
 
-export function setCursor(userid: number, name: string, uri: vscode.Uri, selections: vscode.Selection[]) {
+export function setCursor(userid: string, name: string, uri: vscode.Uri, selections: vscode.Selection[]) {
     let usersCursors = cursors.get(userid)
     if (usersCursors) {
+        // Remove all decorations by this user.
         for (let cursor of usersCursors) {
-            const editor = vscode.window.visibleTextEditors.find(
+            // TODO: Refactor this into drawCursors below?
+            const editors = vscode.window.visibleTextEditors.filter(
                 (editor) => editor.document.uri.toString() === cursor.uri.toString(),
             )
-            if (editor) {
+            for (const editor of editors) {
                 editor.setDecorations(selectionDecorationType, [])
             }
         }
@@ -43,9 +45,9 @@ export function setCursor(userid: number, name: string, uri: vscode.Uri, selecti
     })
     cursors.set(userid, newCursors)
 
-    const editor = vscode.window.visibleTextEditors.find((editor) => editor.document.uri.toString() === uri.toString())
-    if (editor) {
-        editor.setDecorations(selectionDecorationType, selections)
+    const editors = vscode.window.visibleTextEditors.filter((editor) => editor.document.uri.toString() === uri.toString())
+    for (let editor of editors) {
+        drawCursors(editor)
     }
 }
 
@@ -68,5 +70,16 @@ export function getCursorInfo(): string {
             }
         })
         return message.join("\n")
+    }
+}
+
+export function drawCursors(editor: vscode.TextEditor | undefined) {
+    if (editor) {
+        let uri = editor.document.uri;
+        let allSelections = Array.from(cursors.values())
+            .flat()
+            .filter(cursor => cursor.uri.toString() === uri.toString())
+            .map(cursor => cursor.selection);
+        editor.setDecorations(selectionDecorationType, allSelections)
     }
 }
