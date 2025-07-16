@@ -69,6 +69,13 @@ local function connect(directory)
         client.terminate()
     end
 
+    if vim.fn.executable("ethersync") == 0 then
+        vim.api.nvim_err_writeln(
+            "Tried to connect to the Ethersync daemon, but `ethersync` executable was not found. Make sure that is in your PATH."
+        )
+        return false
+    end
+
     local params = { "client", "--directory", directory }
 
     local dispatchers = {
@@ -95,6 +102,7 @@ local function connect(directory)
     end
 
     print("Connected to Ethersync daemon!")
+    return true
 end
 
 local function find_directory(filename)
@@ -183,7 +191,10 @@ local function on_buffer_open()
     end
 
     if not client then
-        connect(directory)
+        local success = connect(directory)
+        if not success then
+            return
+        end
     end
 
     local uri = "file://" .. filename
