@@ -12,7 +12,7 @@ const selectionDecorationType = vscode.window.createTextEditorDecorationType({
     before: {
         color: "#548abf",
         contentText: "ᛙ",
-        margin: "0px 0px 0px -0.5ch",
+        margin: "0px 0px 0px -0.35ch",
         textDecoration: "font-weight: bold; position: absolute; top: 0; font-size: 200%; z-index: 0;",
     },
 })
