@@ -232,9 +232,14 @@ async function processCursorFromDaemon(cursor: CursorFromDaemon) {
     const document = documentForUri(uri)
 
     try {
-        let selections: vscode.Selection[] = []
+        let selections: vscode.DecorationOptions[] = []
         if (document) {
-            selections = cursor.ranges.map((r) => ethersyncRangeToVSCodeRange(document, r)).map(vsCodeRangeToSelection)
+            selections = cursor.ranges.map((r) => ethersyncRangeToVSCodeRange(document, r)).map(vsCodeRangeToSelection).map(s => {
+                return {
+                    range: s,
+                    hoverMessage: cursor.name,
+                }
+            })
         }
         setCursor(cursor.userid, cursor.name || "anonymous", vscode.Uri.parse(uri), selections)
     } catch {

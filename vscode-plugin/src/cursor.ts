@@ -20,12 +20,12 @@ const selectionDecorationType = vscode.window.createTextEditorDecorationType({
 interface RemoteCursor {
     name: string
     uri: vscode.Uri
-    selection: vscode.Selection
+    selection: vscode.DecorationOptions
 }
 
 let cursors: Map<string, RemoteCursor[]> = new Map()
 
-export function setCursor(userid: string, name: string, uri: vscode.Uri, selections: vscode.Selection[]) {
+export function setCursor(userid: string, name: string, uri: vscode.Uri, selections: vscode.DecorationOptions[]) {
     let usersCursors = cursors.get(userid)
     if (usersCursors) {
         // Remove all decorations by this user.
@@ -58,8 +58,8 @@ export function getCursorInfo(): string {
         let message: string[] = []
         cursors.forEach((usersCursors, _userid) => {
             for (let cursor of usersCursors) {
-                let line1 = cursor.selection.active.line + 1
-                let line2 = cursor.selection.anchor.line + 1
+                let line1 = cursor.selection.range.start.line + 1
+                let line2 = cursor.selection.range.end.line + 1
                 if (line1 > line2) {
                     ;[line1, line2] = [line2, line1]
                 }
