@@ -7,6 +7,6 @@ SPDX-License-Identifier: CC-BY-SA-4.0
 
 # VS Code plugin for 🍃 [Ethersync](https://github.com/ethersync/ethersync)
 
-Note: Install and run the Ethersync daemon in addition to this plugin!
+Note: You will need to install and run the Ethersync daemon in addition to this plugin!
 
-Refer to the [main project](https://github.com/ethersync/ethersync) for up-to-date documentation and usage instructions.
+Refer to the [main project](https://github.com/ethersync/ethersync) for documentation and usage instructions.
