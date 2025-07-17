@@ -98,10 +98,10 @@ pub fn ignored(absolute_base_dir: &Path, absolute_file_path: &Path) -> Result<bo
     // To use the same logic for which files are ignored, iterate through all files
     // using ignore::Walk, and try to find this file.
     // This has the downside that the file must already exist.
-    // TODO: Things in .gitignore are only ignored when there is a .git? Does that make sense?
     let walk = WalkBuilder::new(absolute_base_dir)
         .standard_filters(true)
         .hidden(false)
+        .require_git(false)
         // Interestingly, the standard filters don't seem to ignore .git.
         .filter_entry(move |dir_entry| {
             let name = dir_entry
