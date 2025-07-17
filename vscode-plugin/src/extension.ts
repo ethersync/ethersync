@@ -282,6 +282,12 @@ async function processUserOpen(document: vscode.TextDocument) {
         connect(directory)
     }
 
+    // In particular, ignore documents using the git: scheme,
+    // which is used by VS Code's Git integration.
+    if (document.uri.scheme !== "file") {
+        return
+    }
+
     const fileUri = decodeURI(document.uri.toString())
     debug("OPEN " + fileUri)
     connection
