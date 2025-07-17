@@ -130,3 +130,24 @@ pub fn has_git_remote(path: &Path) -> bool {
     }
     false
 }
+
+pub fn get_username(base_dir: &Path) -> Option<String> {
+    local_git_username(base_dir)
+        .or_else(|_| global_git_username())
+        .ok()
+}
+
+fn local_git_username(base_dir: &Path) -> Result<String> {
+    Ok(git2::Repository::discover(base_dir)?
+        .config()?
+        .snapshot()?
+        .get_str("user.name")?
+        .to_string())
+}
+
+fn global_git_username() -> Result<String> {
+    Ok(git2::Config::open_default()?
+        .snapshot()?
+        .get_str("user.name")?
+        .to_string())
+}
