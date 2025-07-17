@@ -39,7 +39,7 @@ impl Neovim {
         let handler = Dummy::new();
         let mut cmd = tokio::process::Command::new("nvim");
         cmd.arg("--headless").arg("--embed");
-        // Disable ShaDa file.
+        // Disable ShaDa files, to prevent CI failures related to them.
         cmd.arg("-i").arg("NONE");
         let (nvim, _, _) = new_child_cmd(&mut cmd, handler).await.unwrap();
 
