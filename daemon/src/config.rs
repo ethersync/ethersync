@@ -68,7 +68,9 @@ impl AppConfig {
     pub async fn resolve_peer(self, directory: &Path, config_file: &Path) -> Result<Self> {
         let peer = match self.peer {
             Some(Peer::JoinCode(join_code)) => {
-                let secret_address = get_secret_address_from_wormhole(&join_code).await?;
+                let secret_address = get_secret_address_from_wormhole(&join_code).await.context(
+                    "Failed to retreive secret address, was this join code already used?",
+                )?;
                 info!(
                     "Derived peer from join code. Storing in config (overwriting previous config)."
                 );

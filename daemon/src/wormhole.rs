@@ -6,7 +6,7 @@
 use anyhow::Result;
 use magic_wormhole::{transfer, AppID, Code, MailboxConnection, Wormhole};
 use std::str::FromStr;
-use tracing::info;
+use tracing::{info, warn};
 
 pub async fn put_secret_address_into_wormhole(address: &str) {
     let config = transfer::APP_CONFIG.id(AppID::new("ethersync"));
@@ -15,16 +15,17 @@ pub async fn put_secret_address_into_wormhole(address: &str) {
     let code = mailbox_connection.code().clone();
 
     info!(
-        "\n\tTo connect to you, another person can run:\n\n\tethersync join {}\n",
+        "\n\tTo connect to you, another person can use this one-time join code:\n\n\tethersync join {}\n",
         &code
     );
 
     let payload = address.into();
     tokio::spawn(async move {
-        let mut wormhole = Wormhole::connect(mailbox_connection)
-            .await
-            .expect("Failed to initiate wormhole connection");
-        let _ = wormhole.send(payload).await;
+        if let Ok(mut wormhole) = Wormhole::connect(mailbox_connection).await {
+            let _ = wormhole.send(payload).await;
+        } else {
+            warn!("Failed to share secret address. Did your peer mistype the join code?");
+        }
     });
 }
 
