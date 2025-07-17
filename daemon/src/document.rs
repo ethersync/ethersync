@@ -120,7 +120,7 @@ impl Document {
     }
 
     pub fn initialize_text(&mut self, text: &str, file_path: &RelativePath) {
-        info!("Initializing {file_path} in CRDT.");
+        info!("Initializing {file_path} in the Ethersync history.");
 
         // Now it should definitely work?
         let file_map = self
@@ -154,7 +154,7 @@ impl Document {
             }
 
             let text_delta: TextDelta = chunks.into();
-            info!("Updating {file_path} in CRDT with delta: {text_delta:?}");
+            info!("Updating {file_path} with delta: {text_delta:?}");
             self.apply_delta_to_doc(&text_delta, file_path);
             Some(text_delta)
         } else {
@@ -170,7 +170,7 @@ impl Document {
             return;
         };
 
-        info!("Removing {file_path} from CRDT.");
+        info!("Removing {file_path} from the Ethersync history.");
         // TODO: Also remove it from ot server, if applicable
         let file_map = self
             .top_level_map_obj("files")
