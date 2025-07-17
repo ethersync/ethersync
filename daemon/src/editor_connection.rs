@@ -3,12 +3,13 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-use std::{collections::HashMap, env, path::PathBuf};
+use std::{collections::HashMap, path::PathBuf};
 
 use anyhow::Context;
 use tracing::debug;
 
 use crate::{
+    config,
     ot::OTServer,
     path::{AbsolutePath, FileUri, RelativePath},
     sandbox,
@@ -26,12 +27,15 @@ pub struct EditorConnection {
     base_dir: PathBuf,
     /// There's one OTServer per open buffer.
     ot_servers: HashMap<RelativePath, OTServer>,
+    /// The name other people see.
+    username: Option<String>,
 }
 
 impl EditorConnection {
     pub fn new(id: String, base_dir: PathBuf) -> Self {
         Self {
             id,
+            username: config::get_username(&base_dir),
             base_dir,
             ot_servers: HashMap::new(),
         }
@@ -229,7 +233,7 @@ impl EditorConnection {
                     ComponentMessage::Cursor {
                         cursor_id: self.id.clone(),
                         cursor_state: CursorState {
-                            name: env::var("USER").ok(),
+                            name: self.username.clone(),
                             file_path: relative_path.clone(),
                             ranges: ranges.clone(),
                         },
