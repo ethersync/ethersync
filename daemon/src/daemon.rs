@@ -531,13 +531,14 @@ impl DocumentActor {
         }
     }
 
-    // TODO: Should this also go to the sandbox module?
+    // TODO: Join this code with the WalkBuilder in the sandbox module!
     fn build_walk(&mut self) -> Walk {
         let ignored_things = [".git", ".ethersync"];
         // TODO: How to deal with binary files?
         WalkBuilder::new(self.base_dir.clone())
             .standard_filters(true)
             .hidden(false)
+            .require_git(false)
             // Interestingly, the standard filters don't seem to ignore .git.
             .filter_entry(move |dir_entry| {
                 let name = dir_entry
