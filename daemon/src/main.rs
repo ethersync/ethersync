@@ -42,7 +42,7 @@ enum Commands {
         /// keep Magic Wormhole out of the loop.
         #[arg(long)]
         no_join_code: bool,
-        /// Do print the secret address. Useful for bulk sharing.
+        /// Print the secret address. Useful for sharing with multiple people.
         #[arg(long)]
         show_secret_address: bool,
     },
