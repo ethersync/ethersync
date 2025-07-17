@@ -101,11 +101,11 @@ impl P2PActor {
             while let Some(incoming) = endpoint.accept().await {
                 match incoming.await {
                     Ok(conn) => {
-                        info!(
-                            "Peer connected: {}",
-                            conn.remote_node_id()
-                                .expect("Connection should have a node ID")
-                        );
+                        let node_id = conn
+                            .remote_node_id()
+                            .expect("Connection should have a node ID");
+
+                        info!("Peer connected: {}", &node_id);
 
                         let my_passphrase_clone = my_passphrase.clone();
                         let document_handle_clone = self.document_handle.clone();
@@ -117,6 +117,8 @@ impl P2PActor {
                                 None,
                             )
                             .await;
+
+                            info!("Peer disconnected: {node_id}",);
                         });
                     }
                     Err(err) => {
@@ -208,7 +210,6 @@ impl P2PActor {
         )
         .await;
 
-        info!("Peer disconnected.");
         // TODO: Do we still this abort? The syncer should stop anyway once it cannot use its
         // to_peer_tx anymore.
         syncer_handle.abort_handle().abort();
