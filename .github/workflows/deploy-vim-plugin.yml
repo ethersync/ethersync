@@ -14,13 +14,13 @@ on:
 
 jobs:
   mirror:
-    name: Mirror to ethersync/ethersync-vim
+    name: Mirror to ethersync/ethersync-nvim
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: s0/git-publish-subdir-action@develop
         env:
-          REPO: git@github.com:ethersync/ethersync-vim
+          REPO: git@github.com:ethersync/ethersync-nvim
           BRANCH: main
           FOLDER: nvim-plugin
           SSH_PRIVATE_KEY: ${{ secrets.VIM_PLUGIN_DEPLOY_PRIVATE_KEY }}

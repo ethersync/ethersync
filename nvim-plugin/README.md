@@ -13,13 +13,13 @@ SPDX-License-Identifier: CC-BY-SA-4.0
 
 ## Installation
 
-The Neovim plugin is located at <https://github.com/ethersync/ethersync-vim>, so you would usually add the string `"ethersync/ethersync-vim"` to your plugin manager. Here's some example configuration blocks:
+The Neovim plugin is located at <https://github.com/ethersync/ethersync-nvim>, so you would usually add the string `"ethersync/ethersync-nvim"` to your plugin manager. Here's some example configuration blocks:
 
 ### Lazy
 
 ```lua
 {
-  "ethersync/ethersync-vim",
+  "ethersync/ethersync-nvim",
   keys = { { "<leader>j", "<cmd>EthersyncJumpToCursor<cr>" } },
   lazy = false,
 }
@@ -29,7 +29,7 @@ The Neovim plugin is located at <https://github.com/ethersync/ethersync-vim>, so
 
 ```lua
 {
-  "ethersync/ethersync-vim",
+  "ethersync/ethersync-nvim",
   config = function()
     vim.keymap.set('n', '<leader>j', '<cmd>EthersyncJumpToCursor<cr>')
   end
@@ -41,7 +41,7 @@ The Neovim plugin is located at <https://github.com/ethersync/ethersync-vim>, so
 If you're not using a plugin manager, here's a "quick and dirty" way to install the plugin:
 
 ```
-git clone git@github.com:ethersync/ethersync-vim $HOME/.local/share/nvim/site/pack/plugins/start/ethersync
+git clone git@github.com:ethersync/ethersync-nvim $HOME/.local/share/nvim/site/pack/plugins/start/ethersync
 ```
 
 ### Nix
