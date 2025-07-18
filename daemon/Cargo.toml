@@ -7,7 +7,7 @@
 [package]
 name = "ethersync"
 description = "Enables real-time co-editing of local text files."
-version = "0.7.0-beta.0"
+version = "0.7.0-beta.1"
 authors = ["Moritz Neeb <nt4u@kpvn.de>", "blinry <mail@blinry.org>"]
 license = "AGPL-3.0-or-later"
 readme = "../README.md"
