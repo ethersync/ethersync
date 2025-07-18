@@ -9,7 +9,7 @@ on:
     branches:
       - 'main'
     paths:
-      - 'vim-plugin/**'
+      - 'nvim-plugin/**'
       - '.github/workflows/deploy-vim-plugin.yml'
 
 jobs:
@@ -22,7 +22,7 @@ jobs:
         env:
           REPO: git@github.com:ethersync/ethersync-vim
           BRANCH: main
-          FOLDER: vim-plugin
+          FOLDER: nvim-plugin
           SSH_PRIVATE_KEY: ${{ secrets.VIM_PLUGIN_DEPLOY_PRIVATE_KEY }}
           SKIP_EMPTY_COMMITS: true
           MESSAGE: "Automatic mirror of commit {sha} in main Ethersync repository"
