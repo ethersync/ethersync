@@ -10,12 +10,12 @@ on:
       - 'main'
     paths:
       - 'daemon/**'
-      - 'vim-plugin/**'
+      - 'nvim-plugin/**'
       - '.github/workflows/general.yml'
   pull_request:
     paths:
       - 'daemon/**'
-      - 'vim-plugin/**'
+      - 'nvim-plugin/**'
       - '.github/workflows/general.yml'
 
 env:
@@ -59,7 +59,7 @@ jobs:
       - name: Install Neovim plugin
         run: |
           mkdir -p $HOME/.local/share/nvim/site/pack/plugins/start
-          ln -s $PWD/../vim-plugin $HOME/.local/share/nvim/site/pack/plugins/start/ethersync
+          ln -s $PWD/../nvim-plugin $HOME/.local/share/nvim/site/pack/plugins/start/ethersync
       - name: Compile unit tests
         run: cargo test --no-default-features --no-run --locked
       - name: Run unit tests

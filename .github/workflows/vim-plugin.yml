@@ -9,11 +9,11 @@ on:
     branches:
       - 'main'
     paths:
-      - 'vim-plugin/**'
+      - 'nvim-plugin/**'
       - '.github/workflows/vim-plugin.yml'
   pull_request:
     paths:
-      - 'vim-plugin/**'
+      - 'nvim-plugin/**'
       - '.github/workflows/vim-plugin.yml'
 
 jobs:
@@ -26,8 +26,8 @@ jobs:
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           version: 0.20.0
-          args: --config-path vim-plugin/.stylua.toml --check vim-plugin
+          args: --config-path nvim-plugin/.stylua.toml --check nvim-plugin
       - name: Luacheck Linting
         uses: lunarmodules/luacheck@v1
         with:
-          args: --config vim-plugin/.luacheckrc vim-plugin
+          args: --config nvim-plugin/.luacheckrc nvim-plugin

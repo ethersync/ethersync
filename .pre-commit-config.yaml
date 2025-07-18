@@ -23,7 +23,7 @@ repos:
     rev: v2.1.0
     hooks:
     -   id: stylua
-        args: ['--config-path', 'vim-plugin/.stylua.toml', '--check', 'vim-plugin']
+        args: ['--config-path', 'nvim-plugin/.stylua.toml', '--check', 'nvim-plugin']
 -   repo: https://github.com/fsfe/reuse-tool
     rev: v5.0.2
     hooks:
