@@ -12,14 +12,14 @@ on:
       - 'flake.*'
       - 'contrib/nix/**'
       - 'daemon/**'
-      - 'vim-plugin/**'
+      - 'nvim-plugin/**'
       - '.github/workflows/nix.yml'
   pull_request:
     paths:
       - 'flake.*'
       - 'contrib/nix/**'
       - 'daemon/**'
-      - 'vim-plugin/**'
+      - 'nvim-plugin/**'
       - '.github/workflows/nix.yml'
 
 jobs:
