@@ -5,14 +5,19 @@ SPDX-FileCopyrightText: 2024 zormit <nt4u@kpvn.de>
 SPDX-License-Identifier: CC-BY-SA-4.0
 -->
 
-# 0.7.0-beta.1 (unreleased)
+# 0.7.0 (unreleased)
+
+Breaking changes:
+- The canonical location of the Vim plugin is now at <https://github.com/ethersync/ethersync-nvim>. The directory from this repository is mirrored there.
+
+# 0.7.0-beta.1
 
 New features:
 - Many small improvements regarding user facing terminology (avoiding jargon)
 - The name shown with the cursor is now picked up from gitconfig instead of $USER
 - The join code is printed again, after one gets invalid
 
-# 0.7.0-beta.0 (unreleased)
+# 0.7.0-beta.0
 
 Breaking changes:
 
