@@ -74,7 +74,7 @@ jobs:
       - if: ${{ matrix.os != 'ubuntu-latest' || matrix.nvim-version != 'v0.10.4' }}
         name: Run integration tests (without fuzzer)
         working-directory: ./daemon/integration-tests
-        run: cargo test --test vim-plugin
+        run: cargo test --test nvim-plugin
   check_formatting:
     name: Check Rust formatting
     runs-on: ubuntu-latest
