@@ -23,6 +23,6 @@ jobs:
           REPO: git@github.com:ethersync/ethersync-nvim
           BRANCH: main
           FOLDER: nvim-plugin
-          SSH_PRIVATE_KEY: ${{ secrets.VIM_PLUGIN_DEPLOY_PRIVATE_KEY }}
+          SSH_PRIVATE_KEY: ${{ secrets.NVIM_PLUGIN_DEPLOY_PRIVATE_KEY }}
           SKIP_EMPTY_COMMITS: true
           MESSAGE: "Automatic mirror of commit {sha} in main Ethersync repository"
