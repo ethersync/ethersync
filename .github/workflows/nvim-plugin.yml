@@ -2,7 +2,7 @@
 #
 # SPDX-License-Identifier: CC0-1.0
 
-name: Vim plugin
+name: Neovim plugin
 
 on:
   push:
@@ -10,11 +10,11 @@ on:
       - 'main'
     paths:
       - 'nvim-plugin/**'
-      - '.github/workflows/vim-plugin.yml'
+      - '.github/workflows/nvim-plugin.yml'
   pull_request:
     paths:
       - 'nvim-plugin/**'
-      - '.github/workflows/vim-plugin.yml'
+      - '.github/workflows/nvim-plugin.yml'
 
 jobs:
   check_lua:

@@ -2,7 +2,7 @@
 #
 # SPDX-License-Identifier: CC0-1.0
 
-name: Deploy Vim plugin
+name: Deploy Neovim plugin
 
 on:
   push:
@@ -10,7 +10,7 @@ on:
       - 'main'
     paths:
       - 'nvim-plugin/**'
-      - '.github/workflows/deploy-vim-plugin.yml'
+      - '.github/workflows/deploy-nvim-plugin.yml'
 
 jobs:
   mirror:

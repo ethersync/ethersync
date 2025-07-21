@@ -80,7 +80,7 @@ impl Actor for Daemon {
 #[async_trait]
 impl Actor for Neovim {
     async fn apply_random_delta(&mut self) {
-        let mut vim_normal_command = String::new();
+        let mut normal_command = String::new();
 
         let string_components = vec![
             "e".to_string(),
@@ -114,11 +114,11 @@ impl Actor for Neovim {
             format!("I{}", s),
         ];
 
-        vim_normal_command.push_str(&random_string(rand_usize_inclusive(1, 2), &components));
+        normal_command.push_str(&random_string(rand_usize_inclusive(1, 2), &components));
 
         self.nvim
-            .command(&format!(r#"silent! execute "normal {vim_normal_command}""#))
-            //.input(&vim_normal_command)
+            .command(&format!(r#"silent! execute "normal {normal_command}""#))
+            //.input(&normal_command)
             .await
             .expect("Failed to send input to Neovim");
     }
