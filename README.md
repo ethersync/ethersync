@@ -40,7 +40,7 @@ The [releases on GitHub](https://github.com/ethersync/ethersync/releases/latest)
 
 <details>
 <summary>Arch Linux</summary>
-    
+
 ```
 yay -S ethersync-bin
 ```
@@ -68,10 +68,10 @@ cargo install ethersync
 
 ### 2. Install an editor plugin
 
-- [Neovim](https://github.com/ethersync/ethersync-vim)
+- [Neovim](https://github.com/ethersync/ethersync-nvim)
 - [VS Code](https://marketplace.visualstudio.com/items?itemName=ethersync.ethersync)
 - [VS Codium](https://open-vsx.org/extension/ethersync/ethersync)
- 
+
 ## 📖 Basic usage
 
 In one directory:

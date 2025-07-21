@@ -26,7 +26,7 @@ async fn plugin_loaded() {
 }
 
 #[tokio::test]
-async fn ethersync_executable_from_vim() {
+async fn ethersync_executable_from_nvim() {
     let handler = Dummy::new();
     let mut cmd = tokio::process::Command::new("nvim");
     cmd.arg("--headless").arg("--embed");
@@ -41,7 +41,7 @@ async fn ethersync_executable_from_vim() {
 }
 
 #[tokio::test]
-async fn vim_sends_something_to_socket() {
+async fn nvim_sends_something_to_socket() {
     let (nvim, _file_path, mut socket, _dir) = Neovim::new_ethersync_enabled("hi").await;
     dbg!(nvim.content().await);
     timeout(Duration::from_millis(1000), async {
@@ -51,7 +51,7 @@ async fn vim_sends_something_to_socket() {
     .expect("sends_somthing test timed out");
 }
 
-async fn assert_vim_deltas_yield_content(
+async fn assert_nvim_deltas_yield_content(
     initial_content: &str,
     deltas: Vec<EditorTextOp>,
     expected_content: &str,
@@ -87,17 +87,18 @@ async fn assert_vim_deltas_yield_content(
 
 #[tokio::test]
 #[serial]
-async fn vim_processes_deltas_correctly() {
-    assert_vim_deltas_yield_content("", vec![replace_ed((0, 0), (0, 0), "a")], "a").await;
-    assert_vim_deltas_yield_content("x\n", vec![replace_ed((0, 1), (1, 0), "")], "x").await;
-    assert_vim_deltas_yield_content("x\n", vec![replace_ed((0, 1), (1, 0), "y")], "xy").await;
-    assert_vim_deltas_yield_content("x\n", vec![replace_ed((0, 1), (1, 0), "\n")], "x\n").await;
-    assert_vim_deltas_yield_content("x\n", vec![replace_ed((0, 1), (1, 0), "\n\n")], "x\n\n").await;
-    assert_vim_deltas_yield_content("x\n123\nz", vec![replace_ed((1, 1), (2, 1), "y")], "x\n1y")
+async fn nvim_processes_deltas_correctly() {
+    assert_nvim_deltas_yield_content("", vec![replace_ed((0, 0), (0, 0), "a")], "a").await;
+    assert_nvim_deltas_yield_content("x\n", vec![replace_ed((0, 1), (1, 0), "")], "x").await;
+    assert_nvim_deltas_yield_content("x\n", vec![replace_ed((0, 1), (1, 0), "y")], "xy").await;
+    assert_nvim_deltas_yield_content("x\n", vec![replace_ed((0, 1), (1, 0), "\n")], "x\n").await;
+    assert_nvim_deltas_yield_content("x\n", vec![replace_ed((0, 1), (1, 0), "\n\n")], "x\n\n")
         .await;
-    assert_vim_deltas_yield_content("x", vec![replace_ed((0, 1), (0, 1), "\n")], "x\n").await;
+    assert_nvim_deltas_yield_content("x\n123\nz", vec![replace_ed((1, 1), (2, 1), "y")], "x\n1y")
+        .await;
+    assert_nvim_deltas_yield_content("x", vec![replace_ed((0, 1), (0, 1), "\n")], "x\n").await;
 
-    assert_vim_deltas_yield_content(
+    assert_nvim_deltas_yield_content(
         "bananas",
         vec![
             replace_ed((0, 2), (0, 3), ""),
@@ -107,27 +108,28 @@ async fn vim_processes_deltas_correctly() {
     )
     .await;
 
-    assert_vim_deltas_yield_content("ba\nna\nnas", vec![replace_ed((0, 1), (2, 1), "")], "bas")
+    assert_nvim_deltas_yield_content("ba\nna\nnas", vec![replace_ed((0, 1), (2, 1), "")], "bas")
         .await;
 
-    assert_vim_deltas_yield_content(
+    assert_nvim_deltas_yield_content(
         "hi\n",
         vec![replace_ed((1, 0), (1, 0), "there\n")],
         "hi\nthere\n",
     )
     .await;
 
-    assert_vim_deltas_yield_content(
+    assert_nvim_deltas_yield_content(
         "hi\n",
         vec![replace_ed((1, 0), (1, 0), "there\n\n")],
         "hi\nthere\n\n",
     )
     .await;
 
-    assert_vim_deltas_yield_content("hi\n", vec![replace_ed((1, 0), (1, 0), "\n")], "hi\n\n").await;
+    assert_nvim_deltas_yield_content("hi\n", vec![replace_ed((1, 0), (1, 0), "\n")], "hi\n\n")
+        .await;
 }
 
-async fn assert_vim_input_yields_replacements(
+async fn assert_nvim_input_yields_replacements(
     initial_content: &str,
     input: &str,
     mut expected_replacements: Vec<EditorTextOp>,
@@ -161,49 +163,52 @@ async fn assert_vim_input_yields_replacements(
             .await
             .unwrap_or_else(|_| {
                 panic!(
-                    "Nvim test for input '{input}' on '{initial_content:?}' timed out. Maybe increase timeout to make sure vim started fast enough. We probably received too few messages?"
+                    "Nvim test for input '{input}' on '{initial_content:?}' timed out. Maybe increase timeout to make sure nvim started fast enough. We probably received too few messages?"
                 )
             });
 }
 
 #[tokio::test]
 #[serial]
-async fn vim_sends_correct_delta() {
+async fn nvim_sends_correct_delta() {
     // Edits on a single line.
-    assert_vim_input_yields_replacements("", "ia", vec![replace_ed((0, 0), (0, 0), "a")]).await;
-    assert_vim_input_yields_replacements("a\n", "x", vec![replace_ed((0, 0), (0, 1), "")]).await;
-    assert_vim_input_yields_replacements("abc\n", "lx", vec![replace_ed((0, 1), (0, 2), "")]).await;
-    assert_vim_input_yields_replacements("abc\n", "vd", vec![replace_ed((0, 0), (0, 1), "")]).await;
-    assert_vim_input_yields_replacements("abc\n", "vlld", vec![replace_ed((0, 0), (0, 3), "")])
+    assert_nvim_input_yields_replacements("", "ia", vec![replace_ed((0, 0), (0, 0), "a")]).await;
+    assert_nvim_input_yields_replacements("a\n", "x", vec![replace_ed((0, 0), (0, 1), "")]).await;
+    assert_nvim_input_yields_replacements("abc\n", "lx", vec![replace_ed((0, 1), (0, 2), "")])
         .await;
-    assert_vim_input_yields_replacements("a\n", "rb", vec![replace_ed((0, 0), (0, 1), "b")]).await;
+    assert_nvim_input_yields_replacements("abc\n", "vd", vec![replace_ed((0, 0), (0, 1), "")])
+        .await;
+    assert_nvim_input_yields_replacements("abc\n", "vlld", vec![replace_ed((0, 0), (0, 3), "")])
+        .await;
+    assert_nvim_input_yields_replacements("a\n", "rb", vec![replace_ed((0, 0), (0, 1), "b")]).await;
     // To add to end of line, the existence of a newline should not matter.
-    assert_vim_input_yields_replacements("a", "Ab", vec![replace_ed((0, 1), (0, 1), "b")]).await;
-    assert_vim_input_yields_replacements("a\n", "Ab", vec![replace_ed((0, 1), (0, 1), "b")]).await;
-    assert_vim_input_yields_replacements("a\n", "Ib", vec![replace_ed((0, 0), (0, 0), "b")]).await;
+    assert_nvim_input_yields_replacements("a", "Ab", vec![replace_ed((0, 1), (0, 1), "b")]).await;
+    assert_nvim_input_yields_replacements("a\n", "Ab", vec![replace_ed((0, 1), (0, 1), "b")]).await;
+    assert_nvim_input_yields_replacements("a\n", "Ib", vec![replace_ed((0, 0), (0, 0), "b")]).await;
 
     // Edits involving multiple lines.
-    assert_vim_input_yields_replacements("a\n", "O", vec![replace_ed((0, 0), (0, 0), "\n")]).await;
+    assert_nvim_input_yields_replacements("a\n", "O", vec![replace_ed((0, 0), (0, 0), "\n")]).await;
     // Indentation matters.
-    assert_vim_input_yields_replacements(
+    assert_nvim_input_yields_replacements(
         "    a\n",
         "O",
         vec![replace_ed((0, 0), (0, 0), "    \n")],
     )
     .await;
-    assert_vim_input_yields_replacements("a\nb\n", "dd", vec![replace_ed((0, 0), (1, 0), "")])
+    assert_nvim_input_yields_replacements("a\nb\n", "dd", vec![replace_ed((0, 0), (1, 0), "")])
         .await;
-    assert_vim_input_yields_replacements("a\nb\n", "jdd", vec![replace_ed((1, 0), (2, 0), "")])
+    assert_nvim_input_yields_replacements("a\nb\n", "jdd", vec![replace_ed((1, 0), (2, 0), "")])
         .await;
     // Also works without \n at the end.
-    assert_vim_input_yields_replacements("a\nb", "jdd", vec![replace_ed((0, 1), (1, 1), "")]).await;
+    assert_nvim_input_yields_replacements("a\nb", "jdd", vec![replace_ed((0, 1), (1, 1), "")])
+        .await;
     // 'eol' will still be on, so let's keep the newline.
-    assert_vim_input_yields_replacements("a\n", "dd", vec![replace_ed((0, 0), (0, 1), "")]).await;
+    assert_nvim_input_yields_replacements("a\n", "dd", vec![replace_ed((0, 0), (0, 1), "")]).await;
     // Our design goal: produce something, that works without any implict newlines.
-    assert_vim_input_yields_replacements("a", "dd", vec![replace_ed((0, 0), (0, 1), "")]).await;
+    assert_nvim_input_yields_replacements("a", "dd", vec![replace_ed((0, 0), (0, 1), "")]).await;
     // Test what happens when we start with empty buffer:
     // The eol option can be "true" unexpectedly.
-    assert_vim_input_yields_replacements(
+    assert_nvim_input_yields_replacements(
         "",
         "ia<Esc>dd",
         vec![
@@ -213,8 +218,9 @@ async fn vim_sends_correct_delta() {
     )
     .await;
 
-    assert_vim_input_yields_replacements("", "i<CR>", vec![replace_ed((0, 0), (0, 0), "\n")]).await;
-    assert_vim_input_yields_replacements(
+    assert_nvim_input_yields_replacements("", "i<CR>", vec![replace_ed((0, 0), (0, 0), "\n")])
+        .await;
+    assert_nvim_input_yields_replacements(
         "",
         "i<CR>i",
         vec![
@@ -223,7 +229,7 @@ async fn vim_sends_correct_delta() {
         ],
     )
     .await;
-    assert_vim_input_yields_replacements(
+    assert_nvim_input_yields_replacements(
         "",
         "ia<CR>a",
         vec![
@@ -234,14 +240,14 @@ async fn vim_sends_correct_delta() {
     )
     .await;
 
-    assert_vim_input_yields_replacements(
+    assert_nvim_input_yields_replacements(
         "a\n",
         ":s/a/b<CR>",
         vec![replace_ed((0, 0), (0, 1), "b")],
     )
     .await;
 
-    assert_vim_input_yields_replacements(
+    assert_nvim_input_yields_replacements(
         "",
         "i<CR><BS>",
         vec![
@@ -251,10 +257,10 @@ async fn vim_sends_correct_delta() {
     )
     .await;
 
-    assert_vim_input_yields_replacements("a\nbcd", "ggdG", vec![replace_ed((0, 0), (1, 3), "")])
+    assert_nvim_input_yields_replacements("a\nbcd", "ggdG", vec![replace_ed((0, 0), (1, 3), "")])
         .await;
 
-    assert_vim_input_yields_replacements(
+    assert_nvim_input_yields_replacements(
         "a\n",
         "ddix<CR><BS>",
         vec![
@@ -266,7 +272,7 @@ async fn vim_sends_correct_delta() {
     )
     .await;
 
-    assert_vim_input_yields_replacements(
+    assert_nvim_input_yields_replacements(
         "hello\nworld\n",
         "llvjd",
         vec![
@@ -278,7 +284,7 @@ async fn vim_sends_correct_delta() {
     )
     .await;
 
-    assert_vim_input_yields_replacements(
+    assert_nvim_input_yields_replacements(
         "",
         "ox",
         vec![
@@ -288,7 +294,7 @@ async fn vim_sends_correct_delta() {
     )
     .await;
 
-    assert_vim_input_yields_replacements(
+    assert_nvim_input_yields_replacements(
         "a\n",
         "ddo",
         vec![
@@ -298,44 +304,49 @@ async fn vim_sends_correct_delta() {
     )
     .await;
 
-    assert_vim_input_yields_replacements("a\n", "o", vec![replace_ed((1, 0), (1, 0), "\n")]).await;
+    assert_nvim_input_yields_replacements("a\n", "o", vec![replace_ed((1, 0), (1, 0), "\n")]).await;
 
     // Unicode tests
-    assert_vim_input_yields_replacements("ä\nü\n", "dd", vec![replace_ed((0, 0), (1, 0), "")])
+    assert_nvim_input_yields_replacements("ä\nü\n", "dd", vec![replace_ed((0, 0), (1, 0), "")])
         .await;
-    assert_vim_input_yields_replacements("ä💚🥕", "vlld", vec![replace_ed((0, 0), (0, 3), "")])
+    assert_nvim_input_yields_replacements("ä💚🥕", "vlld", vec![replace_ed((0, 0), (0, 3), "")])
         .await;
-    assert_vim_input_yields_replacements("ä", "dd", vec![replace_ed((0, 0), (0, 1), "")]).await;
+    assert_nvim_input_yields_replacements("ä", "dd", vec![replace_ed((0, 0), (0, 1), "")]).await;
 
-    assert_vim_input_yields_replacements("a\n", "yyp", vec![replace_ed((1, 0), (1, 0), "a\n")])
+    assert_nvim_input_yields_replacements("a\n", "yyp", vec![replace_ed((1, 0), (1, 0), "a\n")])
         .await;
-    assert_vim_input_yields_replacements("🥕\n", "yyp", vec![replace_ed((1, 0), (1, 0), "🥕\n")])
+    assert_nvim_input_yields_replacements("🥕\n", "yyp", vec![replace_ed((1, 0), (1, 0), "🥕\n")])
         .await;
-    assert_vim_input_yields_replacements("a", "yyp", vec![replace_ed((0, 1), (0, 1), "\na")]).await;
+    assert_nvim_input_yields_replacements("a", "yyp", vec![replace_ed((0, 1), (0, 1), "\na")])
+        .await;
 
-    assert_vim_input_yields_replacements(
+    assert_nvim_input_yields_replacements(
         "a\n🥕\n",
         "jyyp",
         vec![replace_ed((2, 0), (2, 0), "🥕\n")],
     )
     .await;
 
-    assert_vim_input_yields_replacements("a", "o", vec![replace_ed((0, 1), (0, 1), "\n")]).await;
+    assert_nvim_input_yields_replacements("a", "o", vec![replace_ed((0, 1), (0, 1), "\n")]).await;
 
-    assert_vim_input_yields_replacements(
+    assert_nvim_input_yields_replacements(
         "eins\ntwo\n",
         "jo",
         vec![replace_ed((2, 0), (2, 0), "\n")],
     )
     .await;
 
-    assert_vim_input_yields_replacements("eins\ntwo", "jo", vec![replace_ed((1, 3), (1, 3), "\n")])
-        .await;
+    assert_nvim_input_yields_replacements(
+        "eins\ntwo",
+        "jo",
+        vec![replace_ed((1, 3), (1, 3), "\n")],
+    )
+    .await;
 
     // Tests where Vim behaves a bit weirdly.
 
     // A direct replace_ed((0, 1), (1, 0), " ") would be nicer.
-    assert_vim_input_yields_replacements(
+    assert_nvim_input_yields_replacements(
         "a\nb\n",
         "J",
         vec![
@@ -345,7 +356,7 @@ async fn vim_sends_correct_delta() {
     )
     .await;
 
-    assert_vim_input_yields_replacements(
+    assert_nvim_input_yields_replacements(
         "a\nb",
         "J",
         vec![
@@ -356,7 +367,7 @@ async fn vim_sends_correct_delta() {
     .await;
 
     // Visual on multiple lines.
-    assert_vim_input_yields_replacements(
+    assert_nvim_input_yields_replacements(
         "abc\nde\nf\n",
         "jVjd",
         vec![replace_ed((1, 0), (3, 0), "")],
@@ -364,7 +375,7 @@ async fn vim_sends_correct_delta() {
     .await;
 
     // Same test without eol.
-    assert_vim_input_yields_replacements(
+    assert_nvim_input_yields_replacements(
         "abc\nde\nf",
         "jVjd",
         vec![replace_ed((0, 3), (2, 1), "")],
