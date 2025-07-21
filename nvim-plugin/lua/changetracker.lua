@@ -86,7 +86,7 @@ function M.track_changes(buffer, callback)
             -- For example, pull tests into good variable names like "ends_with_newline".
             -- TODO: Update the following comment to describe the problem and the solution more clearly.
 
-            -- Sometimes, Vim deletes full lines by deleting the last line, plus an imaginary newline at the end. For example, to delete the second line, Vim would delete from (line: 1, column: 0) to (line: 2, column 0).
+            -- Sometimes, Neovim deletes full lines by deleting the last line, plus an imaginary newline at the end. For example, to delete the second line, Neovim would delete from (line: 1, column: 0) to (line: 2, column 0).
             -- But, in the case of deleting the last line, what we expect in the rest of Ethersync is to delete the newline *before* the line.
             -- So let's change the deleted range to (line: 0, column: [last character of the first line]) to (line: 1, column: [last character of the second line]).
 

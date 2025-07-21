@@ -8,11 +8,13 @@ SPDX-License-Identifier: CC-BY-SA-4.0
 # 0.7.0 (unreleased)
 
 Breaking changes:
-- The canonical location of the Vim plugin is now at <https://github.com/ethersync/ethersync-nvim>. The directory from this repository is mirrored there.
+
+- The canonical location of the Neovim plugin is now at <https://github.com/ethersync/ethersync-nvim>. The directory from this repository is mirrored there.
 
 # 0.7.0-beta.1
 
 New features:
+
 - Many small improvements regarding user facing terminology (avoiding jargon)
 - The name shown with the cursor is now picked up from gitconfig instead of $USER
 - The join code is printed again, after one gets invalid
@@ -25,7 +27,7 @@ Breaking changes:
 - Redesigning the CLI UI: Remove the `daemon` subcommand, instead use `share` and `join`.
 - Use `.ethersync/socket` as the location for the daemon's socket. This makes it possible to easily run multiple daemons at the same time.
 - Remove `--socket-name` command-line option.
-- The canonical location of the Vim plugin is now at <https://github.com/ethersync/ethersync-vim>. The directory from this repository is mirrored there.
+- The canonical location of the Neovim plugin is now at <https://github.com/ethersync/ethersync-vim>. The directory from this repository is mirrored there.
 
 Bug fixes:
 

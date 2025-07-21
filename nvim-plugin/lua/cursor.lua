@@ -181,7 +181,7 @@ function M.track_cursor(bufnr, callback)
                 elseif vim.fn.mode() == "" then
                     -- We are in blockwise visual mode. Calculate the individual pieces.
 
-                    -- This calculation is a bit more involved, because Vim forms a blockwise range visually, going by the
+                    -- This calculation is a bit more involved, because Neovim forms a blockwise range visually, going by the
                     -- "display cells", so that the range is always rectangular. We need to perform our own calculations with
                     -- these display cells to make sure that we send out the same ranges.
 
