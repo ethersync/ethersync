@@ -104,11 +104,11 @@ local function connect(directory)
     }
 
     if vim.version().api_level < 12 then
-        -- In Vim 0.9, the API was to pass the command and its parameters as two arguments.
+        -- In Neovim 0.9, the API was to pass the command and its parameters as two arguments.
         ---@diagnostic disable-next-line: param-type-mismatch
         client = vim.lsp.rpc.start("ethersync", params, dispatchers)
     else
-        -- While in Vim 0.10, it is combined into one table.
+        -- While in Neovim 0.10, it is combined into one table.
         local cmd = params
         table.insert(cmd, 1, "ethersync")
         client = vim.lsp.rpc.start(cmd, dispatchers)
@@ -121,7 +121,7 @@ end
 local function find_directory(filename)
     -- Recusively scan up directories. If we find an .ethersync directory on any level, return its parent, and nil otherwise.
     if vim.version().api_level < 12 then
-        -- In Vim 0.9, do it manually.
+        -- In Neovim 0.9, do it manually.
         local path = filename
         while true do
             if vim.fn.isdirectory(path .. "/.ethersync") == 1 then
@@ -136,7 +136,7 @@ local function find_directory(filename)
             end
         end
     else
-        -- In Vim 0.10, this function is available.
+        -- In Neovim 0.10, this function is available.
         return vim.fs.root(filename, ".ethersync")
     end
 end
@@ -212,7 +212,7 @@ local function on_buffer_open()
 
     local uri = "file://" .. filename
 
-    -- Vim enables eol for an empty file, but we do use this option values
+    -- Neovim enables eol for an empty file, but we do use this option values
     -- assuming there's a trailing newline iff eol is true.
     if vim.fn.getfsize(vim.api.nvim_buf_get_name(0)) == 0 then
         vim.bo.eol = false

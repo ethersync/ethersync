@@ -34,9 +34,9 @@ async fn ethersync_executable_from_nvim() {
     assert_eq!(
         nvim.command_output("echomsg executable('ethersync')")
             .await
-            .expect("Failed to run executable() in Vim"),
+            .expect("Failed to run executable() in Neovim"),
         "1",
-        "Failed to run ethersync executable from Vim"
+        "Failed to run ethersync executable from Neovim"
     );
 }
 
@@ -343,7 +343,7 @@ async fn nvim_sends_correct_delta() {
     )
     .await;
 
-    // Tests where Vim behaves a bit weirdly.
+    // Tests where Neovim behaves a bit weirdly.
 
     // A direct replace_ed((0, 1), (1, 0), " ") would be nicer.
     assert_nvim_input_yields_replacements(
