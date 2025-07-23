@@ -86,14 +86,19 @@ async fn main() -> Result<()> {
         .join(config::CONFIG_DIR)
         .join(config::DEFAULT_SOCKET_NAME);
 
-    let persist = !config::has_git_remote(&directory);
-
     match cli.command {
         Commands::Share { .. } | Commands::Join { .. } => {
+            let persist = !config::has_git_remote(&directory);
             if !persist {
                 info!(
                     "Detected a Git remote: Assuming a pair-programming use-case and starting a new history."
                 );
+            }
+
+            if !config::ethersync_directory_is_ignored(&directory) {
+                warn!(".ethersync should be ignored in your Git repo, as it contains sensitive secrets. See\n\
+                \thttps://ethersync.github.io/ethersync/git-integration.html#ignoring-ethersync-directories\n\
+                on how to do that.");
             }
 
             let mut init_doc = false;
