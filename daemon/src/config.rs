@@ -131,6 +131,16 @@ pub fn has_git_remote(path: &Path) -> bool {
     false
 }
 
+pub fn ethersync_directory_is_ignored(path: &Path) -> bool {
+    if let Ok(repo) = git2::Repository::discover(path) {
+        let ethersync_dir = path.join(CONFIG_DIR);
+        return repo
+            .is_path_ignored(ethersync_dir)
+            .expect("Should have been able to determine ignore state for {path}");
+    }
+    false
+}
+
 pub fn get_username(base_dir: &Path) -> Option<String> {
     local_git_username(base_dir)
         .or_else(|_| global_git_username())
