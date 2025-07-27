@@ -30,12 +30,17 @@ The project is under active development right now. We use it every day, but ther
 
 ### 1. Install the `ethersync` command
 
-Ethersync works on Linux, macOS, and on the Windows Subsystem for Linux.
+Ethersync works on Linux, macOS, Android, and on the Windows Subsystem for Linux.
 
 <details>
 <summary>Binary releases</summary>
 
-The [releases on GitHub](https://github.com/ethersync/ethersync/releases/latest) come with precompiled static binaries for Linux and macOS. Download one and put it somewhere in your shell's [`PATH`](https://en.wikipedia.org/wiki/PATH_(variable)).
+The [releases on GitHub](https://github.com/ethersync/ethersync/releases/latest) come with precompiled static binaries. Download one and put it somewhere in your shell's [`PATH`](https://en.wikipedia.org/wiki/PATH_(variable)):
+
+- `x86_64-unknown-linux-musl` for Linux
+- `universal-apple-darwin` for macOS
+- `aarch64-unknown-linux-musl` for Android (use a terminal emulator like [Termux](https://termux.dev))
+
 </details>
 
 <details>
