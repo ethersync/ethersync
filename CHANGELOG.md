@@ -5,29 +5,19 @@ SPDX-FileCopyrightText: 2024 zormit <nt4u@kpvn.de>
 SPDX-License-Identifier: CC-BY-SA-4.0
 -->
 
-# 0.7.0 (unreleased)
+# 0.7.0 (2025-07-27)
 
-Breaking changes:
+Update instructions for plugin authors:
 
-- The canonical location of the Neovim plugin is now at <https://github.com/ethersync/ethersync-nvim>. The directory from this repository is mirrored there.
+- In order to find the correct socket to connect to, `ethersync client` now needs to know the directory which contains the `.ethersync/` subdirectory. Search up from the edited file path to find it, and then either change the current directory there, or use the `--directory` command-line option to specify it.
 
-# 0.7.0-beta.1
+Other breaking changes:
 
-New features:
-
-- Many small improvements regarding user facing terminology (avoiding jargon)
-- The name shown with the cursor is now picked up from gitconfig instead of $USER
-- The join code is printed again, after one gets invalid
-
-# 0.7.0-beta.0
-
-Breaking changes:
-
-- Switched from libp2p to iroh as our peer-to-peer transport library. This changes the format of the connection addresess.
+- Switched from libp2p to [iroh](https://www.iroh.computer) as our peer-to-peer transport library. This changes the format of the connection addresess, and the underlying protocol.
 - Redesigning the CLI UI: Remove the `daemon` subcommand, instead use `share` and `join`.
 - Use `.ethersync/socket` as the location for the daemon's socket. This makes it possible to easily run multiple daemons at the same time.
 - Remove `--socket-name` command-line option.
-- The canonical location of the Neovim plugin is now at <https://github.com/ethersync/ethersync-vim>. The directory from this repository is mirrored there.
+- The canonical location of the Neovim plugin is now at <https://github.com/ethersync/ethersync-nvim>. The directory from this repository is mirrored there.
 
 Bug fixes:
 
@@ -36,11 +26,13 @@ Bug fixes:
 
 New features:
 
+- Use [magic-wormhole.rs](https://github.com/magic-wormhole/magic-wormhole.rs) for making initial connections. This allows you to easily tell a short joincode to another person.
 - Make cursor messages ephemeral, and don't store them in the CRDT document. This makes the document smaller, and loading and syncing faster.
 - Infer pair-programming use-case when there are configured Git remotes. In that case, always start a new history.
 - Always write current content to files, instead of respecting editor ownership. This allows better paring on Rust and web projects.
 - Neovim plugin: Add support for Neovim 11
 - Add global `--directory` command-line option to `ethersync`, which allows you to set the shared directory without changing your current path there.
+- The name shown with the cursor is now picked up from your (global or local) gitconfig instead of `$USER`.
 
 # 0.6.0 (2024-12-13)
 
