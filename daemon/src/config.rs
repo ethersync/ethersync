@@ -123,7 +123,7 @@ pub fn store_peer_in_config(directory: &Path, config_file: &Path, peer: &str) ->
 }
 
 pub fn has_git_remote(path: &Path) -> bool {
-    if let Ok(repo) = git2::Repository::discover(path) {
+    if let Ok(repo) = find_git_repo(path) {
         if let Ok(remotes) = repo.remotes() {
             return !remotes.is_empty();
         }
@@ -132,7 +132,7 @@ pub fn has_git_remote(path: &Path) -> bool {
 }
 
 pub fn ethersync_directory_is_ignored(path: &Path) -> bool {
-    if let Ok(repo) = git2::Repository::discover(path) {
+    if let Ok(repo) = find_git_repo(path) {
         let ethersync_dir = path.join(CONFIG_DIR);
         return repo
             .is_path_ignored(ethersync_dir)
@@ -148,7 +148,7 @@ pub fn get_username(base_dir: &Path) -> Option<String> {
 }
 
 fn local_git_username(base_dir: &Path) -> Result<String> {
-    Ok(git2::Repository::discover(base_dir)?
+    Ok(find_git_repo(base_dir)?
         .config()?
         .snapshot()?
         .get_str("user.name")?
@@ -160,4 +160,8 @@ fn global_git_username() -> Result<String> {
         .snapshot()?
         .get_str("user.name")?
         .to_string())
+}
+
+fn find_git_repo(path: &Path) -> Result<git2::Repository, git2::Error> {
+    git2::Repository::discover(path)
 }
