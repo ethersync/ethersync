@@ -300,6 +300,7 @@ impl DocumentActor {
         AbsolutePath::from_parts(&self.base_dir, file_path).expect("base_dir should be absolute")
     }
 
+    // Returns the messages to send back to the editor which made the request.
     async fn react_to_message_from_editor(
         &mut self,
         editor_id: EditorId,
@@ -618,6 +619,8 @@ impl DocumentActor {
         self.crdt_doc.current_file_content(file_path)
     }
 
+    // Returns the component messages to send back to the editor that sent the message.
+    // `from_editor` must be None if the component message originates from the "CRDT component".
     async fn process_component_message(
         &mut self,
         from_editor: Option<EditorId>,
@@ -628,7 +631,7 @@ impl DocumentActor {
         match message {
             ComponentMessage::Open { file_path, content } => {
                 if let Ok(crdt_content) = self.current_file_content(file_path) {
-                    let chunks = dissimilar::diff(&content, &crdt_content);
+                    let chunks = dissimilar::diff(content, &crdt_content);
                     if let [] | [dissimilar::Chunk::Equal(_)] = chunks.as_slice() {
                         // The contents match, nothing to do.
                     } else {
@@ -644,7 +647,7 @@ impl DocumentActor {
                     }
                 } else {
                     // The file doesn't exist yet - create it in the Automerge document.
-                    self.crdt_doc.initialize_text(&content, file_path);
+                    self.crdt_doc.initialize_text(content, file_path);
                 };
             }
             ComponentMessage::Close { file_path } => {
@@ -684,6 +687,7 @@ impl DocumentActor {
         return to_editor;
     }
 
+    // Send component message to all editors, excluding `exlude_id`.
     async fn broadcast_to_editors(
         &mut self,
         exclude_id: Option<EditorId>,
@@ -699,6 +703,7 @@ impl DocumentActor {
         }
     }
 
+    // Returns the protocol messages that should be sent to the editor.
     fn process_in_editor(
         &mut self,
         editor_id: EditorId,
