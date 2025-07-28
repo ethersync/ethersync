@@ -133,7 +133,7 @@ Feel free to [open a discussion on Github](https://github.com/ethersync/ethersyn
 - Mastodon: [@ethersync@fosstodon.org](https://fosstodon.org/@ethersync)
 - Email: <span>e<span title="ihate@spam.com&lt;/span&gt;">t</span>hersync</span>@zormit<i title="&lt;/i&gt;mailto:">.</i>de
 
-## 💚 Funded by
+## 💚 Thanks
 
 Ethersync received funding from [NLNet](https://nlnet.nl)'s [NGI0 Core Fund](https://nlnet.nl/core/) throughout 2024.
 
@@ -146,6 +146,10 @@ Thanks to the [Prototype Fund](https://www.prototypefund.de/) and the [Federal M
 <a href="https://okfn.de/en/"><img src="https://upload.wikimedia.org/wikipedia/commons/4/4d/Open_Knowledge_Foundation_Deutschland_Logo.svg" alt="Logo of the Open Knowledge Foundation Germany" style="height: 100px;"></a>
 &nbsp;&nbsp;
 <a href="https://www.bmbf.de/EN/"><img src="https://upload.wikimedia.org/wikipedia/commons/d/df/BMFTR_Logo.svg" alt="Logo of the German Federal Ministry of Research, Technology and Space" style="height: 110px;"></a>
+
+Ethersync is based on [Automerge](https://automerge.org), [Iroh](https://www.iroh.computer), and [Magic Wormhole](https://magic-wormhole.readthedocs.io).
+
+And finally, thanks to everyone who helped us beta-test, or reported issues!
 
 ## 📜 License
 
