@@ -255,6 +255,7 @@ mod tests {
         let result =
             editor_connection.message_from_editor(&EditorProtocolMessageFromEditor::Open {
                 uri: "file:///foobar/file".to_string(),
+                content: "".to_string(),
             });
 
         assert!(result.is_err());
@@ -273,12 +274,14 @@ mod tests {
         let result =
             editor_connection.message_from_editor(&EditorProtocolMessageFromEditor::Open {
                 uri: format!("file://{}", file.display()),
+                content: "initial content".to_string(),
             });
         assert_eq!(
             result,
             Ok((
                 ComponentMessage::Open {
-                    file_path: RelativePath::new("file")
+                    file_path: RelativePath::new("file"),
+                    content: "initial content".to_string(),
                 },
                 vec![]
             ))
