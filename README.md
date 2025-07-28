@@ -79,7 +79,7 @@ cargo install ethersync
 
 ## 📖 Basic usage
 
-In one directory:
+In the directory you want to share:
 
 ```
 $ ethersync share
@@ -91,7 +91,7 @@ $ ethersync share
 Peer connected: adfa90edd932732ddf242f24dc2dcd6156779e69966d432fcb3b9fe3ae9831ab
 ```
 
-In another directory (this can be on another computer!):
+Another person, in a separate directory (also works on the same computer):
 
 ```
 $ ethersync join 5-hamburger-endorse
