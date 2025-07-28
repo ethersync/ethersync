@@ -212,14 +212,15 @@ mod test_serde {
     #[test]
     fn open() {
         let message = JSONRPCFromEditor::from_jsonrpc(
-            r#"{"jsonrpc":"2.0","id":1,"method":"open","params":{"uri":"file:\/\/\/tmp\/file"}}"#,
+            r#"{"jsonrpc":"2.0","id":1,"method":"open","params":{"uri":"file:\/\/\/tmp\/file","content":"initial content"}}"#,
         );
         assert_eq!(
             message.unwrap(),
             JSONRPCFromEditor::Request {
                 id: 1,
                 payload: EditorProtocolMessageFromEditor::Open {
-                    uri: "file:///tmp/file".into()
+                    uri: "file:///tmp/file".into(),
+                    content: "initial content".to_string(),
                 }
             }
         );
