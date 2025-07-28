@@ -211,14 +211,18 @@ local function on_buffer_open()
     end
 
     local uri = "file://" .. filename
+    local buf = tonumber(vim.fn.expand("<abuf>"))
 
     -- Neovim enables eol for an empty file, but we do use this option values
     -- assuming there's a trailing newline iff eol is true.
-    if vim.fn.getfsize(vim.api.nvim_buf_get_name(0)) == 0 then
+    if vim.fn.getfsize(vim.api.nvim_buf_get_name(buf)) == 0 then
         vim.bo.eol = false
     end
 
-    send_request("open", { uri = uri }, function()
+    local lines = changetracker.get_all_lines_respecting_eol(buf)
+    local content = table.concat(lines, "\n")
+
+    send_request("open", { uri = uri, content = content }, function()
         debug("Tracking Edits")
         ensure_autoread_is_off()
         disable_writing()

@@ -159,6 +159,7 @@ impl JSONRPCFromEditor {
 pub enum EditorProtocolMessageFromEditor {
     Open {
         uri: DocumentUri,
+        content: String,
     },
     Close {
         uri: DocumentUri,
@@ -180,6 +181,7 @@ pub enum EditorProtocolMessageFromEditor {
 pub enum ComponentMessage {
     Open {
         file_path: RelativePath,
+        content: String,
     },
     Close {
         file_path: RelativePath,
