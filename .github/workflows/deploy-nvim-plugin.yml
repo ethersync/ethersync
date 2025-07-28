@@ -2,7 +2,7 @@
 #
 # SPDX-License-Identifier: CC0-1.0
 
-name: Deploy Neovim plugin
+name: Mirror development version of Neovim plugin
 
 on:
   push:
@@ -21,7 +21,7 @@ jobs:
       - uses: s0/git-publish-subdir-action@develop
         env:
           REPO: git@github.com:ethersync/ethersync-nvim
-          BRANCH: main
+          BRANCH: develop
           FOLDER: nvim-plugin
           SSH_PRIVATE_KEY: ${{ secrets.NVIM_PLUGIN_DEPLOY_PRIVATE_KEY }}
           SKIP_EMPTY_COMMITS: true
