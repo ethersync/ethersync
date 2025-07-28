@@ -5,7 +5,6 @@
 
 use std::{collections::HashMap, path::PathBuf};
 
-use anyhow::Context;
 use tracing::debug;
 
 use crate::{
@@ -105,7 +104,7 @@ impl EditorConnection {
         }
 
         match message {
-            EditorProtocolMessageFromEditor::Open { uri } => {
+            EditorProtocolMessageFromEditor::Open { uri, content } => {
                 let uri = FileUri::try_from(uri.clone()).map_err(anyhow_err_to_protocol_err)?;
                 let absolute_path = uri.to_absolute_path();
                 let relative_path = RelativePath::try_from_absolute(&self.base_dir, &absolute_path)
@@ -132,18 +131,13 @@ impl EditorConnection {
                     });
                 }
 
-                let bytes = sandbox::read_file(&self.base_dir, &absolute_path)
-                    .map_err(anyhow_err_to_protocol_err)?;
-                let text = String::from_utf8(bytes)
-                    .context("Failed to convert bytes to string")
-                    .map_err(anyhow_err_to_protocol_err)?;
-
-                let ot_server = OTServer::new(text);
+                let ot_server = OTServer::new(content.clone());
                 self.ot_servers.insert(relative_path.clone(), ot_server);
 
                 Ok((
                     ComponentMessage::Open {
                         file_path: relative_path,
+                        content: content.clone(),
                     },
                     vec![],
                 ))
