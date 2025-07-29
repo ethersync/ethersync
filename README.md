@@ -74,8 +74,7 @@ cargo install ethersync
 ### 2. Install an editor plugin
 
 - [Neovim](https://github.com/ethersync/ethersync-nvim)
-- [VS Code](https://marketplace.visualstudio.com/items?itemName=ethersync.ethersync)
-- [VS Codium](https://open-vsx.org/extension/ethersync/ethersync)
+- VS Code/Codium: Install the "Ethersync" extension from the marketplace
 
 ## 📖 Basic usage
 
