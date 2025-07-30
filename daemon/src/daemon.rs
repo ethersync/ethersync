@@ -19,6 +19,7 @@ use crate::watcher::Watcher;
 use crate::watcher::WatcherEvent;
 use crate::wormhole::put_secret_address_into_wormhole;
 use anyhow::Result;
+use automerge::ChangeHash;
 use automerge::{
     sync::{Message as AutomergeSyncMessage, State as SyncState},
     Patch,
@@ -214,6 +215,8 @@ impl DocumentActor {
                 state: mut peer_state,
                 response_tx,
             } => {
+                let heads_before_sync_message = self.get_heads();
+
                 let patches = self.apply_sync_message_to_doc(message, &mut peer_state);
 
                 let patch_effects = PatchEffect::from_crdt_patches(patches);
@@ -226,15 +229,54 @@ impl DocumentActor {
                             file_deltas.push(file_text_delta);
                         }
                         PatchEffect::FileRemoval(file_path) => {
-                            info!("Removing file {file_path}.");
+                            if self.owns(&file_path) {
+                                info!("Removing file {file_path}.");
 
-                            sandbox::remove_file(
-                                &self.base_dir,
-                                &self.absolute_path_for_file_path(&file_path),
-                            )
-                            .unwrap_or_else(|err| {
-                                warn!("Failed to remove file {file_path}: {err}");
-                            });
+                                sandbox::remove_file(
+                                    &self.base_dir,
+                                    &self.absolute_path_for_file_path(&file_path),
+                                )
+                                .unwrap_or_else(|err| {
+                                    warn!("Failed to remove file {file_path}: {err}");
+                                });
+                            } else {
+                                // At least one editor has the file open. We want to allow it to
+                                // keep editing it. Conceptually, we want to treat the file as
+                                // still there, but send deltas to the editor to make it empty.
+
+                                // Delete all previous file_deltas touching that file. After the
+                                // deletion, they are now irrelevant to the editor. And it's easier
+                                // for us to find out the file's content directly before the sync
+                                // message was applied.
+                                file_deltas.retain(|d| d.file_path != file_path);
+
+                                let content_before_sync_message = self
+                                    .file_content_at(&file_path, &heads_before_sync_message)
+                                    .expect("Could not get file content at heads");
+
+                                // Create a delta that deletes all the previous content.
+                                let mut text_delta = TextDelta::default();
+                                text_delta.delete(content_before_sync_message.chars().count());
+                                let delta = FileTextDelta {
+                                    file_path: file_path.clone(),
+                                    delta: text_delta,
+                                };
+                                file_deltas.push(delta);
+
+                                // If the file doesn't exist anymore after the sync message was
+                                // applied (which is now!), we'd like it to be there again. So
+                                // re-create an empty version.
+                                if !self.crdt_doc.file_exists(&file_path) {
+                                    info!("Peer deleted {file_path}, but you have it open in an editor. Bringing back an empty version.");
+                                    self.crdt_doc.update_text("", &file_path);
+                                } else {
+                                    // If the file is still there, the upcoming patches of the sync
+                                    // message will re-add it for us. In that case, we don't want
+                                    // to touch it in the doc, because we will send the
+                                    // modifications to the editors, and these contents should be
+                                    // consistent. So we don't need to do anything.
+                                }
+                            }
                         }
                         PatchEffect::FileBytes(file_path, bytes) => {
                             let absolute_path = &self.absolute_path_for_file_path(&file_path);
@@ -256,6 +298,7 @@ impl DocumentActor {
                 }
 
                 self.write_files_changed_in_file_deltas(&file_deltas);
+
                 for file_text_delta in &file_deltas {
                     let message = ComponentMessage::Edit {
                         file_path: file_text_delta.file_path.clone(),
@@ -442,7 +485,7 @@ impl DocumentActor {
                 let relative_file_path = RelativePath::try_from_path(&self.base_dir, &file_path)
                     .expect("Watcher event should have a path within the base directory");
                 if self.owns(&relative_file_path) {
-                    self.crdt_doc.remove_file(&relative_file_path);
+                    self.remove_file(&relative_file_path);
                     let _ = self.doc_changed_ping_tx.send(());
                 }
             }
@@ -486,6 +529,10 @@ impl DocumentActor {
             .receive_sync_message_log_patches(message, peer_state);
         let _ = self.doc_changed_ping_tx.send(());
         patches
+    }
+
+    fn get_heads(&mut self) -> Vec<ChangeHash> {
+        self.crdt_doc.get_heads()
     }
 
     fn random_delta(&self) -> TextDelta {
@@ -617,6 +664,7 @@ impl DocumentActor {
                     }
                 }
             });
+
         for relative_file_path in self.crdt_doc.files() {
             let absolute_file_path = self.absolute_path_for_file_path(&relative_file_path);
             if !sandbox::exists(&self.base_dir, &absolute_file_path)
@@ -628,7 +676,7 @@ impl DocumentActor {
                 warn!(
                         "File {relative_file_path} exists in the CRDT, but not on disk. Deleting from CRDT."
                     );
-                self.crdt_doc.remove_file(&relative_file_path);
+                self.remove_file(&relative_file_path);
             }
         }
         let _ = self.doc_changed_ping_tx.send(());
@@ -636,6 +684,19 @@ impl DocumentActor {
 
     fn current_file_content(&self, file_path: &RelativePath) -> Result<String> {
         self.crdt_doc.current_file_content(file_path)
+    }
+
+    fn file_content_at(&self, file_path: &RelativePath, heads: &[ChangeHash]) -> Result<String> {
+        self.crdt_doc.file_content_at(file_path, heads)
+    }
+
+    fn remove_file(&mut self, file_path: &RelativePath) {
+        if self.owns(file_path) {
+            self.crdt_doc.remove_file(file_path);
+        } else {
+            // TODO: Once we remove the concept of ownership entirely, make sure to send proper
+            // ComponentMessagse to the editors that remove their entire content.
+        }
     }
 
     /// Called when a component message is sent "into the core".

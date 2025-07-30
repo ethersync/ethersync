@@ -12,7 +12,7 @@ use automerge::{
     patches::TextRepresentation,
     sync::{Message as AutomergeSyncMessage, State as SyncState, SyncDoc},
     transaction::Transactable,
-    AutoCommit, ObjType, Patch, PatchLog, ReadDoc, TextEncoding,
+    AutoCommit, ChangeHash, ObjType, Patch, PatchLog, ReadDoc, TextEncoding,
 };
 use dissimilar::Chunk;
 use tracing::{debug, info};
@@ -115,6 +115,18 @@ impl Document {
         self.text_obj(file_path).map(|to| {
             self.doc
                 .text(to)
+                .expect("Failed to get string from Automerge text object")
+        })
+    }
+
+    pub fn file_content_at(
+        &self,
+        file_path: &RelativePath,
+        heads: &[ChangeHash],
+    ) -> Result<String> {
+        self.text_obj_at(file_path, heads).map(|to| {
+            self.doc
+                .text_at(to, heads)
                 .expect("Failed to get string from Automerge text object")
         })
     }
@@ -235,6 +247,27 @@ impl Document {
         }
     }
 
+    fn text_obj_at(
+        &self,
+        file_path: &RelativePath,
+        heads: &[ChangeHash],
+    ) -> Result<automerge::ObjId> {
+        // I hope this one is always there...
+        let file_map = self.top_level_map_obj("files")?;
+
+        let text_obj = self
+            .doc
+            .get_at(file_map, file_path, heads)
+            .unwrap_or_else(|_| panic!("Failed to get {file_path} key from Automerge document"));
+        if let Some((automerge::Value::Object(ObjType::Text), text_obj)) = text_obj {
+            Ok(text_obj)
+        } else {
+            Err(anyhow::anyhow!(
+                "Automerge document doesn't have a {file_path} Text object, so I can't provide it"
+            ))
+        }
+    }
+
     pub fn files(&self) -> Vec<RelativePath> {
         if let Ok(file_map) = self.top_level_map_obj("files") {
             self.doc
@@ -255,6 +288,10 @@ impl Document {
         } else {
             false
         }
+    }
+
+    pub fn get_heads(&mut self) -> Vec<ChangeHash> {
+        self.doc.get_heads()
     }
 }
 
