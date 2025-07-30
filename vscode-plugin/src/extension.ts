@@ -76,7 +76,7 @@ let t0 = Date.now()
 const mutex = new Mutex()
 let attemptedRemoteEdits: Set<vscode.TextEdit[]> = new Set()
 
-const openType = new rpc.RequestType<{uri: string}, string, void>("open")
+const openType = new rpc.RequestType<{uri: string; content: string}, string, void>("open")
 const closeType = new rpc.RequestType<{uri: string}, string, void>("close")
 const editType = new rpc.RequestType<Edit, string, void>("edit")
 const cursorType = new rpc.NotificationType<Cursor>("cursor")
@@ -234,12 +234,15 @@ async function processCursorFromDaemon(cursor: CursorFromDaemon) {
     try {
         let selections: vscode.DecorationOptions[] = []
         if (document) {
-            selections = cursor.ranges.map((r) => ethersyncRangeToVSCodeRange(document, r)).map(vsCodeRangeToSelection).map(s => {
-                return {
-                    range: s,
-                    hoverMessage: cursor.name,
-                }
-            })
+            selections = cursor.ranges
+                .map((r) => ethersyncRangeToVSCodeRange(document, r))
+                .map(vsCodeRangeToSelection)
+                .map((s) => {
+                    return {
+                        range: s,
+                        hoverMessage: cursor.name,
+                    }
+                })
         }
         setCursor(cursor.userid, cursor.name || "anonymous", vscode.Uri.parse(uri), selections)
     } catch {
@@ -290,8 +293,9 @@ async function processUserOpen(document: vscode.TextDocument) {
 
     const fileUri = decodeURI(document.uri.toString())
     debug("OPEN " + fileUri)
+    const content = document.getText()
     connection
-        .sendRequest(openType, {uri: fileUri})
+        .sendRequest(openType, {uri: fileUri, content: content})
         .then(() => {
             revisions[document.fileName] = new Revision()
             updateContents(document)
