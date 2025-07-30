@@ -574,14 +574,16 @@ impl DocumentActor {
                         let relative_file_path =
                             RelativePath::try_from_path(&self.base_dir, file_path)
                                 .expect("Walked file path should be within base directory");
-                        if let Ok(text) = String::from_utf8(bytes) {
-                            if init {
-                                self.crdt_doc.initialize_text(&text, &relative_file_path);
+                        if self.owns(&relative_file_path) {
+                            if let Ok(text) = String::from_utf8(bytes) {
+                                if init {
+                                    self.crdt_doc.initialize_text(&text, &relative_file_path);
+                                } else {
+                                    self.crdt_doc.update_text(&text, &relative_file_path);
+                                }
                             } else {
-                                self.crdt_doc.update_text(&text, &relative_file_path);
+                                warn!("Ignoring non-UTF-8 file {relative_file_path}",)
                             }
-                        } else {
-                            warn!("Ignoring non-UTF-8 file {relative_file_path}",)
                         }
                     }
                     Err(e) => {
@@ -589,11 +591,15 @@ impl DocumentActor {
                     }
                 }
             });
-        for file_path in self.crdt_doc.files() {
-            let absolute_file_path = self.absolute_path_for_file_path(&file_path);
-            if !sandbox::exists(&self.base_dir, &absolute_file_path).expect("") {
-                warn!("File {file_path} exists in the CRDT, but not on disk. Deleting from CRDT.");
-                self.crdt_doc.remove_text(&file_path);
+        for relative_file_path in self.crdt_doc.files() {
+            let absolute_file_path = self.absolute_path_for_file_path(&relative_file_path);
+            if !sandbox::exists(&self.base_dir, &absolute_file_path).expect("")
+                && self.owns(&relative_file_path)
+            {
+                warn!(
+                        "File {relative_file_path} exists in the CRDT, but not on disk. Deleting from CRDT."
+                    );
+                self.crdt_doc.remove_text(&relative_file_path);
             }
         }
         let _ = self.doc_changed_ping_tx.send(());
