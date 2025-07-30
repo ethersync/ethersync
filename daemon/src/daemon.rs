@@ -226,15 +226,28 @@ impl DocumentActor {
                             file_deltas.push(file_text_delta);
                         }
                         PatchEffect::FileRemoval(file_path) => {
-                            info!("Removing file {file_path}.");
+                            if self.owns(&file_path) {
+                                info!("Removing file {file_path}.");
 
-                            sandbox::remove_file(
-                                &self.base_dir,
-                                &self.absolute_path_for_file_path(&file_path),
-                            )
-                            .unwrap_or_else(|err| {
-                                warn!("Failed to remove file {file_path}: {err}");
-                            });
+                                sandbox::remove_file(
+                                    &self.base_dir,
+                                    &self.absolute_path_for_file_path(&file_path),
+                                )
+                                .unwrap_or_else(|err| {
+                                    warn!("Failed to remove file {file_path}: {err}");
+                                });
+                            } else {
+                                // At least one editor has the file open. Deleting it under its ass
+                                // would not be nice. So bring back the file, but edit it to be
+                                // empty.
+                                self.crdt_doc.update_text("".to_string(), &file_path);
+                                let text_delta = ...
+                                let delta = FileTextDelta {
+                                    file_path,
+                                    text_delta,
+                                };
+                                file_deltas.push(delta);
+                            }
                         }
                         PatchEffect::NoEffect => {}
                     }
@@ -427,7 +440,7 @@ impl DocumentActor {
                 let relative_file_path = RelativePath::try_from_path(&self.base_dir, &file_path)
                     .expect("Watcher event should have a path within the base directory");
                 if self.owns(&relative_file_path) {
-                    self.crdt_doc.remove_text(&relative_file_path);
+                    self.remove_file(&relative_file_path);
                     let _ = self.doc_changed_ping_tx.send(());
                 }
             }
@@ -608,6 +621,7 @@ impl DocumentActor {
                     }
                 }
             });
+
         for relative_file_path in self.crdt_doc.files() {
             let absolute_file_path = self.absolute_path_for_file_path(&relative_file_path);
             if !sandbox::exists(&self.base_dir, &absolute_file_path).expect("")
@@ -616,7 +630,7 @@ impl DocumentActor {
                 warn!(
                         "File {relative_file_path} exists in the CRDT, but not on disk. Deleting from CRDT."
                     );
-                self.crdt_doc.remove_text(&relative_file_path);
+                self.remove_file(&relative_file_path);
             }
         }
         let _ = self.doc_changed_ping_tx.send(());
@@ -624,6 +638,13 @@ impl DocumentActor {
 
     fn current_file_content(&self, file_path: &RelativePath) -> Result<String> {
         self.crdt_doc.current_file_content(file_path)
+    }
+
+    fn remove_file(&self, file_path: &RelativePath) {
+        if self.owns(&file_path) {
+            self.crdt_doc.remove_text(&file_path);
+        } else {
+        }
     }
 
     /// Called when a component message is sent "into the core".
