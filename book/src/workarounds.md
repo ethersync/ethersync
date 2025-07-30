@@ -12,3 +12,8 @@ Some things about Ethersync are currently still a bit annoying. Let us show you 
 ## Restarting the daemon requires restarting the editor
 
 The editor plugins currently only try to connect to Ethersync when they first start. If you need to restart the daemon for any reason, you will also need to restart all open editors to reconnect.
+
+## Can't work on files from multiple projects in one editor session
+
+The editor plugins currently only connect to a single daemon, when the first file from a shared directory is opened.
+To work on files from another project, either use a second editor instance, or close the first one.
