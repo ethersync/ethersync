@@ -68,7 +68,7 @@ impl RelativePath {
         })?;
         let relative_path = path.strip_prefix(&project_dir).with_context(|| {
             format!(
-                "Failed to strip project directory '{}' from path {path}",
+                "The path {path} is not in the project directory '{}'. Your plugin probably doesn't support opening files from multiple Ethersync directories.",
                 project_dir.display()
             )
         })?;
