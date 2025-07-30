@@ -3,9 +3,9 @@
 --
 -- SPDX-License-Identifier: AGPL-3.0-or-later
 
-local changetracker = require("changetracker")
-local cursor = require("cursor")
-local debug = require("logging").debug
+local changetracker = require("ethersync.changetracker")
+local cursor = require("ethersync.cursor")
+local debug = require("ethersync.logging").debug
 
 -- JSON-RPC connection.
 local client

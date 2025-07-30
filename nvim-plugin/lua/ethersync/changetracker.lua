@@ -4,8 +4,8 @@
 -- SPDX-License-Identifier: AGPL-3.0-or-later
 
 local sync = require("vim.lsp.sync")
-local utils = require("utils")
-local debug = require("logging").debug
+local utils = require("ethersync.utils")
+local debug = require("ethersync.logging").debug
 
 local M = {}
 
