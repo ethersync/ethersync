@@ -44,6 +44,7 @@ jobs:
           target: ${{ matrix.target }}
           token: ${{ secrets.GITHUB_TOKEN }}
 
+  # There's a "mirror to develop" step in deploy-nvim-plugin.yml, make sure to change both accordingly.
   mirror-nvim-plugin:
     name: Mirror Neovim plugin to ethersync/ethersync-nvim
     runs-on: ubuntu-latest

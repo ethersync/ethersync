@@ -12,6 +12,7 @@ on:
       - 'nvim-plugin/**'
       - '.github/workflows/deploy-nvim-plugin.yml'
 
+# There's a "mirror to main" step in release.yml, make sure to change both accordingly.
 jobs:
   mirror:
     name: Mirror to ethersync/ethersync-nvim
