@@ -131,8 +131,10 @@ fn check_inside_base_dir_and_canonicalize(base_dir: &Path, path: &Path) -> Resul
     let canonical_base_dir = absolute_and_canonicalized(base_dir)?;
     let canonical_path = absolute_and_canonicalized(path)?;
 
-    if !canonical_path.starts_with(canonical_base_dir) {
-        bail!("File path is not inside the base directory.");
+    if !canonical_path.starts_with(&canonical_base_dir) {
+        let canonical_path_str = &canonical_path.display();
+        let canonical_base_dir_str = &canonical_base_dir.display();
+        bail!("File path {canonical_path_str} is not inside the base directory {canonical_base_dir_str}");
     }
 
     Ok(canonical_path)
