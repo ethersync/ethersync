@@ -75,9 +75,7 @@ pub async fn spawn_socket_listener(
     // Using the sandbox method here is technically unnecessary,
     // but we want to really run all path operations through the sandbox module.
     // TODO: Use correct directory as guard.
-    if sandbox::exists(Path::new("/"), Path::new(&socket_path))
-        .expect("Failed to check existence of path")
-    {
+    if sandbox::exists(Path::new("/"), Path::new(&socket_path)) {
         sandbox::remove_file(Path::new("/"), &socket_path).expect("Could not remove socket");
     }
 

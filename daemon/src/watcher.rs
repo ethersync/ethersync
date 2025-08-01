@@ -4,7 +4,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 use crate::sandbox;
-use anyhow::Context;
 use notify::{
     event::EventKind, RecommendedWatcher, RecursiveMode, Result as NotifyResult,
     Watcher as NotifyWatcher,
@@ -108,12 +107,8 @@ impl Watcher {
                     notify::event::RenameMode::Any,
                 )) => {
                     assert!(event.paths.len() == 1);
-                    let path_exists = sandbox::exists(&self.base_dir, &event.paths[0])
-                        .with_context(|| {
-                            format!("Checking existence of path '{}'", &event.paths[0].display())
-                        })
-                        .expect("Should have been able to check for existence in watcher");
-                    if path_exists {
+                    debug!("Checking existence of path '{}'", &event.paths[0].display());
+                    if sandbox::exists(&self.base_dir, &event.paths[0]) {
                         if let Some(e) = self.maybe_created(&event.paths[0]) {
                             return Some(e);
                         }

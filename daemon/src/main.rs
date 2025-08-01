@@ -59,7 +59,7 @@ fn has_ethersync_directory(dir: &Path) -> bool {
     let ethersync_dir = dir.join(config::CONFIG_DIR);
     // Using the sandbox method here is technically unnecessary,
     // but we want to really run all path operations through the sandbox module.
-    sandbox::exists(dir, &ethersync_dir).expect("Failed to check") && ethersync_dir.is_dir()
+    sandbox::exists(dir, &ethersync_dir) && ethersync_dir.is_dir()
 }
 
 #[tokio::main]

@@ -81,10 +81,13 @@ pub fn create_dir_all(absolute_base_dir: &Path, absolute_dir_path: &Path) -> Res
     Ok(())
 }
 
-pub fn exists(absolute_base_dir: &Path, absolute_file_path: &Path) -> Result<bool> {
+pub fn exists(absolute_base_dir: &Path, absolute_file_path: &Path) -> bool {
     let canonical_file_path =
-        check_inside_base_dir_and_canonicalize(absolute_base_dir, absolute_file_path)?;
-    Ok(canonical_file_path.exists())
+        check_inside_base_dir_and_canonicalize(absolute_base_dir, absolute_file_path);
+    return match canonical_file_path {
+        Err(_) => false,
+        Ok(canonical_file_path) => canonical_file_path.exists(),
+    };
 }
 
 // TODO: Don't build the list of ignored files on every call.

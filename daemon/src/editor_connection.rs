@@ -112,9 +112,7 @@ impl EditorConnection {
                     .map_err(anyhow_err_to_protocol_err)?;
 
                 debug!("Got an 'open' message for {relative_path}");
-                if !sandbox::exists(&self.base_dir, &absolute_path)
-                    .map_err(anyhow_err_to_protocol_err)?
-                {
+                if !sandbox::exists(&self.base_dir, &absolute_path) {
                     // Creating nonexisting files allows us to traverse this file for whether it's
                     // ignored, which is needed to even be allowed to open it.
                     sandbox::write_file(&self.base_dir, &absolute_path, b"")
