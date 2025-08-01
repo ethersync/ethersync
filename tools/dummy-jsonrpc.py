@@ -24,6 +24,7 @@ messages = {
         "method": "open",
         "params": {
             "uri": uri,
+            "content": "initial content",
         },
     },
     "edit": {

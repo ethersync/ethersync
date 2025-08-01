@@ -12,7 +12,7 @@ local M = {}
 -- Used to note that changes to the buffer should be ignored, and not be sent out as deltas.
 local ignore_edits = false
 
-local function get_all_lines_respecting_eol(buffer)
+function M.get_all_lines_respecting_eol(buffer)
     local lines = vim.api.nvim_buf_get_lines(buffer, 0, -1, true)
 
     -- If eol is on, that's like a virtual empty line after the current lines.
@@ -35,7 +35,7 @@ end
 function M.track_changes(buffer, callback)
     -- Used to remember the previous content of the buffer, so that we can
     -- calculate the difference between the previous and the current content.
-    local prev_lines = get_all_lines_respecting_eol(buffer)
+    local prev_lines = M.get_all_lines_respecting_eol(buffer)
 
     vim.api.nvim_buf_attach(buffer, false, {
         on_lines = function(
@@ -54,7 +54,7 @@ function M.track_changes(buffer, callback)
             -- last_line and new_last_line are exclusive
 
             -- TODO: optimize with a cache
-            local curr_lines = get_all_lines_respecting_eol(buffer)
+            local curr_lines = M.get_all_lines_respecting_eol(buffer)
 
             -- Special case: When deleting the entire content, when 'eol' is on, there
             -- will still be a "virtual line" after the current empty line: The file content will be "\n".

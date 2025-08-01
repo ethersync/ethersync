@@ -66,10 +66,11 @@ The protocol uses a couple of basic data types (we're using the same syntax to s
 
 These should be sent as JSON-RPC requests, so that the daemon can send back errors.
 
-#### `"open" {uri: DocumentUri}`
+#### `"open" {uri: DocumentUri, content: String}`
 
 - Sent when the editor opens a document. The daemon will respond either with a success, or with an error describing why the file could not be opened (for example, because it is an ignored file, or if it's not part of the daemons shared project).
 - When an open succeeds, the editor gets ownership of the file, and the daemon will start sending updates for it as they come in.
+- The `content` parameter should be the editor's buffer content. If that content diverges from what the daemon thinks the content should be, it will send edits back.
 - The editor has to initialize its editor revision and daemon revision for that document to 0.
 
 #### `"close" {uri: DocumentUri}`

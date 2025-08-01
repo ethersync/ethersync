@@ -12,8 +12,8 @@ use crate::peer;
 use crate::sandbox;
 use crate::types::{
     ComponentMessage, CursorId, CursorState, EditorProtocolMessageError,
-    EditorProtocolMessageFromEditor, EditorProtocolObject, EphemeralMessage, FileTextDelta,
-    JSONRPCFromEditor, JSONRPCResponse, PatchEffect, TextDelta,
+    EditorProtocolMessageFromEditor, EditorProtocolMessageToEditor, EditorProtocolObject,
+    EphemeralMessage, FileTextDelta, JSONRPCFromEditor, JSONRPCResponse, PatchEffect, TextDelta,
 };
 use crate::watcher::Watcher;
 use crate::watcher::WatcherEvent;
@@ -179,8 +179,7 @@ impl DocumentActor {
                     file_path: RelativePath::new(TEST_FILE_PATH),
                     delta,
                 };
-                self.inside_message_to_doc(&message).await;
-                self.broadcast_to_editors(None, &message).await;
+                self.process_component_message(None, &message).await;
             }
             DocMessage::FromEditor(editor_id, message) => {
                 self.handle_message_from_editor(editor_id, message).await;
@@ -296,30 +295,29 @@ impl DocumentActor {
         AbsolutePath::from_parts(&self.base_dir, file_path).expect("base_dir should be absolute")
     }
 
+    // Returns the messages to send back to the editor which made the request.
     async fn react_to_message_from_editor(
         &mut self,
         editor_id: EditorId,
         message: &EditorProtocolMessageFromEditor,
-    ) -> Result<(), EditorProtocolMessageError> {
-        let (inside_message, messages_to_editor) = self
+    ) -> Result<Vec<EditorProtocolMessageToEditor>, EditorProtocolMessageError> {
+        let (inside_message, mut messages_to_editor) = self
             .editor_connections
             .get_mut(&editor_id)
             .expect("Could not get editor connection")
             .0
             .message_from_editor(message)?;
 
-        self.inside_message_to_doc(&inside_message).await;
-        self.broadcast_to_editors(Some(editor_id), &inside_message)
+        let component_messages_to_editor = self
+            .process_component_message(Some(editor_id), &inside_message)
             .await;
-        for message_to_editor in messages_to_editor {
-            self.send_to_editor_client(
-                &editor_id,
-                EditorProtocolObject::Request(message_to_editor),
-            )
-            .await;
-        }
 
-        Ok(())
+        let mut more_messages_to_editor =
+            self.process_in_editor(editor_id, component_messages_to_editor);
+
+        messages_to_editor.append(&mut more_messages_to_editor);
+
+        Ok(messages_to_editor)
     }
 
     fn cursor_id(&self, editor_id: EditorId) -> String {
@@ -331,24 +329,36 @@ impl DocumentActor {
             Ok(parsed_message) => match parsed_message {
                 JSONRPCFromEditor::Request { id, payload } => {
                     let result = self.react_to_message_from_editor(editor_id, &payload).await;
-                    let response = match result {
+                    match result {
                         Err(error) => {
                             error!("Error for JSON-RPC request: {:?}", error);
-                            JSONRPCResponse::RequestError {
-                                id: Some(id),
-                                error,
+                            self.send_to_editor_client(
+                                &editor_id,
+                                EditorProtocolObject::Response(JSONRPCResponse::RequestError {
+                                    id: Some(id),
+                                    error,
+                                }),
+                            )
+                            .await;
+                        }
+                        Ok(messages) => {
+                            self.send_to_editor_client(
+                                &editor_id,
+                                EditorProtocolObject::Response(JSONRPCResponse::RequestSuccess {
+                                    id,
+                                    result: "success".into(),
+                                }),
+                            )
+                            .await;
+                            for message in messages {
+                                self.send_to_editor_client(
+                                    &editor_id,
+                                    EditorProtocolObject::Request(message),
+                                )
+                                .await;
                             }
                         }
-                        Ok(_) => JSONRPCResponse::RequestSuccess {
-                            id,
-                            result: "success".into(),
-                        },
                     };
-                    self.send_to_editor_client(
-                        &editor_id,
-                        EditorProtocolObject::Response(response),
-                    )
-                    .await;
                 }
                 JSONRPCFromEditor::Notification { payload } => {
                     let _ = self.react_to_message_from_editor(editor_id, &payload).await;
@@ -598,16 +608,36 @@ impl DocumentActor {
         self.crdt_doc.current_file_content(file_path)
     }
 
-    // TODO: Give this method a better name.
-    async fn inside_message_to_doc(&mut self, message: &ComponentMessage) {
+    // Returns the component messages to send back to the editor that sent the message.
+    // `from_editor` must be None if the component message originates from the "CRDT component".
+    async fn process_component_message(
+        &mut self,
+        from_editor: Option<EditorId>,
+        message: &ComponentMessage,
+    ) -> Vec<ComponentMessage> {
+        let mut to_editor = vec![];
+
         match message {
-            ComponentMessage::Open { file_path } => {
-                self.current_file_content(file_path).unwrap_or_else(|_| {
+            ComponentMessage::Open { file_path, content } => {
+                if let Ok(crdt_content) = self.current_file_content(file_path) {
+                    let chunks = dissimilar::diff(content, &crdt_content);
+                    if let [] | [dissimilar::Chunk::Equal(_)] = chunks.as_slice() {
+                        // The contents match, nothing to do.
+                    } else {
+                        // The editor's content and the CRDT content differ. Update the editor to
+                        // match.
+                        let text_delta: TextDelta = chunks.into();
+                        let update_message = ComponentMessage::Edit {
+                            file_path: file_path.clone(),
+                            delta: text_delta,
+                        };
+
+                        to_editor.push(update_message);
+                    }
+                } else {
                     // The file doesn't exist yet - create it in the Automerge document.
-                    let text = String::new();
-                    self.crdt_doc.initialize_text(&text, file_path);
-                    text
-                });
+                    self.crdt_doc.initialize_text(content, file_path);
+                };
             }
             ComponentMessage::Close { file_path } => {
                 self.write_file(file_path);
@@ -640,8 +670,13 @@ impl DocumentActor {
                 let _ = self.ephemeral_message_tx.send(new_cursor_state);
             }
         }
+
+        self.broadcast_to_editors(from_editor, message).await;
+
+        return to_editor;
     }
 
+    // Send component message to all editors, excluding `exlude_id`.
     async fn broadcast_to_editors(
         &mut self,
         exclude_id: Option<EditorId>,
@@ -657,13 +692,29 @@ impl DocumentActor {
         }
     }
 
-    async fn send_to_editor(&mut self, editor_id: EditorId, message: &ComponentMessage) {
-        let messages_to_editor = self
+    // Returns the protocol messages that should be sent to the editor.
+    fn process_in_editor(
+        &mut self,
+        editor_id: EditorId,
+        messages: Vec<ComponentMessage>,
+    ) -> Vec<EditorProtocolMessageToEditor> {
+        let mut all_responses = vec![];
+        let connection = &mut self
             .editor_connections
             .get_mut(&editor_id)
             .expect("Could not get editor connection")
-            .0
-            .message_from_daemon(message);
+            .0;
+
+        for message in messages {
+            let mut responses = connection.message_from_daemon(&message);
+            all_responses.append(&mut responses);
+        }
+
+        all_responses
+    }
+
+    async fn send_to_editor(&mut self, editor_id: EditorId, message: &ComponentMessage) {
+        let messages_to_editor = self.process_in_editor(editor_id, vec![message.clone()]);
 
         for message_to_editor in messages_to_editor {
             self.send_to_editor_client(
@@ -715,11 +766,7 @@ impl DocumentActor {
             },
         };
 
-        // Send cursor delete to remote peers.
-        self.inside_message_to_doc(&message).await;
-
-        // Send cursor delete to local peers.
-        self.broadcast_to_editors(None, &message).await;
+        self.process_component_message(None, &message).await;
 
         self.ephemeral_states.remove(cursor_id);
     }
