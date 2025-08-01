@@ -586,7 +586,11 @@ impl DocumentActor {
             });
         for file_path in self.crdt_doc.files() {
             let absolute_file_path = self.absolute_path_for_file_path(&file_path);
-            if !sandbox::exists(&self.base_dir, &absolute_file_path).expect("") {
+            if !sandbox::exists(&self.base_dir, &absolute_file_path)
+                .expect(
+                    "Should have been able to check for file existence while reading current directory content"
+                )
+            {
                 warn!("File {file_path} exists in the CRDT, but not on disk. Deleting from CRDT.");
                 self.crdt_doc.remove_text(&file_path);
             }
