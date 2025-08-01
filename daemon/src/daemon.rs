@@ -610,7 +610,10 @@ impl DocumentActor {
             });
         for relative_file_path in self.crdt_doc.files() {
             let absolute_file_path = self.absolute_path_for_file_path(&relative_file_path);
-            if !sandbox::exists(&self.base_dir, &absolute_file_path).expect("")
+            if !sandbox::exists(&self.base_dir, &absolute_file_path)
+                .expect(
+                    "Should have been able to check for file existence while reading current directory content"
+                )
                 && self.owns(&relative_file_path)
             {
                 warn!(
