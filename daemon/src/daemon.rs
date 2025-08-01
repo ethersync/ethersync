@@ -48,6 +48,7 @@ pub enum DocMessage {
     },
     FromEditor(EditorId, String),
     FromWatcher(WatcherEvent),
+    RescanFiles,
     Persist,
     RandomEdit,
     ReceiveSyncMessage {
@@ -73,6 +74,7 @@ impl fmt::Debug for DocMessage {
                 format!("open/close/edit/... message from editor #{id}")
             }
             DocMessage::FromWatcher(_) => "watcher event".to_string(),
+            DocMessage::RescanFiles => "rescan".to_string(),
             DocMessage::Persist => "persist".to_string(),
             DocMessage::RandomEdit => "random edit".to_string(),
             DocMessage::ReceiveSyncMessage { .. } => "<automerge internal sync rcv>".to_string(),
@@ -187,6 +189,9 @@ impl DocumentActor {
             }
             DocMessage::FromWatcher(watcher_event) => {
                 self.handle_watcher_event(watcher_event).await;
+            }
+            DocMessage::RescanFiles => {
+                self.read_current_content_from_dir(false);
             }
             DocMessage::Persist => {
                 let persistence_file = self.base_dir.join(".ethersync/doc");
@@ -569,14 +574,16 @@ impl DocumentActor {
                         let relative_file_path =
                             RelativePath::try_from_path(&self.base_dir, file_path)
                                 .expect("Walked file path should be within base directory");
-                        if let Ok(text) = String::from_utf8(bytes) {
-                            if init {
-                                self.crdt_doc.initialize_text(&text, &relative_file_path);
+                        if self.owns(&relative_file_path) {
+                            if let Ok(text) = String::from_utf8(bytes) {
+                                if init {
+                                    self.crdt_doc.initialize_text(&text, &relative_file_path);
+                                } else {
+                                    self.crdt_doc.update_text(&text, &relative_file_path);
+                                }
                             } else {
-                                self.crdt_doc.update_text(&text, &relative_file_path);
+                                warn!("Ignoring non-UTF-8 file {relative_file_path}",)
                             }
-                        } else {
-                            warn!("Ignoring non-UTF-8 file {relative_file_path}",)
                         }
                     }
                     Err(e) => {
@@ -584,11 +591,15 @@ impl DocumentActor {
                     }
                 }
             });
-        for file_path in self.crdt_doc.files() {
-            let absolute_file_path = self.absolute_path_for_file_path(&file_path);
-            if !sandbox::exists(&self.base_dir, &absolute_file_path).expect("") {
-                warn!("File {file_path} exists in the CRDT, but not on disk. Deleting from CRDT.");
-                self.crdt_doc.remove_text(&file_path);
+        for relative_file_path in self.crdt_doc.files() {
+            let absolute_file_path = self.absolute_path_for_file_path(&relative_file_path);
+            if !sandbox::exists(&self.base_dir, &absolute_file_path).expect("")
+                && self.owns(&relative_file_path)
+            {
+                warn!(
+                        "File {relative_file_path} exists in the CRDT, but not on disk. Deleting from CRDT."
+                    );
+                self.crdt_doc.remove_text(&relative_file_path);
             }
         }
         let _ = self.doc_changed_ping_tx.send(());
@@ -872,13 +883,45 @@ impl Daemon {
     }
 }
 
+// Spawn a file watcher and feed its events to the document_handle.
+// In addition, a short timeout after the last event, do a full re-scan, so that we don't miss any
+// file changes - the watcher isn't necessarily exhaustive.
 async fn spawn_file_watcher(base_dir: &Path, document_handle: DocumentActorHandle) {
     let mut watcher = Watcher::new(base_dir);
+
     tokio::spawn(async move {
-        while let Some(watcher_event) = watcher.next().await {
-            document_handle
-                .send_message(DocMessage::FromWatcher(watcher_event))
-                .await;
+        let debounce_duration = Duration::from_millis(100);
+
+        let debounce_timer = tokio::time::sleep(debounce_duration);
+        // Sleep does not implement the Unpin trait, so in order to use it with select!, we have to
+        // pin it first (according to the documentation).
+        tokio::pin!(debounce_timer);
+
+        let mut rescan_required = false;
+
+        loop {
+            tokio::select! {
+                maybe_event = watcher.next() => {
+                    if let Some(watcher_event) = maybe_event {
+                        document_handle
+                            .send_message(DocMessage::FromWatcher(watcher_event))
+                            .await;
+
+                        debounce_timer.as_mut().reset(tokio::time::Instant::now() + debounce_duration);
+                        rescan_required = true;
+                    } else {
+                        // Watcher terminated. Seems we're shutting down.
+                        return;
+                    }
+                }
+
+                _ = &mut debounce_timer, if rescan_required => {
+                    document_handle
+                        .send_message(DocMessage::RescanFiles)
+                        .await;
+                    rescan_required = false;
+                }
+            }
         }
     });
 }
