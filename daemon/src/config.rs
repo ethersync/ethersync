@@ -136,7 +136,7 @@ pub fn ethersync_directory_should_be_ignored_but_isnt(path: &Path) -> bool {
         let ethersync_dir = path.join(CONFIG_DIR);
         return !repo
             .is_path_ignored(ethersync_dir)
-            .expect("Should have been able to determine ignore state for {path}");
+            .expect("Should have been able to determine ignore state of path");
     }
     false
 }
