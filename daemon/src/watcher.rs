@@ -34,11 +34,14 @@ pub struct Watcher {
 impl Watcher {
     pub fn new(dir: &Path) -> Self {
         let (tx, rx) = mpsc::channel(1);
-        let mut watcher = notify::recommended_watcher(move |res: NotifyResult<notify::Event>| {
-            futures::executor::block_on(async {
-                tx.send(res).await.unwrap();
-            });
-        })
+        let mut watcher = notify::RecommendedWatcher::new(
+            move |res: NotifyResult<notify::Event>| {
+                futures::executor::block_on(async {
+                    tx.send(res).await.unwrap();
+                })
+            },
+            notify::Config::default().with_follow_symlinks(false),
+        )
         .expect("Could not construct watcher");
 
         watcher
