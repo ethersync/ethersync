@@ -78,7 +78,8 @@ pub async fn spawn_socket_listener(
     if sandbox::exists(Path::new("/"), Path::new(&socket_path))
         .expect("Failed to check existence of path")
     {
-        sandbox::remove_file(Path::new("/"), &socket_path).expect("Could not remove socket");
+        let socket_path = socket_path.display();
+        bail!("Detected an existing socket '{socket_path}'. Do you have a daemon running already? If not, you need to remove it manually.");
     }
 
     let listener = UnixListener::bind(&socket_path)?;
