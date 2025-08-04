@@ -894,7 +894,7 @@ async fn spawn_file_watcher(base_dir: &Path, document_handle: DocumentActorHandl
 
         let debounce_timer = tokio::time::sleep(debounce_duration);
         // Sleep does not implement the Unpin trait, so in order to use it with select!, we have to
-        // pin it first (according to the documentation).
+        // pin it first (according to the documentation https://docs.rs/tokio/latest/tokio/time/struct.Sleep.html).
         tokio::pin!(debounce_timer);
 
         let mut rescan_required = false;
