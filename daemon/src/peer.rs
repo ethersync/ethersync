@@ -196,7 +196,16 @@ impl EndpointActor {
                 let peer_passphrase = iroh::SecretKey::from_str(parts[1])?;
 
                 let node_addr: iroh::NodeAddr = public_key.into();
-                let conn = self.endpoint.connect(node_addr, ALPN).await?;
+                let conn = match self.endpoint.connect(node_addr, ALPN).await {
+                    Ok(connection) => connection,
+                    Err(_) => {
+                        Self::reconnect(self.message_tx.clone(), secret_address)
+                            .await
+                            .expect("Failed to initiate reconnection");
+                        // Not really Ok, but Ok enough.
+                        return Ok(());
+                    }
+                };
 
                 info!(
                     "Connected to peer: {}",
@@ -219,19 +228,27 @@ impl EndpointActor {
                         Some(peer_passphrase),
                     )
                     .await;
-
-                    info!("Connection to peer {public_key} lost, trying to reconnect...");
-                    // We don't need to be notified, so we don't need to use the response channel.
-                    message_tx_clone
-                        .send(EndpointMessage::Connect {
-                            secret_address,
-                            response_tx: None,
-                        })
+                    Self::reconnect(message_tx_clone, secret_address)
                         .await
-                        .expect("Failed to initiate reconnection to peer");
+                        .expect("Failed to initiate reconnection");
                 });
             }
         }
+        Ok(())
+    }
+
+    async fn reconnect(
+        message_tx: mpsc::Sender<EndpointMessage>,
+        secret_address: String,
+    ) -> Result<()> {
+        info!("Connection to peer TODO lost, trying to reconnect...");
+        // We don't need to be notified, so we don't need to use the response channel.
+        message_tx
+            .send(EndpointMessage::Connect {
+                secret_address,
+                response_tx: None,
+            })
+            .await?;
         Ok(())
     }
 
