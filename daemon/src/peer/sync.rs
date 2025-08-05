@@ -1,13 +1,20 @@
 use crate::daemon::{DocMessage, DocumentActorHandle};
 use crate::types::EphemeralMessage;
-use anyhow::{Context, Result};
+use anyhow::{bail, Context, Result};
+use async_trait::async_trait;
 use automerge::sync::{Message as AutomergeSyncMessage, State as SyncState};
+use iroh::endpoint::{RecvStream, SendStream};
 use iroh::SecretKey;
 use postcard::{from_bytes, to_allocvec};
 use serde::{Deserialize, Serialize};
 use std::mem;
-use tokio::sync::{broadcast, mpsc, oneshot};
-use tracing::{debug, error, warn};
+use tokio::sync::{broadcast, oneshot};
+use tracing::debug;
+
+pub enum PeerAuth {
+    MyPassphrase(SecretKey),
+    YourPassphrase(SecretKey),
+}
 
 #[derive(Deserialize, Serialize)]
 /// The PeerMessage is used for peer to peer data exchange.
@@ -19,91 +26,87 @@ pub enum PeerMessage {
     Ephemeral(EphemeralMessage),
 }
 
-/// Core low-level syncing protocol.
-pub async fn protocol_handler(
-    conn: iroh::endpoint::Connection,
-    from_peer_tx: mpsc::Sender<PeerMessage>,
-    mut to_peer_rx: mpsc::Receiver<PeerMessage>,
-    my_passphrase: SecretKey,
-    peer_passphrase: Option<SecretKey>,
-) -> Result<()> {
-    let (mut send, mut recv) = if let Some(peer_passphrase) = peer_passphrase {
-        let (mut send, recv) = conn.open_bi().await?;
+// Sends/receives PeerMessages to/from and Iroh connection.
+pub struct IrohConnection {
+    send: SendStream,
+    receive: RecvStream,
+}
 
-        send.write_all(&peer_passphrase.to_bytes()).await?;
+impl IrohConnection {
+    pub async fn new(conn: iroh::endpoint::Connection, auth: PeerAuth) -> Result<Self> {
+        let (send, receive) = match auth {
+            PeerAuth::YourPassphrase(passphrase) => {
+                let (mut send, recv) = conn.open_bi().await?;
 
-        (send, recv)
-    } else {
-        let (send, mut recv) = conn.accept_bi().await?;
+                send.write_all(&passphrase.to_bytes()).await?;
 
-        let mut received_passphrase = [0; 32];
-        recv.read_exact(&mut received_passphrase).await?;
+                (send, recv)
+            }
+            PeerAuth::MyPassphrase(passphrase) => {
+                let (send, mut recv) = conn.accept_bi().await?;
 
-        // Guard against timing attacks.
-        if !constant_time_eq::constant_time_eq(&received_passphrase, &my_passphrase.to_bytes()) {
-            warn!("Peer provided incorrect passphrase.");
-            return Ok(());
-        }
+                let mut received_passphrase = [0; 32];
+                recv.read_exact(&mut received_passphrase).await?;
 
-        (send, recv)
-    };
+                // Guard against timing attacks.
+                if !constant_time_eq::constant_time_eq(&received_passphrase, &passphrase.to_bytes())
+                {
+                    bail!("Peer provided incorrect passphrase.");
+                }
 
-    loop {
+                (send, recv)
+            }
+        };
+
+        Ok(Self { send, receive })
+    }
+}
+
+#[async_trait]
+pub trait Connection<T>: Send + Sync {
+    async fn send(&mut self, message: T) -> Result<()>;
+    async fn next(&mut self) -> Result<Option<T>>;
+}
+
+#[async_trait]
+impl Connection<PeerMessage> for IrohConnection {
+    async fn send(&mut self, message: PeerMessage) -> Result<()> {
+        let bytes: Vec<u8> = to_allocvec(&message)?;
+        let byte_count = u32::try_from(bytes.len());
+        self.send.write_all(&byte_count?.to_be_bytes()).await?;
+        self.send.write_all(&bytes).await?;
+        Ok(())
+    }
+
+    async fn next(&mut self) -> Result<Option<PeerMessage>> {
         let mut message_len_buf = [0; 4];
 
-        tokio::select! {
-            message_maybe = to_peer_rx.recv() => {
-                match message_maybe {
-                    Some(message) => {
-                        let bytes: Vec<u8> = to_allocvec(&message)?;
-                        let byte_count = u32::try_from(bytes.len());
-                        send
-                            .write_all(&byte_count?.to_be_bytes())
-                            .await?;
-                        send
-                            .write_all(&bytes)
-                            .await?;
-                        }
-                    None => {
-                        // TODO: What should we do?
-                        error!("None on to_peer_rx");
-                    }
-                }
-            }
-            _ = recv.read_exact(&mut message_len_buf) => {
-                let byte_count = u32::from_be_bytes(message_len_buf);
-                let mut bytes = vec![0; byte_count as usize];
-                recv.read_exact(&mut bytes).await?;
-
-                let message = from_bytes(&bytes)?;
-
-                from_peer_tx.send(message).await?;
-            }
-        }
+        self.receive.read_exact(&mut message_len_buf).await?;
+        let byte_count = u32::from_be_bytes(message_len_buf);
+        let mut bytes = vec![0; byte_count as usize];
+        self.receive.read_exact(&mut bytes).await?;
+        Ok(from_bytes(&bytes)?)
     }
 }
 
 /// Transport-agnostic logic of how to sync with another peer.
-/// Exchanges PeerMessages with the "syncer", and communicates with the document on the other side.
+/// Exchanges PeerMessages with the connection, and communicates with the document on the other side.
 /// Maintains the sync state.
 pub struct SyncActor {
     peer_state: SyncState,
     document_handle: DocumentActorHandle,
-    syncer_receiver: mpsc::Receiver<PeerMessage>,
-    syncer_sender: mpsc::Sender<PeerMessage>,
+    connection: Box<dyn Connection<PeerMessage>>,
 }
 
 impl SyncActor {
     pub fn new(
         document_handle: DocumentActorHandle,
-        syncer_receiver: mpsc::Receiver<PeerMessage>,
-        syncer_sender: mpsc::Sender<PeerMessage>,
+        connection: Box<dyn Connection<PeerMessage>>,
     ) -> Self {
         Self {
             peer_state: SyncState::new(),
             document_handle,
-            syncer_receiver,
-            syncer_sender,
+            connection,
         }
     }
 
@@ -145,10 +148,11 @@ impl SyncActor {
             .context("Could not read response from Document channel")?;
         self.peer_state = ps;
         if let Some(message) = message {
-            self.syncer_sender
+            self.connection
                 .send(PeerMessage::Sync(message.encode()))
                 .await
                 .context("Failed to send sync message on syncer_sender channel")?;
+            dbg!("sent");
         }
         Ok(())
     }
@@ -181,7 +185,7 @@ impl SyncActor {
                 ephemeral_message = ephemeral_messages_rx.recv() => {
                     match ephemeral_message {
                         Ok(ephemeral_message) => {
-                            self.syncer_sender.send(PeerMessage::Ephemeral(ephemeral_message))
+                            self.connection.send(PeerMessage::Ephemeral(ephemeral_message))
                                 .await
                                 .context("Failed to send ephemeral message on syncer_sender channel")?;
                         }
@@ -195,7 +199,7 @@ impl SyncActor {
                         }
                     }
                 }
-                Some(message) = self.syncer_receiver.recv() => {
+                Ok(Some(message)) = self.connection.next() => {
                     self.receive_peer_message(message).await?;
                 }
             }
