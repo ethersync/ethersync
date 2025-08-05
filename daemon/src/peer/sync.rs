@@ -84,8 +84,8 @@ pub async fn protocol_handler(
 }
 
 /// Transport-agnostic logic of how to sync with another peer.
-/// Receives Automerge sync messages on one channel, and sends some out on another.
-/// Maintains the sync state, and communicates with the document.
+/// Exchanges PeerMessages with the "syncer", and communicates with the document on the other side.
+/// Maintains the sync state.
 pub struct SyncActor {
     peer_state: SyncState,
     document_handle: DocumentActorHandle,
