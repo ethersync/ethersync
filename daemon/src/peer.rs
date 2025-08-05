@@ -5,7 +5,7 @@
 
 //! This module provides a ConnectionManager, which can be used to connect to other daemons.
 
-use self::sync::SyncActor;
+use self::sync::{IrohConnection, PeerAuth, SyncActor};
 use crate::daemon::DocumentActorHandle;
 use anyhow::{bail, Result};
 use iroh::{NodeAddr, SecretKey};
@@ -228,15 +228,13 @@ impl EndpointActor {
                     response_tx.send(Ok(())).expect("Connect receiver dropped");
                 }
 
-                let my_passphrase_clone = self.my_passphrase.clone();
                 let document_handle_clone = self.document_handle.clone();
                 let message_tx_clone = self.message_tx.clone();
                 tokio::spawn(async move {
                     Self::handle_peer(
                         document_handle_clone,
                         conn,
-                        my_passphrase_clone,
-                        Some(secret_address.passphrase.clone()),
+                        PeerAuth::YourPassphrase(secret_address.passphrase.clone()),
                     )
                     .await;
                     Self::reconnect(message_tx_clone, secret_address)
@@ -283,8 +281,7 @@ impl EndpointActor {
                                         Self::handle_peer(
                                             document_handle_clone,
                                             conn,
-                                            my_passphrase_clone,
-                                            None,
+                                            PeerAuth::MyPassphrase(my_passphrase_clone),
                                         )
                                         .await;
 
@@ -320,36 +317,19 @@ impl EndpointActor {
     async fn handle_peer(
         document_handle: DocumentActorHandle,
         conn: iroh::endpoint::Connection,
-        my_passphrase: SecretKey,
-        peer_passphrase: Option<SecretKey>,
+        auth: PeerAuth,
     ) {
-        let (to_peer_tx, to_peer_rx) = mpsc::channel(16);
-        let (from_peer_tx, from_peer_rx) = mpsc::channel(16);
+        let connection = IrohConnection::new(conn, auth)
+            .await
+            .expect("Failed to authenticate connection");
+        dbg!("authed");
+        let syncer = SyncActor::new(document_handle, Box::new(connection));
 
-        let syncer = SyncActor::new(document_handle, from_peer_rx, to_peer_tx);
-
-        let syncer_handle = tokio::spawn(async move {
-            // The syncer can fail when the protocol_handler below has
-            // stopped. But in that case, both components will stop, so we can
-            // ignore the error.
-            if let Err(e) = syncer.run().await {
-                error!("Syncing failed with: {e}");
-            }
-        });
-
-        // This is a function that either runs forever, or errors.
-        // But errors just mean that the connection was closed/interrupted, so we ignore them.
-        let _ = sync::protocol_handler(
-            conn,
-            from_peer_tx,
-            to_peer_rx,
-            my_passphrase,
-            peer_passphrase,
-        )
-        .await;
-
-        // TODO: Do we still this abort? The syncer should stop anyway once it cannot use its
-        // to_peer_tx anymore.
-        syncer_handle.abort_handle().abort();
+        // The syncer can fail when the protocol_handler below has
+        // stopped. But in that case, both components will stop, so we can
+        // ignore the error.
+        if let Err(e) = syncer.run().await {
+            error!("Syncing failed with: {e}");
+        }
     }
 }
