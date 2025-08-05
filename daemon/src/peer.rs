@@ -3,7 +3,7 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-//! A peer is another daemon. This module is all about daemon to daemon communication.
+//! This module provides a ConnectionManager, which can be used to connect to other daemons.
 
 use self::sync::SyncActor;
 use crate::daemon::DocumentActorHandle;
@@ -157,11 +157,16 @@ impl ConnectionManager {
 enum EndpointMessage {
     // Instruct the endpoint to connect to a new peer.
     Connect {
+        // All information we need to connect to another peer.
         secret_address: SecretAddress,
+        // On connection success, this channel will be pinged.
+        // Used for the initial connection, where we want to fail if connecting fails.
         response_tx: Option<oneshot::Sender<Result<()>>>,
     },
 }
 
+// Owns the Iroh endpoint, accepts incoming connections, and can be instructed to connect to
+// another daemon.
 struct EndpointActor {
     endpoint: iroh::Endpoint,
     message_rx: mpsc::Receiver<EndpointMessage>,
