@@ -8,7 +8,7 @@ use iroh::SecretKey;
 use postcard::{from_bytes, to_allocvec};
 use serde::{Deserialize, Serialize};
 use std::mem;
-use tokio::sync::{broadcast, oneshot};
+use tokio::sync::{broadcast, mpsc, oneshot};
 use tracing::debug;
 
 pub enum PeerAuth {
@@ -29,7 +29,7 @@ pub enum PeerMessage {
 // Sends/receives PeerMessages to/from and Iroh connection.
 pub struct IrohConnection {
     send: SendStream,
-    receive: RecvStream,
+    message_rx: mpsc::Receiver<PeerMessage>,
 }
 
 impl IrohConnection {
@@ -58,7 +58,25 @@ impl IrohConnection {
             }
         };
 
-        Ok(Self { send, receive })
+        let (message_tx, message_rx) = mpsc::channel(1);
+
+        tokio::spawn(async move {
+            let _ = Self::read(receive, message_tx).await;
+        });
+
+        Ok(Self { send, message_rx })
+    }
+
+    async fn read(mut receive: RecvStream, message_tx: mpsc::Sender<PeerMessage>) -> Result<()> {
+        loop {
+            let mut message_len_buf = [0; 4];
+
+            receive.read_exact(&mut message_len_buf).await?;
+            let byte_count = u32::from_be_bytes(message_len_buf);
+            let mut bytes = vec![0; byte_count as usize];
+            receive.read_exact(&mut bytes).await?;
+            message_tx.send(from_bytes(&bytes)?).await?;
+        }
     }
 }
 
@@ -79,13 +97,7 @@ impl Connection<PeerMessage> for IrohConnection {
     }
 
     async fn next(&mut self) -> Result<Option<PeerMessage>> {
-        let mut message_len_buf = [0; 4];
-
-        self.receive.read_exact(&mut message_len_buf).await?;
-        let byte_count = u32::from_be_bytes(message_len_buf);
-        let mut bytes = vec![0; byte_count as usize];
-        self.receive.read_exact(&mut bytes).await?;
-        Ok(from_bytes(&bytes)?)
+        Ok(self.message_rx.recv().await)
     }
 }
 
@@ -152,7 +164,6 @@ impl SyncActor {
                 .send(PeerMessage::Sync(message.encode()))
                 .await
                 .context("Failed to send sync message on syncer_sender channel")?;
-            dbg!("sent");
         }
         Ok(())
     }
