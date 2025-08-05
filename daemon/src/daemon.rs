@@ -891,6 +891,9 @@ pub struct Daemon {
     pub address: String,
     socket_path: PathBuf,
     base_dir: PathBuf,
+    #[allow(dead_code)]
+    // We need to store the connection manager in order to keep the connection alive.
+    connection_manager: peer::ConnectionManager,
 }
 
 impl Daemon {
@@ -920,13 +923,10 @@ impl Daemon {
         }
 
         // Start p2p listener.
-        let base_dir = base_dir.to_path_buf();
-        let secret_address = match app_config.peer {
-            Some(config::Peer::SecretAddress(addr)) => Some(addr),
-            _ => None,
-        };
-        let p2p_actor = peer::P2PActor::new(secret_address, document_handle.clone(), &base_dir);
-        let address = p2p_actor.run().await?;
+        let connection_manager = peer::ConnectionManager::new(document_handle.clone(), &base_dir)
+            .await
+            .expect("Failed to start connection manager");
+        let address = connection_manager.secret_address();
 
         if app_config.emit_secret_address {
             info!(
@@ -937,12 +937,19 @@ impl Daemon {
         if app_config.emit_join_code {
             put_secret_address_into_wormhole(&address).await;
         }
+        if let Some(config::Peer::SecretAddress(secret_address)) = app_config.peer {
+            connection_manager
+                .connect(secret_address)
+                .await
+                .expect("Failed to connect to specified peer");
+        }
 
         Ok(Self {
             document_handle,
             address,
             socket_path,
             base_dir,
+            connection_manager,
         })
     }
 }
