@@ -16,7 +16,7 @@ use std::fs::{self, File, OpenOptions};
 use std::io::{Read, Write};
 use std::mem;
 use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::str::FromStr;
 use tokio::sync::{broadcast, mpsc, oneshot};
 use tracing::{debug, error, info, warn};
@@ -33,29 +33,51 @@ enum PeerMessage {
     Ephemeral(EphemeralMessage),
 }
 
-#[derive(Clone)]
-pub struct P2PActor {
-    secret_address: Option<String>,
-    document_handle: DocumentActorHandle,
-    base_dir: PathBuf,
+pub struct ConnectionManager {
+    message_tx: mpsc::Sender<EndpointMessage>,
+    secret_address: String,
 }
 
-impl P2PActor {
-    pub fn new(
-        secret_address: Option<String>,
-        document_handle: DocumentActorHandle,
-        base_dir: &Path,
-    ) -> Self {
-        Self {
+impl ConnectionManager {
+    pub async fn new(document_handle: DocumentActorHandle, base_dir: &Path) -> Result<Self> {
+        let (message_tx, message_rx) = mpsc::channel(1);
+
+        let (endpoint, my_passphrase) = Self::build_endpoint(base_dir).await?;
+
+        let secret_address = format!("{}#{}", endpoint.node_id(), my_passphrase);
+
+        let mut actor = EndpointActor::new(endpoint, message_rx, document_handle, my_passphrase);
+
+        tokio::spawn(async move { actor.run().await });
+
+        Ok(Self {
+            message_tx,
             secret_address,
-            document_handle,
-            base_dir: base_dir.to_path_buf(),
-        }
+        })
     }
 
-    // Returns the connection address.
-    pub async fn run(self) -> Result<String> {
-        let (secret_key, my_passphrase) = self.get_keypair();
+    pub fn secret_address(&self) -> String {
+        self.secret_address.clone()
+    }
+
+    pub async fn connect(&self, secret_address: String) -> Result<()> {
+        let (response_tx, response_rx) = oneshot::channel();
+
+        self.message_tx
+            .send(EndpointMessage::Connect {
+                secret_address,
+                response_tx,
+            })
+            .await
+            .expect("EndpointActor task has been killed");
+
+        response_rx.await??;
+
+        Ok(())
+    }
+
+    async fn build_endpoint(base_dir: &Path) -> Result<(iroh::Endpoint, SecretKey)> {
+        let (secret_key, my_passphrase) = Self::get_keypair(base_dir);
 
         let endpoint = iroh::Endpoint::builder()
             .secret_key(secret_key)
@@ -64,76 +86,11 @@ impl P2PActor {
             .bind()
             .await?;
 
-        let address = format!("{}#{}", endpoint.node_id(), my_passphrase);
-
-        if let Some(ref peer) = self.secret_address {
-            let parts: Vec<&str> = peer.split("#").collect();
-            if parts.len() != 2 {
-                panic!("Peer string must have format <node_id>#<passphrase>");
-            }
-
-            let public_key = iroh::PublicKey::from_str(parts[0])?;
-            let peer_passphrase = iroh::SecretKey::from_str(parts[1])?;
-
-            let node_addr: iroh::NodeAddr = public_key.into();
-            let conn = endpoint.connect(node_addr, ALPN).await?;
-
-            info!(
-                "Connected to peer: {}",
-                conn.remote_node_id()
-                    .expect("Connection should have a node ID")
-            );
-
-            let my_passphrase_clone = my_passphrase.clone();
-            let document_handle_clone = self.document_handle.clone();
-            tokio::spawn(async move {
-                Self::handle_peer(
-                    document_handle_clone,
-                    conn,
-                    my_passphrase_clone,
-                    Some(peer_passphrase),
-                )
-                .await;
-            });
-        }
-
-        tokio::spawn(async move {
-            while let Some(incoming) = endpoint.accept().await {
-                match incoming.await {
-                    Ok(conn) => {
-                        let node_id = conn
-                            .remote_node_id()
-                            .expect("Connection should have a node ID");
-
-                        info!("Peer connected: {}", &node_id);
-
-                        let my_passphrase_clone = my_passphrase.clone();
-                        let document_handle_clone = self.document_handle.clone();
-                        tokio::spawn(async move {
-                            Self::handle_peer(
-                                document_handle_clone,
-                                conn,
-                                my_passphrase_clone,
-                                None,
-                            )
-                            .await;
-
-                            info!("Peer disconnected: {node_id}",);
-                        });
-                    }
-                    Err(err) => {
-                        error!("Error while accepting peer connection: {err}");
-                    }
-                }
-            }
-        });
-
-        Ok(address)
+        Ok((endpoint, my_passphrase))
     }
 
-    /// Returns an existing secret key + passphrase, or generates new ones.
-    fn get_keypair(&self) -> (SecretKey, SecretKey) {
-        let keyfile = self.base_dir.join(".ethersync").join("key");
+    fn get_keypair(base_dir: &Path) -> (SecretKey, SecretKey) {
+        let keyfile = base_dir.join(".ethersync").join("key");
         if keyfile.exists() {
             let current_permissions = fs::metadata(&keyfile)
                 .expect("Expected to have access to metadata of the keyfile")
@@ -176,6 +133,134 @@ impl P2PActor {
                 .expect("Failed to write to key file");
 
             (secret_key, passphrase)
+        }
+    }
+}
+
+enum EndpointMessage {
+    // Instruct the endpoint to connect to a new peer.
+    Connect {
+        secret_address: String,
+        response_tx: oneshot::Sender<Result<()>>,
+    },
+}
+
+struct EndpointActor {
+    endpoint: iroh::Endpoint,
+    message_rx: mpsc::Receiver<EndpointMessage>,
+    document_handle: DocumentActorHandle,
+    my_passphrase: SecretKey,
+}
+
+impl EndpointActor {
+    fn new(
+        endpoint: iroh::Endpoint,
+        message_rx: mpsc::Receiver<EndpointMessage>,
+        document_handle: DocumentActorHandle,
+        my_passphrase: SecretKey,
+    ) -> Self {
+        Self {
+            endpoint,
+            message_rx,
+            document_handle,
+            my_passphrase,
+        }
+    }
+
+    async fn handle_message(&mut self, message: EndpointMessage) -> Result<()> {
+        match message {
+            EndpointMessage::Connect {
+                secret_address,
+                response_tx,
+            } => {
+                let parts: Vec<&str> = secret_address.split("#").collect();
+                if parts.len() != 2 {
+                    panic!("Peer string must have format <node_id>#<passphrase>");
+                }
+
+                dbg!(&secret_address);
+                let public_key = iroh::PublicKey::from_str(parts[0])?;
+                let peer_passphrase = iroh::SecretKey::from_str(parts[1])?;
+
+                let node_addr: iroh::NodeAddr = public_key.into();
+                dbg!(&node_addr);
+                let conn = self.endpoint.connect(node_addr, ALPN).await?;
+
+                info!(
+                    "Connected to peer: {}",
+                    conn.remote_node_id()
+                        .expect("Connection should have a node ID")
+                );
+
+                response_tx.send(Ok(())).expect("Connect receiver dropped");
+
+                let my_passphrase_clone = self.my_passphrase.clone();
+                let document_handle_clone = self.document_handle.clone();
+                tokio::spawn(async move {
+                    Self::handle_peer(
+                        document_handle_clone,
+                        conn,
+                        my_passphrase_clone,
+                        Some(peer_passphrase),
+                    )
+                    .await;
+                });
+            }
+        }
+        Ok(())
+    }
+
+    async fn run(&mut self) {
+        loop {
+            tokio::select! {
+                maybe_incoming = self.endpoint.accept() => {
+                    match maybe_incoming {
+                        Some(incoming) => {
+                            match incoming.await {
+                                Ok(conn) => {
+                                    let node_id = conn
+                                        .remote_node_id()
+                                        .expect("Connection should have a node ID");
+
+                                    info!("Peer connected: {}", &node_id);
+
+                                    let my_passphrase_clone = self.my_passphrase.clone();
+                                    let document_handle_clone = self.document_handle.clone();
+                                    tokio::spawn(async move {
+                                        Self::handle_peer(
+                                            document_handle_clone,
+                                            conn,
+                                            my_passphrase_clone,
+                                            None,
+                                        )
+                                        .await;
+
+                                        info!("Peer disconnected: {node_id}",);
+                                    });
+                                }
+                                Err(err) => {
+                                    error!("Error while accepting peer connection: {err}");
+                                }
+                            }
+                        }
+                        None => {
+                            // Endpoint was closed. Let's shut down.
+                            break
+                        }
+                    }
+                }
+                maybe_message = self.message_rx.recv() => {
+                    match maybe_message {
+                        Some(message) => {
+                            self.handle_message(message).await.expect("Failed to handle endpoint message");
+                        }
+                        None => {
+                            // Our message channel was closed? Let's shut down.
+                            break
+                        }
+                    }
+                }
+            }
         }
     }
 
