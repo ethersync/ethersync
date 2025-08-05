@@ -83,7 +83,7 @@ impl IrohConnection {
 #[async_trait]
 pub trait Connection<T>: Send + Sync {
     async fn send(&mut self, message: T) -> Result<()>;
-    async fn next(&mut self) -> Result<Option<T>>;
+    async fn next(&mut self) -> Option<T>;
 }
 
 #[async_trait]
@@ -96,8 +96,8 @@ impl Connection<PeerMessage> for IrohConnection {
         Ok(())
     }
 
-    async fn next(&mut self) -> Result<Option<PeerMessage>> {
-        Ok(self.message_rx.recv().await)
+    async fn next(&mut self) -> Option<PeerMessage> {
+        self.message_rx.recv().await
     }
 }
 
@@ -210,8 +210,12 @@ impl SyncActor {
                         }
                     }
                 }
-                Ok(Some(message)) = self.connection.next() => {
-                    self.receive_peer_message(message).await?;
+                message = self.connection.next() => {
+                    if let Some(message) = message {
+                        self.receive_peer_message(message).await?;
+                    } else {
+                        bail!("Connection died");
+                    }
                 }
             }
         }
