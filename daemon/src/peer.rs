@@ -46,7 +46,13 @@ impl ConnectionManager {
 
         let secret_address = format!("{}#{}", endpoint.node_id(), my_passphrase);
 
-        let mut actor = EndpointActor::new(endpoint, message_rx, document_handle, my_passphrase);
+        let mut actor = EndpointActor::new(
+            endpoint,
+            message_rx,
+            message_tx.clone(),
+            document_handle,
+            my_passphrase,
+        );
 
         tokio::spawn(async move { actor.run().await });
 
@@ -66,7 +72,7 @@ impl ConnectionManager {
         self.message_tx
             .send(EndpointMessage::Connect {
                 secret_address,
-                response_tx,
+                response_tx: Some(response_tx),
             })
             .await
             .expect("EndpointActor task has been killed");
@@ -146,13 +152,14 @@ enum EndpointMessage {
     // Instruct the endpoint to connect to a new peer.
     Connect {
         secret_address: String,
-        response_tx: oneshot::Sender<Result<()>>,
+        response_tx: Option<oneshot::Sender<Result<()>>>,
     },
 }
 
 struct EndpointActor {
     endpoint: iroh::Endpoint,
     message_rx: mpsc::Receiver<EndpointMessage>,
+    message_tx: mpsc::Sender<EndpointMessage>,
     document_handle: DocumentActorHandle,
     my_passphrase: SecretKey,
 }
@@ -161,12 +168,14 @@ impl EndpointActor {
     fn new(
         endpoint: iroh::Endpoint,
         message_rx: mpsc::Receiver<EndpointMessage>,
+        message_tx: mpsc::Sender<EndpointMessage>,
         document_handle: DocumentActorHandle,
         my_passphrase: SecretKey,
     ) -> Self {
         Self {
             endpoint,
             message_rx,
+            message_tx,
             document_handle,
             my_passphrase,
         }
@@ -183,12 +192,10 @@ impl EndpointActor {
                     panic!("Peer string must have format <node_id>#<passphrase>");
                 }
 
-                dbg!(&secret_address);
                 let public_key = iroh::PublicKey::from_str(parts[0])?;
                 let peer_passphrase = iroh::SecretKey::from_str(parts[1])?;
 
                 let node_addr: iroh::NodeAddr = public_key.into();
-                dbg!(&node_addr);
                 let conn = self.endpoint.connect(node_addr, ALPN).await?;
 
                 info!(
@@ -197,10 +204,13 @@ impl EndpointActor {
                         .expect("Connection should have a node ID")
                 );
 
-                response_tx.send(Ok(())).expect("Connect receiver dropped");
+                if let Some(response_tx) = response_tx {
+                    response_tx.send(Ok(())).expect("Connect receiver dropped");
+                }
 
                 let my_passphrase_clone = self.my_passphrase.clone();
                 let document_handle_clone = self.document_handle.clone();
+                let message_tx_clone = self.message_tx.clone();
                 tokio::spawn(async move {
                     Self::handle_peer(
                         document_handle_clone,
@@ -209,6 +219,16 @@ impl EndpointActor {
                         Some(peer_passphrase),
                     )
                     .await;
+
+                    info!("Connection to peer {public_key} lost, trying to reconnect...");
+                    // We don't need to be notified, so we don't need to use the response channel.
+                    message_tx_clone
+                        .send(EndpointMessage::Connect {
+                            secret_address,
+                            response_tx: None,
+                        })
+                        .await
+                        .expect("Failed to initiate reconnection to peer");
                 });
             }
         }
