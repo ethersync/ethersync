@@ -124,6 +124,9 @@ impl Watcher {
                         }
                     }
                 }
+                EventKind::Access(_) => {
+                    // We're not interested in these, ignore them.
+                }
                 e => {
                     // Don't handle other events.
                     // But log them! I'm curious what they are!
