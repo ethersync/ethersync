@@ -245,7 +245,10 @@ impl EndpointActor {
         message_tx: mpsc::Sender<EndpointMessage>,
         secret_address: SecretAddress,
     ) -> Result<()> {
-        info!("Connection to peer TODO lost, trying to reconnect...");
+        info!(
+            "Connection to peer {} lost, trying to reconnect...",
+            secret_address.node_addr.node_id
+        );
         // We don't need to be notified, so we don't need to use the response channel.
         message_tx
             .send(EndpointMessage::Connect {
@@ -322,8 +325,6 @@ impl EndpointActor {
         // The syncer can fail when the protocol_handler below has
         // stopped. But in that case, both components will stop, so we can
         // ignore the error.
-        if let Err(e) = syncer.run().await {
-            error!("Syncing failed with: {e}");
-        }
+        let _ = syncer.run().await;
     }
 }
