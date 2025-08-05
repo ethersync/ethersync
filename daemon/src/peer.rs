@@ -322,7 +322,6 @@ impl EndpointActor {
         let connection = IrohConnection::new(conn, auth)
             .await
             .expect("Failed to authenticate connection");
-        dbg!("authed");
         let syncer = SyncActor::new(document_handle, Box::new(connection));
 
         // The syncer can fail when the protocol_handler below has
