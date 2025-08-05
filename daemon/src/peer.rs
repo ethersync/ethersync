@@ -7,9 +7,9 @@
 
 use crate::daemon::{DocMessage, DocumentActorHandle};
 use crate::types::EphemeralMessage;
-use anyhow::{Context, Result};
+use anyhow::{bail, Context, Result};
 use automerge::sync::{Message as AutomergeSyncMessage, State as SyncState};
-use iroh::SecretKey;
+use iroh::{NodeAddr, SecretKey};
 use postcard::{from_bytes, to_allocvec};
 use serde::{Deserialize, Serialize};
 use std::fs::{self, File, OpenOptions};
@@ -22,6 +22,29 @@ use tokio::sync::{broadcast, mpsc, oneshot};
 use tracing::{debug, error, info, warn};
 
 const ALPN: &[u8] = b"/ethersync/0";
+
+struct SecretAddress {
+    node_addr: NodeAddr,
+    passphrase: SecretKey,
+}
+
+impl FromStr for SecretAddress {
+    type Err = anyhow::Error;
+    fn from_str(s: &str) -> Result<Self> {
+        let parts: Vec<&str> = s.split("#").collect();
+        if parts.len() != 2 {
+            bail!("Peer string must have format <node_id>#<passphrase>");
+        }
+
+        let node_addr = iroh::PublicKey::from_str(parts[0])?.into();
+        let passphrase = iroh::SecretKey::from_str(parts[1])?;
+
+        Ok(Self {
+            node_addr,
+            passphrase,
+        })
+    }
+}
 
 #[derive(Deserialize, Serialize)]
 /// The PeerMessage is used for peer to peer data exchange.
@@ -71,7 +94,7 @@ impl ConnectionManager {
 
         self.message_tx
             .send(EndpointMessage::Connect {
-                secret_address,
+                secret_address: SecretAddress::from_str(&secret_address)?,
                 response_tx: Some(response_tx),
             })
             .await
@@ -146,7 +169,7 @@ impl ConnectionManager {
 enum EndpointMessage {
     // Instruct the endpoint to connect to a new peer.
     Connect {
-        secret_address: String,
+        secret_address: SecretAddress,
         response_tx: Option<oneshot::Sender<Result<()>>>,
     },
 }
@@ -182,15 +205,10 @@ impl EndpointActor {
                 secret_address,
                 response_tx,
             } => {
-                let parts: Vec<&str> = secret_address.split("#").collect();
-                if parts.len() != 2 {
-                    panic!("Peer string must have format <node_id>#<passphrase>");
-                }
+                //
+                //...
 
-                let public_key = iroh::PublicKey::from_str(parts[0])?;
-                let peer_passphrase = iroh::SecretKey::from_str(parts[1])?;
-
-                let node_addr: iroh::NodeAddr = public_key.into();
+                let node_addr = secret_address.node_addr.clone();
                 let conn = match self.endpoint.connect(node_addr, ALPN).await {
                     Ok(connection) => connection,
                     Err(_) => {
@@ -220,7 +238,7 @@ impl EndpointActor {
                         document_handle_clone,
                         conn,
                         my_passphrase_clone,
-                        Some(peer_passphrase),
+                        Some(secret_address.passphrase.clone()),
                     )
                     .await;
                     Self::reconnect(message_tx_clone, secret_address)
@@ -234,7 +252,7 @@ impl EndpointActor {
 
     async fn reconnect(
         message_tx: mpsc::Sender<EndpointMessage>,
-        secret_address: String,
+        secret_address: SecretAddress,
     ) -> Result<()> {
         info!("Connection to peer TODO lost, trying to reconnect...");
         // We don't need to be notified, so we don't need to use the response channel.
