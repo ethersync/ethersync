@@ -41,6 +41,8 @@ impl Neovim {
         cmd.arg("--headless").arg("--embed");
         // Disable ShaDa files, to prevent CI failures related to them.
         cmd.arg("-i").arg("NONE");
+        // Disable Swap file, to prevent CI failures related to them.
+        cmd.arg("-n");
         let (nvim, _, _) = new_child_cmd(&mut cmd, handler).await.unwrap();
 
         // We canonicalize the path here, because on macOS, TempDir gives us paths in /var/, which
