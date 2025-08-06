@@ -3,18 +3,10 @@ use crate::types::EphemeralMessage;
 use anyhow::{bail, Context, Result};
 use async_trait::async_trait;
 use automerge::sync::{Message as AutomergeSyncMessage, State as SyncState};
-use iroh::endpoint::{RecvStream, SendStream};
-use iroh::SecretKey;
-use postcard::{from_bytes, to_allocvec};
 use serde::{Deserialize, Serialize};
 use std::mem;
-use tokio::sync::{broadcast, mpsc, oneshot};
+use tokio::sync::{broadcast, oneshot};
 use tracing::debug;
-
-pub enum PeerAuth {
-    MyPassphrase(SecretKey),
-    YourPassphrase(SecretKey),
-}
 
 #[derive(Deserialize, Serialize)]
 /// The PeerMessage is used for peer to peer data exchange.
@@ -26,79 +18,10 @@ pub enum PeerMessage {
     Ephemeral(EphemeralMessage),
 }
 
-// Sends/receives PeerMessages to/from and Iroh connection.
-pub struct IrohConnection {
-    send: SendStream,
-    message_rx: mpsc::Receiver<PeerMessage>,
-}
-
-impl IrohConnection {
-    pub async fn new(conn: iroh::endpoint::Connection, auth: PeerAuth) -> Result<Self> {
-        let (send, receive) = match auth {
-            PeerAuth::YourPassphrase(passphrase) => {
-                let (mut send, recv) = conn.open_bi().await?;
-
-                send.write_all(&passphrase.to_bytes()).await?;
-
-                (send, recv)
-            }
-            PeerAuth::MyPassphrase(passphrase) => {
-                let (send, mut recv) = conn.accept_bi().await?;
-
-                let mut received_passphrase = [0; 32];
-                recv.read_exact(&mut received_passphrase).await?;
-
-                // Guard against timing attacks.
-                if !constant_time_eq::constant_time_eq(&received_passphrase, &passphrase.to_bytes())
-                {
-                    bail!("Peer provided incorrect passphrase.");
-                }
-
-                (send, recv)
-            }
-        };
-
-        let (message_tx, message_rx) = mpsc::channel(1);
-
-        tokio::spawn(async move {
-            let _ = Self::read(receive, message_tx).await;
-        });
-
-        Ok(Self { send, message_rx })
-    }
-
-    async fn read(mut receive: RecvStream, message_tx: mpsc::Sender<PeerMessage>) -> Result<()> {
-        loop {
-            let mut message_len_buf = [0; 4];
-
-            receive.read_exact(&mut message_len_buf).await?;
-            let byte_count = u32::from_be_bytes(message_len_buf);
-            let mut bytes = vec![0; byte_count as usize];
-            receive.read_exact(&mut bytes).await?;
-            message_tx.send(from_bytes(&bytes)?).await?;
-        }
-    }
-}
-
 #[async_trait]
 pub trait Connection<T>: Send + Sync {
     async fn send(&mut self, message: T) -> Result<()>;
     async fn next(&mut self) -> Option<T>;
-}
-
-#[async_trait]
-impl Connection<PeerMessage> for IrohConnection {
-    async fn send(&mut self, message: PeerMessage) -> Result<()> {
-        let bytes: Vec<u8> = to_allocvec(&message)?;
-        let byte_count = u32::try_from(bytes.len());
-        self.send.write_all(&byte_count?.to_be_bytes()).await?;
-        self.send.write_all(&bytes).await?;
-        Ok(())
-    }
-
-    async fn next(&mut self) -> Option<PeerMessage> {
-        self.message_rx.recv().await
-    }
 }
 
 /// Transport-agnostic logic of how to sync with another peer.
