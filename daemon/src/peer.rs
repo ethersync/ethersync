@@ -18,7 +18,7 @@ use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
 use std::path::Path;
 use std::str::FromStr;
 use tokio::sync::{mpsc, oneshot};
-use tracing::{debug, error, info};
+use tracing::{debug, error, info, warn};
 
 mod sync;
 
@@ -236,15 +236,24 @@ impl EndpointActor {
                 let document_handle_clone = self.document_handle.clone();
                 let message_tx_clone = self.message_tx.clone();
                 tokio::spawn(async move {
-                    Self::handle_peer(
+                    // handle_peer currently only returns an error if authentication fails.
+                    // In this case, we don't want to reconnect, but panic!
+                    match Self::handle_peer(
                         document_handle_clone,
                         conn,
                         PeerAuth::YourPassphrase(secret_address.passphrase.clone()),
                     )
-                    .await;
-                    Self::reconnect(message_tx_clone, secret_address)
-                        .await
-                        .expect("Failed to initiate reconnection");
+                    .await
+                    {
+                        Ok(()) => {
+                            Self::reconnect(message_tx_clone, secret_address)
+                                .await
+                                .expect("Failed to initiate reconnection");
+                        }
+                        Err(err) => {
+                            panic!("Making a connection failed: {err}");
+                        }
+                    }
                 });
             }
         }
@@ -315,12 +324,15 @@ impl EndpointActor {
         let my_passphrase_clone = self.my_passphrase.clone();
         let document_handle_clone = self.document_handle.clone();
         tokio::spawn(async move {
-            Self::handle_peer(
+            if let Err(err) = Self::handle_peer(
                 document_handle_clone,
                 conn,
                 PeerAuth::MyPassphrase(my_passphrase_clone),
             )
-            .await;
+            .await
+            {
+                warn!("Incoming connection failed: {err}");
+            }
 
             info!("Peer disconnected: {node_id}",);
         });
@@ -330,16 +342,11 @@ impl EndpointActor {
         document_handle: DocumentActorHandle,
         conn: iroh::endpoint::Connection,
         auth: PeerAuth,
-    ) {
-        let connection = IrohConnection::new(conn, auth)
-            .await
-            .expect("Failed to authenticate connection");
+    ) -> Result<()> {
+        let connection = IrohConnection::new(conn, auth).await?;
         let syncer = SyncActor::new(document_handle, Box::new(connection));
-
-        // The syncer can fail when the protocol_handler below has
-        // stopped. But in that case, both components will stop, so we can
-        // ignore the error.
         let _ = syncer.run().await;
+        Ok(())
     }
 }
 
