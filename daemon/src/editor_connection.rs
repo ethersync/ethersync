@@ -44,7 +44,9 @@ impl EditorConnection {
         self.ot_servers.contains_key(file_path)
     }
 
-    pub fn message_from_daemon(
+    /// A message from inside is either an edit from another local editor or an edit that came
+    /// from another peer but is prepared to be applied to all components.
+    pub fn message_from_inside(
         &mut self,
         message: &ComponentMessage,
     ) -> Vec<EditorProtocolMessageToEditor> {
@@ -90,6 +92,9 @@ impl EditorConnection {
         }
     }
 
+    /// When processing an edit, this method will return edits that should be sent to the editor.
+    /// These edits that are returned are transformed edits, which take into account what the
+    /// editor has missed.
     pub fn message_from_editor(
         &mut self,
         message: &EditorProtocolMessageFromEditor,
@@ -289,7 +294,7 @@ mod tests {
 
         // Daemon sends an edit.
         let delta = insert(1, "x"); // hello -> hxello
-        let result = editor_connection.message_from_daemon(&ComponentMessage::Edit {
+        let result = editor_connection.message_from_inside(&ComponentMessage::Edit {
             file_path: RelativePath::new("file"),
             delta,
         });
