@@ -306,6 +306,8 @@ impl DocumentActor {
         editor_id: EditorId,
         message: &EditorProtocolMessageFromEditor,
     ) -> Result<Vec<EditorProtocolMessageToEditor>, EditorProtocolMessageError> {
+        // First, convert the editor message into a component message (+ transformed edits from the
+        // OT server).
         let (inside_message, mut messages_to_editor) = self
             .editor_connections
             .get_mut(&editor_id)
@@ -313,10 +315,15 @@ impl DocumentActor {
             .0
             .message_from_editor(message)?;
 
+        // Then, forward them to the "core", and get back component messages that should be
+        // returned to the editor (because, for example, it opened a file with a not up-to-date
+        // content.)
         let component_messages_to_editor = self
             .process_component_message(Some(editor_id), &inside_message)
             .await;
 
+        // And finally, send these component messages back to the editor connection (pass them
+        // through the OT server), to retrieve raw messages for the editor.
         let mut more_messages_to_editor =
             self.process_in_editor(editor_id, component_messages_to_editor);
 
@@ -619,8 +626,9 @@ impl DocumentActor {
         self.crdt_doc.current_file_content(file_path)
     }
 
-    // Returns the component messages to send back to the editor that sent the message.
-    // `from_editor` must be None if the component message originates from the "CRDT component".
+    /// Called when a component message is sent "into the core".
+    /// Returns the component messages to send back to the editor that sent the component message.
+    /// `from_editor` must be `None` if the component message originates from the "CRDT component".
     async fn process_component_message(
         &mut self,
         from_editor: Option<EditorId>,
@@ -631,6 +639,8 @@ impl DocumentActor {
         match message {
             ComponentMessage::Open { file_path, content } => {
                 if let Ok(crdt_content) = self.current_file_content(file_path) {
+                    // We want to compare the content sent along with the "open" with the content
+                    // that's known to the CRDT.
                     let chunks = dissimilar::diff(content, &crdt_content);
                     if let [] | [dissimilar::Chunk::Equal(_)] = chunks.as_slice() {
                         // The contents match, nothing to do.
@@ -684,7 +694,7 @@ impl DocumentActor {
 
         self.broadcast_to_editors(from_editor, message).await;
 
-        return to_editor;
+        to_editor
     }
 
     // Send component message to all editors, excluding `exlude_id`.
@@ -717,7 +727,7 @@ impl DocumentActor {
             .0;
 
         for message in messages {
-            let mut responses = connection.message_from_daemon(&message);
+            let mut responses = connection.message_from_inside(&message);
             all_responses.append(&mut responses);
         }
 
