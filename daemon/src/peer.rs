@@ -5,10 +5,13 @@
 
 //! This module provides a ConnectionManager, which can be used to connect to other daemons.
 
-use self::sync::{IrohConnection, PeerAuth, SyncActor};
+use self::sync::{Connection, PeerMessage, SyncActor};
 use crate::daemon::DocumentActorHandle;
 use anyhow::{bail, Result};
+use async_trait::async_trait;
+use iroh::endpoint::{RecvStream, SendStream};
 use iroh::{NodeAddr, SecretKey};
+use postcard::{from_bytes, to_allocvec};
 use std::fs::{self, File, OpenOptions};
 use std::io::{Read, Write};
 use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
@@ -42,6 +45,11 @@ impl FromStr for SecretAddress {
             passphrase,
         })
     }
+}
+
+enum PeerAuth {
+    MyPassphrase(SecretKey),
+    YourPassphrase(SecretKey),
 }
 
 pub struct ConnectionManager {
@@ -331,5 +339,74 @@ impl EndpointActor {
         // stopped. But in that case, both components will stop, so we can
         // ignore the error.
         let _ = syncer.run().await;
+    }
+}
+
+// Sends/receives PeerMessages to/from and Iroh connection.
+struct IrohConnection {
+    send: SendStream,
+    message_rx: mpsc::Receiver<PeerMessage>,
+}
+
+impl IrohConnection {
+    async fn new(conn: iroh::endpoint::Connection, auth: PeerAuth) -> Result<Self> {
+        let (send, receive) = match auth {
+            PeerAuth::YourPassphrase(passphrase) => {
+                let (mut send, recv) = conn.open_bi().await?;
+
+                send.write_all(&passphrase.to_bytes()).await?;
+
+                (send, recv)
+            }
+            PeerAuth::MyPassphrase(passphrase) => {
+                let (send, mut recv) = conn.accept_bi().await?;
+
+                let mut received_passphrase = [0; 32];
+                recv.read_exact(&mut received_passphrase).await?;
+
+                // Guard against timing attacks.
+                if !constant_time_eq::constant_time_eq(&received_passphrase, &passphrase.to_bytes())
+                {
+                    bail!("Peer provided incorrect passphrase.");
+                }
+
+                (send, recv)
+            }
+        };
+
+        let (message_tx, message_rx) = mpsc::channel(1);
+
+        tokio::spawn(async move {
+            let _ = Self::read(receive, message_tx).await;
+        });
+
+        Ok(Self { send, message_rx })
+    }
+
+    async fn read(mut receive: RecvStream, message_tx: mpsc::Sender<PeerMessage>) -> Result<()> {
+        loop {
+            let mut message_len_buf = [0; 4];
+
+            receive.read_exact(&mut message_len_buf).await?;
+            let byte_count = u32::from_be_bytes(message_len_buf);
+            let mut bytes = vec![0; byte_count as usize];
+            receive.read_exact(&mut bytes).await?;
+            message_tx.send(from_bytes(&bytes)?).await?;
+        }
+    }
+}
+
+#[async_trait]
+impl Connection<PeerMessage> for IrohConnection {
+    async fn send(&mut self, message: PeerMessage) -> Result<()> {
+        let bytes: Vec<u8> = to_allocvec(&message)?;
+        let byte_count = u32::try_from(bytes.len());
+        self.send.write_all(&byte_count?.to_be_bytes()).await?;
+        self.send.write_all(&bytes).await?;
+        Ok(())
+    }
+
+    async fn next(&mut self) -> Option<PeerMessage> {
+        self.message_rx.recv().await
     }
 }
