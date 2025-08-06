@@ -6,14 +6,12 @@
 use anyhow::{bail, Context, Result};
 use clap::{CommandFactory, FromArgMatches, Parser, Subcommand};
 use ethersync::{
+    cli::ask,
     config::{self, AppConfig},
     daemon::Daemon,
     logging, sandbox,
 };
-use std::{
-    io::Write,
-    path::{Path, PathBuf},
-};
+use std::path::{Path, PathBuf};
 use tokio::signal;
 use tracing::{debug, info, warn};
 
@@ -192,19 +190,5 @@ async fn wait_for_ctrl_c() {
             eprintln!("Unable to listen for shutdown signal: {err}");
             // still shut down.
         }
-    }
-}
-
-fn ask(question: &str) -> Result<bool> {
-    print!("{question} (y/N): ");
-    std::io::stdout().flush()?;
-    let mut lines = std::io::stdin().lines();
-    if let Some(Ok(line)) = lines.next() {
-        match line.to_lowercase().as_str() {
-            "y" | "yes" => Ok(true),
-            _ => Ok(false),
-        }
-    } else {
-        bail!("Failed to read answer");
     }
 }
