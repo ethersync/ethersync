@@ -211,9 +211,6 @@ impl EndpointActor {
                 secret_address,
                 response_tx,
             } => {
-                //
-                //...
-
                 let node_addr = secret_address.node_addr.clone();
                 let conn = match self.endpoint.connect(node_addr, ALPN).await {
                     Ok(connection) => connection,
@@ -280,24 +277,7 @@ impl EndpointActor {
                         Some(incoming) => {
                             match incoming.await {
                                 Ok(conn) => {
-                                    let node_id = conn
-                                        .remote_node_id()
-                                        .expect("Connection should have a node ID");
-
-                                    info!("Peer connected: {}", &node_id);
-
-                                    let my_passphrase_clone = self.my_passphrase.clone();
-                                    let document_handle_clone = self.document_handle.clone();
-                                    tokio::spawn(async move {
-                                        Self::handle_peer(
-                                            document_handle_clone,
-                                            conn,
-                                            PeerAuth::MyPassphrase(my_passphrase_clone),
-                                        )
-                                        .await;
-
-                                        info!("Peer disconnected: {node_id}",);
-                                    });
+                                    self.handle_incoming_connection(conn);
                                 }
                                 Err(err) => {
                                     error!("Error while accepting peer connection: {err}");
@@ -323,6 +303,27 @@ impl EndpointActor {
                 }
             }
         }
+    }
+
+    fn handle_incoming_connection(&self, conn: iroh::endpoint::Connection) {
+        let node_id = conn
+            .remote_node_id()
+            .expect("Connection should have a node ID");
+
+        info!("Peer connected: {}", &node_id);
+
+        let my_passphrase_clone = self.my_passphrase.clone();
+        let document_handle_clone = self.document_handle.clone();
+        tokio::spawn(async move {
+            Self::handle_peer(
+                document_handle_clone,
+                conn,
+                PeerAuth::MyPassphrase(my_passphrase_clone),
+            )
+            .await;
+
+            info!("Peer disconnected: {node_id}",);
+        });
     }
 
     async fn handle_peer(

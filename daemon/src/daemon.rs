@@ -922,7 +922,7 @@ impl Daemon {
             spawn_persister(document_handle.clone()).await;
         }
 
-        // Start p2p listener.
+        // Start connection manager.
         let connection_manager = peer::ConnectionManager::new(document_handle.clone(), &base_dir)
             .await
             .expect("Failed to start connection manager");
