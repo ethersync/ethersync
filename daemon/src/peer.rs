@@ -9,7 +9,7 @@ use self::sync::{Connection, ConnectionError, PeerMessage, SyncActor};
 use crate::daemon::DocumentActorHandle;
 use anyhow::{bail, Result};
 use async_trait::async_trait;
-use iroh::endpoint::{RecvStream, SendStream, WriteError};
+use iroh::endpoint::{ReadError, ReadExactError, RecvStream, SendStream, WriteError};
 use iroh::{NodeAddr, SecretKey};
 use postcard::{from_bytes, to_allocvec};
 use std::fs::{self, File, OpenOptions};
@@ -348,7 +348,7 @@ impl EndpointActor {
 // Sends/receives PeerMessages to/from and Iroh connection.
 struct IrohConnection {
     send: SendStream,
-    message_rx: mpsc::Receiver<PeerMessage>,
+    message_rx: mpsc::Receiver<Result<PeerMessage, ConnectionError>>,
 }
 
 impl IrohConnection {
@@ -380,21 +380,47 @@ impl IrohConnection {
         let (message_tx, message_rx) = mpsc::channel(1);
 
         tokio::spawn(async move {
-            let _ = Self::read(receive, message_tx).await;
+            let _ = Self::read_loop(receive, message_tx).await;
         });
 
         Ok(Self { send, message_rx })
     }
 
-    async fn read(mut receive: RecvStream, message_tx: mpsc::Sender<PeerMessage>) -> Result<()> {
+    async fn read_loop(
+        mut receive: RecvStream,
+        message_tx: mpsc::Sender<Result<PeerMessage, ConnectionError>>,
+    ) -> Result<()> {
         loop {
-            let mut message_len_buf = [0; 4];
+            let result = Self::read_next(&mut receive).await;
 
-            receive.read_exact(&mut message_len_buf).await?;
-            let byte_count = u32::from_be_bytes(message_len_buf);
-            let mut bytes = vec![0; byte_count as usize];
-            receive.read_exact(&mut bytes).await?;
-            message_tx.send(from_bytes(&bytes)?).await?;
+            message_tx.send(result).await?;
+        }
+    }
+
+    async fn read_next(receive: &mut RecvStream) -> Result<PeerMessage, ConnectionError> {
+        fn map_timeout(err: ReadExactError) -> ConnectionError {
+            if let ReadExactError::ReadError(ReadError::ConnectionLost(
+                iroh::endpoint::ConnectionError::TimedOut,
+            )) = err
+            {
+                ConnectionError::TimedOut
+            } else {
+                ConnectionError::Other
+            }
+        }
+
+        let mut message_len_buf = [0; 4];
+        receive
+            .read_exact(&mut message_len_buf)
+            .await
+            .map_err(map_timeout)?;
+        let byte_count = u32::from_be_bytes(message_len_buf);
+
+        let mut bytes = vec![0; byte_count as usize];
+        receive.read_exact(&mut bytes).await.map_err(map_timeout)?;
+        match from_bytes(&bytes) {
+            Ok(message) => Ok(message),
+            Err(_) => Err(ConnectionError::Other),
         }
     }
 }
@@ -427,7 +453,9 @@ impl Connection<PeerMessage> for IrohConnection {
         Ok(())
     }
 
-    async fn next(&mut self) -> Option<PeerMessage> {
-        self.message_rx.recv().await
+    async fn next(&mut self) -> Result<PeerMessage, ConnectionError> {
+        self.message_rx.recv().await.unwrap_or_else(|| {
+            return Err(ConnectionError::Other);
+        })
     }
 }
