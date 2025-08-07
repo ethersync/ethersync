@@ -5,11 +5,11 @@
 
 //! This module provides a ConnectionManager, which can be used to connect to other daemons.
 
-use self::sync::{Connection, PeerMessage, SyncActor};
+use self::sync::{Connection, ConnectionError, PeerMessage, SyncActor};
 use crate::daemon::DocumentActorHandle;
 use anyhow::{bail, Result};
 use async_trait::async_trait;
-use iroh::endpoint::{RecvStream, SendStream};
+use iroh::endpoint::{RecvStream, SendStream, WriteError};
 use iroh::{NodeAddr, SecretKey};
 use postcard::{from_bytes, to_allocvec};
 use std::fs::{self, File, OpenOptions};
@@ -236,8 +236,9 @@ impl EndpointActor {
                 let document_handle_clone = self.document_handle.clone();
                 let message_tx_clone = self.message_tx.clone();
                 tokio::spawn(async move {
-                    // handle_peer currently only returns an error if authentication fails.
-                    // In this case, we don't want to reconnect, but panic!
+                    // If handle_peer returns an Ok, the connection timed out. In that case,
+                    // reconnect.
+                    // In other cases, we got a more serious error, so don't reconnect.
                     match Self::handle_peer(
                         document_handle_clone,
                         conn,
@@ -345,8 +346,7 @@ impl EndpointActor {
     ) -> Result<()> {
         let connection = IrohConnection::new(conn, auth).await?;
         let syncer = SyncActor::new(document_handle, Box::new(connection));
-        let _ = syncer.run().await;
-        Ok(())
+        syncer.run().await
     }
 }
 
@@ -406,11 +406,29 @@ impl IrohConnection {
 
 #[async_trait]
 impl Connection<PeerMessage> for IrohConnection {
-    async fn send(&mut self, message: PeerMessage) -> Result<()> {
-        let bytes: Vec<u8> = to_allocvec(&message)?;
-        let byte_count = u32::try_from(bytes.len());
-        self.send.write_all(&byte_count?.to_be_bytes()).await?;
-        self.send.write_all(&bytes).await?;
+    async fn send(&mut self, message: PeerMessage) -> Result<(), ConnectionError> {
+        let bytes: Vec<u8> = match to_allocvec(&message) {
+            Ok(bytes) => bytes,
+            Err(_) => {
+                return Err(ConnectionError::Other);
+            }
+        };
+        let byte_count = u32::try_from(bytes.len()).map_err(|_| ConnectionError::Other)?;
+
+        fn map_timeout(err: WriteError) -> ConnectionError {
+            if let WriteError::ConnectionLost(iroh::endpoint::ConnectionError::TimedOut) = err {
+                ConnectionError::TimedOut
+            } else {
+                ConnectionError::Other
+            }
+        }
+
+        self.send
+            .write_all(&byte_count.to_be_bytes())
+            .await
+            .map_err(map_timeout)?;
+        self.send.write_all(&bytes).await.map_err(map_timeout)?;
+
         Ok(())
     }
 

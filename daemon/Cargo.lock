@@ -1243,6 +1243,7 @@ dependencies = [
  "serde",
  "serde_json",
  "temp-dir",
+ "thiserror 2.0.12",
  "time",
  "tokio",
  "tokio-util",
