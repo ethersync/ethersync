@@ -10,6 +10,7 @@ use async_trait::async_trait;
 use automerge::sync::{Message as AutomergeSyncMessage, State as SyncState};
 use serde::{Deserialize, Serialize};
 use std::mem;
+use thiserror::Error;
 use tokio::sync::{broadcast, oneshot};
 use tracing::debug;
 
@@ -23,9 +24,17 @@ pub enum PeerMessage {
     Ephemeral(EphemeralMessage),
 }
 
+#[derive(Error, Debug)]
+pub enum ConnectionError {
+    #[error("Connection timed out")]
+    TimedOut,
+    #[error("Connection terminated (did you provide an incorrect passphrase?)")]
+    Other,
+}
+
 #[async_trait]
 pub trait Connection<T>: Send + Sync {
-    async fn send(&mut self, message: T) -> Result<()>;
+    async fn send(&mut self, message: T) -> Result<(), ConnectionError>;
     async fn next(&mut self) -> Option<T>;
 }
 
@@ -90,12 +99,13 @@ impl SyncActor {
         if let Some(message) = message {
             self.connection
                 .send(PeerMessage::Sync(message.encode()))
-                .await
-                .context("Failed to send sync message on syncer_sender channel")?;
+                .await?;
         }
         Ok(())
     }
 
+    // Convention: If this method returns an Ok, the connection timed out.
+    // On other errors, it returns an Err.
     pub async fn run(mut self) -> Result<()> {
         let mut doc_changed_ping_rx = self.document_handle.subscribe_document_changes();
         let mut ephemeral_messages_rx = self.document_handle.subscribe_ephemeral_messages();
@@ -124,9 +134,20 @@ impl SyncActor {
                 ephemeral_message = ephemeral_messages_rx.recv() => {
                     match ephemeral_message {
                         Ok(ephemeral_message) => {
-                            self.connection.send(PeerMessage::Ephemeral(ephemeral_message))
-                                .await
-                                .context("Failed to send ephemeral message on syncer_sender channel")?;
+                            match self.connection.send(PeerMessage::Ephemeral(ephemeral_message))
+                                .await {
+                                    Ok(()) => {
+                                        // Continue the loop. :)
+                                    },
+                                    Err(ConnectionError::TimedOut) => {
+                                        // On timeout, return Ok, so that the caller
+                                        // knows that this was a timeout.
+                                        return Ok(());
+                                    },
+                                    Err(err) => {
+                                        return Err(err.into());
+                                    },
+                            }
                         }
                         Err(broadcast::error::RecvError::Closed) => {
                             panic!("Ephemeral message channel has been closed");
