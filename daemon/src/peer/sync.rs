@@ -5,7 +5,7 @@
 
 use crate::daemon::{DocMessage, DocumentActorHandle};
 use crate::types::EphemeralMessage;
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result};
 use async_trait::async_trait;
 use automerge::sync::{Message as AutomergeSyncMessage, State as SyncState};
 use serde::{Deserialize, Serialize};
@@ -35,7 +35,7 @@ pub enum ConnectionError {
 #[async_trait]
 pub trait Connection<T>: Send + Sync {
     async fn send(&mut self, message: T) -> Result<(), ConnectionError>;
-    async fn next(&mut self) -> Option<T>;
+    async fn next(&mut self) -> Result<T, ConnectionError>;
 }
 
 /// Transport-agnostic logic of how to sync with another peer.
@@ -160,10 +160,18 @@ impl SyncActor {
                     }
                 }
                 message = self.connection.next() => {
-                    if let Some(message) = message {
-                        self.receive_peer_message(message).await?;
-                    } else {
-                        bail!("Connection died");
+                    match message {
+                        Ok(message) => {
+                            self.receive_peer_message(message).await?;
+                        }
+                        Err(ConnectionError::TimedOut) => {
+                            // On timeout, return Ok, so that the caller
+                            // knows that this was a timeout.
+                            return Ok(());
+                        }
+                        Err(err) => {
+                            return Err(err.into());
+                        },
                     }
                 }
             }
