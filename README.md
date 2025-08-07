@@ -47,20 +47,20 @@ The [releases on GitHub](https://github.com/ethersync/ethersync/releases/latest)
 <summary>Arch Linux</summary>
 
 ```
-yay -S ethersync-bin
+sudo pacman -S ethersync
 ```
 </details>
 
 <details>
 <summary>Nix</summary>
 
-This repository provides a Nix flake. To put `ethersync` in your PATH temporarily, run:
+To put `ethersync` in your PATH temporarily, run:
 
 ```
-nix shell github:ethersync/ethersync
+nix shell nixpkgs#ethersync
 ```
 
-Make sure to also have it in your PATH when you run the editors.
+Make sure to also have it in your PATH when you run the editors, or install it to your environment in your preferred way.
 </details>
 
 <details>
