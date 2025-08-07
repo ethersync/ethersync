@@ -92,6 +92,7 @@ impl ConnectionManager {
             .send(EndpointMessage::Connect {
                 secret_address: SecretAddress::from_str(&secret_address)?,
                 response_tx: Some(response_tx),
+                previous_attempts: 0,
             })
             .await
             .expect("EndpointActor task has been killed");
@@ -175,6 +176,8 @@ enum EndpointMessage {
         // On connection success, this channel will be pinged.
         // Used for the initial connection, where we want to fail if connecting fails.
         response_tx: Option<oneshot::Sender<Result<()>>>,
+        // How many times have we already attempted to connect?
+        previous_attempts: usize,
     },
 }
 
@@ -210,12 +213,13 @@ impl EndpointActor {
             EndpointMessage::Connect {
                 secret_address,
                 response_tx,
+                previous_attempts,
             } => {
                 let node_addr = secret_address.node_addr.clone();
                 let conn = match self.endpoint.connect(node_addr, ALPN).await {
                     Ok(connection) => connection,
                     Err(_) => {
-                        Self::reconnect(self.message_tx.clone(), secret_address)
+                        Self::reconnect(self.message_tx.clone(), secret_address, previous_attempts)
                             .await
                             .expect("Failed to initiate reconnection");
                         // Not really Ok, but Ok enough.
@@ -247,7 +251,7 @@ impl EndpointActor {
                     .await
                     {
                         Ok(()) => {
-                            Self::reconnect(message_tx_clone, secret_address)
+                            Self::reconnect(message_tx_clone, secret_address, 0)
                                 .await
                                 .expect("Failed to initiate reconnection");
                         }
@@ -264,16 +268,26 @@ impl EndpointActor {
     async fn reconnect(
         message_tx: mpsc::Sender<EndpointMessage>,
         secret_address: SecretAddress,
+        previous_attempts: usize,
     ) -> Result<()> {
-        info!(
-            "Connection to peer {} lost, trying to reconnect...",
-            secret_address.node_addr.node_id
-        );
+        // Only log at "info" level if this is the first reconnection attempt.
+        if previous_attempts == 0 {
+            info!(
+                "Connection to peer {} lost, will keep trying to reconnect...",
+                secret_address.node_addr.node_id
+            );
+        } else {
+            debug!(
+                "Making another attempt to connect to peer {}...",
+                secret_address.node_addr.node_id
+            );
+        }
         // We don't need to be notified, so we don't need to use the response channel.
         message_tx
             .send(EndpointMessage::Connect {
                 secret_address,
                 response_tx: None,
+                previous_attempts: previous_attempts + 1,
             })
             .await?;
         Ok(())
