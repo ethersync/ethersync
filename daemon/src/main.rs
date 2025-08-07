@@ -146,7 +146,7 @@ async fn main() -> Result<()> {
             let _daemon = Daemon::new(app_config, &socket_path, &directory, init_doc, persist)
                 .await
                 .context("Failed to launch the daemon")?;
-            wait_for_ctrl_c().await;
+            wait_for_shutdown().await;
         }
         Commands::Client => {
             jsonrpc_forwarder::connection(&socket_path)
@@ -183,12 +183,15 @@ fn get_directory(directory: Option<PathBuf>) -> Result<PathBuf> {
     Ok(directory)
 }
 
-async fn wait_for_ctrl_c() {
-    match signal::ctrl_c().await {
-        Ok(()) => {}
-        Err(err) => {
-            eprintln!("Unable to listen for shutdown signal: {err}");
-            // still shut down.
+async fn wait_for_shutdown() {
+    let mut signal_terminate = signal::unix::signal(signal::unix::SignalKind::terminate())
+        .expect("Should have been able to create terminate signal stream");
+    tokio::select! {
+        _ = signal::ctrl_c() => {
+            debug!("Got SIGINT (Ctrl+C), shutting down");
+        }
+        _ = signal_terminate.recv() => {
+            debug!("Got SIGTERM, shutting down");
         }
     }
 }
