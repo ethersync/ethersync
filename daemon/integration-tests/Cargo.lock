@@ -1148,6 +1148,7 @@ name = "ethersync"
 version = "0.7.0"
 dependencies = [
  "anyhow",
+ "async-trait",
  "automerge",
  "constant_time_eq",
  "derive_more 2.0.1",
@@ -1166,6 +1167,7 @@ dependencies = [
  "rust-ini",
  "serde",
  "serde_json",
+ "thiserror 2.0.12",
  "time",
  "tokio",
  "tokio-util",
