@@ -886,6 +886,8 @@ impl DocumentActorHandle {
 pub struct Daemon {
     pub document_handle: DocumentActorHandle,
     pub address: String,
+    socket_path: PathBuf,
+    base_dir: PathBuf,
 }
 
 impl Daemon {
@@ -903,7 +905,7 @@ impl Daemon {
 
         // Start socket listener.
         let socket_path = socket_path.to_path_buf();
-        editor::spawn_socket_listener(socket_path, document_handle.clone()).await?;
+        editor::spawn_socket_listener(socket_path.clone(), document_handle.clone()).await?;
 
         // Start file watcher.
         let base_dir = base_dir.to_path_buf();
@@ -936,7 +938,17 @@ impl Daemon {
         Ok(Self {
             document_handle,
             address,
+            socket_path,
+            base_dir,
         })
+    }
+}
+
+impl Drop for Daemon {
+    fn drop(&mut self) {
+        debug!("Daemon dropped, removing socket");
+        sandbox::remove_file(Path::new(&self.base_dir), &self.socket_path)
+            .expect("Could not remove socket");
     }
 }
 

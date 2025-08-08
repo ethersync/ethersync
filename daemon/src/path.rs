@@ -47,7 +47,7 @@ impl TryFrom<&str> for AbsolutePath {
     }
 }
 
-/// Paths like these are relative to the project directory.
+/// Paths like these are relative to the shared directory.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Eq, Hash, Deref, AsRef, Display)]
 #[as_ref(Path)]
 #[display("'{}'", self.0.display())]
@@ -60,16 +60,16 @@ impl RelativePath {
     }
 
     pub fn try_from_absolute(base_dir: &Path, path: &AbsolutePath) -> Result<Self, anyhow::Error> {
-        let project_dir = path::absolute(base_dir).with_context(|| {
+        let shared_dir = path::absolute(base_dir).with_context(|| {
             format!(
-                "Failed to get absolute path for project directory '{}'",
+                "Failed to get absolute path for shared directory '{}'",
                 base_dir.display()
             )
         })?;
-        let relative_path = path.strip_prefix(&project_dir).with_context(|| {
+        let relative_path = path.strip_prefix(&shared_dir).with_context(|| {
             format!(
-                "The path {path} is not in the project directory '{}'. Your plugin probably doesn't support opening files from multiple Ethersync directories.",
-                project_dir.display()
+                "The path {path} is not in the shared directory '{}'. Your plugin probably doesn't support opening files from multiple Ethersync directories.",
+                shared_dir.display()
             )
         })?;
 

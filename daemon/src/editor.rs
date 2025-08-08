@@ -4,6 +4,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 //! This module is all about daemon to editor communication.
+use crate::cli::ask;
 use crate::daemon::{DocMessage, DocumentActorHandle};
 use crate::sandbox;
 use crate::types::EditorProtocolObject;
@@ -78,7 +79,13 @@ pub async fn spawn_socket_listener(
     if sandbox::exists(Path::new("/"), Path::new(&socket_path))
         .expect("Failed to check existence of path")
     {
-        sandbox::remove_file(Path::new("/"), &socket_path).expect("Could not remove socket");
+        let socket_path_display = socket_path.display();
+        let remove_socket = ask(&format!("Detected an existing socket '{socket_path_display}'. There might be a daemon running already for this directory, or the previous one crashed. Do you want to continue?"));
+        if remove_socket? {
+            sandbox::remove_file(Path::new("/"), &socket_path).expect("Could not remove socket");
+        } else {
+            bail!("Not continuing, make sure to stop all other daemons on this directory");
+        }
     }
 
     let listener = UnixListener::bind(&socket_path)?;

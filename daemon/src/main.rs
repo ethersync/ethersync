@@ -6,14 +6,12 @@
 use anyhow::{bail, Context, Result};
 use clap::{CommandFactory, FromArgMatches, Parser, Subcommand};
 use ethersync::{
+    cli::ask,
     config::{self, AppConfig},
     daemon::Daemon,
     logging, sandbox,
 };
-use std::{
-    io::Write,
-    path::{Path, PathBuf},
-};
+use std::path::{Path, PathBuf};
 use tokio::signal;
 use tracing::{debug, info, warn};
 
@@ -35,7 +33,7 @@ struct Cli {
 enum Commands {
     /// Share a directory with a new peer.
     Share {
-        /// Re-initialize the history of the shared project. You will loose previous history.
+        /// Re-initialize the history of the shared directory. You will loose previous history.
         #[arg(long)]
         init: bool,
         /// Do not generate a join code. To prevent unintended sharing or simply if you want to
@@ -46,7 +44,7 @@ enum Commands {
         #[arg(long)]
         show_secret_address: bool,
     },
-    /// Join a shared project via join code.
+    /// Join a shared directory via a join code, or connect to the most recent one.
     Join {
         /// Specify to connect to a new peer. Otherwise, try to connect to the most recent peer.
         join_code: Option<String>,
@@ -148,7 +146,7 @@ async fn main() -> Result<()> {
             let _daemon = Daemon::new(app_config, &socket_path, &directory, init_doc, persist)
                 .await
                 .context("Failed to launch the daemon")?;
-            wait_for_ctrl_c().await;
+            wait_for_shutdown().await;
         }
         Commands::Client => {
             jsonrpc_forwarder::connection(&socket_path)
@@ -185,26 +183,15 @@ fn get_directory(directory: Option<PathBuf>) -> Result<PathBuf> {
     Ok(directory)
 }
 
-async fn wait_for_ctrl_c() {
-    match signal::ctrl_c().await {
-        Ok(()) => {}
-        Err(err) => {
-            eprintln!("Unable to listen for shutdown signal: {err}");
-            // still shut down.
+async fn wait_for_shutdown() {
+    let mut signal_terminate = signal::unix::signal(signal::unix::SignalKind::terminate())
+        .expect("Should have been able to create terminate signal stream");
+    tokio::select! {
+        _ = signal::ctrl_c() => {
+            debug!("Got SIGINT (Ctrl+C), shutting down");
         }
-    }
-}
-
-fn ask(question: &str) -> Result<bool> {
-    print!("{question} (y/N): ");
-    std::io::stdout().flush()?;
-    let mut lines = std::io::stdin().lines();
-    if let Some(Ok(line)) = lines.next() {
-        match line.to_lowercase().as_str() {
-            "y" | "yes" => Ok(true),
-            _ => Ok(false),
+        _ = signal_terminate.recv() => {
+            debug!("Got SIGTERM, shutting down");
         }
-    } else {
-        bail!("Failed to read answer");
     }
 }
