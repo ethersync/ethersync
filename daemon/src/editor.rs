@@ -84,7 +84,7 @@ pub async fn spawn_socket_listener(
         if remove_socket? {
             sandbox::remove_file(Path::new("/"), &socket_path).expect("Could not remove socket");
         } else {
-            bail!("Not continuing, make sure to stop all other daemons on this project");
+            bail!("Not continuing, make sure to stop all other daemons on this directory");
         }
     }
 

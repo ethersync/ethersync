@@ -33,7 +33,7 @@ struct Cli {
 enum Commands {
     /// Share a directory with a new peer.
     Share {
-        /// Re-initialize the history of the shared project. You will loose previous history.
+        /// Re-initialize the history of the shared directory. You will loose previous history.
         #[arg(long)]
         init: bool,
         /// Do not generate a join code. To prevent unintended sharing or simply if you want to
@@ -44,7 +44,7 @@ enum Commands {
         #[arg(long)]
         show_secret_address: bool,
     },
-    /// Join a shared project via join code.
+    /// Join a shared directory via a join code, or connect to the most recent one.
     Join {
         /// Specify to connect to a new peer. Otherwise, try to connect to the most recent peer.
         join_code: Option<String>,

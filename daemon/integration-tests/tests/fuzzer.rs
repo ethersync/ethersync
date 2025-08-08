@@ -29,7 +29,7 @@ async fn perform_random_edits(actor: &mut (impl Actor + ?Sized)) {
     }
 }
 
-fn initialize_project() -> (temp_dir::TempDir, PathBuf, PathBuf) {
+fn initialize_directory() -> (temp_dir::TempDir, PathBuf, PathBuf) {
     let dir = temp_dir::TempDir::new().expect("Failed to create temp directory");
     let mut ethersync_dir = dir.path().to_path_buf();
     ethersync_dir.push(".ethersync");
@@ -54,9 +54,9 @@ async fn main() -> Result<()> {
 
     logging::initialize()?;
 
-    // Set up files in project directories.
-    let (dir, file, socket_path) = initialize_project();
-    let (dir2, file2, socket_path2) = initialize_project();
+    // Set up files in shared directories.
+    let (dir, file, socket_path) = initialize_directory();
+    let (dir2, file2, socket_path2) = initialize_directory();
 
     // Set up the actors.
     let daemon = Daemon::new(
