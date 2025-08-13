@@ -104,14 +104,24 @@ impl Watcher {
                     notify::event::RenameMode::Any,
                 )) => {
                     assert!(event.paths.len() == 1);
-                    if sandbox::exists(&self.base_dir, &event.paths[0])
-                        .expect("Could not check existence of file")
-                    {
-                        if let Some(e) = self.maybe_created(&event.paths[0]) {
-                            return Some(e);
+                    let file_path = event.paths[0].clone();
+                    match sandbox::exists(&self.base_dir, &file_path) {
+                        Ok(path_exists) => {
+                            if path_exists {
+                                if let Some(e) = self.maybe_created(&file_path) {
+                                    return Some(e);
+                                }
+                            } else if let Some(e) = self.maybe_removed(&file_path) {
+                                return Some(e);
+                            }
                         }
-                    } else if let Some(e) = self.maybe_removed(&event.paths[0]) {
-                        return Some(e);
+                        Err(error) => {
+                            debug!(
+                                "Ignoring creation/removal of '{}' because of an error: {}",
+                                &file_path.display(),
+                                error
+                            );
+                        }
                     }
                 }
                 e => {
