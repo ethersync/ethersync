@@ -135,14 +135,19 @@ impl P2PActor {
     fn get_keypair(&self) -> (SecretKey, SecretKey) {
         let keyfile = self.base_dir.join(".ethersync").join("key");
         if keyfile.exists() {
-            let current_permissions = fs::metadata(&keyfile)
-                .expect("Expected to have access to metadata of the keyfile")
-                .permissions()
-                .mode();
+            let metadata =
+                fs::metadata(&keyfile).expect("Expected to have access to metadata of the keyfile");
+
+            let current_permissions = metadata.permissions().mode();
             let allowed_permissions = 0o100600;
             if current_permissions != allowed_permissions {
                 panic!("For security reasons, please make sure to set the key file to user-readable only (set the permissions to 600).");
             }
+
+            if metadata.len() != 64 {
+                panic!("Your keyfile is not 64 bytes long. This is a sign that it was created by an Ethersync version older than 0.7.0, which is not compatible. Please remove .ethersync/key, and try again.");
+            }
+
             debug!("Re-using existing keypair.");
             let mut file = File::open(keyfile).expect("Failed to open key file");
 
