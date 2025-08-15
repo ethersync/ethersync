@@ -141,7 +141,7 @@ local function find_directory(filename)
     end
 end
 
-local function track_edits(filename, uri)
+local function track_edits(filename, uri, initial_lines)
     files[filename] = {
         -- Number of operations the daemon has made.
         daemon_revision = 0,
@@ -151,7 +151,7 @@ local function track_edits(filename, uri)
 
     local bufnr = vim.uri_to_bufnr(uri)
 
-    changetracker.track_changes(bufnr, function(delta)
+    changetracker.track_changes(bufnr, initial_lines, function(delta)
         files[filename].editor_revision = files[filename].editor_revision + 1
 
         local params = { uri = uri, delta = delta, revision = files[filename].daemon_revision }
@@ -222,11 +222,12 @@ local function on_buffer_open()
     local lines = changetracker.get_all_lines_respecting_eol(buf)
     local content = table.concat(lines, "\n")
 
+    debug("Now sending open with content: " .. content)
     send_request("open", { uri = uri, content = content }, function()
-        debug("Tracking Edits")
+        debug("open succeeded")
         ensure_autoread_is_off()
         disable_writing()
-        track_edits(filename, uri)
+        track_edits(filename, uri, lines)
     end)
 end
 
@@ -240,6 +241,12 @@ end
 
 local function on_buffer_close()
     local closed_file = vim.fn.expand("<afile>:p")
+
+    if closed_file == "" then
+        -- This is a temporary buffer without a name.
+        return
+    end
+
     debug("on_buffer_close: " .. closed_file)
 
     if not find_directory(closed_file) then
