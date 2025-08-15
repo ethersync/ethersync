@@ -18,7 +18,7 @@ use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
 use std::path::Path;
 use std::str::FromStr;
 use tokio::sync::{mpsc, oneshot};
-use tracing::{debug, error, info, warn};
+use tracing::{debug, info, warn};
 
 mod sync;
 
@@ -299,7 +299,7 @@ impl EndpointActor {
                                     self.handle_incoming_connection(conn);
                                 }
                                 Err(err) => {
-                                    error!("Error while accepting peer connection: {err}");
+                                    debug!("Error while accepting peer connection: {err}");
                                 }
                             }
                         }
