@@ -65,23 +65,20 @@ pub enum DocMessage {
     ReceiveEphemeral(EphemeralMessage),
 }
 
-// TODO: Refactor this, to make use of sub-debug traits (default match).
 impl fmt::Debug for DocMessage {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let repr = match self {
-            DocMessage::GetContent { .. } => "get content".to_string(),
-            DocMessage::FromEditor(id, _) => {
-                format!("open/close/edit/... message from editor #{id}")
-            }
-            DocMessage::FromWatcher(_) => "watcher event".to_string(),
-            DocMessage::RescanFiles => "rescan".to_string(),
-            DocMessage::Persist => "persist".to_string(),
-            DocMessage::RandomEdit => "random edit".to_string(),
-            DocMessage::ReceiveSyncMessage { .. } => "<automerge internal sync rcv>".to_string(),
-            DocMessage::GenerateSyncMessage { .. } => "<automerge internal sync gen>".to_string(),
-            DocMessage::NewEditorConnection(..) => "editor connected".to_string(),
-            DocMessage::CloseEditorConnection(id) => format!("editor #{id} disconnected"),
-            DocMessage::ReceiveEphemeral(..) => "receive ephemeral".to_string(),
+            DocMessage::GetContent { .. } => "GetContent".to_string(),
+            DocMessage::FromEditor(id, s) => format!("FromEditor({id}, {s})"),
+            DocMessage::FromWatcher(e) => format!("FromWatcher({e:?}"),
+            DocMessage::RescanFiles => "RescanFiles".to_string(),
+            DocMessage::Persist => "Persist".to_string(),
+            DocMessage::RandomEdit => "RandomEdit".to_string(),
+            DocMessage::ReceiveSyncMessage { .. } => "ReceiveSyncMessage".to_string(),
+            DocMessage::GenerateSyncMessage { .. } => "GenerateSyncMessage".to_string(),
+            DocMessage::NewEditorConnection(id, _) => format!("NewEditorConnection({id})"),
+            DocMessage::CloseEditorConnection(id) => format!("CloseEditorConnection({id})"),
+            DocMessage::ReceiveEphemeral(m) => format!("ReceiveEphemeral({m:?})"),
         };
         write!(f, "{repr}")
     }
