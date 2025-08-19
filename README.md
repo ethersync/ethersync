@@ -22,6 +22,12 @@ Ethersync enables real-time collaborative editing of local text files. You can u
 - ✒️ Local-first: You always have full access, even offline
 - 🧩 [Simple JSON-RPC protocol](https://ethersync.github.io/ethersync/editor-plugin-dev-guide.html) for writing new editor plugins
 
+## What Ethersync is not
+
+We are not a company, and don't sell anything. We don't require you to create an account. We don't have access to your data, and don't use it to train AI algorithms. We don't serve you ads, and don't track you.
+
+We're just a bunch of people building something we want to see in the world.
+
 ## 🚦 Project status
 
 The project is under active development right now. We use it every day, but there's still some [bugs](https://github.com/ethersync/ethersync/issues?q=sort%3Aupdated-desc+is%3Aissue+is%3Aopen+%28label%3Abug+OR+type%3ABug%29) to be aware of.
