@@ -29,6 +29,7 @@ pub type EditorId = usize;
 
 pub type EditorWriter = FramedWrite<WriteHalf<UnixStream>, EditorProtocolCodec>;
 
+#[derive(Debug)]
 pub struct EditorProtocolCodec;
 
 impl Encoder<EditorProtocolObject> for EditorProtocolCodec {
