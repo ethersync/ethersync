@@ -427,7 +427,7 @@ impl DocumentActor {
                 let relative_file_path = RelativePath::try_from_path(&self.base_dir, &file_path)
                     .expect("Watcher event should have a path within the base directory");
                 if self.owns(&relative_file_path) {
-                    self.crdt_doc.remove_text(&relative_file_path);
+                    self.crdt_doc.remove_file(&relative_file_path);
                     let _ = self.doc_changed_ping_tx.send(());
                 }
             }
@@ -619,7 +619,7 @@ impl DocumentActor {
                 warn!(
                         "File {relative_file_path} exists in the CRDT, but not on disk. Deleting from CRDT."
                     );
-                self.crdt_doc.remove_text(&relative_file_path);
+                self.crdt_doc.remove_file(&relative_file_path);
             }
         }
         let _ = self.doc_changed_ping_tx.send(());

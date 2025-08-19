@@ -164,14 +164,22 @@ impl Document {
         }
     }
 
-    pub fn remove_text(&mut self, file_path: &RelativePath) {
-        if self.text_obj(file_path).is_err() {
+    pub fn remove_file(&mut self, file_path: &RelativePath) {
+        let file_map = self
+            .top_level_map_obj("files")
+            .expect("Failed to get files Map");
+        if self
+            .doc
+            .get(file_map, file_path)
+            .expect("Failed to get file from doc")
+            .is_none()
+        {
             debug!("Failed to get {file_path} Text object, so I can't remove it from the CRDT.");
             return;
         };
 
         info!("Removing {file_path} from the Ethersync history.");
-        // TODO: Also remove it from ot server, if applicable
+
         let file_map = self
             .top_level_map_obj("files")
             .expect("Failed to get files Map object");
