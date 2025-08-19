@@ -427,15 +427,16 @@ impl DocumentActor {
                                 return;
                             }
                         };
-                        if let Ok(content) = String::from_utf8(content) {
+                        if let Ok(content) = String::from_utf8(content.clone()) {
                             self.crdt_doc.initialize_text(&content, &relative_file_path);
                         } else {
-                            warn!("Ignoring newly created non-UTF-8 file {relative_file_path}");
+                            info!("Initializing binary {relative_file_path} in the Ethersync history.");
+                            self.crdt_doc.set_bytes(&content, &relative_file_path);
                         }
+                        let _ = self.doc_changed_ping_tx.send(());
                     } else {
                         debug!("Received watcher creation event, but file already exists in CRDT.")
                     }
-                    let _ = self.doc_changed_ping_tx.send(());
                 }
             }
             WatcherEvent::Removed { file_path } => {
@@ -463,14 +464,14 @@ impl DocumentActor {
                             return;
                         }
                     };
-                    if let Ok(new_content) = String::from_utf8(new_content) {
+                    if let Ok(new_content) = String::from_utf8(new_content.clone()) {
                         self.crdt_doc.update_text(&new_content, &relative_file_path);
                         // TODO: Once we get back to processing file changes while editors have it
                         // open, send the delta returned by update_text to editors.
-                        let _ = self.doc_changed_ping_tx.send(());
                     } else {
-                        warn!("Ignoring changed non-UTF-8 file {relative_file_path}");
+                        self.crdt_doc.set_bytes(&new_content, &relative_file_path);
                     }
+                    let _ = self.doc_changed_ping_tx.send(());
                 }
             }
         }
@@ -607,14 +608,14 @@ impl DocumentActor {
                             RelativePath::try_from_path(&self.base_dir, file_path)
                                 .expect("Walked file path should be within base directory");
                         if self.owns(&relative_file_path) {
-                            if let Ok(text) = String::from_utf8(bytes) {
+                            if let Ok(text) = String::from_utf8(bytes.clone()) {
                                 if init {
                                     self.crdt_doc.initialize_text(&text, &relative_file_path);
                                 } else {
                                     self.crdt_doc.update_text(&text, &relative_file_path);
                                 }
                             } else {
-                                warn!("Ignoring non-UTF-8 file {relative_file_path}",)
+                                self.crdt_doc.set_bytes(&bytes, &relative_file_path);
                             }
                         }
                     }
