@@ -28,8 +28,8 @@ pub enum PeerMessage {
 pub enum ConnectionError {
     #[error("Connection timed out")]
     TimedOut,
-    #[error("Connection terminated (did you provide an incorrect passphrase?)")]
-    Other,
+    #[error(transparent)]
+    Other(#[from] anyhow::Error),
 }
 
 #[async_trait]
