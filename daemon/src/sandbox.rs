@@ -22,6 +22,7 @@ pub fn read_file(absolute_base_dir: &Path, absolute_file_path: &Path) -> Result<
     Ok(bytes)
 }
 
+/// Writes content to a file, creating the parent directories, if they don't exist.
 pub fn write_file(
     absolute_base_dir: &Path,
     absolute_file_path: &Path,
@@ -29,6 +30,13 @@ pub fn write_file(
 ) -> Result<()> {
     let canonical_file_path =
         check_inside_base_dir_and_canonicalize(absolute_base_dir, absolute_file_path)?;
+
+    // Create the parent directorie(s), if neccessary.
+    let parent_dir = canonical_file_path
+        .parent()
+        .expect("Failed to get parent directory");
+    create_dir_all(absolute_base_dir, parent_dir).expect("Failed to create parent directory");
+
     fs::write(canonical_file_path, content)?;
     Ok(())
 }
