@@ -180,6 +180,35 @@ impl Document {
             .expect("Failed to delete text object");
     }
 
+    /// Used to set or update a binary file's content.
+    pub fn set_bytes(&mut self, bytes: &[u8], file_path: &RelativePath) {
+        let file_map = self
+            .top_level_map_obj("files")
+            .expect("Failed to get files Map object");
+
+        // If the content hasn't changed, don't write to the file.
+        if let Ok(Some((
+            automerge::Value::Scalar(std::borrow::Cow::Borrowed(automerge::ScalarValue::Bytes(
+                current_bytes,
+            ))),
+            _,
+        ))) = self.doc.get(&file_map, file_path)
+        {
+            if current_bytes == bytes {
+                return;
+            }
+        }
+
+        // If the file was not in the document before, log this.
+        if !self.file_exists(file_path) {
+            info!("Initializing binary {file_path} in the Ethersync history.");
+        }
+
+        self.doc
+            .put(file_map, file_path, bytes.to_vec())
+            .expect("Failed to initialize bytes object in Automerge document");
+    }
+
     fn top_level_map_obj(&self, name: &str) -> Result<automerge::ObjId> {
         let file_map = self.doc.get(automerge::ROOT, name);
         if let Ok(Some((automerge::Value::Object(ObjType::Map), file_map))) = file_map {
