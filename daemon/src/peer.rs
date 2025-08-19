@@ -7,7 +7,7 @@
 
 use self::sync::{Connection, ConnectionError, PeerMessage, SyncActor};
 use crate::daemon::DocumentActorHandle;
-use anyhow::{bail, Result};
+use anyhow::{bail, Context, Result};
 use async_trait::async_trait;
 use iroh::endpoint::{ReadError, ReadExactError, RecvStream, SendStream, WriteError};
 use iroh::{NodeAddr, SecretKey};
@@ -424,7 +424,7 @@ impl IrohConnection {
             {
                 ConnectionError::TimedOut
             } else {
-                ConnectionError::Other
+                ConnectionError::Other(err.into())
             }
         }
 
@@ -437,29 +437,23 @@ impl IrohConnection {
 
         let mut bytes = vec![0; byte_count as usize];
         receive.read_exact(&mut bytes).await.map_err(map_timeout)?;
-        match from_bytes(&bytes) {
-            Ok(message) => Ok(message),
-            Err(_) => Err(ConnectionError::Other),
-        }
+        Ok(from_bytes(&bytes).context("Failed to convert bytes to PeerMessage")?)
     }
 }
 
 #[async_trait]
 impl Connection<PeerMessage> for IrohConnection {
     async fn send(&mut self, message: PeerMessage) -> Result<(), ConnectionError> {
-        let bytes: Vec<u8> = match to_allocvec(&message) {
-            Ok(bytes) => bytes,
-            Err(_) => {
-                return Err(ConnectionError::Other);
-            }
-        };
-        let byte_count = u32::try_from(bytes.len()).map_err(|_| ConnectionError::Other)?;
+        let bytes: Vec<u8> =
+            to_allocvec(&message).context("Failed to convert PeerMessage to bytes")?;
+        let byte_count =
+            u32::try_from(bytes.len()).expect("Converting a length to u32 should work");
 
         fn map_timeout(err: WriteError) -> ConnectionError {
             if let WriteError::ConnectionLost(iroh::endpoint::ConnectionError::TimedOut) = err {
                 ConnectionError::TimedOut
             } else {
-                ConnectionError::Other
+                ConnectionError::Other(err.into())
             }
         }
 
@@ -473,8 +467,9 @@ impl Connection<PeerMessage> for IrohConnection {
     }
 
     async fn next(&mut self) -> Result<PeerMessage, ConnectionError> {
-        self.message_rx.recv().await.unwrap_or_else(|| {
-            return Err(ConnectionError::Other);
-        })
+        self.message_rx
+            .recv()
+            .await
+            .context("Failed to await next peer message")?
     }
 }
