@@ -236,6 +236,21 @@ impl DocumentActor {
                                 warn!("Failed to remove file {file_path}: {err}");
                             });
                         }
+                        PatchEffect::FileBytes(file_path, bytes) => {
+                            let absolute_path = &self.absolute_path_for_file_path(&file_path);
+
+                            // If the file didn't exist before, log it.
+                            if !sandbox::exists(&self.base_dir, absolute_path)
+                                .expect("Failed to check for file existence before writing to it")
+                            {
+                                info!("Creating binary file {file_path}.");
+                            }
+
+                            sandbox::write_file(&self.base_dir, absolute_path, &bytes)
+                                .unwrap_or_else(|err| {
+                                    warn!("Failed to write to file {file_path}: {err}");
+                                });
+                        }
                         PatchEffect::NoEffect => {}
                     }
                 }

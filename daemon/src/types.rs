@@ -112,6 +112,8 @@ pub struct EphemeralMessage {
 pub enum PatchEffect {
     FileChange(FileTextDelta),
     FileRemoval(RelativePath),
+    /// Emitted when a binary file's content is set.
+    FileBytes(RelativePath, Vec<u8>),
     NoEffect,
 }
 
@@ -455,17 +457,34 @@ impl TryFrom<Patch> for PatchEffect {
             (_, automerge::Prop::Map(key)) if key == "files" => {
                 if patch.path.len() == 1 {
                     match patch.action {
-                        PatchAction::PutMap { key, conflict, .. } => {
+                        PatchAction::PutMap {
+                            key,
+                            conflict,
+                            value,
+                        } => {
                             // This action happens when a new file is created.
-                            // We return an empty delta on the new file, so that the file is created on disk when
-                            // synced over to another peer. TODO: Is this the best way to solve this?
+
                             let path = RelativePath::new(&key);
                             if conflict {
                                 warn!(
                                     "Resolved conflict for file {path} by overwriting your version."
                                 );
                             }
-                            Ok(PatchEffect::FileChange(FileTextDelta::new(path, delta)))
+
+                            match value {
+                                (automerge::Value::Object(automerge::ObjType::Text), _) => {
+                                    // We return an empty delta on the new file, so that the file is created on disk when
+                                    // synced over to another peer. TODO: Is this the best way to solve this?
+                                    Ok(PatchEffect::FileChange(FileTextDelta::new(path, delta)))
+                                }
+                                (
+                                    automerge::Value::Scalar(std::borrow::Cow::Owned(
+                                        automerge::ScalarValue::Bytes(bytes),
+                                    )),
+                                    _,
+                                ) => Ok(PatchEffect::FileBytes(path, bytes)),
+                                _ => Err(anyhow::anyhow!("Unexpected value in path {}", path)),
+                            }
                         }
                         PatchAction::DeleteMap { key } => {
                             // This action happens when a file is deleted.
