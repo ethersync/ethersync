@@ -549,12 +549,6 @@ impl DocumentActor {
             let abs_path = self.absolute_path_for_file_path(file_path);
             debug!("Writing to {abs_path}.");
 
-            // Create the parent directorie(s), if neccessary.
-            let parent_dir = abs_path.parent().unwrap();
-            sandbox::create_dir_all(&self.base_dir, parent_dir).unwrap_or_else(|_| {
-                panic!("Could not create parent directory {}", parent_dir.display())
-            });
-
             // If the file didn't exist before, log it.
             if !sandbox::exists(&self.base_dir, &abs_path)
                 .expect("Failed to check for file existence before writing to it")
