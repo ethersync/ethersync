@@ -413,30 +413,22 @@ impl DocumentActor {
                 let relative_file_path = RelativePath::try_from_path(&self.base_dir, &file_path)
                     .expect("Watcher event should have a path within the base directory");
                 if self.owns(&relative_file_path) {
-                    if !self.crdt_doc.file_exists(&relative_file_path) {
-                        let content = match sandbox::read_file(
-                            &self.base_dir,
-                            Path::new(&file_path),
-                        ) {
-                            Ok(content) => content,
-                            Err(e) => {
-                                warn!(
+                    let content = match sandbox::read_file(&self.base_dir, Path::new(&file_path)) {
+                        Ok(content) => content,
+                        Err(e) => {
+                            warn!(
                                     "The file watcher noticed a file creation for {relative_file_path}, \
                                     but we couldn't read it: {e} (probably it disappeared again already?)"
                                 );
-                                return;
-                            }
-                        };
-                        if let Ok(content) = String::from_utf8(content.clone()) {
-                            self.crdt_doc.initialize_text(&content, &relative_file_path);
-                        } else {
-                            info!("Initializing binary {relative_file_path} in the Ethersync history.");
-                            self.crdt_doc.set_bytes(&content, &relative_file_path);
+                            return;
                         }
-                        let _ = self.doc_changed_ping_tx.send(());
+                    };
+                    if let Ok(content) = String::from_utf8(content.clone()) {
+                        self.crdt_doc.initialize_text(&content, &relative_file_path);
                     } else {
-                        debug!("Received watcher creation event, but file already exists in CRDT.")
+                        self.crdt_doc.set_bytes(&content, &relative_file_path);
                     }
+                    let _ = self.doc_changed_ping_tx.send(());
                 }
             }
             WatcherEvent::Removed { file_path } => {
