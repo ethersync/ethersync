@@ -255,7 +255,14 @@ impl Document {
     }
 
     pub fn file_exists(&self, file_path: &RelativePath) -> bool {
-        self.text_obj(file_path).is_ok()
+        if let Ok(file_map) = self.top_level_map_obj("files") {
+            self.doc
+                .get(file_map, file_path)
+                .unwrap_or_else(|_| panic!("Failed to get {file_path} key from Automerge document"))
+                .is_some()
+        } else {
+            false
+        }
     }
 }
 
