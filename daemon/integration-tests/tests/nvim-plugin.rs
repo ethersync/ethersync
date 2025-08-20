@@ -266,7 +266,7 @@ async fn nvim_sends_correct_delta() {
         vec![
             replace_ed((0, 0), (0, 1), ""),
             replace_ed((0, 0), (0, 0), "x"),  // d: "x\n"
-            replace_ed((0, 1), (0, 1), "\n"), // d: "x\n\n"
+            replace_ed((1, 0), (1, 0), "\n"), // d: "x\n\n"
             replace_ed((1, 0), (2, 0), ""),
         ],
     )
