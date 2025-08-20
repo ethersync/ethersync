@@ -663,6 +663,8 @@ impl DocumentActor {
                 } else {
                     // The file doesn't exist yet - create it in the Automerge document.
                     self.crdt_doc.initialize_text(content, file_path);
+                    let _ = self.doc_changed_ping_tx.send(());
+                    self.write_file(file_path);
                 };
             }
             ComponentMessage::Close { file_path } => {
