@@ -5,7 +5,6 @@
 
 local sync = require("vim.lsp.sync")
 local utils = require("ethersync.utils")
-local debug = require("ethersync.logging").debug
 
 local M = {}
 
@@ -33,7 +32,7 @@ local function is_empty(diff)
 end
 
 -- Convert an LSP TextDocumentContentChangeEvent to an Ethersync delta.
-local function lsp_diff_to_ethersync_delta(diff, prev_lines)
+local function lsp_diff_to_ethersync_delta(diff)
     return {
         {
             range = diff.range,
@@ -176,17 +175,18 @@ function M.track_changes(buffer, initial_lines, callback)
 
     -- Computes an Ethersync delta containing the changes between curr_lines and prev_lines_global.
     -- If the delta is not empty, call the callback.
-    local function line_change(curr_lines, first_line, last_line, new_last_line)
+    local function line_change(first_line, last_line, new_last_line)
+        -- TODO: optimize with a cache
+        local curr_lines = M.get_all_lines_respecting_eol(buffer)
+
         local prev_lines = prev_lines_global
         prev_lines_global = curr_lines
 
-        debug({
-            curr_lines = curr_lines,
-            prev_lines = prev_lines,
-            first_line = first_line,
-            last_line = last_line,
-            new_last_line = new_last_line,
-        })
+        -- Are we currently ignoring edits? If so, do nothing.
+        if ignore_edits then
+            prev_lines_global = curr_lines
+            return
+        end
 
         -- Special case: When deleting the entire content, when 'eol' is on, there
         -- will still be a "virtual line" after the current empty line: The file content will be "\n".
@@ -200,67 +200,41 @@ function M.track_changes(buffer, initial_lines, callback)
         first_line, last_line, new_last_line =
             shrink_to_modified_line_range(prev_lines, curr_lines, first_line, last_line, new_last_line)
 
-        debug({
-            curr_lines = curr_lines,
-            prev_lines = prev_lines,
-            first_line = first_line,
-            last_line = last_line,
-            new_last_line = new_last_line,
-        })
-
         local diff = sync.compute_diff(prev_lines, curr_lines, first_line, last_line, new_last_line, "utf-32", "\n")
-        debug({ unfixed_diff = diff })
         diff = fix_diff(diff, prev_lines, curr_lines)
-        debug({ fixed_diff = diff })
 
         if is_empty(diff) then
             return
         end
 
         local delta = lsp_diff_to_ethersync_delta(diff)
-        debug({ final_delta = delta })
         callback(delta)
     end
 
-    local function on_lines(
-        _the_literal_string_lines --[[@diagnostic disable-line]],
-        _buffer_handle --[[@diagnostic disable-line]],
-        _changedtick, --[[@diagnostic disable-line]]
-        first_line,
-        last_line,
-        new_last_line
-    )
-        -- First, clear the "modified" option, so that the buffer is not displayed as dirty.
-        -- Being modified doesn't have meaning for ethersync-ed files.
-        vim.api.nvim_buf_set_option(buffer, "modified", false)
-
-        -- Line counts that we get called with are zero-based.
-        -- last_line and new_last_line are exclusive
-
-        -- TODO: optimize with a cache
-        debug({ buffer = buffer })
-        local curr_lines = M.get_all_lines_respecting_eol(buffer)
-        debug({ curr_lines = curr_lines, buffer = buffer })
-
-        -- Are we currently ignoring edits?
-        if ignore_edits then
-            prev_lines_global = curr_lines
-            return
-        end
-
-        line_change(curr_lines, first_line, last_line, new_last_line)
-    end
-
-    -- Clear the "modified" option, so that the buffer is not displayed as dirty.
-    -- Being modified doesn't have meaning for ethersync-ed files.
-    vim.api.nvim_buf_set_option(buffer, "modified", false)
-
-    local curr_lines = M.get_all_lines_respecting_eol(buffer)
-    line_change(curr_lines, 0, #prev_lines_global, #curr_lines)
-
+    -- Step 1: Register a callback to catch all future buffer changes.
     vim.api.nvim_buf_attach(buffer, false, {
-        on_lines = on_lines,
+        on_lines = function(
+            _the_literal_string_lines --[[@diagnostic disable-line]],
+            _buffer_handle --[[@diagnostic disable-line]],
+            _changedtick, --[[@diagnostic disable-line]]
+            first_line,
+            last_line,
+            new_last_line
+        )
+            -- First, clear the "modified" option, so that the buffer is not displayed as dirty.
+            -- Being modified doesn't have meaning for ethersync-ed files.
+            vim.api.nvim_buf_set_option(buffer, "modified", false)
+
+            -- Line counts that we get called with are zero-based.
+            -- last_line and new_last_line are exclusive
+
+            line_change(first_line, last_line, new_last_line)
+        end,
     })
+
+    -- Step 2: Initially compare the current buffer contents to the `initial_lines`, and maybe send out a diff.
+    local curr_lines = M.get_all_lines_respecting_eol(buffer)
+    line_change(0, #prev_lines_global, #curr_lines)
 end
 
 function M.apply_delta(buffer, delta)
