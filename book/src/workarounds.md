@@ -17,3 +17,15 @@ The editor plugins currently only try to connect to Ethersync when they first st
 
 The editor plugins currently only connect to a single daemon, when the first file from a shared directory is opened.
 To work on files from another project, either use a second editor instance, or close the first one.
+
+## Opening binary files in editors converts them to UTF-8
+
+This happens because most editors are not well-equipped for editing binary data directly.
+
+To edit a binary file together, first convert to a hexdump like this (`-R never` is to disable color output):
+
+    xxd -R never binary_file > binary_file.hex
+
+Then, edit the `.hex` file collaboratively. Finally, convert back to a binary:
+
+    xxd -r binary_file.hex > binary_file
