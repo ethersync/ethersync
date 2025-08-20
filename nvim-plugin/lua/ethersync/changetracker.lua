@@ -135,34 +135,32 @@ local function fix_diff(diff, prev_lines, curr_lines)
                 )
             end
         end
-    else
-        -- The range does not extend past the visible buffer lines (diff.range["end"].line < #prev_lines).
-        -- We might still want to make the delta prettier.
-        -- TODO: Integrate these cases in the above if branches somehow?
-        if
-            diff.range["end"].character == 0
-            and string.sub(diff.text, 1, 1) == "\n"
-            and diff.range["start"].character == vim.fn.strchars(prev_lines[diff.range["start"].line + 1])
-            and diff.range["start"].line < diff.range["end"].line
-        then
-            -- Range starts at the end of a line, and spans the newline after it, but also begins with a newline.
-            -- This newline is redundant, and leads to less-pretty diffs. Remove it.
-            diff.text = string.sub(diff.text, 2, -1)
-            diff.range["start"].line = diff.range["start"].line + 1
-            diff.range["start"].character = 0
-        end
+    end
 
-        if
-            diff.range["end"].character == 0
-            and string.sub(diff.text, -1) == "\n"
-            and diff.range["start"].line < diff.range["end"].line
-        then
-            -- Range ends on the beginning of a line, but the replacement ends with a newline.
-            -- This newline is redundant, and leads to less-pretty diffs. Remove it.
-            diff.text = string.sub(diff.text, 1, -2)
-            diff.range["end"].line = diff.range["end"].line - 1
-            diff.range["end"].character = vim.fn.strchars(prev_lines[diff.range["end"].line + 1])
-        end
+    -- In some cases, we can still want to make the delta prettier.
+    if
+        diff.range["end"].character == 0
+        and string.sub(diff.text, 1, 1) == "\n"
+        and diff.range["start"].character == vim.fn.strchars(prev_lines[diff.range["start"].line + 1])
+        and diff.range["start"].line < diff.range["end"].line
+    then
+        -- Range starts at the end of a line, and spans the newline after it, but also begins with a newline.
+        -- This newline is redundant, and leads to less-pretty diffs. Remove it.
+        diff.text = string.sub(diff.text, 2, -1)
+        diff.range["start"].line = diff.range["start"].line + 1
+        diff.range["start"].character = 0
+    end
+
+    if
+        diff.range["end"].character == 0
+        and string.sub(diff.text, -1) == "\n"
+        and diff.range["start"].line < diff.range["end"].line
+    then
+        -- Range ends on the beginning of a line, but the replacement ends with a newline.
+        -- This newline is redundant, and leads to less-pretty diffs. Remove it.
+        diff.text = string.sub(diff.text, 1, -2)
+        diff.range["end"].line = diff.range["end"].line - 1
+        diff.range["end"].character = vim.fn.strchars(prev_lines[diff.range["end"].line + 1])
     end
 
     return diff
@@ -182,6 +180,14 @@ function M.track_changes(buffer, initial_lines, callback)
         local prev_lines = prev_lines_global
         prev_lines_global = curr_lines
 
+        debug({
+            curr_lines = curr_lines,
+            prev_lines = prev_lines,
+            first_line = first_line,
+            last_line = last_line,
+            new_last_line = new_last_line,
+        })
+
         -- Special case: When deleting the entire content, when 'eol' is on, there
         -- will still be a "virtual line" after the current empty line: The file content will be "\n".
         -- So new_last_line should not be 0, but 1!
@@ -194,14 +200,25 @@ function M.track_changes(buffer, initial_lines, callback)
         first_line, last_line, new_last_line =
             shrink_to_modified_line_range(prev_lines, curr_lines, first_line, last_line, new_last_line)
 
+        debug({
+            curr_lines = curr_lines,
+            prev_lines = prev_lines,
+            first_line = first_line,
+            last_line = last_line,
+            new_last_line = new_last_line,
+        })
+
         local diff = sync.compute_diff(prev_lines, curr_lines, first_line, last_line, new_last_line, "utf-32", "\n")
+        debug({ unfixed_diff = diff })
         diff = fix_diff(diff, prev_lines, curr_lines)
+        debug({ fixed_diff = diff })
 
         if is_empty(diff) then
             return
         end
 
         local delta = lsp_diff_to_ethersync_delta(diff)
+        debug({ final_delta = delta })
         callback(delta)
     end
 
@@ -221,7 +238,9 @@ function M.track_changes(buffer, initial_lines, callback)
         -- last_line and new_last_line are exclusive
 
         -- TODO: optimize with a cache
+        debug({ buffer = buffer })
         local curr_lines = M.get_all_lines_respecting_eol(buffer)
+        debug({ curr_lines = curr_lines, buffer = buffer })
 
         -- Are we currently ignoring edits?
         if ignore_edits then
@@ -230,7 +249,6 @@ function M.track_changes(buffer, initial_lines, callback)
         end
 
         line_change(curr_lines, first_line, last_line, new_last_line)
-        prev_lines_global = curr_lines
     end
 
     -- Clear the "modified" option, so that the buffer is not displayed as dirty.
@@ -239,7 +257,6 @@ function M.track_changes(buffer, initial_lines, callback)
 
     local curr_lines = M.get_all_lines_respecting_eol(buffer)
     line_change(curr_lines, 0, #prev_lines_global, #curr_lines)
-    prev_lines_global = curr_lines
 
     vim.api.nvim_buf_attach(buffer, false, {
         on_lines = on_lines,
