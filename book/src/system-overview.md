@@ -10,7 +10,6 @@ SPDX-License-Identifier: CC-BY-SA-4.0
 Ethersync is a system for real-time local-first collaboration on text files, where
 - *real-time* means that edits and cursor movements should appear immediately while you are in a connection with your peer
 - *local-first* means that it's also possible to continue working on the project while you're (temporarily) offline
-- and the collaboration is restricted to *text-files* only (unfortunately, we don't support docx, xlsx, images, or other binary files yet).
 
 Here's a diagram of the components that are involved:
 
