@@ -413,22 +413,29 @@ impl DocumentActor {
                 let relative_file_path = RelativePath::try_from_path(&self.base_dir, &file_path)
                     .expect("Watcher event should have a path within the base directory");
                 if self.owns(&relative_file_path) {
-                    let content = match sandbox::read_file(&self.base_dir, Path::new(&file_path)) {
-                        Ok(content) => content,
-                        Err(e) => {
-                            warn!(
+                    if !self.crdt_doc.file_exists(&relative_file_path) {
+                        let content = match sandbox::read_file(
+                            &self.base_dir,
+                            Path::new(&file_path),
+                        ) {
+                            Ok(content) => content,
+                            Err(e) => {
+                                warn!(
                                     "The file watcher noticed a file creation for {relative_file_path}, \
                                     but we couldn't read it: {e} (probably it disappeared again already?)"
                                 );
-                            return;
+                                return;
+                            }
+                        };
+                        if let Ok(content) = String::from_utf8(content.clone()) {
+                            self.crdt_doc.initialize_text(&content, &relative_file_path);
+                        } else {
+                            self.crdt_doc.set_bytes(&content, &relative_file_path);
                         }
-                    };
-                    if let Ok(content) = String::from_utf8(content.clone()) {
-                        self.crdt_doc.initialize_text(&content, &relative_file_path);
+                        let _ = self.doc_changed_ping_tx.send(());
                     } else {
-                        self.crdt_doc.set_bytes(&content, &relative_file_path);
+                        debug!("Received watcher creation event, but file already exists in CRDT.");
                     }
-                    let _ = self.doc_changed_ping_tx.send(());
                 }
             }
             WatcherEvent::Removed { file_path } => {
@@ -450,8 +457,8 @@ impl DocumentActor {
                         Ok(content) => content,
                         Err(e) => {
                             warn!(
-                                    "The file watcher noticed a file change for {relative_file_path}, \
-                                    but we couldn't read it: {e} (probably it was deleted after the change?)"
+                                "The file watcher noticed a file change for {relative_file_path}, \
+                                but we couldn't read it: {e} (probably it was deleted after the change?)"
                             );
                             return;
                         }
