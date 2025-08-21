@@ -20,7 +20,7 @@ To work on files from another project, either use a second editor instance, or c
 
 ## Opening binary files in editors converts them to UTF-8
 
-This happens because most editors are not well-equipped for editing binary data directly.
+This happens because most editors are [not well-equipped](https://github.com/ethersync/ethersync/issues/360) for editing binary data directly.
 
 To edit a binary file together, first convert to a hexdump like this (`-R never` is to disable color output):
 
