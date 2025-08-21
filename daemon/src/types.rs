@@ -433,8 +433,6 @@ impl TryFrom<Patch> for PatchEffect {
             ))
         }
 
-        let mut delta = TextDelta::default();
-
         if patch.path.is_empty() {
             return match patch.action {
                 PatchAction::PutMap { key, .. } => {
@@ -475,7 +473,10 @@ impl TryFrom<Patch> for PatchEffect {
                                 (automerge::Value::Object(automerge::ObjType::Text), _) => {
                                     // We return an empty delta on the new file, so that the file is created on disk when
                                     // synced over to another peer. TODO: Is this the best way to solve this?
-                                    Ok(PatchEffect::FileChange(FileTextDelta::new(path, delta)))
+                                    Ok(PatchEffect::FileChange(FileTextDelta::new(
+                                        path,
+                                        TextDelta::default(),
+                                    )))
                                 }
                                 (
                                     automerge::Value::Scalar(std::borrow::Cow::Owned(
@@ -513,6 +514,7 @@ impl TryFrom<Patch> for PatchEffect {
                         )),
                     }
                 } else if patch.path.len() == 2 {
+                    let mut delta = TextDelta::default();
                     match patch.action {
                         PatchAction::SpliceText { index, value, .. } => {
                             delta.retain(index);
