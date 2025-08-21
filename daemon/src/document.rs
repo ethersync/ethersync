@@ -165,16 +165,8 @@ impl Document {
     }
 
     pub fn remove_file(&mut self, file_path: &RelativePath) {
-        let file_map = self
-            .top_level_map_obj("files")
-            .expect("Failed to get files Map");
-        if self
-            .doc
-            .get(file_map, file_path)
-            .expect("Failed to get file from doc")
-            .is_none()
-        {
-            debug!("Failed to get {file_path} Text object, so I can't remove it from the CRDT.");
+        if !self.file_exists(file_path) {
+            debug!("Failed to get {file_path} key object, so I can't remove it from the CRDT.");
             return;
         };
 
@@ -194,7 +186,7 @@ impl Document {
             .top_level_map_obj("files")
             .expect("Failed to get files Map object");
 
-        // If the content hasn't changed, don't write to the file.
+        // If the content hasn't changed, don't write to the file. This prevents irrelevant watcher events.
         if let Ok(Some((
             automerge::Value::Scalar(std::borrow::Cow::Borrowed(automerge::ScalarValue::Bytes(
                 current_bytes,
