@@ -463,20 +463,23 @@ impl TryFrom<Patch> for PatchEffect {
                             // This action happens when a new file is created.
 
                             let path = RelativePath::new(&key);
-                            if conflict {
-                                warn!(
-                                    "Resolved conflict for file {path} by overwriting your version."
-                                );
-                            }
 
                             match value {
                                 (automerge::Value::Object(automerge::ObjType::Text), _) => {
-                                    // We return an empty delta on the new file, so that the file is created on disk when
-                                    // synced over to another peer. TODO: Is this the best way to solve this?
-                                    Ok(PatchEffect::FileChange(FileTextDelta::new(
-                                        path,
-                                        TextDelta::default(),
-                                    )))
+                                    if !conflict {
+                                        // We return an empty delta on the new file, so that the file is created on disk when
+                                        // synced over to another peer. TODO: Is this the best way to solve this?
+                                        Ok(PatchEffect::FileChange(FileTextDelta::new(
+                                            path,
+                                            TextDelta::default(),
+                                        )))
+                                    } else {
+                                        // In this case, the peer receiving this PutMap should
+                                        // remove all existing content of this file in open
+                                        // editors. So we emit a FileRemovel.
+                                        warn!("Resolved conflict for file {path} by overwriting your version.");
+                                        Ok(PatchEffect::FileRemoval(path))
+                                    }
                                 }
                                 (
                                     automerge::Value::Scalar(std::borrow::Cow::Owned(
