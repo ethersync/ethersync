@@ -279,3 +279,5 @@ vim.api.nvim_create_autocmd("FileChangedShell", { callback = function() end })
 
 vim.api.nvim_create_user_command("EthersyncInfo", print_info, {})
 vim.api.nvim_create_user_command("EthersyncJumpToCursor", cursor.jump_to_cursor, {})
+vim.api.nvim_create_user_command("EthersyncFollow", cursor.follow_cursor, {})
+vim.api.nvim_create_user_command("EthersyncUnfollow", cursor.unfollow_cursor, {})

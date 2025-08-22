@@ -1,5 +1,6 @@
 -- SPDX-FileCopyrightText: 2024 blinry <mail@blinry.org>
 -- SPDX-FileCopyrightText: 2024 zormit <nt4u@kpvn.de>
+-- SPDX-FileCopyrightText: 2025 mbitard <code@bitard.fr>
 --
 -- SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -18,6 +19,7 @@ local user_cursors = {}
 local cursor_namespace = vim.api.nvim_create_namespace("Ethersync")
 local offset_encoding = "utf-32"
 local cursor_timeout_ms = 300 * 1000
+local following_user_id = nil
 
 local function show_cursor_information(name, cursor)
     return name .. " @ " .. vim.uri_to_fname(cursor.uri) .. ":" .. cursor.range.start.line + 1
@@ -36,12 +38,23 @@ local function is_forward(start_row, end_row, start_col, end_col)
     return (start_row < end_row) or (start_row == end_row and start_col <= end_col)
 end
 
-local function jump(location)
-    -- In Neovim 0.11, jump_to_location was deprecated.
-    if vim.version().api_level < 13 then
-        vim.lsp.util.jump_to_location(location, offset_encoding, true)
+local function jump_to_user_id(user_id)
+    local cursors = user_cursors[user_id].cursors
+    local cursor = cursors[#cursors]
+    if cursor == nil then
+        following_user_id = nil
     else
-        vim.lsp.util.show_document(location, offset_encoding)
+        local location = {
+            targetUri = cursor.uri,
+            targetRange = cursor.range,
+            targetSelectionRange = cursor.range,
+        }
+        -- In Neovim 0.11, jump_to_location was deprecated.
+        if vim.version().api_level < 13 then
+            vim.lsp.util.jump_to_location(location, offset_encoding, true)
+        else
+            vim.lsp.util.show_document(location, offset_encoding)
+        end
     end
 end
 
@@ -66,72 +79,74 @@ function M.set_cursor(uri, user_id, name, ranges)
         for _, range in ipairs(ranges) do
             table.insert(user_cursors[user_id].cursors, { uri = uri, range = range, extmark = nil })
         end
-        return
-    end
+    else
+        for i, range in ipairs(ranges) do
+            -- Convert from LSP style ranges to Neovim style ranges.
+            local start_row = range.start.line
+            local start_col = vim.lsp.util._get_line_byte_from_position(bufnr, range.start, offset_encoding)
+            local end_row = range["end"].line
+            local end_col = vim.lsp.util._get_line_byte_from_position(bufnr, range["end"], offset_encoding)
 
-    for i, range in ipairs(ranges) do
-        -- Convert from LSP style ranges to Neovim style ranges.
-        local start_row = range.start.line
-        local start_col = vim.lsp.util._get_line_byte_from_position(bufnr, range.start, offset_encoding)
-        local end_row = range["end"].line
-        local end_col = vim.lsp.util._get_line_byte_from_position(bufnr, range["end"], offset_encoding)
-
-        -- If the range is backwards, swap the start and end positions.
-        if not is_forward(start_row, end_row, start_col, end_col) then
-            start_row, end_row = end_row, start_row
-            start_col, end_col = end_col, start_col
-        end
-
-        -- If the range is empty, expand the highlighted range by 1 to make it visible.
-        if start_row == end_row and start_col == end_col then
-            local bytes_in_end_row = vim.fn.strlen(vim.fn.getline(end_row + 1))
-            if bytes_in_end_row > end_col then
-                -- Note: Instead of 1, we should actually add the byte length of the character at this position.
-                end_col = end_col + 1
-            elseif bytes_in_end_row > 0 then
-                -- This highlights the last character in the row.
-                start_col = start_col - 1
+            -- If the range is backwards, swap the start and end positions.
+            if not is_forward(start_row, end_row, start_col, end_col) then
+                start_row, end_row = end_row, start_row
+                start_col, end_col = end_col, start_col
             end
-        end
 
-        local e = {
-            start_row = start_row,
-            start_col = start_col,
-            end_row = end_row,
-            end_col = end_col,
-        }
-
-        local virt_text = {}
-        if i == 1 and name then
-            virt_text = { { name, "EthersyncUsername" } }
-        end
-
-        -- Try setting the extmark, ignore errors (which can happen at end of lines/buffers).
-        pcall(function()
-            local extmark_id = vim.api.nvim_buf_set_extmark(bufnr, cursor_namespace, e.start_row, e.start_col, {
-                hl_mode = "combine",
-                hl_group = "TermCursor",
-                end_col = e.end_col,
-                end_row = e.end_row,
-                virt_text = virt_text,
-            })
-            vim.defer_fn(function()
-                vim.api.nvim_buf_del_extmark(bufnr, cursor_namespace, extmark_id)
-                for _, user_cursor in ipairs(user_cursors[user_id].cursors) do
-                    if user_cursor.extmark ~= nil and user_cursor.extmark.id == extmark_id then
-                        -- If we find our own extmark_id, we can remove all ranges,
-                        -- because they were all created at the same time.
-                        user_cursors[user_id].cursors = {}
-                        break
-                    end
+            -- If the range is empty, expand the highlighted range by 1 to make it visible.
+            if start_row == end_row and start_col == end_col then
+                local bytes_in_end_row = vim.fn.strlen(vim.fn.getline(end_row + 1))
+                if bytes_in_end_row > end_col then
+                    -- Note: Instead of 1, we should actually add the byte length of the character at this position.
+                    end_col = end_col + 1
+                elseif bytes_in_end_row > 0 then
+                    -- This highlights the last character in the row.
+                    start_col = start_col - 1
                 end
-            end, cursor_timeout_ms)
+            end
 
-            table.insert(
-                user_cursors[user_id].cursors,
-                { uri = uri, range = range, extmark = { id = extmark_id, bufnr = bufnr } }
-            )
-        end)
+            local e = {
+                start_row = start_row,
+                start_col = start_col,
+                end_row = end_row,
+                end_col = end_col,
+            }
+
+            local virt_text = {}
+            if i == 1 and name then
+                virt_text = { { name, "EthersyncUsername" } }
+            end
+
+            -- Try setting the extmark, ignore errors (which can happen at end of lines/buffers).
+            pcall(function()
+                local extmark_id = vim.api.nvim_buf_set_extmark(bufnr, cursor_namespace, e.start_row, e.start_col, {
+                    hl_mode = "combine",
+                    hl_group = "TermCursor",
+                    end_col = e.end_col,
+                    end_row = e.end_row,
+                    virt_text = virt_text,
+                })
+                vim.defer_fn(function()
+                    vim.api.nvim_buf_del_extmark(bufnr, cursor_namespace, extmark_id)
+                    for _, user_cursor in ipairs(user_cursors[user_id].cursors) do
+                        if user_cursor.extmark ~= nil and user_cursor.extmark.id == extmark_id then
+                            -- If we find our own extmark_id, we can remove all ranges,
+                            -- because they were all created at the same time.
+                            user_cursors[user_id].cursors = {}
+                            break
+                        end
+                    end
+                end, cursor_timeout_ms)
+
+                table.insert(
+                    user_cursors[user_id].cursors,
+                    { uri = uri, range = range, extmark = { id = extmark_id, bufnr = bufnr } }
+                )
+            end)
+        end
+    end
+    if following_user_id == user_id then
+        jump_to_user_id(user_id)
     end
 end
 
@@ -233,11 +248,19 @@ function M.track_cursor(bufnr, callback)
     vim.api.nvim_exec_autocmds("CursorMoved", {})
 end
 
-function M.jump_to_cursor()
+function M.unfollow_cursor()
+    if following_user_id ~= nil then
+        print("Unfollowed cursor")
+        following_user_id = nil
+    end
+end
+
+local function pick_cursor_menu(callback)
+    local users = {}
     local descriptions = {}
-    local locations = {}
     local max_width = 10
-    for _, data in pairs(user_cursors) do
+    local locations = {}
+    for user_id, data in pairs(user_cursors) do
         local _, cursor = next(data.cursors)
         if cursor then
             local description = show_cursor_information(data.name, cursor)
@@ -248,6 +271,7 @@ function M.jump_to_cursor()
 
             table.insert(descriptions, description)
 
+            table.insert(users, user_id)
             table.insert(locations, {
                 targetUri = cursor.uri,
                 targetRange = cursor.range,
@@ -256,50 +280,62 @@ function M.jump_to_cursor()
         end
     end
 
-    if #locations == 0 then
-        print("No cursors to jump to.")
-        return
-    elseif #locations == 1 then
-        -- Jump immediately.
-        jump(locations[1])
-        return
+    if #users == 0 then
+        print("No cursor available.")
+    elseif #users == 1 then
+        callback(users[1])
+    else
+        local buf = vim.api.nvim_create_buf(false, true)
+        vim.api.nvim_buf_set_lines(buf, 0, -1, true, descriptions)
+        vim.bo[buf].modifiable = false
+
+        local opts = {
+            relative = "cursor",
+            width = max_width,
+            height = #descriptions,
+            col = 0,
+            row = 1,
+            anchor = "NW",
+            style = "minimal",
+            border = "single",
+        }
+        local win = vim.api.nvim_open_win(buf, true, opts)
+
+        vim.api.nvim_buf_set_keymap(buf, "n", "<CR>", "", {
+            callback = function()
+                local line_number = vim.fn.line(".")
+                vim.api.nvim_win_close(win, true)
+                callback(users[line_number])
+            end,
+        })
+        vim.api.nvim_buf_set_keymap(buf, "n", "<Esc>", "", {
+            callback = function()
+                vim.api.nvim_win_close(win, true)
+            end,
+        })
+        vim.api.nvim_create_autocmd("BufLeave", {
+            buffer = buf,
+            callback = function()
+                vim.api.nvim_win_close(win, true)
+            end,
+        })
     end
+end
 
-    local buf = vim.api.nvim_create_buf(false, true)
-    vim.api.nvim_buf_set_lines(buf, 0, -1, true, descriptions)
-    vim.bo[buf].modifiable = false
+function M.follow_cursor()
+    local callback = function(user_id)
+        print("Following cursor")
+        following_user_id = user_id
+        jump_to_user_id(following_user_id)
+    end
+    pick_cursor_menu(callback)
+end
 
-    local opts = {
-        relative = "cursor",
-        width = max_width,
-        height = #descriptions,
-        col = 0,
-        row = 1,
-        anchor = "NW",
-        style = "minimal",
-        border = "single",
-    }
-    local win = vim.api.nvim_open_win(buf, true, opts)
-
-    vim.api.nvim_buf_set_keymap(buf, "n", "<CR>", "", {
-        callback = function()
-            local line_number = vim.fn.line(".")
-            local location = locations[line_number]
-            vim.api.nvim_win_close(win, true)
-            jump(location)
-        end,
-    })
-    vim.api.nvim_buf_set_keymap(buf, "n", "<Esc>", "", {
-        callback = function()
-            vim.api.nvim_win_close(win, true)
-        end,
-    })
-    vim.api.nvim_create_autocmd("BufLeave", {
-        buffer = buf,
-        callback = function()
-            vim.api.nvim_win_close(win, true)
-        end,
-    })
+function M.jump_to_cursor()
+    local callback = function(user_id)
+        jump_to_user_id(user_id)
+    end
+    pick_cursor_menu(callback)
 end
 
 function M.list_cursors()
@@ -311,7 +347,7 @@ function M.list_cursors()
         for _, data in pairs(user_cursors) do
             local name = data.name
             local cursors = data.cursors
-            message = message .. name .. ":"
+            message = message .. (name or "") .. ":"
             if #cursors == 0 then
                 message = message .. " No cursors"
             elseif #cursors == 1 then
