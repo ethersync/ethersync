@@ -30,7 +30,11 @@ Usually, you will add the string `"ethersync/ethersync-nvim"` to your plugin man
 ```lua
 {
   "ethersync/ethersync-nvim",
-  keys = { { "<leader>j", "<cmd>EthersyncJumpToCursor<cr>" } },
+  keys = { 
+    { "<leader>ej", "<cmd>EthersyncJumpToCursor<cr>" },
+    { "<leader>ef", "<cmd>EthersyncFollow<cr>" },
+    { "<esc>", mode = { "n" }, "<cmd>EthersyncUnfollow<cr>" },
+  },
   lazy = false,
 }
 ```
@@ -41,7 +45,9 @@ Usually, you will add the string `"ethersync/ethersync-nvim"` to your plugin man
 {
   "ethersync/ethersync-nvim",
   config = function()
-    vim.keymap.set('n', '<leader>j', '<cmd>EthersyncJumpToCursor<cr>')
+    vim.keymap.set('n', '<leader>ej', '<cmd>EthersyncJumpToCursor<cr>')
+    vim.keymap.set('n', '<leader>ef', '<cmd>EthersyncFollow<cr>')
+    vim.keymap.set('n', '<esc>', '<cmd>EthersyncUnfollow<cr>')
   end
 }
 ```
@@ -60,4 +66,4 @@ To confirm that the plugin is installed, try running the `:EthersyncInfo` comman
 
 ## Tips
 
-We recommend creating a mapping for the `:EthersyncJumpToCursor` command (for example, `<Leader>j`, which jumps to another user's cursor.
+We recommend creating mappings for the `:EthersyncJumpToCursor`, `:EthersyncFollow` and `EthersyncUnfollow` command (for example, `<Leader>ej`, which jumps to another user's cursor.
