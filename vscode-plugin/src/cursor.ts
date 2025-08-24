@@ -4,6 +4,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import * as vscode from "vscode"
+import { cleanUriFormatting, uriToFname } from "./extension"
 
 const selectionDecorationType = vscode.window.createTextEditorDecorationType({
     backgroundColor: "#1a4978",
@@ -32,7 +33,7 @@ export function setCursor(userid: string, name: string, uri: vscode.Uri, selecti
         for (let cursor of usersCursors) {
             // TODO: Refactor this into drawCursors below?
             const editors = vscode.window.visibleTextEditors.filter(
-                (editor) => editor.document.uri.toString() === cursor.uri.toString(),
+                (editor) => uriToFname(editor.document.uri.toString(), true) === uriToFname(cursor.uri.toString(), true)
             )
             for (const editor of editors) {
                 editor.setDecorations(selectionDecorationType, [])
@@ -45,7 +46,7 @@ export function setCursor(userid: string, name: string, uri: vscode.Uri, selecti
     })
     cursors.set(userid, newCursors)
 
-    const editors = vscode.window.visibleTextEditors.filter((editor) => editor.document.uri.toString() === uri.toString())
+    const editors = vscode.window.visibleTextEditors.filter((editor) => uriToFname(editor.document.uri.toString(), true) === uriToFname(uri.toString(), true))
     for (let editor of editors) {
         drawCursors(editor)
     }
@@ -78,7 +79,7 @@ export function drawCursors(editor: vscode.TextEditor | undefined) {
         let uri = editor.document.uri;
         let allSelections = Array.from(cursors.values())
             .flat()
-            .filter(cursor => cursor.uri.toString() === uri.toString())
+            .filter(cursor => uriToFname(cursor.uri.toString(), true) === uriToFname(uri.toString(), true))
             .map(cursor => cursor.selection);
         editor.setDecorations(selectionDecorationType, allSelections)
     }

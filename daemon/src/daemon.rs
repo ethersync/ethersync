@@ -5,7 +5,7 @@
 
 use crate::config;
 use crate::document::Document;
-use crate::editor::{self, EditorId, EditorWriter};
+use crate::editor::{Editor, EditorId, EditorWriter};
 use crate::editor_connection::EditorConnection;
 use crate::path::{AbsolutePath, RelativePath};
 use crate::peer;
@@ -969,7 +969,7 @@ impl Daemon {
     // Launch the daemon. Optionally, connect to given peer.
     pub async fn new(
         app_config: config::AppConfig,
-        socket_path: &Path,
+        editor: Box<dyn Editor>,
         base_dir: &Path,
         init: bool,
         persist: bool,
@@ -979,9 +979,7 @@ impl Daemon {
         let document_handle = DocumentActorHandle::new(base_dir, init, is_host, persist);
 
         // Start socket listener.
-        let socket_path = socket_path.to_path_buf();
-        editor::spawn_socket_listener(socket_path.clone(), document_handle.clone()).await?;
-
+        editor.spawn_socket_listener(document_handle.clone()).expect("Failed to start socket listener");
         // Start file watcher.
         let base_dir = base_dir.to_path_buf();
         spawn_file_watcher(&base_dir, document_handle.clone()).await;
@@ -1012,7 +1010,7 @@ impl Daemon {
                 .await
                 .expect("Failed to connect to specified peer");
         }
-
+        let socket_path = editor.get_socket_path().clone();
         Ok(Self {
             document_handle,
             address,

@@ -5,15 +5,11 @@
 
 use anyhow::{bail, Context, Result};
 use clap::{CommandFactory, FromArgMatches, Parser, Subcommand};
-use ethersync::{
-    cli::ask,
-    config::{self, AppConfig},
-    daemon::Daemon,
-    logging, sandbox,
-};
+use ethersync::{cli::ask, config::{self, AppConfig}, daemon::Daemon, editor, logging, sandbox};
 use std::path::{Path, PathBuf};
 use tokio::signal;
 use tracing::{debug, info, warn};
+use crate::jsonrpc_forwarder::JsonRPCForwarder;
 
 mod jsonrpc_forwarder;
 
@@ -83,6 +79,15 @@ async fn main() -> Result<()> {
     let socket_path = directory
         .join(config::CONFIG_DIR)
         .join(config::DEFAULT_SOCKET_NAME);
+    let editor: Box<dyn editor::Editor>;
+    #[cfg(windows)]
+    {
+        editor = Box::new(editor::windows::EditorWindows { pipe_name: socket_path.clone() });
+    }
+    #[cfg(unix)]
+    {
+        editor = Box::new(editor::unix::EditorUnix { socket_path: socket_path.clone() });
+    }
 
     match cli.command {
         Commands::Share { .. } | Commands::Join { .. } => {
@@ -143,25 +148,31 @@ async fn main() -> Result<()> {
             }
 
             debug!("Starting Ethersync on {}.", directory.display());
-            let _daemon = Daemon::new(app_config, &socket_path, &directory, init_doc, persist)
+            let _daemon = Daemon::new(app_config, editor, &directory, init_doc, persist)
                 .await
                 .context("Failed to launch the daemon")?;
             wait_for_shutdown().await;
         }
         Commands::Client => {
-            jsonrpc_forwarder::connection(&socket_path)
-                .await
-                .context("JSON-RPC forwarder failed")?;
+            let forwarder;
+            #[cfg(windows)]
+            {
+                forwarder = jsonrpc_forwarder::windows::WindowsJsonRPCForwarder { };
+            }
+            #[cfg(unix)]
+            {
+                forwarder = jsonrpc_forwarder::unix::UnixJsonRPCForwarder { };
+            }
+
+            forwarder.connection(&socket_path).await.expect("JSON-RPC forwarder failed");
         }
     }
     Ok(())
 }
 
 fn get_directory(directory: Option<PathBuf>) -> Result<PathBuf> {
-    let directory = directory
-        .unwrap_or_else(|| std::env::current_dir().expect("Could not access current directory"))
-        .canonicalize()
-        .expect("Could not access given directory");
+    let directory = normalize_directory(directory
+        .unwrap_or_else(|| std::env::current_dir().expect("Could not access current directory")));
     if !has_ethersync_directory(&directory) {
         let ethersync_dir = directory.join(config::CONFIG_DIR);
 
@@ -183,15 +194,68 @@ fn get_directory(directory: Option<PathBuf>) -> Result<PathBuf> {
     Ok(directory)
 }
 
-async fn wait_for_shutdown() {
-    let mut signal_terminate = signal::unix::signal(signal::unix::SignalKind::terminate())
-        .expect("Should have been able to create terminate signal stream");
+#[cfg(unix)]
+pub async fn wait_for_shutdown() {
+    use tokio::signal::unix::{signal, SignalKind};
+
+    let mut sigterm =
+        signal(SignalKind::terminate()).expect("failed to create SIGTERM stream");
+
     tokio::select! {
         _ = signal::ctrl_c() => {
             debug!("Got SIGINT (Ctrl+C), shutting down");
         }
-        _ = signal_terminate.recv() => {
+        _ = sigterm.recv() => {
             debug!("Got SIGTERM, shutting down");
         }
+    }
+}
+
+#[cfg(windows)]
+pub async fn wait_for_shutdown() {
+    use tokio::signal::windows::{ctrl_break, ctrl_close, ctrl_logoff, ctrl_shutdown};
+
+    let mut brk  = ctrl_break().expect("failed to create CTRL_BREAK handler");
+    let mut clos = ctrl_close().expect("failed to create CTRL_CLOSE handler");
+    let mut logf = ctrl_logoff().expect("failed to create CTRL_LOGOFF handler");
+    let mut shdn = ctrl_shutdown().expect("failed to create CTRL_SHUTDOWN handler");
+
+    tokio::select! {
+        _ = signal::ctrl_c() => {
+            debug!("Got CTRL+C, shutting down");
+        }
+        _ = brk.recv() => {
+            debug!("Got CTRL_BREAK, shutting down");
+        }
+        _ = clos.recv() => {
+            debug!("Got CTRL_CLOSE, shutting down");
+        }
+        _ = logf.recv() => {
+            debug!("Got CTRL_LOGOFF, shutting down");
+        }
+        _ = shdn.recv() => {
+            debug!("Got CTRL_SHUTDOWN, shutting down");
+        }
+    }
+}
+
+fn normalize_directory(directory: PathBuf) -> PathBuf {
+    #[cfg(windows)]
+    {
+        let directory_str = directory.to_string_lossy();
+        if directory_str.len() > 2 && directory_str.chars().nth(1) == Some(':') {
+            let (drive_letter, rest) = directory_str.split_at(1);
+            let lower_drive = drive_letter.to_lowercase();
+            let path_with_forward_slashes = rest.replace('\\', "/");
+            return PathBuf::from(format!("{}{}", lower_drive, path_with_forward_slashes));
+        }
+        directory
+    }
+
+    #[cfg(unix)]
+    {
+        return directory
+            .canonicalize()
+            .expect("Could not access given directory");
     }
 }

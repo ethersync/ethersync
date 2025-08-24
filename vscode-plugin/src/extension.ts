@@ -81,14 +81,6 @@ const closeType = new rpc.RequestType<{uri: string}, string, void>("close")
 const editType = new rpc.RequestType<Edit, string, void>("edit")
 const cursorType = new rpc.NotificationType<Cursor>("cursor")
 
-function uriToFname(uri: string): string {
-    const prefix = "file://"
-    if (!uri.startsWith(prefix)) {
-        console.error(`expected URI prefix for '${uri}'`)
-    }
-    return uri.slice(prefix.length)
-}
-
 // helpful: https://stackoverflow.com/a/54369605
 function UTF16CodeUnitOffsetToCharOffset(utf16CodeUnitOffset: number, content: string): number {
     if (utf16CodeUnitOffset > content.length) {
@@ -184,13 +176,18 @@ function openCurrentTextDocuments() {
 }
 
 function documentForUri(uri: string): vscode.TextDocument | undefined {
-    return vscode.workspace.textDocuments.find((doc) => decodeURI(doc.uri.toString()) === uri)
+    return vscode.workspace.textDocuments.find((doc) => {
+        let docUri = uriToFname(getDocumentUri(doc), true);
+        let editUri = uriToFname(uri, true);
+        debug(`Comparing docUri '${docUri}' with editUri '${editUri}'`);
+        return docUri === editUri;
+    })
 }
 
 async function processEditFromDaemon(edit: Edit) {
     try {
         await mutex.runExclusive(async () => {
-            const filename = uriToFname(edit.uri)
+            const filename = uriToFname(edit.uri, true)
             let revision = revisions[filename]
             if (edit.revision !== revision.editor) {
                 debug(`Received edit for revision ${edit.revision} (!= ${revision.editor}), ignoring`)
@@ -199,9 +196,7 @@ async function processEditFromDaemon(edit: Edit) {
 
             debug(`Received edit ${edit.revision}`)
 
-            const uri = edit.uri
-
-            const document = documentForUri(uri)
+            const document = documentForUri(edit.uri)
             if (document) {
                 let textEdit = ethersyncDeltasToVSCodeTextEdits(document, edit.delta)
                 attemptedRemoteEdits.add(textEdit)
@@ -210,15 +205,16 @@ async function processEditFromDaemon(edit: Edit) {
                     revision.daemon += 1
                     // Attempt auto-save to avoid the situation where one user closes a modified
                     // document without saving, which will cause VS Code to undo the dirty changes.
-                    document.save()
+                    //document.save()
                 } else {
                     debug("rejected an applyEdit, sending empty delta")
-                    let theEdit: Edit = {uri, revision: revision.daemon, delta: []}
+                    let theEdit: Edit = {uri: cleanUriFormatting(edit.uri), revision: revision.daemon, delta: []}
+                    debug(`Sending edit to daemon: ${JSON.stringify(theEdit)}`)
                     connection.sendRequest(editType, theEdit)
                     revision.editor += 1
                 }
             } else {
-                throw new Error(`No document for URI ${uri}, why is the daemon sending me this?`)
+                throw new Error(`No document for URI ${filename}, why is the daemon sending me this?`)
             }
         })
     } catch (e) {
@@ -227,9 +223,7 @@ async function processEditFromDaemon(edit: Edit) {
 }
 
 async function processCursorFromDaemon(cursor: CursorFromDaemon) {
-    let uri = cursor.uri
-
-    const document = documentForUri(uri)
+    const document = documentForUri(cursor.uri)
 
     try {
         let selections: vscode.DecorationOptions[] = []
@@ -244,7 +238,7 @@ async function processCursorFromDaemon(cursor: CursorFromDaemon) {
                     }
                 })
         }
-        setCursor(cursor.userid, cursor.name || "anonymous", vscode.Uri.parse(uri), selections)
+        setCursor(cursor.userid, cursor.name || "anonymous", vscode.Uri.parse(uriToFname(cursor.uri, true)), selections)
     } catch {
         // If we couldn't convert ethersyncRangeToVSCodeRange, it's probably because
         // we received the cursor message before integrating the edits, typing at the end of a line.
@@ -258,7 +252,7 @@ async function applyEdit(document: vscode.TextDocument, edit: Edit): Promise<boo
     for (const delta of edit.delta) {
         const range = ethersyncRangeToVSCodeRange(document, delta.range)
         let edit = new vscode.TextEdit(range, delta.replacement)
-        debug(`Edit applied to document ${decodeURI(document.uri.toString())}`)
+        debug(`Edit applied to document ${getDocumentUri(document)}`)
         edits.push(edit)
     }
     let workspaceEdit = new vscode.WorkspaceEdit()
@@ -291,13 +285,13 @@ async function processUserOpen(document: vscode.TextDocument) {
         return
     }
 
-    const fileUri = decodeURI(document.uri.toString())
+    const fileUri = getDocumentUri(document)
     debug("OPEN " + fileUri)
     const content = document.getText()
     connection
         .sendRequest(openType, {uri: fileUri, content: content})
         .then(() => {
-            revisions[document.fileName] = new Revision()
+            revisions[getDocumentFileName(document)] = new Revision()
             updateContents(document)
             debug("Successfully opened. Tracking changes.")
         })
@@ -307,14 +301,16 @@ async function processUserOpen(document: vscode.TextDocument) {
 }
 
 function processUserClose(document: vscode.TextDocument) {
-    if (!(document.fileName in revisions)) {
+    if (!(getDocumentFileName(document) in revisions)) {
         // File is not currently tracked in ethersync.
         return
     }
-    const fileUri = decodeURI(document.uri.toString())
+    document.save()
+    const fileUri = getDocumentUri(document)
+    debug(`Sending close to daemon: ${JSON.stringify(fileUri)}`)
     connection.sendRequest(closeType, {uri: fileUri})
 
-    delete revisions[document.fileName]
+    delete revisions[getDocumentFileName(document)]
 }
 
 function isTextEditsEqualToVSCodeContentChanges(
@@ -352,7 +348,7 @@ function isRemoteEdit(event: vscode.TextDocumentChangeEvent): boolean {
 // NOTE: We might get multiple events per document.version,
 // as the _state_ of the document might change (like isDirty).
 function processUserEdit(event: vscode.TextDocumentChangeEvent) {
-    if (!(event.document.fileName in revisions)) {
+    if (!(getDocumentFileName(event.document) in revisions)) {
         // File is not currently tracked in Ethersync.
         return
     }
@@ -373,7 +369,7 @@ function processUserEdit(event: vscode.TextDocumentChangeEvent) {
                 return
             }
 
-            const filename = document.fileName
+            const filename = getDocumentFileName(document)
             if (!findEthersyncDirectory(path.dirname(filename))) {
                 return
             }
@@ -385,6 +381,8 @@ function processUserEdit(event: vscode.TextDocumentChangeEvent) {
             for (const theEdit of edits) {
                 // interestingly this seems to block when it can't send
                 // TODO: Catch exceptions, for example when daemon disconnects/crashes.
+                
+                debug(`Sending edit to daemon: ${JSON.stringify(theEdit)}`)
                 connection.sendRequest(editType, theEdit)
                 revision.editor += 1
 
@@ -398,7 +396,7 @@ function processUserEdit(event: vscode.TextDocumentChangeEvent) {
 
             // Attempt auto-save to avoid the situation where one user closes a modified
             // document without saving, which will cause VS Code to undo the dirty changes.
-            document.save()
+            //document.save()
         })
         .catch((e: Error) => {
             vscode.window.showErrorMessage(`Error while sending edit to Ethersync daemon: ${e}`)
@@ -406,21 +404,22 @@ function processUserEdit(event: vscode.TextDocumentChangeEvent) {
 }
 
 function processSelection(event: vscode.TextEditorSelectionChangeEvent) {
-    if (!(event.textEditor.document.fileName in revisions)) {
+    if (!(getDocumentFileName(event.textEditor.document) in revisions)) {
         // File is not currently tracked in ethersync.
         return
     }
-    let uri = decodeURI(event.textEditor.document.uri.toString())
-    let content = contents[event.textEditor.document.fileName]
+    let uri = getDocumentUri(event.textEditor.document)
+    let content = contents[getDocumentFileName(event.textEditor.document)]
     let ranges = event.selections.map((s) => {
         return vsCodeRangeToEthersyncRange(content, s)
     })
+    debug(`Sending cursor selection to daemon: ${JSON.stringify({uri, ranges})}`)
     connection.sendNotification(cursorType, {uri, ranges})
 }
 
 function vsCodeChangeEventToEthersyncEdits(event: vscode.TextDocumentChangeEvent): Edit[] {
     let document = event.document
-    let filename = document.fileName
+    let filename = getDocumentFileName(document)
 
     let revision = revisions[filename]
 
@@ -429,7 +428,7 @@ function vsCodeChangeEventToEthersyncEdits(event: vscode.TextDocumentChangeEvent
 
     for (const change of event.contentChanges) {
         let delta = vsCodeChangeToEthersyncDelta(content, change)
-        let uri = decodeURI(document.uri.toString())
+        let uri = getDocumentUri(document)
         let theEdit: Edit = {uri, revision: revision.daemon, delta: [delta]}
         edits.push(theEdit)
     }
@@ -468,12 +467,44 @@ export function deactivate() {}
 
 function debug(text: string) {
     // Disabled because we don't need it right now.
-    // console.log(Date.now() - t0 + " " + text)
+    console.log(Date.now() - t0 + " " + text)
 }
 
 function updateContents(document: vscode.TextDocument) {
-    contents[document.fileName] = new Array(document.lineCount)
+    let filename = getDocumentFileName(document)
+    contents[filename] = new Array(document.lineCount)
     for (let line = 0; line < document.lineCount; line++) {
-        contents[document.fileName][line] = document.lineAt(line).text
+        contents[filename][line] = document.lineAt(line).text
     }
+}
+
+function getDocumentFileName(document: vscode.TextDocument){
+    return cleanUriFormatting(document.fileName.toString());
+}
+
+function getDocumentUri(document: vscode.TextDocument){
+    return cleanUriFormatting(document.uri.toString());
+}
+
+export function cleanUriFormatting(uri: string){
+    // todo maybe improve regex to be less error-prone
+    let result = decodeURI(uri).replaceAll("%3A",":").replaceAll("\\","/");
+    debug(`cleanUriFormatting uri: '${uri}' result:'${result}'`);
+    return result;
+}
+
+export function uriToFname(uri: string, clean: boolean = false): string {
+    let result;
+    if (uri.startsWith("file:///")) {
+        result = uri.slice(8);
+    } else if (uri.startsWith("file://")) {
+        result = uri.slice(7);
+    } else {
+        result = uri;
+    }
+    if (clean) {
+        result = cleanUriFormatting(result);
+    }
+    debug(`uriToFname uri: '${uri}' result:'${result}'`)
+    return result;
 }

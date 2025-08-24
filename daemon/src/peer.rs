@@ -14,6 +14,7 @@ use iroh::{NodeAddr, SecretKey};
 use postcard::{from_bytes, to_allocvec};
 use std::fs::{self, File, OpenOptions};
 use std::io::{Read, Write};
+#[cfg(unix)]
 use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
 use std::path::Path;
 use std::str::FromStr;
@@ -118,19 +119,28 @@ impl ConnectionManager {
     fn get_keypair(base_dir: &Path) -> (SecretKey, SecretKey) {
         let keyfile = base_dir.join(".ethersync").join("key");
         if keyfile.exists() {
-            let metadata =
-                fs::metadata(&keyfile).expect("Expected to have access to metadata of the keyfile");
+            // Check file perms only on Unix
 
-            let current_permissions = metadata.permissions().mode();
-            let allowed_permissions = 0o100600;
-            if current_permissions != allowed_permissions {
-                panic!("For security reasons, please make sure to set the key file to user-readable only (set the permissions to 600).");
+
+            #[cfg(unix)]
+
+
+            {
+                let metadata =
+                    fs::metadata(&keyfile).expect("Expected to have access to metadata of the keyfile");
+
+                let current_permissions = metadata.permissions().mode();
+                let allowed_permissions = 0o100600;
+                if current_permissions != allowed_permissions {
+                    panic!("For security reasons, please make sure to set the key file to user-readable only (set the permissions to 600).");
+                }
+
+                if metadata.len() != 64 {
+                    panic!("Your keyfile is not 64 bytes long. This is a sign that it was created by an Ethersync version older than 0.7.0, which is not compatible. Please remove .ethersync/key, and try again.");
+                }
             }
 
-            if metadata.len() != 64 {
-                panic!("Your keyfile is not 64 bytes long. This is a sign that it was created by an Ethersync version older than 0.7.0, which is not compatible. Please remove .ethersync/key, and try again.");
-            }
-
+            // On Windows, do nothing
             debug!("Re-using existing keypair.");
             let mut file = File::open(keyfile).expect("Failed to open key file");
 
@@ -151,10 +161,19 @@ impl ConnectionManager {
             let secret_key = SecretKey::generate(rand::rngs::OsRng);
             let passphrase = SecretKey::generate(rand::rngs::OsRng);
 
+            // On Unix, set mode. On Windows, skip.
+            #[cfg(unix)]
             let mut file = OpenOptions::new()
                 .create_new(true)
                 .write(true)
                 .mode(0o600)
+                .open(keyfile)
+                .expect("Should have been able to create key file that did not exist before");
+
+            #[cfg(windows)]
+            let mut file = OpenOptions::new()
+                .create_new(true)
+                .write(true)
                 .open(keyfile)
                 .expect("Should have been able to create key file that did not exist before");
 

@@ -59,8 +59,22 @@ impl RelativePath {
         Self(path.into())
     }
 
-    pub fn try_from_absolute(base_dir: &Path, path: &AbsolutePath) -> Result<Self, anyhow::Error> {
-        let shared_dir = path::absolute(base_dir).with_context(|| {
+    pub fn try_from_absolute(_base_dir: &Path, _path: &AbsolutePath) -> Result<Self, anyhow::Error> {
+
+        let base_dir;
+        let path;
+        #[cfg(windows)]
+        {
+            base_dir = Self::strip_extended_prefix(_base_dir);
+            path = Self::strip_extended_prefix(_path);
+        }
+        #[cfg(unix)]
+        {
+            base_dir = _base_dir.to_path_buf();
+            path = _path.to_path_buf();
+        }
+
+        let shared_dir = path::absolute(base_dir.clone()).with_context(|| {
             format!(
                 "Failed to get absolute path for shared directory '{}'",
                 base_dir.display()
@@ -68,7 +82,7 @@ impl RelativePath {
         })?;
         let relative_path = path.strip_prefix(&shared_dir).with_context(|| {
             format!(
-                "The path {path} is not in the shared directory '{}'. Your plugin probably doesn't support opening files from multiple Ethersync directories.",
+                "The path {_path} is not in the shared directory '{}'. Your plugin probably doesn't support opening files from multiple Ethersync directories.",
                 shared_dir.display()
             )
         })?;
@@ -78,6 +92,18 @@ impl RelativePath {
         }
 
         Ok(Self(relative_path.to_path_buf()))
+    }
+
+
+    #[cfg(windows)]
+    pub fn strip_extended_prefix(p: &Path) -> std::path::PathBuf {
+        let s = p.display().to_string();
+        if let Some(stripped) = s.strip_prefix(r"\\?\") {
+            // Rebuild as PathBuf
+            std::path::PathBuf::from(stripped)
+        } else {
+            p.to_path_buf()
+        }
     }
 
     pub fn try_from_path(base_dir: &Path, path: &Path) -> Result<Self, anyhow::Error> {
@@ -97,7 +123,16 @@ pub struct FileUri(String);
 
 impl FileUri {
     pub fn to_absolute_path(&self) -> AbsolutePath {
-        let path = Path::new(&self.0[7..]);
+        let uri = &self.0;
+        let path;
+        if(uri.starts_with("file:///")) {
+            path = Path::new(&self.0[8..]);
+        }
+        else if(uri.starts_with("file://")) {
+            path = Path::new(&self.0[7..]);
+        }else{
+            path = Path::new(&self.0);
+        }
         AbsolutePath::try_from(path.to_path_buf())
             .expect("File URI should contain an absolute path")
     }
@@ -107,10 +142,20 @@ impl TryFrom<String> for FileUri {
     type Error = anyhow::Error;
 
     fn try_from(string: String) -> Result<Self, Self::Error> {
-        if string.starts_with("file:///") {
-            Ok(Self(string.to_string()))
+        let uri;
+        #[cfg(unix)]
+        {
+            uri = string;
+        }
+        #[cfg(windows)]
+        {
+            uri = string.replace("%3A", ":"); // todo maybe just always replace this then we dont need the scope
+        }
+
+        if uri.starts_with("file://") || uri.starts_with("file:///") {
+            Ok(Self(uri.to_string()))
         } else {
-            bail!("File URI '{}' does not start with 'file:///'", string);
+            bail!("File URI '{}' does not start with 'file://' || 'file:///'", uri);
         }
     }
 }
