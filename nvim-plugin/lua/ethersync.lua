@@ -26,7 +26,6 @@ local connections = {}
 function M.config(name, cfg)
     -- TODO: check here if valid?
     collaboration_servers[name] = { cfg = cfg, enabled = false }
-    debug(vim.inspect(collaboration_servers))
 end
 
 function M.enable(name, enable)
@@ -145,7 +144,7 @@ local function activate_config_for_buffer(config_name, buf_nr, root_dir)
     table.insert(connection.buffers, buf_nr)
 
     local filename = vim.api.nvim_buf_get_name(buf_nr)
-    local uri = "file://" .. filename
+    local uri = vim.uri_from_bufnr(buf_nr)
 
     -- Neovim enables eol for an empty file, but we do use this option values
     -- assuming there's a trailing newline iff eol is true.
@@ -190,7 +189,12 @@ local function on_buffer_new_file()
     -- to prevent a warning that the file has been created externally (W13).
     -- This resolves issue #92.
     -- TODO: Only do this when file is going to be tracked.
-    vim.cmd("silent write")
+    local buf_nr = tonumber(vim.fn.expand("<abuf>"))
+    local uri = vim.uri_from_bufnr(buf_nr)
+    if string.find(uri, "file://") == 1 then
+        vim.cmd("silent write")
+    end
+
     on_buffer_open()
 end
 
@@ -233,7 +237,7 @@ local function on_buffer_close()
     -- vim.api.nvim_buf_detach(0) isn't a thing. https://github.com/neovim/neovim/issues/17874
     -- It's not a high priority, as we can only generate edits when the buffer exists anyways.
 
-    local uri = "file://" .. closed_file
+    local uri = vim.uri_from_bufnr(buf_nr)
     connection.client:send_notification("close", { uri = uri })
 end
 
