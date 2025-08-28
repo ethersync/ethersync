@@ -7,20 +7,20 @@ function M.is_connected()
 end
 
 -- Connect to the daemon.
-function M.connect(directory, on_notification)
+function M.connect(cmd, directory, on_notification)
     if client then
         client.terminate()
     end
 
-    -- TODO: executable should now be configurable
-    if vim.fn.executable("ethersync") == 0 then
+    local executable = cmd[1]
+    if vim.fn.executable(executable) == 0 then
         vim.api.nvim_err_writeln(
-            "Tried to connect to the Ethersync daemon, but `ethersync` executable was not found. Make sure that is in your PATH."
+            "Tried to connect to the Ethersync daemon, but `"
+                .. executable
+                .. "` executable was not found. Make sure that is in your PATH."
         )
         return false
     end
-
-    local params = { "client", "--directory", directory }
 
     local dispatchers = {
         notification = on_notification,
@@ -45,15 +45,16 @@ function M.connect(directory, on_notification)
         end,
     }
 
+    local extra_spawn_params = { cwd = directory }
+
     if vim.version().api_level < 12 then
         -- In Neovim 0.9, the API was to pass the command and its parameters as two arguments.
         ---@diagnostic disable-next-line: param-type-mismatch
-        client = vim.lsp.rpc.start("ethersync", params, dispatchers)
+        local params = table.remove(cmd, 1)
+        client = vim.lsp.rpc.start(executable, params, dispatchers, extra_spawn_params)
     else
         -- While in Neovim 0.10, it is combined into one table.
-        local cmd = params
-        table.insert(cmd, 1, "ethersync")
-        client = vim.lsp.rpc.start(cmd, dispatchers)
+        client = vim.lsp.rpc.start(cmd, dispatchers, extra_spawn_params)
     end
 
     print("Connected to Ethersync daemon!")
