@@ -155,10 +155,64 @@ local function on_buffer_open()
     end
 end
 
+local function on_buffer_new_file()
+    -- Ensure that the file exists on disk before we "open" it in the daemon,
+    -- to prevent a warning that the file has been created externally (W13).
+    -- This resolves issue #92.
+    -- TODO: Only do this when file is going to be tracked.
+    vim.cmd("silent write")
+    on_buffer_open()
+end
+
+local function on_buffer_close()
+    local closed_file = vim.fn.expand("<afile>:p")
+
+    if closed_file == "" then
+        -- This is a temporary buffer without a name.
+        return
+    end
+
+    debug("on_buffer_close: " .. closed_file)
+
+    if not files[closed_file] then
+        return
+    end
+
+    files[closed_file] = nil
+
+    -- TODO: Is the on_lines callback un-registered automatically when the buffer closes,
+    -- or should we detach it ourselves?
+    -- vim.api.nvim_buf_detach(0) isn't a thing. https://github.com/neovim/neovim/issues/17874
+    -- It's not a high priority, as we can only generate edits when the buffer exists anyways.
+
+    local uri = "file://" .. closed_file
+    client.send_notification("close", { uri = uri })
+end
+
+local function print_info()
+    if client.is_connected() then
+        print("Connected to Ethersync daemon." .. "\n" .. cursor.list_cursors())
+    else
+        print("Not connected to Ethersync daemon.")
+    end
+end
+
 local function activate_plugin()
     vim.api.nvim_create_autocmd({ "BufRead" }, { callback = on_buffer_open })
+    vim.api.nvim_create_autocmd({ "BufNewFile" }, { callback = on_buffer_new_file })
+    vim.api.nvim_create_autocmd("BufUnload", { callback = on_buffer_close })
+
+    -- This autocommand prevents that, when a file changes on disk while Neovim has the file open,
+    -- it should not attempt to reload it. Related to issue #176.
+    vim.api.nvim_create_autocmd("FileChangedShell", { callback = function() end })
+
+    vim.api.nvim_create_user_command("EthersyncInfo", print_info, {})
+    vim.api.nvim_create_user_command("EthersyncJumpToCursor", cursor.jump_to_cursor, {})
+    vim.api.nvim_create_user_command("EthersyncFollow", cursor.follow_cursor, {})
+    vim.api.nvim_create_user_command("EthersyncUnfollow", cursor.unfollow_cursor, {})
 end
 
 activate_plugin()
 
 return M
+
