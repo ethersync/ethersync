@@ -170,11 +170,16 @@ local function on_buffer_open()
 
     for name, server in pairs(collaboration_servers) do
         if server.enabled then
-            -- TODO: What if buf_name is not a file name?
-            local root_dir = helpers.find_directory(buf_name, server.cfg.root_markers)
-            debug(root_dir)
-            if root_dir then
-                activate_config_for_buffer(name, buf_nr, root_dir)
+            if server.cfg.root_dir then
+                server.cfg.root_dir(buf_nr, function(root_dir)
+                    activate_config_for_buffer(name, buf_nr, root_dir)
+                end)
+            elseif server.cfg.root_markers then
+                -- TODO: What if buf_name is not a file name?
+                local root_dir = helpers.find_directory(buf_name, server.cfg.root_markers)
+                if root_dir then
+                    activate_config_for_buffer(name, buf_nr, root_dir)
+                end
             end
         end
     end
