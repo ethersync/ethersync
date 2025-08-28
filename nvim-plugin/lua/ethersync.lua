@@ -111,9 +111,8 @@ local function track_edits(filename, uri, initial_lines)
 end
 
 local function activate_config_for_buffer(config_name, buf_nr, root_dir)
-    debug("activating!")
     if not client.is_connected() then
-        local success = client.connect(root_dir, process_operation_for_editor)
+        local success = client.connect(configs[config_name].cmd, root_dir, process_operation_for_editor)
         if not success then
             return
         end
@@ -140,17 +139,16 @@ local function activate_config_for_buffer(config_name, buf_nr, root_dir)
 end
 
 local function on_buffer_open()
-    debug("buf open")
     local buf_nr = tonumber(vim.fn.expand("<abuf>"))
     local buf_name = vim.api.nvim_buf_get_name(buf_nr)
 
     debug(vim.inspect(configs))
-    for _, config in pairs(configs) do
+    for name, config in pairs(configs) do
         -- TODO: What if buf_name is not a file name?
         local root_dir = helpers.find_directory(buf_name, config.root_markers)
         debug(root_dir)
         if root_dir then
-            activate_config_for_buffer(config.name, buf_nr, root_dir)
+            activate_config_for_buffer(name, buf_nr, root_dir)
         end
     end
 end
@@ -215,4 +213,3 @@ end
 activate_plugin()
 
 return M
-
