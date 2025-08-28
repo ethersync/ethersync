@@ -12,15 +12,16 @@ local helpers = require("ethersync.helpers")
 local M = {}
 
 -- Registry of possible configurations.
-local configs = {}
+-- TODO: Find a better name for this variable.
+local collaboration_servers = {}
 
 -- Registry of the files that are synced.
 local files = {}
 
 function M.config(name, cfg)
     -- TODO: check here if valid?
-    configs[name] = cfg
-    debug(vim.inspect(configs))
+    collaboration_servers[name] = {cfg = cfg, enabled = false}
+    debug(vim.inspect(collaboration_servers))
 end
 
 function M.enable(name, enable)
@@ -28,8 +29,7 @@ function M.enable(name, enable)
         enable = true
     end
 
-    if enable then
-    end
+    collaboration_servers[name].enabled = enable
 end
 
 -- Take an operation from the daemon and apply it to the editor.
@@ -112,7 +112,7 @@ end
 
 local function activate_config_for_buffer(config_name, buf_nr, root_dir)
     if not client.is_connected() then
-        local success = client.connect(configs[config_name].cmd, root_dir, process_operation_for_editor)
+        local success = client.connect(collaboration_servers[config_name].cfg.cmd, root_dir, process_operation_for_editor)
         if not success then
             return
         end
@@ -142,13 +142,15 @@ local function on_buffer_open()
     local buf_nr = tonumber(vim.fn.expand("<abuf>"))
     local buf_name = vim.api.nvim_buf_get_name(buf_nr)
 
-    debug(vim.inspect(configs))
-    for name, config in pairs(configs) do
-        -- TODO: What if buf_name is not a file name?
-        local root_dir = helpers.find_directory(buf_name, config.root_markers)
-        debug(root_dir)
-        if root_dir then
-            activate_config_for_buffer(name, buf_nr, root_dir)
+    debug(vim.inspect(collaboration_servers))
+    for name, server in pairs(collaboration_servers) do
+        if server.enabled then
+            -- TODO: What if buf_name is not a file name?
+            local root_dir = helpers.find_directory(buf_name, server.cfg.root_markers)
+            debug(root_dir)
+            if root_dir then
+                activate_config_for_buffer(name, buf_nr, root_dir)
+            end
         end
     end
 end
