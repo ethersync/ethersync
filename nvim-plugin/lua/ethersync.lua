@@ -18,9 +18,12 @@ local collaboration_servers = {}
 -- Registry of the files that are synced.
 local files = {}
 
+-- The one client connection. TODO: Allow multiple.
+local the_client = nil
+
 function M.config(name, cfg)
     -- TODO: check here if valid?
-    collaboration_servers[name] = {cfg = cfg, enabled = false}
+    collaboration_servers[name] = { cfg = cfg, enabled = false }
     debug(vim.inspect(collaboration_servers))
 end
 
@@ -100,20 +103,20 @@ local function track_edits(filename, uri, initial_lines)
 
         local params = { uri = uri, delta = delta, revision = files[filename].daemon_revision }
 
-        client.send_request("edit", params)
+        the_client:send_request("edit", params)
     end)
     cursor.track_cursor(bufnr, function(ranges)
         local params = { uri = uri, ranges = ranges }
         -- Even though it's not "needed" we're sending requests in this case
         -- to ensure we're processing/seeing potential errors.
-        client.send_request("cursor", params)
+        the_client:send_request("cursor", params)
     end)
 end
 
 local function activate_config_for_buffer(config_name, buf_nr, root_dir)
-    if not client.is_connected() then
-        local success = client.connect(collaboration_servers[config_name].cfg.cmd, root_dir, process_operation_for_editor)
-        if not success then
+    if not the_client then
+        the_client = client.connect(collaboration_servers[config_name].cfg.cmd, root_dir, process_operation_for_editor)
+        if not the_client then
             return
         end
     end
@@ -130,7 +133,7 @@ local function activate_config_for_buffer(config_name, buf_nr, root_dir)
     local lines = changetracker.get_all_lines_respecting_eol(buf_nr)
     local content = table.concat(lines, "\n")
 
-    client.send_request("open", { uri = uri, content = content }, function()
+    the_client:send_request("open", { uri = uri, content = content }, function()
         debug("Tracking Edits")
         ensure_autoread_is_off()
         disable_writing()
@@ -186,11 +189,11 @@ local function on_buffer_close()
     -- It's not a high priority, as we can only generate edits when the buffer exists anyways.
 
     local uri = "file://" .. closed_file
-    client.send_notification("close", { uri = uri })
+    the_client:send_notification("close", { uri = uri })
 end
 
 local function print_info()
-    if client.is_connected() then
+    if not the_client then
         print("Connected to Ethersync daemon." .. "\n" .. cursor.list_cursors())
     else
         print("Not connected to Ethersync daemon.")

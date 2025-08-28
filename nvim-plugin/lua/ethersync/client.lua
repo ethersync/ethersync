@@ -1,17 +1,37 @@
 local M = {}
 
-local client
+local Client = {}
 
-function M.is_connected()
-    return client ~= nil
+function Client:is_connected()
+    return self.client ~= nil
 end
 
--- Connect to the daemon.
-function M.connect(cmd, directory, on_notification)
-    if client then
-        client.terminate()
-    end
+-- Pulled out as a method in case we want to add a new "offline simulation" later.
+function Client:send_notification(method, params)
+    self.client.notify(method, params)
+end
 
+function Client:send_request(method, params, result_callback, err_callback)
+    err_callback = err_callback or function() end
+    result_callback = result_callback or function() end
+
+    self.client.request(method, params, function(err, result)
+        if err then
+            local error_msg = "[ethersync] Error for '" .. method .. "': " .. err.message
+            if err.data and err.data ~= "" then
+                error_msg = error_msg .. " (" .. err.data .. ")"
+            end
+            vim.api.nvim_err_writeln(error_msg)
+            err_callback(err)
+        end
+        if result then
+            result_callback(result)
+        end
+    end)
+end
+
+-- Connect to the daemon, and return a handle on the connection.
+function M.connect(cmd, directory, on_notification)
     local executable = cmd[1]
     if vim.fn.executable(executable) == 0 then
         vim.api.nvim_err_writeln(
@@ -19,7 +39,7 @@ function M.connect(cmd, directory, on_notification)
                 .. executable
                 .. "` executable was not found. Make sure that is in your PATH."
         )
-        return false
+        return nil
     end
 
     local dispatchers = {
@@ -45,6 +65,7 @@ function M.connect(cmd, directory, on_notification)
         end,
     }
 
+    local client
     local extra_spawn_params = { cwd = directory }
 
     if vim.version().api_level < 12 then
@@ -58,31 +79,10 @@ function M.connect(cmd, directory, on_notification)
     end
 
     print("Connected to Ethersync daemon!")
-    return true
-end
 
--- Pulled out as a method in case we want to add a new "offline simulation" later.
-function M.send_notification(method, params)
-    client.notify(method, params)
-end
-
-function M.send_request(method, params, result_callback, err_callback)
-    err_callback = err_callback or function() end
-    result_callback = result_callback or function() end
-
-    client.request(method, params, function(err, result)
-        if err then
-            local error_msg = "[ethersync] Error for '" .. method .. "': " .. err.message
-            if err.data and err.data ~= "" then
-                error_msg = error_msg .. " (" .. err.data .. ")"
-            end
-            vim.api.nvim_err_writeln(error_msg)
-            err_callback(err)
-        end
-        if result then
-            result_callback(result)
-        end
-    end)
+    local result = { client = client }
+    setmetatable(result, { __index = Client })
+    return result
 end
 
 return M
