@@ -18,7 +18,57 @@
                 "command": "ethersync.showCursors",
                 "title": "Ethersync: List other cursor positions"
             }
-        ]
+        ],
+        "configuration": {
+            "title": "Ethersync",
+            "properties": {
+                "ethersync.configs": {
+                    "type": "array",
+                    "description": "Configurations",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "name": {
+                                "type": "string",
+                                "description": "Name of the configuration"
+                            },
+                            "enabled": {
+                                "type": "boolean",
+                                "description": "Whether or not to enable this configuration"
+                            },
+                            "rootMarkers": {
+                                "type": "array",
+                                "items": {
+                                    "type": "string"
+                                },
+                                "description": "List of marker files that indicate the root"
+                            },
+                            "activatePattern": {
+                                "type": "string",
+                                "description": "If file matches this regular expression, the configuration will be activated"
+                            }
+                        },
+                        "required": "name",
+                        "anyOf": [
+                            {
+                                "required": "rootMarkers"
+                            },
+                            {
+                                "required": "activatePattern"
+                            }
+                        ]
+                    },
+                    "default": [
+                        {
+                            "name": "ethersync",
+                            "rootMarkers": [
+                                ".ethersync"
+                            ]
+                        }
+                    ]
+                }
+            }
+        }
     },
     "categories": [
         "Other"
