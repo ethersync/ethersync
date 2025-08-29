@@ -4,7 +4,7 @@
 
 local M = {}
 
--- The following functions are taken from the Neovim source code:
+-- These functions are taken from the Neovim source code:
 -- https://github.com/neovim/neovim/blob/master/runtime/lua/vim/lsp/util.lua
 
 --- Gets the zero-indexed lines from the given buffer.

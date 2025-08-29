@@ -4,7 +4,7 @@
 -- SPDX-License-Identifier: AGPL-3.0-or-later
 
 local sync = require("vim.lsp.sync")
-local utils = require("ethersync.utils")
+local lsp_util = require("ethersync.lsp_util")
 
 local M = {}
 
@@ -241,7 +241,7 @@ function M.apply_delta(buffer, delta)
     local text_edits = ethersync_delta_to_lsp_text_edits(delta)
 
     ignore_edits = true
-    utils.apply_text_edits(text_edits, buffer, "utf-32")
+    lsp_util.apply_text_edits(text_edits, buffer, "utf-32")
     ignore_edits = false
 end
 
