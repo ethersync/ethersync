@@ -1,21 +1,26 @@
+-- SPDX-FileCopyrightText: 2025 blinry <mail@blinry.org>
+-- SPDX-FileCopyrightText: 2025 zormit <nt4u@kpvn.de>
+--
+-- SPDX-License-Identifier: AGPL-3.0-or-later
+
 local M = {}
 
-local Client = {}
+-- A Connection represents an ative JSON-RPC connection.
+local Connection = {}
 
-function Client:is_connected()
-    return self.client ~= nil
+function Connection:is_connected()
+    return self.connection ~= nil
 end
 
--- Pulled out as a method in case we want to add a new "offline simulation" later.
-function Client:send_notification(method, params)
-    self.client.notify(method, params)
+function Connection:send_notification(method, params)
+    self.connection.notify(method, params)
 end
 
-function Client:send_request(method, params, result_callback, err_callback)
+function Connection:send_request(method, params, result_callback, err_callback)
     err_callback = err_callback or function() end
     result_callback = result_callback or function() end
 
-    self.client.request(method, params, function(err, result)
+    self.connection.request(method, params, function(err, result)
         if err then
             local error_msg = "[ethersync] Error for '" .. method .. "': " .. err.message
             if err.data and err.data ~= "" then
@@ -45,7 +50,7 @@ function M.connect(cmd, directory, on_notification)
     local dispatchers = {
         notification = on_notification,
         on_error = function(code, ...)
-            print("Ethersync client connection error: ", code, vim.inspect({ ... }))
+            print("Ethersync connection error: ", code, vim.inspect({ ... }))
         end,
         on_exit = function(code, _)
             if code == 0 then
@@ -65,23 +70,26 @@ function M.connect(cmd, directory, on_notification)
         end,
     }
 
-    local client
+    local connection
     local extra_spawn_params = { cwd = directory }
 
     if vim.version().api_level < 12 then
         -- In Neovim 0.9, the API was to pass the command and its parameters as two arguments.
-        ---@diagnostic disable-next-line: param-type-mismatch
-        local params = table.remove(cmd, 1)
-        client = vim.lsp.rpc.start(executable, params, dispatchers, extra_spawn_params)
+        local params = {}
+        for i = 2, #cmd do
+            table.insert(params, cmd[i])
+        end
+        ---@diagnostic disable-next-line: redundant-parameter
+        connection = vim.lsp.rpc.start(executable, params, dispatchers, extra_spawn_params)
     else
         -- While in Neovim 0.10, it is combined into one table.
-        client = vim.lsp.rpc.start(cmd, dispatchers, extra_spawn_params)
+        connection = vim.lsp.rpc.start(cmd, dispatchers, extra_spawn_params)
     end
 
     print("Connected to Ethersync daemon!")
 
-    local result = { client = client }
-    setmetatable(result, { __index = Client })
+    local result = { connection = connection }
+    setmetatable(result, { __index = Connection })
     return result
 end
 
