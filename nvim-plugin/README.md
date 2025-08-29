@@ -5,7 +5,12 @@ SPDX-FileCopyrightText: 2024 zormit <nt4u@kpvn.de>
 SPDX-License-Identifier: CC-BY-SA-4.0
 -->
 
-# Neovim plugin for 🍃 [Ethersync](https://github.com/ethersync/ethersync)
+# Neovim plugin for 🍃 [Ethersync](https://github.com/ethersync/ethersync)-compatible collaborative software
+
+This plugin adds real-time collaborative editing functionality to Neovim.
+You can use it for pair programming or note-taking, for example. It is mainly
+meant to be used with Ethersync, but can also be configured to work with other
+collaborative software speaking the same protocol.
 
 > [!IMPORTANT]
 >
@@ -66,4 +71,8 @@ To confirm that the plugin is installed, try running the `:EthersyncInfo` comman
 
 ## Tips
 
-We recommend creating mappings for the `:EthersyncJumpToCursor`, `:EthersyncFollow` and `EthersyncUnfollow` command (for example, `<Leader>ej`, which jumps to another user's cursor.
+We recommend creating mappings for the `:EthersyncJumpToCursor`, `:EthersyncFollow` and `EthersyncUnfollow` command, see above configurations for examples.
+
+## Configuration
+
+See the [help file](doc/ethersync.txt) for details on configuring this plugin.
