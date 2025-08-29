@@ -4,7 +4,7 @@
 -- SPDX-License-Identifier: AGPL-3.0-or-later
 
 local changetracker = require("ethersync.changetracker")
-local client = require("ethersync.client")
+local connection = require("ethersync.connection")
 local cursor = require("ethersync.cursor")
 local debug = require("ethersync.logging").debug
 local helpers = require("ethersync.helpers")
@@ -15,13 +15,13 @@ local M = {}
 -- TODO: Find a better name for this variable.
 local collaboration_servers = {}
 
--- The active connections. Each connection has:
+-- The active clients. Each client has:
 -- name: The name of the configuration (available options: the keys in the above dictionary)
 -- files: a registry of files that are synced
 -- root_dir: the root directory
--- client: a client connection
+-- connection: a JSON-RPC connection
 -- buffers: list of attached buffers
-local connections = {}
+local clients = {}
 
 function M.config(name, cfg)
     -- TODO: check here if valid?
@@ -37,7 +37,7 @@ function M.enable(name, enable)
 end
 
 -- Take an operation from the daemon and apply it to the editor.
-local function process_operation_for_editor(connection, method, parameters)
+local function process_operation_for_editor(client, method, parameters)
     if method == "edit" then
         local uri = parameters.uri
         -- TODO: Determine the proper filepath (relative to project dir).
@@ -47,13 +47,13 @@ local function process_operation_for_editor(connection, method, parameters)
 
         -- Check if operation is up-to-date to our content.
         -- If it's not, ignore it! The daemon will send a transformed one later.
-        if the_editor_revision == connection.files[filepath].editor_revision then
+        if the_editor_revision == client.files[filepath].editor_revision then
             -- Find correct buffer to apply edits to.
             local bufnr = vim.uri_to_bufnr(uri)
 
             changetracker.apply_delta(bufnr, delta)
 
-            connection.files[filepath].daemon_revision = connection.files[filepath].daemon_revision + 1
+            client.files[filepath].daemon_revision = client.files[filepath].daemon_revision + 1
         end
     elseif method == "cursor" then
         cursor.set_cursor(parameters.uri, parameters.userid, parameters.name, parameters.ranges)
@@ -89,8 +89,8 @@ local function disable_writing()
     vim.api.nvim_create_autocmd("FileAppendCmd", autocmd_arg)
 end
 
-local function track_edits(connection, filename, uri, initial_lines)
-    connection.files[filename] = {
+local function track_edits(client, filename, uri, initial_lines)
+    client.files[filename] = {
         -- Number of operations the daemon has made.
         daemon_revision = 0,
         -- Number of operations we have made.
@@ -100,48 +100,48 @@ local function track_edits(connection, filename, uri, initial_lines)
     local bufnr = vim.uri_to_bufnr(uri)
 
     changetracker.track_changes(bufnr, initial_lines, function(delta)
-        connection.files[filename].editor_revision = connection.files[filename].editor_revision + 1
+        client.files[filename].editor_revision = client.files[filename].editor_revision + 1
 
-        local params = { uri = uri, delta = delta, revision = connection.files[filename].daemon_revision }
+        local params = { uri = uri, delta = delta, revision = client.files[filename].daemon_revision }
 
-        connection.client:send_request("edit", params)
+        client.connection:send_request("edit", params)
     end)
     cursor.track_cursor(bufnr, function(ranges)
         local params = { uri = uri, ranges = ranges }
         -- Even though it's not "needed" we're sending requests in this case
         -- to ensure we're processing/seeing potential errors.
-        connection.client:send_request("cursor", params)
+        client.connection:send_request("cursor", params)
     end)
 end
 
-local function find_or_create_connection(config_name, root_dir)
+local function find_or_create_client(config_name, root_dir)
     -- We re-use connections for configs with the same name and root_dir.
-    for _, connection in ipairs(connections) do
-        if connection.name == config_name and connection.root_dir == root_dir then
-            return connection
+    for _, client in ipairs(clients) do
+        if client.name == config_name and client.root_dir == root_dir then
+            return client
         end
     end
 
     -- No reusable connection? Let's create a new one.
-    local connection = {
+    local client = {
         name = config_name,
         root_dir = root_dir,
         files = {},
         buffers = {},
-        client = nil,
+        connection = nil,
     }
-    local the_client = client.connect(collaboration_servers[config_name].cfg.cmd, root_dir, function(m, p)
-        process_operation_for_editor(connection, m, p)
+    local the_connection = connection.connect(collaboration_servers[config_name].cfg.cmd, root_dir, function(m, p)
+        process_operation_for_editor(client, m, p)
     end)
-    connection.client = the_client
-    table.insert(connections, connection)
+    client.connection = the_connection
+    table.insert(clients, client)
 
-    return connection
+    return client
 end
 
 local function activate_config_for_buffer(config_name, buf_nr, root_dir)
-    local connection = find_or_create_connection(config_name, root_dir)
-    table.insert(connection.buffers, buf_nr)
+    local client = find_or_create_client(config_name, root_dir)
+    table.insert(client.buffers, buf_nr)
 
     local filename = vim.api.nvim_buf_get_name(buf_nr)
     local uri = vim.uri_from_bufnr(buf_nr)
@@ -155,11 +155,11 @@ local function activate_config_for_buffer(config_name, buf_nr, root_dir)
     local lines = changetracker.get_all_lines_respecting_eol(buf_nr)
     local content = table.concat(lines, "\n")
 
-    connection.client:send_request("open", { uri = uri, content = content }, function()
+    client.connection:send_request("open", { uri = uri, content = content }, function()
         debug("Tracking Edits")
         ensure_autoread_is_off()
         disable_writing()
-        track_edits(connection, filename, uri, lines)
+        track_edits(client, filename, uri, lines)
     end)
 end
 
@@ -209,28 +209,28 @@ local function on_buffer_close()
 
     debug("on_buffer_close: " .. closed_file)
 
-    -- Find the correct connection, and remove this buffer from it.
-    local connection = nil
-    for _, c in ipairs(connections) do
+    -- Find the correct client, and remove this buffer from it.
+    local client = nil
+    for _, c in ipairs(clients) do
         for j, buffer in ipairs(c.buffers) do
             if buffer == buf_nr then
-                connection = c
+                client = c
                 table.remove(c.buffers, j)
                 break
             end
         end
     end
 
-    if not connection then
+    if not client then
         return
     end
 
     -- TODO: Do we also need this?
-    if not connection.files[closed_file] then
+    if not client.files[closed_file] then
         return
     end
 
-    connection.files[closed_file] = nil
+    client.files[closed_file] = nil
 
     -- TODO: Is the on_lines callback un-registered automatically when the buffer closes,
     -- or should we detach it ourselves?
@@ -238,19 +238,19 @@ local function on_buffer_close()
     -- It's not a high priority, as we can only generate edits when the buffer exists anyways.
 
     local uri = vim.uri_from_bufnr(buf_nr)
-    connection.client:send_notification("close", { uri = uri })
+    client.connection:send_notification("close", { uri = uri })
 end
 
 local function print_info()
-    if #connections == 0 then
+    if #clients == 0 then
         print("Not connected to any Ethersync daemon.")
         return
     end
 
-    local result = "Connections:\n\n"
+    local result = "Clients:\n\n"
 
-    for i, connection in ipairs(connections) do
-        result = result .. "\"" .. connection.name .. "\" in '" .. connection.root_dir .. "'\n"
+    for _, client in ipairs(clients) do
+        result = result .. "\"" .. client.name .. "\" in '" .. client.root_dir .. "'\n"
     end
 
     result = result .. "\nCursors:\n\n" .. cursor.list_cursors()
