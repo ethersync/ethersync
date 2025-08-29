@@ -8,6 +8,7 @@ use automerge::Prop;
 use derive_more::{AsRef, Deref, Display};
 use serde::{Deserialize, Serialize};
 use std::path::{self, Path, PathBuf};
+use url::Url;
 
 /// Paths like these are guaranteed to be absolute.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Eq, Hash, Deref, AsRef, Display)]
@@ -92,14 +93,17 @@ impl From<&RelativePath> for Prop {
     }
 }
 
+// TODO: Wrap the newtype around url::Url instead?
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Deref)]
 pub struct FileUri(String);
 
 impl FileUri {
     pub fn to_absolute_path(&self) -> AbsolutePath {
-        let path = Path::new(&self.0[7..]);
-        AbsolutePath::try_from(path.to_path_buf())
-            .expect("File URI should contain an absolute path")
+        let path_buf = Url::parse(&self)
+            .expect("Should be able to parse file:// URL as Url")
+            .to_file_path()
+            .expect("Should be able to convert Url to PathBuf");
+        AbsolutePath::try_from(path_buf).expect("File URI should contain an absolute path")
     }
 }
 
@@ -107,8 +111,14 @@ impl TryFrom<String> for FileUri {
     type Error = anyhow::Error;
 
     fn try_from(string: String) -> Result<Self, Self::Error> {
+        // TODO: Could be written simpler?
         if string.starts_with("file:///") {
-            Ok(Self(string.to_string()))
+            // Use the url crate to properly URL encode the path (spaces should be "%20", for example).
+            Ok(Self(
+                Url::parse(&string)
+                    .expect("Should be able to parse file:// URL")
+                    .to_string(),
+            ))
         } else {
             bail!("File URI '{}' does not start with 'file:///'", string);
         }
@@ -161,5 +171,18 @@ mod test {
 
             assert_eq!(RelativePath::new(expected), relative_path);
         }
+    }
+
+    #[test]
+    fn test_uri_encoding_works_with_spaces() {
+        let uri = FileUri::try_from(format!("file:///a/b/file with spaces")).unwrap();
+        assert_eq!("file:///a/b/file%20with%20spaces", uri.0);
+    }
+
+    #[test]
+    fn test_uri_decoding_works_with_spaces() {
+        let uri = FileUri::try_from(format!("file:///a/b/file with spaces")).unwrap();
+        let absolute_path = AbsolutePath::try_from("/a/b/file with spaces").unwrap();
+        assert_eq!(absolute_path, uri.to_absolute_path());
     }
 }
