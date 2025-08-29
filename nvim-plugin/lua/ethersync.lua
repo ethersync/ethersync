@@ -12,8 +12,7 @@ local helpers = require("ethersync.helpers")
 local M = {}
 
 -- Registry of possible configurations.
--- TODO: Find a better name for this variable.
-local collaboration_servers = {}
+local configurations = {}
 
 -- The active clients. Each client has:
 -- name: The name of the configuration (available options: the keys in the above dictionary)
@@ -25,7 +24,7 @@ local clients = {}
 
 function M.config(name, cfg)
     -- TODO: check here if valid?
-    collaboration_servers[name] = { cfg = cfg, enabled = false }
+    configurations[name] = { cfg = cfg, enabled = false }
 end
 
 function M.enable(name, enable)
@@ -33,7 +32,7 @@ function M.enable(name, enable)
         enable = true
     end
 
-    collaboration_servers[name].enabled = enable
+    configurations[name].enabled = enable
 end
 
 -- Take an operation from the daemon and apply it to the editor.
@@ -130,7 +129,7 @@ local function find_or_create_client(config_name, root_dir)
         buffers = {},
         connection = nil,
     }
-    local the_connection = connection.connect(collaboration_servers[config_name].cfg.cmd, root_dir, function(m, p)
+    local the_connection = connection.connect(configurations[config_name].cfg.cmd, root_dir, function(m, p)
         process_operation_for_editor(client, m, p)
     end)
     client.connection = the_connection
@@ -167,7 +166,7 @@ local function on_buffer_open()
     local buf_nr = tonumber(vim.fn.expand("<abuf>"))
     local buf_name = vim.api.nvim_buf_get_name(buf_nr)
 
-    for name, server in pairs(collaboration_servers) do
+    for name, server in pairs(configurations) do
         if server.enabled then
             if server.cfg.root_dir then
                 server.cfg.root_dir(buf_nr, function(root_dir)
