@@ -68,6 +68,7 @@ tracing-subscriber = { version = "0.3.18", default-features = false, features = 
     "time",
     "env-filter",
 ] }
+url = "2.5.7"
 
 [dependencies.tokio]
 version = "1"
