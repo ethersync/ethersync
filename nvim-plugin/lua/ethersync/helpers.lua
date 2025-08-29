@@ -5,8 +5,8 @@
 
 local M = {}
 
+-- Recusively scan up directories. If we find an .ethersync directory on any level, return its parent, and nil otherwise.
 function M.find_directory(filename, marker)
-    -- Recusively scan up directories. If we find an .ethersync directory on any level, return its parent, and nil otherwise.
     if vim.version().api_level < 12 then
         -- In Neovim 0.9, do it manually.
         local path = filename
