@@ -184,7 +184,7 @@ function openCurrentTextDocuments() {
 }
 
 function documentForUri(uri: string): vscode.TextDocument | undefined {
-    return vscode.workspace.textDocuments.find((doc) => decodeURI(doc.uri.toString()) === uri)
+    return vscode.workspace.textDocuments.find((doc) => doc.uri.toString() === uri)
 }
 
 async function processEditFromDaemon(edit: Edit) {
@@ -291,8 +291,8 @@ async function processUserOpen(document: vscode.TextDocument) {
         return
     }
 
-    const fileUri = decodeURI(document.uri.toString())
-    debug("OPEN " + fileUri)
+    const fileUri = document.uri.toString()
+    debug("OPEN " + decodeURI(fileUri))
     const content = document.getText()
     connection
         .sendRequest(openType, {uri: fileUri, content: content})
@@ -311,7 +311,7 @@ function processUserClose(document: vscode.TextDocument) {
         // File is not currently tracked in ethersync.
         return
     }
-    const fileUri = decodeURI(document.uri.toString())
+    const fileUri = document.uri.toString()
     connection.sendRequest(closeType, {uri: fileUri})
 
     delete revisions[document.fileName]
@@ -410,7 +410,7 @@ function processSelection(event: vscode.TextEditorSelectionChangeEvent) {
         // File is not currently tracked in ethersync.
         return
     }
-    let uri = decodeURI(event.textEditor.document.uri.toString())
+    let uri = event.textEditor.document.uri.toString()
     let content = contents[event.textEditor.document.fileName]
     let ranges = event.selections.map((s) => {
         return vsCodeRangeToEthersyncRange(content, s)
@@ -429,7 +429,7 @@ function vsCodeChangeEventToEthersyncEdits(event: vscode.TextDocumentChangeEvent
 
     for (const change of event.contentChanges) {
         let delta = vsCodeChangeToEthersyncDelta(content, change)
-        let uri = decodeURI(document.uri.toString())
+        let uri = document.uri.toString()
         let theEdit: Edit = {uri, revision: revision.daemon, delta: [delta]}
         edits.push(theEdit)
     }
