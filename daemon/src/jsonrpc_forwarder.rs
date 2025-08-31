@@ -69,9 +69,8 @@ impl Decoder for ContentLengthCodec {
     fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
         // Find the position of the Content-Length header.
         let c = b"Content-Length: ";
-        let start_of_header = match src.windows(c.len()).position(|window| window == c) {
-            Some(pos) => pos,
-            None => return Ok(None),
+        let Some(start_of_header) = src.windows(c.len()).position(|window| window == c) else {
+            return Ok(None);
         };
 
         // Find the end of the line after that.

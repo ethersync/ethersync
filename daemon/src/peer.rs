@@ -213,15 +213,12 @@ impl EndpointActor {
                 previous_attempts,
             } => {
                 let node_addr = secret_address.node_addr.clone();
-                let conn = match self.endpoint.connect(node_addr, ALPN).await {
-                    Ok(connection) => connection,
-                    Err(_) => {
-                        Self::reconnect(self.message_tx.clone(), secret_address, previous_attempts)
-                            .await
-                            .expect("Failed to initiate reconnection");
-                        // Not really Ok, but Ok enough.
-                        return Ok(());
-                    }
+                let Ok(conn) = self.endpoint.connect(node_addr, ALPN).await else {
+                    Self::reconnect(self.message_tx.clone(), secret_address, previous_attempts)
+                        .await
+                        .expect("Failed to initiate reconnection");
+                    // Not really Ok, but Ok enough.
+                    return Ok(());
                 };
 
                 info!(
