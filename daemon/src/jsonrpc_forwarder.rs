@@ -84,7 +84,7 @@ impl Decoder for ContentLengthCodec {
             // accept plain newline separators in order to simplify manual testing.
             None => match src[start_of_header + c.len()..]
                 .windows(2)
-                .position(|window| (window == b"\n\n"))
+                .position(|window| window == b"\n\n")
             {
                 Some(pos) => (pos, 2),
                 None => return Ok(None),
