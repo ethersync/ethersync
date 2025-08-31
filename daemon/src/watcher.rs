@@ -15,7 +15,7 @@ use std::{
 use tokio::sync::mpsc::{self, Receiver};
 use tracing::debug;
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum WatcherEvent {
     Created { file_path: PathBuf },
     Removed { file_path: PathBuf },

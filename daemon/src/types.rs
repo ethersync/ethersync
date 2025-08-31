@@ -12,7 +12,7 @@ use ropey::Rope;
 use serde::{Deserialize, Serialize};
 use tracing::{debug, warn};
 
-#[derive(Debug, Clone, PartialEq, Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct TextDelta(pub Vec<TextOp>);
 
 impl IntoIterator for TextDelta {
@@ -24,14 +24,14 @@ impl IntoIterator for TextDelta {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TextOp {
     Retain(usize),
     Insert(String),
     Delete(usize),
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct EditorTextDelta(pub Vec<EditorTextOp>);
 
 impl IntoIterator for EditorTextDelta {
@@ -43,7 +43,7 @@ impl IntoIterator for EditorTextDelta {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RevisionedEditorTextDelta {
     pub revision: usize,
     pub delta: EditorTextDelta,
@@ -57,7 +57,7 @@ impl RevisionedEditorTextDelta {
 }
 
 /// When doing OT, many `TextDelta`s need a revision metadata, to see whether they apply.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RevisionedTextDelta {
     pub revision: usize,
     pub delta: TextDelta,
@@ -79,7 +79,7 @@ impl RevisionedTextDelta {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FileTextDelta {
     pub file_path: RelativePath,
     pub delta: TextDelta,
@@ -95,14 +95,14 @@ impl FileTextDelta {
 type DocumentUri = String;
 pub type CursorId = String;
 
-#[derive(Serialize, Deserialize, PartialEq, Clone, Debug)]
+#[derive(Serialize, Deserialize, PartialEq, Eq, Clone, Debug)]
 pub struct CursorState {
     pub name: Option<String>,
     pub file_path: RelativePath,
     pub ranges: Vec<Range>,
 }
 
-#[derive(Serialize, Deserialize, PartialEq, Clone, Debug)]
+#[derive(Serialize, Deserialize, PartialEq, Eq, Clone, Debug)]
 pub struct EphemeralMessage {
     pub cursor_id: CursorId,
     pub sequence_number: usize,
@@ -136,7 +136,7 @@ impl PatchEffect {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum JSONRPCFromEditor {
     Request {
@@ -156,7 +156,7 @@ impl JSONRPCFromEditor {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "method", content = "params", rename_all = "camelCase")]
 pub enum EditorProtocolMessageFromEditor {
     Open {
@@ -179,7 +179,7 @@ pub enum EditorProtocolMessageFromEditor {
 
 /// These messages are "internally" passed between the components that the daemon consists of -
 /// namely, the connected editors and the CRDT document.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ComponentMessage {
     Open {
         file_path: RelativePath,
@@ -198,7 +198,7 @@ pub enum ComponentMessage {
     },
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct EditorProtocolMessageError {
     pub code: i32,
     pub message: String,
@@ -259,7 +259,7 @@ mod test_serde {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum EditorProtocolObject {
     Request(EditorProtocolMessageToEditor),
@@ -280,7 +280,7 @@ impl EditorProtocolObject {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "method", content = "params", rename_all = "camelCase")]
 pub enum EditorProtocolMessageToEditor {
     Edit {
@@ -296,7 +296,7 @@ pub enum EditorProtocolMessageToEditor {
     },
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum JSONRPCResponse {
     RequestSuccess {
@@ -310,13 +310,13 @@ pub enum JSONRPCResponse {
     },
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct EditorTextOp {
     pub range: Range,
     pub replacement: String,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Range {
     pub start: Position,
     pub end: Position,
@@ -346,7 +346,7 @@ impl Range {
     }
 }
 
-#[derive(Debug, Default, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Default, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Position {
     pub line: usize,
     pub character: usize,
