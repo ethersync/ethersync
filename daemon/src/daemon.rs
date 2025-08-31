@@ -185,7 +185,7 @@ impl DocumentActor {
                 self.handle_message_from_editor(editor_id, message).await;
             }
             DocMessage::FromWatcher(watcher_event) => {
-                self.handle_watcher_event(watcher_event).await;
+                self.handle_watcher_event(watcher_event);
             }
             DocMessage::RescanFiles => {
                 self.read_current_content_from_dir(false);
@@ -447,7 +447,7 @@ impl DocumentActor {
         }
     }
 
-    async fn handle_watcher_event(&mut self, watcher_event: WatcherEvent) {
+    fn handle_watcher_event(&mut self, watcher_event: WatcherEvent) {
         match watcher_event {
             WatcherEvent::Created { file_path } => {
                 let relative_file_path = RelativePath::try_from_path(&self.base_dir, &file_path)
@@ -980,15 +980,15 @@ impl Daemon {
 
         // Start socket listener.
         let socket_path = socket_path.to_path_buf();
-        editor::spawn_socket_listener(socket_path.clone(), document_handle.clone()).await?;
+        editor::spawn_socket_listener(socket_path.clone(), document_handle.clone())?;
 
         // Start file watcher.
         let base_dir = base_dir.to_path_buf();
-        spawn_file_watcher(&base_dir, document_handle.clone()).await;
+        spawn_file_watcher(&base_dir, document_handle.clone());
 
         if persist {
             // Start persister.
-            spawn_persister(document_handle.clone()).await;
+            spawn_persister(document_handle.clone());
         }
 
         // Start connection manager.
@@ -1034,7 +1034,7 @@ impl Drop for Daemon {
 // Spawn a file watcher and feed its events to the document_handle.
 // In addition, a short timeout after the last event, do a full re-scan, so that we don't miss any
 // file changes - the watcher isn't necessarily exhaustive.
-async fn spawn_file_watcher(base_dir: &Path, document_handle: DocumentActorHandle) {
+fn spawn_file_watcher(base_dir: &Path, document_handle: DocumentActorHandle) {
     let mut watcher = Watcher::new(base_dir);
 
     tokio::spawn(async move {
@@ -1074,7 +1074,7 @@ async fn spawn_file_watcher(base_dir: &Path, document_handle: DocumentActorHandl
     });
 }
 
-async fn spawn_persister(document_handle: DocumentActorHandle) {
+fn spawn_persister(document_handle: DocumentActorHandle) {
     tokio::spawn(async move {
         let mut doc_changed_ping_rx = document_handle.subscribe_document_changes();
 

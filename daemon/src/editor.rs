@@ -65,7 +65,7 @@ fn is_user_readable_only(socket_path: &Path) -> Result<()> {
 /// # Panics
 ///
 /// Will panic if we fail to listen on the socket, or if we fail to accept an incoming connection.
-pub async fn spawn_socket_listener(
+pub fn spawn_socket_listener(
     socket_path: PathBuf,
     document_handle: DocumentActorHandle,
 ) -> Result<()> {
