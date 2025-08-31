@@ -1003,7 +1003,7 @@ impl Daemon {
             );
         }
         if app_config.emit_join_code {
-            put_secret_address_into_wormhole(&address).await;
+            put_secret_address_into_wormhole(address).await;
         }
         if let Some(config::Peer::SecretAddress(secret_address)) = app_config.peer {
             connection_manager
@@ -1014,7 +1014,7 @@ impl Daemon {
 
         Ok(Self {
             document_handle,
-            address,
+            address: address.to_owned(),
             socket_path,
             base_dir,
             connection_manager,
