@@ -46,6 +46,7 @@ pedantic = { level = "warn", priority = -1 }
 allow_attributes = "warn"
 derive_partial_eq_without_eq = "warn"
 map_with_unused_argument_over_ranges = "warn"
+option_if_let_else = "warn"
 or_fun_call = "warn"
 redundant_clone = "warn"
 use_self = "warn"
