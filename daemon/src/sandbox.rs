@@ -76,16 +76,16 @@ pub fn remove_file(absolute_base_dir: &Path, absolute_file_path: &Path) -> Resul
 pub fn create_dir(absolute_base_dir: &Path, absolute_dir_path: &Path) -> Result<()> {
     let canonical_dir_path =
         check_inside_base_dir_and_canonicalize(absolute_base_dir, absolute_dir_path)?;
-    std::fs::create_dir(&canonical_dir_path)?;
+    fs::create_dir(&canonical_dir_path)?;
     let permissions = fs::Permissions::from_mode(0o700);
-    std::fs::set_permissions(canonical_dir_path, permissions)?;
+    fs::set_permissions(canonical_dir_path, permissions)?;
     Ok(())
 }
 
 pub fn create_dir_all(absolute_base_dir: &Path, absolute_dir_path: &Path) -> Result<()> {
     let canonical_dir_path =
         check_inside_base_dir_and_canonicalize(absolute_base_dir, absolute_dir_path)?;
-    std::fs::create_dir_all(canonical_dir_path)?;
+    fs::create_dir_all(canonical_dir_path)?;
     Ok(())
 }
 
