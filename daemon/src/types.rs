@@ -460,7 +460,7 @@ impl TryFrom<Patch> for PatchEffect {
                         } => {
                             // This action happens when a new file is created.
 
-                            let path = RelativePath::new(&key);
+                            let relative_path = RelativePath::new(&key);
 
                             match value {
                                 (automerge::Value::Object(automerge::ObjType::Text), _) => {
@@ -468,13 +468,13 @@ impl TryFrom<Patch> for PatchEffect {
                                         // In this case, the peer receiving this PutMap should
                                         // remove all existing content of this file in open
                                         // editors. So we emit a FileRemovel.
-                                        warn!("Resolved conflict for file {path} by overwriting your version.");
-                                        Ok(Self::FileRemoval(path))
+                                        warn!("Resolved conflict for file {relative_path} by overwriting your version.");
+                                        Ok(Self::FileRemoval(relative_path))
                                     } else {
                                         // We return an empty delta on the new file, so that the file is created on disk when
                                         // synced over to another peer. TODO: Is this the best way to solve this?
                                         Ok(Self::FileChange(FileTextDelta::new(
-                                            path,
+                                            relative_path,
                                             TextDelta::default(),
                                         )))
                                     }
@@ -484,15 +484,16 @@ impl TryFrom<Patch> for PatchEffect {
                                         automerge::ScalarValue::Bytes(bytes),
                                     )),
                                     _,
-                                ) => Ok(Self::FileBytes(path, bytes)),
-                                _ => Err(anyhow::anyhow!("Unexpected value in path {}", path)),
+                                ) => Ok(Self::FileBytes(relative_path, bytes)),
+                                _ => {
+                                    Err(anyhow::anyhow!("Unexpected value in path {relative_path}"))
+                                }
                             }
                         }
                         PatchAction::DeleteMap { key } => {
                             // This action happens when a file is deleted.
                             debug!("Got file removal from patch: {key}");
-                            let path = RelativePath::new(&key);
-                            Ok(Self::FileRemoval(path))
+                            Ok(Self::FileRemoval(RelativePath::new(&key)))
                         }
                         PatchAction::Conflict { prop } => {
                             // This can happen when both sides create the same file.
@@ -509,8 +510,7 @@ impl TryFrom<Patch> for PatchEffect {
                             }
                         }
                         other_action => Err(anyhow::anyhow!(
-                            "Unsupported patch action for path 'files': {}",
-                            other_action
+                            "Unsupported patch action for path 'files': {other_action}"
                         )),
                     }
                 } else if patch.path.len() == 2 {
