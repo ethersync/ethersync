@@ -108,7 +108,7 @@ impl TryFrom<String> for FileUri {
 
     fn try_from(string: String) -> Result<Self, Self::Error> {
         if string.starts_with("file:///") {
-            Ok(Self(string.to_string()))
+            Ok(Self(string))
         } else {
             bail!("File URI '{}' does not start with 'file:///'", string);
         }

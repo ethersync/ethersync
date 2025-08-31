@@ -42,6 +42,7 @@ executable-deps = ["dep:clap", "tokio/signal", "tokio/rt-multi-thread"]
 unsafe_code = "forbid"
 unused_qualifications = "warn"
 [lints.clippy]
+redundant_clone = "warn"
 unnecessary_semicolon = "warn"
 unused_async = "warn"
 use_self = "warn"
