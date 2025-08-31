@@ -180,7 +180,7 @@ impl Document {
         if !self.file_exists(file_path) {
             debug!("Failed to get {file_path} key object, so I can't remove it from the CRDT.");
             return;
-        };
+        }
 
         info!("Removing {file_path} from the Ethersync history.");
 

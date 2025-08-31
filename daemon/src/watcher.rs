@@ -133,7 +133,7 @@ impl Watcher {
                     debug!("Unhandled event in {:?}: {e:?}", event.paths);
                     continue;
                 }
-            };
+            }
         }
     }
 

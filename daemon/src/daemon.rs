@@ -425,7 +425,7 @@ impl DocumentActor {
                                 .await;
                             }
                         }
-                    };
+                    }
                 }
                 JSONRPCFromEditor::Notification { payload } => {
                     let _ = self.react_to_message_from_editor(editor_id, &payload).await;
@@ -730,7 +730,7 @@ impl DocumentActor {
                     self.crdt_doc.initialize_text(content, file_path);
                     let _ = self.doc_changed_ping_tx.send(());
                     self.write_file(file_path);
-                };
+                }
             }
             ComponentMessage::Close { file_path } => {
                 self.write_file(file_path);
