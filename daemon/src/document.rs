@@ -276,26 +276,24 @@ impl Document {
 
     #[must_use]
     pub fn files(&self) -> Vec<RelativePath> {
-        if let Ok(file_map) = self.top_level_map_obj("files") {
-            self.doc
-                .keys(file_map)
-                .map(|k| RelativePath::new(&k))
-                .collect()
-        } else {
-            vec![]
-        }
+        self.top_level_map_obj("files")
+            .map(|file_map| {
+                self.doc
+                    .keys(file_map)
+                    .map(|k| RelativePath::new(&k))
+                    .collect()
+            })
+            .unwrap_or_default()
     }
 
     #[must_use]
     pub fn file_exists(&self, file_path: &RelativePath) -> bool {
-        if let Ok(file_map) = self.top_level_map_obj("files") {
+        self.top_level_map_obj("files").is_ok_and(|file_map| {
             self.doc
                 .get(file_map, file_path)
                 .unwrap_or_else(|_| panic!("Failed to get {file_path} key from Automerge document"))
                 .is_some()
-        } else {
-            false
-        }
+        })
     }
 
     #[must_use]
