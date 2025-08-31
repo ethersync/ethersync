@@ -25,7 +25,7 @@ pub enum WatcherEvent {
 /// Returns events among the files in `base_dir` that are not ignored.
 #[must_use]
 pub struct Watcher {
-    _watcher: RecommendedWatcher,
+    _inner: RecommendedWatcher,
     base_dir: PathBuf,
     notify_receiver: Receiver<NotifyResult<notify::Event>>,
     out_queue: VecDeque<WatcherEvent>,
@@ -47,7 +47,7 @@ impl Watcher {
 
         Self {
             // Keep the watcher, so that it's not dropped.
-            _watcher: watcher,
+            _inner: watcher,
             base_dir: dir.to_path_buf(),
             notify_receiver: rx,
             out_queue: VecDeque::new(),
