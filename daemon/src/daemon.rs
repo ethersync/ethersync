@@ -160,7 +160,7 @@ impl DocumentActor {
 
     /// If any editor owns the file, it means that the daemon doesn't have ownership.
     #[must_use]
-    fn owns(&mut self, file_path: &RelativePath) -> bool {
+    fn owns(&self, file_path: &RelativePath) -> bool {
         !self
             .editor_connections
             .values()
@@ -612,7 +612,7 @@ impl DocumentActor {
 
     // TODO: Join this code with the WalkBuilder in the sandbox module!
     #[must_use]
-    fn build_walk(&mut self) -> Walk {
+    fn build_walk(&self) -> Walk {
         let ignored_things = [".git", ".ethersync"];
         // TODO: How to deal with binary files?
         WalkBuilder::new(self.base_dir.clone())
