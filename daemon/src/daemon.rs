@@ -579,7 +579,7 @@ impl DocumentActor {
         });
     }
 
-    fn write_files_changed_in_file_deltas(&mut self, file_deltas: &Vec<FileTextDelta>) {
+    fn write_files_changed_in_file_deltas(&mut self, file_deltas: &[FileTextDelta]) {
         // Collect file paths into a set, so we don't write files multiple times on complex
         // patches.
         let mut file_paths = HashSet::new();
