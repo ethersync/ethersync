@@ -774,7 +774,7 @@ impl DocumentActor {
         exclude_id: Option<EditorId>,
         message: &ComponentMessage,
     ) {
-        let editor_ids: Vec<EditorId> = self.editor_connections.keys().cloned().collect();
+        let editor_ids: Vec<EditorId> = self.editor_connections.keys().copied().collect();
         for editor_id in editor_ids {
             if Some(editor_id) == exclude_id {
                 continue;
