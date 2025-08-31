@@ -25,7 +25,7 @@ pub struct EditorConnection {
     id: String,
     // TODO: Feels a bit duplicated here?
     base_dir: PathBuf,
-    /// There's one OTServer per open buffer.
+    /// There's one [`OTServer`] per open buffer.
     ot_servers: HashMap<RelativePath, OTServer>,
     /// The name other people see.
     username: Option<String>,
