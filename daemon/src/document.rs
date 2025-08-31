@@ -26,6 +26,7 @@ use tracing::{debug, info};
 ///
 /// Furthermore there's a way to retrieve and initialize the content.
 #[derive(Debug)]
+#[must_use]
 pub struct Document {
     doc: AutoCommit,
 }
@@ -54,18 +55,22 @@ impl Document {
         Self { doc }
     }
 
+    #[must_use]
     pub fn save(&mut self) -> Vec<u8> {
         self.doc.save()
     }
 
+    #[must_use]
     pub fn save_incremental(&mut self) -> Vec<u8> {
         self.doc.save_incremental()
     }
 
+    #[must_use]
     pub fn actor_id(&self) -> String {
         self.doc.get_actor().to_hex_string()
     }
 
+    #[must_use]
     pub fn receive_sync_message_log_patches(
         &mut self,
         message: AutomergeSyncMessage,
@@ -79,6 +84,7 @@ impl Document {
         self.doc.make_patches(&mut patch_log)
     }
 
+    #[must_use]
     pub fn generate_sync_message(
         &mut self,
         peer_state: &mut SyncState,
@@ -268,6 +274,7 @@ impl Document {
         }
     }
 
+    #[must_use]
     pub fn files(&self) -> Vec<RelativePath> {
         if let Ok(file_map) = self.top_level_map_obj("files") {
             self.doc
@@ -279,6 +286,7 @@ impl Document {
         }
     }
 
+    #[must_use]
     pub fn file_exists(&self, file_path: &RelativePath) -> bool {
         if let Ok(file_map) = self.top_level_map_obj("files") {
             self.doc
@@ -290,6 +298,7 @@ impl Document {
         }
     }
 
+    #[must_use]
     pub fn get_heads(&mut self) -> Vec<ChangeHash> {
         self.doc.get_heads()
     }
