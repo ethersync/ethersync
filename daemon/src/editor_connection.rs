@@ -20,6 +20,7 @@ use crate::{
 
 /// Represents a connection to an editor. Handles the OT. To keep the code testable and sync, we do
 /// the actual sending of messages in the daemon, and the functions here just *calculate* them.
+#[must_use]
 pub struct EditorConnection {
     id: String,
     // TODO: Feels a bit duplicated here?
@@ -40,12 +41,14 @@ impl EditorConnection {
         }
     }
 
+    #[must_use]
     pub fn owns(&self, file_path: &RelativePath) -> bool {
         self.ot_servers.contains_key(file_path)
     }
 
     /// A message from inside is either an edit from another local editor or an edit that came
     /// from another peer but is prepared to be applied to all components.
+    #[must_use]
     pub fn message_from_inside(
         &mut self,
         message: &ComponentMessage,
