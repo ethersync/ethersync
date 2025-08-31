@@ -179,7 +179,7 @@ pub fn add_ethersync_to_global_gitignore() -> Result<()> {
     sandbox::create_dir_all(&git_config_dir, &git_config_dir)?;
     let bytes_in = sandbox::read_file(&git_config_dir, &ignore_file_path).unwrap_or_default();
     let mut content = std::str::from_utf8(&bytes_in)?.to_string();
-    if !content.is_empty() && !content.ends_with("\n") {
+    if !content.is_empty() && !content.ends_with('\n') {
         content.push('\n');
     }
     content.push_str(".ethersync/\n");
