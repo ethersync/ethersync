@@ -62,6 +62,7 @@ use tracing::{debug, warn};
 ///
 ///
 #[derive(Debug, Default)]
+#[must_use]
 pub struct OTServer {
     editor_revision: usize,
     daemon_revision: usize,
@@ -194,8 +195,9 @@ impl OTServer {
         to_editor
     }
 
-    pub fn current_content(&mut self) -> String {
-        self.current_content.clone()
+    #[must_use]
+    pub fn current_content(&self) -> &str {
+        &self.current_content
     }
 
     #[must_use]
