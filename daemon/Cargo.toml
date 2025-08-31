@@ -42,31 +42,24 @@ executable-deps = ["dep:clap", "tokio/signal", "tokio/rt-multi-thread"]
 unsafe_code = "forbid"
 unused_qualifications = "warn"
 [lints.clippy]
+pedantic = { level = "warn", priority = -1 }
 allow_attributes = "warn"
-cloned_instead_of_copied = "warn"
-default_trait_access = "warn"
 derive_partial_eq_without_eq = "warn"
-doc_markdown = "warn"
-if_not_else = "warn"
-ignored_unit_patterns = "warn"
-implicit_clone = "warn"
-manual_assert = "warn"
-manual_let_else = "warn"
-manual_string_new = "warn"
 map_with_unused_argument_over_ranges = "warn"
-match_wildcard_for_single_variants = "warn"
-needless_pass_by_value = "warn"
 or_fun_call = "warn"
 redundant_clone = "warn"
-return_self_not_must_use = "warn"
-semicolon_if_nothing_returned = "warn"
-similar_names = "warn"
-single_char_pattern = "warn"
-struct_field_names = "warn"
-unnecessary_semicolon = "warn"
-unreadable_literal = "warn"
-unused_async = "warn"
 use_self = "warn"
+
+needless_continue = "allow" # TODO: probably a bug that needs to be fixed
+
+cast_possible_truncation = "allow"
+cast_possible_wrap = "allow"
+cast_sign_loss = "allow"
+missing_errors_doc = "allow"
+missing_panics_doc = "allow"
+must_use_candidate = "allow"
+should_panic_without_expect = "allow"
+too_many_lines = "allow"
 
 [dependencies]
 anyhow = "1.0.81"
