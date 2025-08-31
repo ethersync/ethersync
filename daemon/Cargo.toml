@@ -41,6 +41,8 @@ executable-deps = ["dep:clap", "tokio/signal", "tokio/rt-multi-thread"]
 [lints.rust]
 unsafe_code = "forbid"
 unused_qualifications = "warn"
+[lints.clippy]
+unused_async = "warn"
 
 [dependencies]
 anyhow = "1.0.81"
