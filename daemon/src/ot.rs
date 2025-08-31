@@ -476,14 +476,14 @@ mod tests {
         use operational_transform::Operation as OTOperation;
 
         fn ot_insert(at: usize, s: &str) -> OperationSeq {
-            let mut op_seq: OperationSeq = Default::default();
+            let mut op_seq = OperationSeq::default();
             op_seq.retain(at as u64);
             op_seq.insert(s);
             op_seq
         }
 
         fn ot_delete(from: usize, length: usize) -> OperationSeq {
-            let mut op_seq: OperationSeq = Default::default();
+            let mut op_seq = OperationSeq::default();
             op_seq.retain(from as u64);
             op_seq.delete(length as u64);
             op_seq
