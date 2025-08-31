@@ -14,6 +14,7 @@ use url::Url;
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Eq, Hash, Deref, AsRef, Display)]
 #[as_ref(Path)]
 #[display("'{}'", self.0.display())]
+#[must_use]
 pub struct AbsolutePath(PathBuf);
 
 impl AbsolutePath {
@@ -52,6 +53,7 @@ impl TryFrom<&str> for AbsolutePath {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Eq, Hash, Deref, AsRef, Display)]
 #[as_ref(Path)]
 #[display("'{}'", self.0.display())]
+#[must_use]
 pub struct RelativePath(PathBuf);
 
 impl RelativePath {
@@ -95,6 +97,7 @@ impl From<&RelativePath> for Prop {
 
 // TODO: Wrap the newtype around url::Url instead?
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Deref)]
+#[must_use]
 pub struct FileUri(String);
 
 impl FileUri {
