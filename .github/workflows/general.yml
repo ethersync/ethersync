@@ -75,9 +75,31 @@ jobs:
         name: Run integration tests (without fuzzer)
         working-directory: ./daemon/integration-tests
         run: cargo test --test nvim-plugin
+
   check_formatting:
     name: Check Rust formatting
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - run: cargo fmt --check
+
+  clippy:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    env:
+      RUSTFLAGS: --deny warnings
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Rust toolchain
+        run: rustup toolchain install stable --profile minimal --component=clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            daemon
+            daemon/integration-tests
+          cache-on-failure: true
+      - run: cargo clippy --all-targets --all-features
+      - run: cargo doc --no-deps --all-features
