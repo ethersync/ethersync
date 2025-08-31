@@ -43,6 +43,7 @@ use tracing::{debug, error, info, warn};
 pub const TEST_FILE_PATH: &str = "text";
 
 // These messages are sent to the task that owns the document.
+#[must_use]
 pub enum DocMessage {
     GetContent {
         response_tx: oneshot::Sender<Result<String>>,
@@ -94,6 +95,7 @@ type EphemeralMessageReceiver = broadcast::Receiver<EphemeralMessage>;
 /// This Actor is responsible for applying changes to the document asynchronously.
 ///
 /// Any `DocMessage` that is emitted via `DocumentActorHandle` should have an effect eventually.
+#[must_use]
 pub struct DocumentActor {
     doc_message_rx: mpsc::Receiver<DocMessage>,
     doc_changed_ping_tx: DocChangedSender,
@@ -107,7 +109,6 @@ pub struct DocumentActor {
 }
 
 impl DocumentActor {
-    #[must_use]
     fn new(
         doc_message_rx: mpsc::Receiver<DocMessage>,
         doc_changed_ping_tx: DocChangedSender,
@@ -158,6 +159,7 @@ impl DocumentActor {
     }
 
     /// If any editor owns the file, it means that the daemon doesn't have ownership.
+    #[must_use]
     fn owns(&mut self, file_path: &RelativePath) -> bool {
         !self
             .editor_connections
@@ -387,6 +389,7 @@ impl DocumentActor {
         Ok(messages_to_editor)
     }
 
+    #[must_use]
     fn cursor_id(&self, editor_id: EditorId) -> String {
         self.crdt_doc.actor_id() + "-" + editor_id.to_string().as_str()
     }
@@ -516,6 +519,7 @@ impl DocumentActor {
         }
     }
 
+    #[must_use]
     fn apply_sync_message_to_doc(
         &mut self,
         message: AutomergeSyncMessage,
@@ -528,10 +532,12 @@ impl DocumentActor {
         patches
     }
 
+    #[must_use]
     fn get_heads(&mut self) -> Vec<ChangeHash> {
         self.crdt_doc.get_heads()
     }
 
+    #[must_use]
     fn random_delta(&self) -> TextDelta {
         let text = self
             .current_file_content(&RelativePath::new(TEST_FILE_PATH))
@@ -606,6 +612,7 @@ impl DocumentActor {
     }
 
     // TODO: Join this code with the WalkBuilder in the sandbox module!
+    #[must_use]
     fn build_walk(&mut self) -> Walk {
         let ignored_things = [".git", ".ethersync"];
         // TODO: How to deal with binary files?
@@ -785,6 +792,7 @@ impl DocumentActor {
     }
 
     // Returns the protocol messages that should be sent to the editor.
+    #[must_use]
     fn process_in_editor(
         &mut self,
         editor_id: EditorId,
@@ -878,6 +886,7 @@ impl DocumentActor {
 ///
 /// The rest of the methods are used for instrumentation (e.g. by the fuzzer).
 #[derive(Clone)]
+#[must_use]
 pub struct DocumentActorHandle {
     doc_message_tx: DocMessageSender,
     doc_changed_ping_tx: DocChangedSender,
@@ -925,10 +934,12 @@ impl DocumentActorHandle {
             .expect("DocumentActor task has been killed");
     }
 
+    #[must_use]
     pub fn subscribe_document_changes(&self) -> DocChangedReceiver {
         self.doc_changed_ping_tx.subscribe()
     }
 
+    #[must_use]
     pub fn subscribe_ephemeral_messages(&self) -> EphemeralMessageReceiver {
         self.ephemeral_message_tx.subscribe()
     }
@@ -949,11 +960,13 @@ impl DocumentActorHandle {
             .expect("Failed to send random edit to document task");
     }
 
+    #[must_use]
     pub fn next_editor_id(&self) -> EditorId {
         self.next_id.fetch_add(1, Ordering::Relaxed)
     }
 }
 
+#[must_use]
 pub struct Daemon {
     pub document_handle: DocumentActorHandle,
     pub address: String,
