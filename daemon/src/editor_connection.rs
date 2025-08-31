@@ -199,7 +199,7 @@ impl EditorConnection {
                 };
 
                 let (delta_for_crdt, rev_deltas_for_editor) =
-                    ot_server.apply_editor_operation(rev_delta.clone());
+                    ot_server.apply_editor_operation(rev_delta);
 
                 let uri = AbsolutePath::from_parts(&self.base_dir, &relative_path)
                     .expect("Should be able to construct absolute URI")
@@ -233,7 +233,7 @@ impl EditorConnection {
                         cursor_id: self.id.clone(),
                         cursor_state: CursorState {
                             name: self.username.clone(),
-                            file_path: relative_path.clone(),
+                            file_path: relative_path,
                             ranges: ranges.clone(),
                         },
                     },

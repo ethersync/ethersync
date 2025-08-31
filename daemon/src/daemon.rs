@@ -1130,8 +1130,8 @@ mod tests {
 
                 Self::new(
                     doc_message_rx,
-                    doc_changed_ping_tx.clone(),
-                    ephemeral_message_tx.clone(),
+                    doc_changed_ping_tx,
+                    ephemeral_message_tx,
                     directory.path().to_path_buf(),
                     true,
                     true,
