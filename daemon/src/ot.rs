@@ -232,9 +232,9 @@ impl OTServer {
 ///
 fn transform_through_operations(
     mut their_op_seq: OperationSeq,
-    my_operations: &Vec<OperationSeq>,
+    my_operations: &[OperationSeq],
 ) -> (OperationSeq, Vec<OperationSeq>) {
-    let mut transformed_my_operations = vec![];
+    let mut transformed_my_operations = Vec::new();
     for my_op_seq in my_operations {
         let mut my_op_seq = my_op_seq.clone();
         // transform expects both operations to have the same base_len. See also:
