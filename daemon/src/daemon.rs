@@ -980,7 +980,7 @@ impl Daemon {
 
         // Start socket listener.
         let socket_path = socket_path.to_path_buf();
-        editor::spawn_socket_listener(socket_path.clone(), document_handle.clone())?;
+        editor::spawn_socket_listener(&socket_path, document_handle.clone())?;
 
         // Start file watcher.
         let base_dir = base_dir.to_path_buf();

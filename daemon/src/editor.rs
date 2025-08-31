@@ -10,11 +10,7 @@ use crate::sandbox;
 use crate::types::EditorProtocolObject;
 use anyhow::{bail, Context, Result};
 use futures::StreamExt;
-use std::{
-    fs,
-    os::unix::fs::PermissionsExt,
-    path::{Path, PathBuf},
-};
+use std::{fs, os::unix::fs::PermissionsExt, path::Path};
 use tokio::{
     io::WriteHalf,
     net::{UnixListener, UnixStream},
@@ -66,11 +62,11 @@ fn is_user_readable_only(socket_path: &Path) -> Result<()> {
 ///
 /// Will panic if we fail to listen on the socket, or if we fail to accept an incoming connection.
 pub fn spawn_socket_listener(
-    socket_path: PathBuf,
+    socket_path: &Path,
     document_handle: DocumentActorHandle,
 ) -> Result<()> {
     // Make sure the parent directory of the socket is only accessible by the current user.
-    if let Err(description) = is_user_readable_only(&socket_path) {
+    if let Err(description) = is_user_readable_only(socket_path) {
         panic!("{}", description);
     }
 
@@ -83,13 +79,13 @@ pub fn spawn_socket_listener(
         let socket_path_display = socket_path.display();
         let remove_socket = ask(&format!("Detected an existing socket '{socket_path_display}'. There might be a daemon running already for this directory, or the previous one crashed. Do you want to continue?"));
         if remove_socket? {
-            sandbox::remove_file(Path::new("/"), &socket_path).expect("Could not remove socket");
+            sandbox::remove_file(Path::new("/"), socket_path).expect("Could not remove socket");
         } else {
             bail!("Not continuing, make sure to stop all other daemons on this directory");
         }
     }
 
-    let listener = UnixListener::bind(&socket_path)?;
+    let listener = UnixListener::bind(socket_path)?;
     debug!("Listening on UNIX socket: {}", socket_path.display());
 
     tokio::spawn(async move {
