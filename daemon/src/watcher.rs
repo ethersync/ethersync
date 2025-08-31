@@ -23,6 +23,7 @@ pub enum WatcherEvent {
 }
 
 /// Returns events among the files in base_dir that are not ignored.
+#[must_use]
 pub struct Watcher {
     _watcher: RecommendedWatcher,
     base_dir: PathBuf,
@@ -53,6 +54,7 @@ impl Watcher {
         }
     }
 
+    #[must_use]
     pub async fn next(&mut self) -> Option<WatcherEvent> {
         loop {
             // If there's an event in the queue, return the oldest one.
@@ -137,6 +139,7 @@ impl Watcher {
         }
     }
 
+    #[must_use]
     fn maybe_created(&self, file_path: &Path) -> Option<WatcherEvent> {
         match sandbox::ignored(&self.base_dir, file_path) {
             Ok(is_ignored) => {
@@ -161,6 +164,7 @@ impl Watcher {
         })
     }
 
+    #[must_use]
     fn maybe_removed(&self, file_path: &Path) -> Option<WatcherEvent> {
         // TODO: We should check whether the file was ignored here. But how?
         Some(WatcherEvent::Removed {
@@ -168,6 +172,7 @@ impl Watcher {
         })
     }
 
+    #[must_use]
     fn maybe_modified(&self, file_path: &Path) -> Option<WatcherEvent> {
         match sandbox::ignored(&self.base_dir, file_path) {
             Ok(is_ignored) => {
