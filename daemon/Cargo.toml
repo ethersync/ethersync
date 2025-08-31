@@ -22,6 +22,7 @@ keywords = [
 ]
 categories = ["command-line-utilities", "text-editors"]
 edition = "2021"
+rust-version = "1.81.0"
 default-run = "ethersync"
 
 [lib]
