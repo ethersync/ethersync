@@ -412,9 +412,10 @@ impl IrohConnection {
 
     async fn read_next(receive: &mut RecvStream) -> Result<PeerMessage, ConnectionError> {
         fn map_timeout(err: ReadExactError) -> ConnectionError {
-            if let ReadExactError::ReadError(ReadError::ConnectionLost(
-                iroh::endpoint::ConnectionError::TimedOut,
-            )) = err
+            if err
+                == ReadExactError::ReadError(ReadError::ConnectionLost(
+                    iroh::endpoint::ConnectionError::TimedOut,
+                ))
             {
                 ConnectionError::TimedOut
             } else {
@@ -444,7 +445,7 @@ impl Connection<PeerMessage> for IrohConnection {
             u32::try_from(bytes.len()).expect("Converting a length to u32 should work");
 
         fn map_timeout(err: WriteError) -> ConnectionError {
-            if let WriteError::ConnectionLost(iroh::endpoint::ConnectionError::TimedOut) = err {
+            if err == WriteError::ConnectionLost(iroh::endpoint::ConnectionError::TimedOut) {
                 ConnectionError::TimedOut
             } else {
                 ConnectionError::Other(err.into())

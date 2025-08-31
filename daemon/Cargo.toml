@@ -45,6 +45,7 @@ unused_qualifications = "warn"
 pedantic = { level = "warn", priority = -1 }
 allow_attributes = "warn"
 derive_partial_eq_without_eq = "warn"
+equatable_if_let = "warn"
 map_with_unused_argument_over_ranges = "warn"
 option_if_let_else = "warn"
 or_fun_call = "warn"
