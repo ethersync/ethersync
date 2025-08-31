@@ -487,6 +487,7 @@ mod tests {
             op_seq
         }
 
+        #[expect(clippy::needless_pass_by_value)] // only used in tests
         pub fn ot_compose(mut op1: OperationSeq, op2: OperationSeq) -> OperationSeq {
             if op1.target_len() < op2.base_len() {
                 op1.retain((op2.base_len() - op1.target_len()) as u64);

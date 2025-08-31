@@ -43,6 +43,7 @@ unsafe_code = "forbid"
 unused_qualifications = "warn"
 [lints.clippy]
 implicit_clone = "warn"
+needless_pass_by_value = "warn"
 redundant_clone = "warn"
 unnecessary_semicolon = "warn"
 unused_async = "warn"

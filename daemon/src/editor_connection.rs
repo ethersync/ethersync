@@ -100,6 +100,7 @@ impl EditorConnection {
         message: &EditorProtocolMessageFromEditor,
     ) -> Result<(ComponentMessage, Vec<EditorProtocolMessageToEditor>), EditorProtocolMessageError>
     {
+        #[expect(clippy::needless_pass_by_value)] // map_err takes by value
         fn anyhow_err_to_protocol_err(error: anyhow::Error) -> EditorProtocolMessageError {
             EditorProtocolMessageError {
                 code: -1, // TODO: Should the error codes differ per error?
