@@ -613,21 +613,19 @@ impl DocumentActor {
     // TODO: Join this code with the WalkBuilder in the sandbox module!
     #[must_use]
     fn build_walk(&self) -> Walk {
-        let ignored_things = [".git", ".ethersync"];
+        const IGNORED: &[&str] = &[".git", ".ethersync"];
         // TODO: How to deal with binary files?
-        WalkBuilder::new(self.base_dir.clone())
+        WalkBuilder::new(&self.base_dir)
             .standard_filters(true)
             .hidden(false)
             .require_git(false)
             // Interestingly, the standard filters don't seem to ignore .git.
             .filter_entry(move |dir_entry| {
-                let name = dir_entry
+                dir_entry
                     .path()
                     .file_name()
-                    .expect("Failed to get file name from path.")
-                    .to_str()
-                    .expect("Failed to convert OsStr to str");
-                !ignored_things.contains(&name)
+                    .and_then(|name| name.to_str())
+                    .map_or(true, |name| !IGNORED.contains(&name))
             })
             .build()
     }
