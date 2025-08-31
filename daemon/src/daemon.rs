@@ -1074,7 +1074,7 @@ fn spawn_file_watcher(base_dir: &Path, document_handle: DocumentActorHandle) {
                     }
                 }
 
-                _ = &mut debounce_timer, if rescan_required => {
+                () = &mut debounce_timer, if rescan_required => {
                     document_handle
                         .send_message(DocMessage::RescanFiles)
                         .await;
