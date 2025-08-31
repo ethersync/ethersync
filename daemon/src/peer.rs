@@ -123,13 +123,9 @@ impl ConnectionManager {
 
             let current_permissions = metadata.permissions().mode();
             let allowed_permissions = 0o100600;
-            if current_permissions != allowed_permissions {
-                panic!("For security reasons, please make sure to set the key file to user-readable only (set the permissions to 600).");
-            }
+            assert!(current_permissions == allowed_permissions, "For security reasons, please make sure to set the key file to user-readable only (set the permissions to 600).");
 
-            if metadata.len() != 64 {
-                panic!("Your keyfile is not 64 bytes long. This is a sign that it was created by an Ethersync version older than 0.7.0, which is not compatible. Please remove .ethersync/key, and try again.");
-            }
+            assert!(metadata.len() == 64, "Your keyfile is not 64 bytes long. This is a sign that it was created by an Ethersync version older than 0.7.0, which is not compatible. Please remove .ethersync/key, and try again.");
 
             debug!("Re-using existing keypair.");
             let mut file = File::open(keyfile).expect("Failed to open key file");
