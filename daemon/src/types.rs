@@ -68,9 +68,7 @@ impl RevisionedTextDelta {
     pub fn new(revision: usize, delta: TextDelta) -> Self {
         Self { revision, delta }
     }
-}
 
-impl RevisionedTextDelta {
     pub fn from_rev_ed_delta(rev_ed_delta: RevisionedEditorTextDelta, content: &str) -> Self {
         Self::new(
             rev_ed_delta.revision,
