@@ -752,7 +752,7 @@ impl DocumentActor {
                     };
 
                 let new_cursor_state = EphemeralMessage {
-                    cursor_id: cursor_id.to_string(),
+                    cursor_id: cursor_id.clone(),
                     sequence_number: next_sequence_number,
                     cursor_state: cursor_state.clone(),
                 };
