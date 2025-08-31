@@ -69,17 +69,17 @@ pub enum DocMessage {
 impl fmt::Debug for DocMessage {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let repr = match self {
-            DocMessage::GetContent { .. } => "GetContent".to_string(),
-            DocMessage::FromEditor(id, s) => format!("FromEditor({id}, {s})"),
-            DocMessage::FromWatcher(e) => format!("FromWatcher({e:?}"),
-            DocMessage::RescanFiles => "RescanFiles".to_string(),
-            DocMessage::Persist => "Persist".to_string(),
-            DocMessage::RandomEdit => "RandomEdit".to_string(),
-            DocMessage::ReceiveSyncMessage { .. } => "ReceiveSyncMessage".to_string(),
-            DocMessage::GenerateSyncMessage { .. } => "GenerateSyncMessage".to_string(),
-            DocMessage::NewEditorConnection(id, _) => format!("NewEditorConnection({id})"),
-            DocMessage::CloseEditorConnection(id) => format!("CloseEditorConnection({id})"),
-            DocMessage::ReceiveEphemeral(m) => format!("ReceiveEphemeral({m:?})"),
+            Self::GetContent { .. } => "GetContent".to_string(),
+            Self::FromEditor(id, s) => format!("FromEditor({id}, {s})"),
+            Self::FromWatcher(e) => format!("FromWatcher({e:?}"),
+            Self::RescanFiles => "RescanFiles".to_string(),
+            Self::Persist => "Persist".to_string(),
+            Self::RandomEdit => "RandomEdit".to_string(),
+            Self::ReceiveSyncMessage { .. } => "ReceiveSyncMessage".to_string(),
+            Self::GenerateSyncMessage { .. } => "GenerateSyncMessage".to_string(),
+            Self::NewEditorConnection(id, _) => format!("NewEditorConnection({id})"),
+            Self::CloseEditorConnection(id) => format!("CloseEditorConnection({id})"),
+            Self::ReceiveEphemeral(m) => format!("ReceiveEphemeral({m:?})"),
         };
         write!(f, "{repr}")
     }
@@ -1128,7 +1128,7 @@ mod tests {
                 let (ephemeral_message_tx, _ephemeral_message_rx) =
                     broadcast::channel::<EphemeralMessage>(100);
 
-                DocumentActor::new(
+                Self::new(
                     doc_message_rx,
                     doc_changed_ping_tx.clone(),
                     ephemeral_message_tx.clone(),

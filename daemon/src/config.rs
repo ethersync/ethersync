@@ -85,7 +85,7 @@ impl AppConfig {
                 bail!("Missing join code, and no peer=<secret address> in .ethersync/config");
             }
         };
-        Ok(AppConfig {
+        Ok(Self {
             peer: Some(peer),
             emit_join_code: self.emit_join_code,
             emit_secret_address: self.emit_secret_address,

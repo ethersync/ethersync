@@ -43,6 +43,7 @@ unsafe_code = "forbid"
 unused_qualifications = "warn"
 [lints.clippy]
 unused_async = "warn"
+use_self = "warn"
 
 [dependencies]
 anyhow = "1.0.81"
