@@ -165,6 +165,7 @@ impl Watcher {
     }
 
     #[must_use]
+    #[expect(clippy::unnecessary_wraps, clippy::unused_self)]
     fn maybe_removed(&self, file_path: &Path) -> Option<WatcherEvent> {
         // TODO: We should check whether the file was ignored here. But how?
         Some(WatcherEvent::Removed {
