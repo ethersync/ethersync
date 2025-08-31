@@ -7,7 +7,7 @@
 //!
 //! The idea is that a daemon process communicates through newline separated jsonrpc messages,
 //! whereas LSP expects an HTTP-like Base Protocol:
-//! https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#baseProtocol
+//! <https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#baseProtocol>
 //!
 //! This forwarder thus
 //! - takes jsonrpc from a socket (usually a daemon) and wraps it content-length encoded data to stdout

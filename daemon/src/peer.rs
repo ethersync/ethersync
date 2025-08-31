@@ -3,7 +3,7 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-//! This module provides a ConnectionManager, which can be used to connect to other daemons.
+//! This module provides a [`ConnectionManager`], which can be used to connect to other daemons.
 
 use self::sync::{Connection, ConnectionError, PeerMessage, SyncActor};
 use crate::daemon::DocumentActorHandle;

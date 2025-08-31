@@ -22,7 +22,7 @@ pub enum WatcherEvent {
     Changed { file_path: PathBuf },
 }
 
-/// Returns events among the files in base_dir that are not ignored.
+/// Returns events among the files in `base_dir` that are not ignored.
 #[must_use]
 pub struct Watcher {
     _watcher: RecommendedWatcher,
