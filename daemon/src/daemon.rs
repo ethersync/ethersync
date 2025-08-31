@@ -263,15 +263,15 @@ impl DocumentActor {
                                 // If the file doesn't exist anymore after the sync message was
                                 // applied (which is now!), we'd like it to be there again. So
                                 // re-create an empty version.
-                                if !self.crdt_doc.file_exists(&file_path) {
-                                    info!("Peer deleted {file_path}, but you have it open in an editor. Bringing back an empty version.");
-                                    self.crdt_doc.update_text("", &file_path);
-                                } else {
+                                if self.crdt_doc.file_exists(&file_path) {
                                     // If the file is still there, the upcoming patches of the sync
                                     // message will re-add it for us. In that case, we don't want
                                     // to touch it in the doc, because we will send the
                                     // modifications to the editors, and these contents should be
                                     // consistent. So we don't need to do anything.
+                                } else {
+                                    info!("Peer deleted {file_path}, but you have it open in an editor. Bringing back an empty version.");
+                                    self.crdt_doc.update_text("", &file_path);
                                 }
                             }
                         }
@@ -453,7 +453,9 @@ impl DocumentActor {
                 let relative_file_path = RelativePath::try_from_path(&self.base_dir, &file_path)
                     .expect("Watcher event should have a path within the base directory");
                 if self.owns(&relative_file_path) {
-                    if !self.crdt_doc.file_exists(&relative_file_path) {
+                    if self.crdt_doc.file_exists(&relative_file_path) {
+                        debug!("Received watcher creation event, but file already exists in CRDT.");
+                    } else {
                         let content = match sandbox::read_file(
                             &self.base_dir,
                             Path::new(&file_path),
@@ -473,8 +475,6 @@ impl DocumentActor {
                             self.crdt_doc.set_bytes(&content, &relative_file_path);
                         }
                         let _ = self.doc_changed_ping_tx.send(());
-                    } else {
-                        debug!("Received watcher creation event, but file already exists in CRDT.");
                     }
                 }
             }
