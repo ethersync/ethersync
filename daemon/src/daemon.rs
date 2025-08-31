@@ -198,7 +198,7 @@ impl DocumentActor {
                     sandbox::write_file(&self.base_dir, &persistence_file, &bytes).unwrap_or_else(
                         |_| panic!("Failed to persist to '{}'", persistence_file.display()),
                     );
-                    self.save_fully = false
+                    self.save_fully = false;
                 } else {
                     debug!("Persisting CRDT document incrementally.");
                     let bytes = self.crdt_doc.save_incremental();
