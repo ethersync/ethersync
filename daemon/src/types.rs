@@ -466,19 +466,19 @@ impl TryFrom<Patch> for PatchEffect {
 
                             match value {
                                 (automerge::Value::Object(automerge::ObjType::Text), _) => {
-                                    if !conflict {
+                                    if conflict {
+                                        // In this case, the peer receiving this PutMap should
+                                        // remove all existing content of this file in open
+                                        // editors. So we emit a FileRemovel.
+                                        warn!("Resolved conflict for file {path} by overwriting your version.");
+                                        Ok(Self::FileRemoval(path))
+                                    } else {
                                         // We return an empty delta on the new file, so that the file is created on disk when
                                         // synced over to another peer. TODO: Is this the best way to solve this?
                                         Ok(Self::FileChange(FileTextDelta::new(
                                             path,
                                             TextDelta::default(),
                                         )))
-                                    } else {
-                                        // In this case, the peer receiving this PutMap should
-                                        // remove all existing content of this file in open
-                                        // editors. So we emit a FileRemovel.
-                                        warn!("Resolved conflict for file {path} by overwriting your version.");
-                                        Ok(Self::FileRemoval(path))
                                     }
                                 }
                                 (
