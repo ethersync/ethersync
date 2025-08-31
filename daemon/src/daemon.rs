@@ -960,7 +960,7 @@ pub struct Daemon {
     pub address: String,
     socket_path: PathBuf,
     base_dir: PathBuf,
-    #[allow(dead_code)]
+    #[expect(dead_code)]
     // We need to store the connection manager in order to keep the connection alive.
     connection_manager: peer::ConnectionManager,
 }
