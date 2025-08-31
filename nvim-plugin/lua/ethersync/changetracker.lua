@@ -171,20 +171,19 @@ end
 function M.track_changes(buffer, initial_lines, callback)
     -- Used to remember the previous content of the buffer, so that we can
     -- calculate the difference between the previous and the current content.
-    local prev_lines_global = initial_lines
+    local prev_lines = initial_lines
 
-    -- Computes an Ethersync delta containing the changes between curr_lines and prev_lines_global.
+    -- Computes an Ethersync delta containing the changes between curr_lines and prev_lines.
     -- If the delta is not empty, call the callback.
     local function line_change(first_line, last_line, new_last_line)
         -- TODO: optimize with a cache
         local curr_lines = M.get_all_lines_respecting_eol(buffer)
 
-        local prev_lines = prev_lines_global
-        prev_lines_global = curr_lines
+        local prev_lines_copy = prev_lines
+        prev_lines = curr_lines
 
         -- Are we currently ignoring edits? If so, do nothing.
         if ignore_edits then
-            prev_lines_global = curr_lines
             return
         end
 
@@ -198,10 +197,11 @@ function M.track_changes(buffer, initial_lines, callback)
         -- When the line ranges are larger then the actual differences, compute_diff will compute
         -- unneccessarily large diffs. We can fix this by hand.
         first_line, last_line, new_last_line =
-            shrink_to_modified_line_range(prev_lines, curr_lines, first_line, last_line, new_last_line)
+            shrink_to_modified_line_range(prev_lines_copy, curr_lines, first_line, last_line, new_last_line)
 
-        local diff = sync.compute_diff(prev_lines, curr_lines, first_line, last_line, new_last_line, "utf-32", "\n")
-        diff = fix_diff(diff, prev_lines, curr_lines)
+        local diff =
+            sync.compute_diff(prev_lines_copy, curr_lines, first_line, last_line, new_last_line, "utf-32", "\n")
+        diff = fix_diff(diff, prev_lines_copy, curr_lines)
 
         if is_empty(diff) then
             return
@@ -234,7 +234,7 @@ function M.track_changes(buffer, initial_lines, callback)
 
     -- Step 2: Initially compare the current buffer contents to the `initial_lines`, and maybe send out a diff.
     local curr_lines = M.get_all_lines_respecting_eol(buffer)
-    line_change(0, #prev_lines_global, #curr_lines)
+    line_change(0, #prev_lines, #curr_lines)
 end
 
 function M.apply_delta(buffer, delta)
