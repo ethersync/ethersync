@@ -81,8 +81,9 @@ impl ConnectionManager {
         })
     }
 
-    pub fn secret_address(&self) -> String {
-        self.secret_address.clone()
+    #[must_use]
+    pub fn secret_address(&self) -> &str {
+        &self.secret_address
     }
 
     pub async fn connect(&self, secret_address: String) -> Result<()> {
