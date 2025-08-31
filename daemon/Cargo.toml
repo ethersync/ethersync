@@ -34,6 +34,14 @@ bench = false
 doc = false
 required-features = ["executable-deps"]
 
+[features]
+default = ["executable-deps"]
+executable-deps = ["dep:clap", "tokio/signal", "tokio/rt-multi-thread"]
+
+[lints.rust]
+unsafe_code = "forbid"
+unused_qualifications = "warn"
+
 [dependencies]
 anyhow = "1.0.81"
 async-trait = "0.1.88"
@@ -73,10 +81,6 @@ url = "2.5.7"
 [dependencies.tokio]
 version = "1"
 features = ["rt", "io-std", "io-util", "macros", "net", "time"]
-
-[features]
-executable-deps = ["dep:clap", "tokio/signal", "tokio/rt-multi-thread"]
-default = ["executable-deps"]
 
 [dev-dependencies]
 pretty_assertions = "1.4.0"

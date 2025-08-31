@@ -38,7 +38,7 @@ impl FromStr for SecretAddress {
         }
 
         let node_addr = iroh::PublicKey::from_str(parts[0])?.into();
-        let passphrase = iroh::SecretKey::from_str(parts[1])?;
+        let passphrase = SecretKey::from_str(parts[1])?;
 
         Ok(Self {
             node_addr,
