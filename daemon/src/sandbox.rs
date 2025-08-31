@@ -156,7 +156,7 @@ fn absolute_and_canonicalized(path: &Path) -> Result<PathBuf> {
     // Remove any ".." and "." from the path.
     let canonical_path = path.clean();
     let mut suffix_path = PathBuf::new();
-    let mut prefix_path = canonical_path.clone();
+    let mut prefix_path = canonical_path;
 
     for component in path.components().rev() {
         if prefix_path.exists() {
