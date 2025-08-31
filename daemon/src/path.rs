@@ -89,7 +89,7 @@ impl RelativePath {
 
 impl From<&RelativePath> for Prop {
     fn from(val: &RelativePath) -> Self {
-        Prop::Map(val.0.display().to_string())
+        Self::Map(val.0.display().to_string())
     }
 }
 
