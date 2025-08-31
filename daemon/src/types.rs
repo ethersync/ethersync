@@ -503,9 +503,8 @@ impl TryFrom<Patch> for PatchEffect {
                                     warn!("Conflict for file '{file_name}' resolved. Taking your version.");
                                     Ok(Self::NoEffect)
                                 }
-                                other_prop => Err(anyhow::anyhow!(
-                                    "Got a Seq-type prop as a conflict, expected Map: {}",
-                                    other_prop
+                                automerge::Prop::Seq(seq) => Err(anyhow::anyhow!(
+                                    "Got a Seq-type prop as a conflict, expected Map: {seq}"
                                 )),
                             }
                         }
