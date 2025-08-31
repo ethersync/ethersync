@@ -61,6 +61,7 @@ return_self_not_must_use = "warn"
 semicolon_if_nothing_returned = "warn"
 struct_field_names = "warn"
 unnecessary_semicolon = "warn"
+unreadable_literal = "warn"
 unused_async = "warn"
 use_self = "warn"
 
