@@ -12,8 +12,8 @@ var Mutex = require("async-mutex").Mutex
 
 import {setCursor, getCursorInfo, drawCursors} from "./cursor"
 
-function findEthersyncDirectory(dir: string) {
-    if (fs.existsSync(path.join(dir, ".ethersync"))) {
+function findMarkerDirectory(dir: string, marker: string) {
+    if (fs.existsSync(path.join(dir, marker))) {
         return dir
     }
 
@@ -24,7 +24,7 @@ function findEthersyncDirectory(dir: string) {
         return null
     }
 
-    return findEthersyncDirectory(parentDir)
+    return findMarkerDirectory(parentDir, marker)
 }
 
 interface Position {
@@ -65,15 +65,34 @@ class Revision {
     editor = 0
 }
 
+class Configuration {
+    name: string
+    cmd: string[]
+    enabled: boolean
+    rootMarkers: string[]
+    activatePattern: string | null
+
+    constructor(config: any) {
+        this.name = config.name || "unnamed"
+        // TODO: []???
+        this.cmd = config.cmd || []
+        this.enabled = config.enabled || false
+        this.rootMarkers = config.rootMarkers || []
+        this.activatePattern = config.activatePattern || null
+    }
+}
+
 class Client {
     name: string
     revisions: {[filename: string]: Revision} = {}
     contents: {[filename: string]: string[]} = {}
     ethersyncClient: cp.ChildProcess
     connection: rpc.MessageConnection
+    directory: string
 
     constructor(name: string, cmd: string[], directory: string) {
         this.name = name
+        this.directory = directory
 
         this.ethersyncClient = cp.spawn(cmd[0], cmd.slice(1), {cwd: directory})
 
@@ -82,7 +101,9 @@ class Client {
         })
 
         this.ethersyncClient.on("exit", () => {
-            vscode.window.showErrorMessage("Connection to Ethersync daemon lost.")
+            vscode.window.showErrorMessage(
+                `Connection to Ethersync daemon in '${directory}' lost or failed to initiate. Maybe there's no daemon running there?`,
+            )
         })
 
         if (!this.ethersyncClient.stdout || !this.ethersyncClient.stdin) {
@@ -103,8 +124,8 @@ class Client {
     }
 }
 
-//let clients: Client[] = []
-let theClient: Client | null = null
+let configurations: Configuration[] = []
+let clients: Client[] = []
 
 // TODO: if we load from disk, this will also cause edits :-/
 let t0 = Date.now()
@@ -262,6 +283,9 @@ async function processCursorFromDaemon(cursor: CursorFromDaemon) {
 
 async function applyEdit(document: vscode.TextDocument, edit: Edit): Promise<boolean> {
     let client = findOrCreateClient(document)
+    if (!client) {
+        return false
+    }
 
     let edits = []
     for (const delta of edit.delta) {
@@ -283,23 +307,51 @@ async function applyEdit(document: vscode.TextDocument, edit: Edit): Promise<boo
     return worked
 }
 
-function findOrCreateClient(document: vscode.TextDocument): Client {
-    const filename = document.fileName
-    const directory = findEthersyncDirectory(path.dirname(filename))
+function findValidConfiguration(document: vscode.TextDocument): [Configuration | null, string] {
+    for (let configuration of configurations) {
+        if (configuration.activatePattern) {
+            let regexp = new RegExp(configuration.activatePattern)
+            if (regexp.test(document.fileName)) {
+                // TODO: /tmp?
+                return [name, configuration, "/tmp"]
+            }
+        } else if (configuration.rootMarkers) {
+            const filename = document.fileName
+            for (let rootMarker of configuration.rootMarkers) {
+                const directory = findMarkerDirectory(path.dirname(filename), rootMarker)
+                if (directory) {
+                    return [name, configuration, directory]
+                }
+            }
+        }
+    }
+    return [null, "/tmp"]
+}
 
-    if (!directory) {
-        throw new Error("TODO")
+function findOrCreateClient(document: vscode.TextDocument): Client | null {
+    let [configuration, directory] = findValidConfiguration(document)
+    if (!configuration) {
+        return null
     }
 
-    if (theClient == null) {
-        theClient = new Client("ethersync", ["ethersync", "client"], directory)
-        return theClient
+    // We re-use connections for configs with the same name and directory.
+    for (let client of clients) {
+        if (client.name === configuration.name && client.directory === directory) {
+            return client
+        }
     }
-    return theClient
+
+    // Otherwise, we create a new config.
+    let client = new Client(name, configuration.cmd, directory)
+    clients.push(client)
+    return client
 }
 
 async function processUserOpen(document: vscode.TextDocument) {
     let client = findOrCreateClient(document)
+    if (!client) {
+        return false
+    }
 
     // In particular, ignore documents using the git: scheme,
     // which is used by VS Code's Git integration.
@@ -324,6 +376,9 @@ async function processUserOpen(document: vscode.TextDocument) {
 
 function processUserClose(document: vscode.TextDocument) {
     let client = findOrCreateClient(document)
+    if (!client) {
+        return false
+    }
 
     if (!(document.fileName in client.revisions)) {
         // File is not currently tracked in ethersync.
@@ -371,6 +426,9 @@ function isRemoteEdit(event: vscode.TextDocumentChangeEvent): boolean {
 // as the _state_ of the document might change (like isDirty).
 function processUserEdit(event: vscode.TextDocumentChangeEvent) {
     let client = findOrCreateClient(event.document)
+    if (!client) {
+        return false
+    }
 
     if (!(event.document.fileName in client.revisions)) {
         // File is not currently tracked in Ethersync.
@@ -396,13 +454,10 @@ function processUserEdit(event: vscode.TextDocumentChangeEvent) {
             }
 
             const filename = document.fileName
-            if (!findEthersyncDirectory(path.dirname(filename))) {
-                return
-            }
 
             let revision = client.revisions[filename]
 
-            let edits = vsCodeChangeEventToEthersyncEdits(event)
+            let edits = vsCodeChangeEventToEthersyncEdits(client, event)
 
             for (const theEdit of edits) {
                 // interestingly this seems to block when it can't send
@@ -429,6 +484,9 @@ function processUserEdit(event: vscode.TextDocumentChangeEvent) {
 
 function processSelection(event: vscode.TextEditorSelectionChangeEvent) {
     let client = findOrCreateClient(event.textEditor.document)
+    if (!client) {
+        return false
+    }
 
     if (!(event.textEditor.document.fileName in client.revisions)) {
         // File is not currently tracked in ethersync.
@@ -442,9 +500,7 @@ function processSelection(event: vscode.TextEditorSelectionChangeEvent) {
     client.connection.sendNotification(cursorType, {uri, ranges})
 }
 
-function vsCodeChangeEventToEthersyncEdits(event: vscode.TextDocumentChangeEvent): Edit[] {
-    let client = findOrCreateClient(event.document)
-
+function vsCodeChangeEventToEthersyncEdits(client: Client, event: vscode.TextDocumentChangeEvent): Edit[] {
     let document = event.document
     let filename = document.fileName
 
@@ -476,7 +532,10 @@ function showCursorNotification() {
 export function activate(context: vscode.ExtensionContext) {
     debug("Ethersync extension activated!")
 
-    //let configs = vscode.workspace.getConfiguration("ethersync.configs")
+    let configs: any = vscode.workspace.getConfiguration("ethersync").get("configs")
+    for (let config of configs) {
+        configurations.push(new Configuration(config))
+    }
 
     context.subscriptions.push(
         vscode.workspace.onDidChangeTextDocument(processUserEdit),

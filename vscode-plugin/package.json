@@ -32,6 +32,13 @@
                                 "type": "string",
                                 "description": "Name of the configuration"
                             },
+                            "cmd": {
+                                "type": "array",
+                                "items": {
+                                    "type": "string"
+                                },
+                                "description": "Command & arguments to start the process"
+                            },
                             "enabled": {
                                 "type": "boolean",
                                 "description": "Whether or not to enable this configuration"
@@ -48,7 +55,10 @@
                                 "description": "If file matches this regular expression, the configuration will be activated"
                             }
                         },
-                        "required": "name",
+                        "required": [
+                            "name",
+                            "cmd"
+                        ],
                         "anyOf": [
                             {
                                 "required": "rootMarkers"
@@ -61,6 +71,10 @@
                     "default": [
                         {
                             "name": "ethersync",
+                            "cmd": [
+                                "ethersync",
+                                "client"
+                            ],
                             "rootMarkers": [
                                 ".ethersync"
                             ]
