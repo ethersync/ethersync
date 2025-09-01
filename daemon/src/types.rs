@@ -12,7 +12,7 @@ use ropey::Rope;
 use serde::{Deserialize, Serialize};
 use tracing::{debug, warn};
 
-#[derive(Debug, Clone, PartialEq, Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct TextDelta(pub Vec<TextOp>);
 
 impl IntoIterator for TextDelta {
@@ -24,14 +24,14 @@ impl IntoIterator for TextDelta {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TextOp {
     Retain(usize),
     Insert(String),
     Delete(usize),
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct EditorTextDelta(pub Vec<EditorTextOp>);
 
 impl IntoIterator for EditorTextDelta {
@@ -43,7 +43,7 @@ impl IntoIterator for EditorTextDelta {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RevisionedEditorTextDelta {
     pub revision: usize,
     pub delta: EditorTextDelta,
@@ -57,7 +57,7 @@ impl RevisionedEditorTextDelta {
 }
 
 /// When doing OT, many `TextDelta`s need a revision metadata, to see whether they apply.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RevisionedTextDelta {
     pub revision: usize,
     pub delta: TextDelta,
@@ -68,9 +68,7 @@ impl RevisionedTextDelta {
     pub fn new(revision: usize, delta: TextDelta) -> Self {
         Self { revision, delta }
     }
-}
 
-impl RevisionedTextDelta {
     pub fn from_rev_ed_delta(rev_ed_delta: RevisionedEditorTextDelta, content: &str) -> Self {
         Self::new(
             rev_ed_delta.revision,
@@ -79,7 +77,7 @@ impl RevisionedTextDelta {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FileTextDelta {
     pub file_path: RelativePath,
     pub delta: TextDelta,
@@ -95,14 +93,14 @@ impl FileTextDelta {
 type DocumentUri = String;
 pub type CursorId = String;
 
-#[derive(Serialize, Deserialize, PartialEq, Clone, Debug)]
+#[derive(Serialize, Deserialize, PartialEq, Eq, Clone, Debug)]
 pub struct CursorState {
     pub name: Option<String>,
     pub file_path: RelativePath,
     pub ranges: Vec<Range>,
 }
 
-#[derive(Serialize, Deserialize, PartialEq, Clone, Debug)]
+#[derive(Serialize, Deserialize, PartialEq, Eq, Clone, Debug)]
 pub struct EphemeralMessage {
     pub cursor_id: CursorId,
     pub sequence_number: usize,
@@ -136,7 +134,7 @@ impl PatchEffect {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum JSONRPCFromEditor {
     Request {
@@ -156,7 +154,7 @@ impl JSONRPCFromEditor {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "method", content = "params", rename_all = "camelCase")]
 pub enum EditorProtocolMessageFromEditor {
     Open {
@@ -179,7 +177,7 @@ pub enum EditorProtocolMessageFromEditor {
 
 /// These messages are "internally" passed between the components that the daemon consists of -
 /// namely, the connected editors and the CRDT document.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ComponentMessage {
     Open {
         file_path: RelativePath,
@@ -198,7 +196,7 @@ pub enum ComponentMessage {
     },
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct EditorProtocolMessageError {
     pub code: i32,
     pub message: String,
@@ -259,7 +257,7 @@ mod test_serde {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum EditorProtocolObject {
     Request(EditorProtocolMessageToEditor),
@@ -280,7 +278,7 @@ impl EditorProtocolObject {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "method", content = "params", rename_all = "camelCase")]
 pub enum EditorProtocolMessageToEditor {
     Edit {
@@ -296,7 +294,7 @@ pub enum EditorProtocolMessageToEditor {
     },
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum JSONRPCResponse {
     RequestSuccess {
@@ -310,13 +308,13 @@ pub enum JSONRPCResponse {
     },
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct EditorTextOp {
     pub range: Range,
     pub replacement: String,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Range {
     pub start: Position,
     pub end: Position,
@@ -346,7 +344,7 @@ impl Range {
     }
 }
 
-#[derive(Debug, Default, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Default, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Position {
     pub line: usize,
     pub character: usize,
@@ -437,7 +435,7 @@ impl TryFrom<Patch> for PatchEffect {
             return match patch.action {
                 PatchAction::PutMap { key, .. } => {
                     if key == "files" {
-                        Ok(PatchEffect::NoEffect)
+                        Ok(Self::NoEffect)
                     } else {
                         Err(anyhow::anyhow!(
                             "Path is empty and action is PutMap, but key is not 'files'",
@@ -462,23 +460,23 @@ impl TryFrom<Patch> for PatchEffect {
                         } => {
                             // This action happens when a new file is created.
 
-                            let path = RelativePath::new(&key);
+                            let relative_path = RelativePath::new(&key);
 
                             match value {
                                 (automerge::Value::Object(automerge::ObjType::Text), _) => {
-                                    if !conflict {
-                                        // We return an empty delta on the new file, so that the file is created on disk when
-                                        // synced over to another peer. TODO: Is this the best way to solve this?
-                                        Ok(PatchEffect::FileChange(FileTextDelta::new(
-                                            path,
-                                            TextDelta::default(),
-                                        )))
-                                    } else {
+                                    if conflict {
                                         // In this case, the peer receiving this PutMap should
                                         // remove all existing content of this file in open
                                         // editors. So we emit a FileRemovel.
-                                        warn!("Resolved conflict for file {path} by overwriting your version.");
-                                        Ok(PatchEffect::FileRemoval(path))
+                                        warn!("Resolved conflict for file {relative_path} by overwriting your version.");
+                                        Ok(Self::FileRemoval(relative_path))
+                                    } else {
+                                        // We return an empty delta on the new file, so that the file is created on disk when
+                                        // synced over to another peer. TODO: Is this the best way to solve this?
+                                        Ok(Self::FileChange(FileTextDelta::new(
+                                            relative_path,
+                                            TextDelta::default(),
+                                        )))
                                     }
                                 }
                                 (
@@ -486,15 +484,16 @@ impl TryFrom<Patch> for PatchEffect {
                                         automerge::ScalarValue::Bytes(bytes),
                                     )),
                                     _,
-                                ) => Ok(PatchEffect::FileBytes(path, bytes)),
-                                _ => Err(anyhow::anyhow!("Unexpected value in path {}", path)),
+                                ) => Ok(Self::FileBytes(relative_path, bytes)),
+                                _ => {
+                                    Err(anyhow::anyhow!("Unexpected value in path {relative_path}"))
+                                }
                             }
                         }
                         PatchAction::DeleteMap { key } => {
                             // This action happens when a file is deleted.
                             debug!("Got file removal from patch: {key}");
-                            let path = RelativePath::new(&key);
-                            Ok(PatchEffect::FileRemoval(path))
+                            Ok(Self::FileRemoval(RelativePath::new(&key)))
                         }
                         PatchAction::Conflict { prop } => {
                             // This can happen when both sides create the same file.
@@ -503,17 +502,15 @@ impl TryFrom<Patch> for PatchEffect {
                                     // We assume that conflict resolution works the way, that the
                                     // side that gets the PatchAction is the one that "wins".
                                     warn!("Conflict for file '{file_name}' resolved. Taking your version.");
-                                    Ok(PatchEffect::NoEffect)
+                                    Ok(Self::NoEffect)
                                 }
-                                other_prop => Err(anyhow::anyhow!(
-                                    "Got a Seq-type prop as a conflict, expected Map: {}",
-                                    other_prop
+                                automerge::Prop::Seq(seq) => Err(anyhow::anyhow!(
+                                    "Got a Seq-type prop as a conflict, expected Map: {seq}"
                                 )),
                             }
                         }
                         other_action => Err(anyhow::anyhow!(
-                            "Unsupported patch action for path 'files': {}",
-                            other_action
+                            "Unsupported patch action for path 'files': {other_action}"
                         )),
                     }
                 } else if patch.path.len() == 2 {
@@ -522,7 +519,7 @@ impl TryFrom<Patch> for PatchEffect {
                         PatchAction::SpliceText { index, value, .. } => {
                             delta.retain(index);
                             delta.insert(&value.make_string());
-                            Ok(PatchEffect::FileChange(FileTextDelta::new(
+                            Ok(Self::FileChange(FileTextDelta::new(
                                 file_path_from_path_default(&patch.path)?,
                                 delta,
                             )))
@@ -530,7 +527,7 @@ impl TryFrom<Patch> for PatchEffect {
                         PatchAction::DeleteSeq { index, length } => {
                             delta.retain(index);
                             delta.delete(length);
-                            Ok(PatchEffect::FileChange(FileTextDelta::new(
+                            Ok(Self::FileChange(FileTextDelta::new(
                                 file_path_from_path_default(&patch.path)?,
                                 delta,
                             )))
@@ -554,7 +551,7 @@ impl TryFrom<Patch> for PatchEffect {
 }
 
 impl From<TextDelta> for Vec<PatchAction> {
-    fn from(delta: TextDelta) -> Vec<PatchAction> {
+    fn from(delta: TextDelta) -> Self {
         let mut patch_actions = vec![];
         let mut position = 0;
         for op in delta {
@@ -588,7 +585,7 @@ impl From<TextDelta> for Vec<PatchAction> {
 
 impl From<OperationSeq> for TextDelta {
     fn from(op_seq: OperationSeq) -> Self {
-        let mut delta = TextDelta::default();
+        let mut delta = Self::default();
         for op in op_seq.ops() {
             match op {
                 OTOperation::Retain(n) => {
@@ -607,8 +604,8 @@ impl From<OperationSeq> for TextDelta {
 }
 
 impl From<TextDelta> for OperationSeq {
-    fn from(delta: TextDelta) -> OperationSeq {
-        let mut op_seq = OperationSeq::default();
+    fn from(delta: TextDelta) -> Self {
+        let mut op_seq = Self::default();
         for op in delta {
             match op {
                 TextOp::Retain(n) => {
@@ -631,14 +628,14 @@ impl TextDelta {
     ///
     /// Will panic if the delta contains multiple operations.
     pub fn from_ed_delta(ed_delta: EditorTextDelta, content: &str) -> Self {
-        let mut delta = TextDelta::default();
+        let mut delta = Self::default();
         // TODO: add support, when needed
         assert!(
             ed_delta.0.len() <= 1,
             "We don't yet support EditorTextDelta with multiple operations."
         );
         for ed_op in ed_delta {
-            let mut delta_step = TextDelta::default();
+            let mut delta_step = Self::default();
             if ed_op.range.is_empty() {
                 if !ed_op.replacement.is_empty() {
                     // insert
@@ -663,7 +660,7 @@ impl TextDelta {
 
 impl From<Vec<Chunk<'_>>> for TextDelta {
     fn from(chunks: Vec<Chunk>) -> Self {
-        let mut delta = TextDelta::default();
+        let mut delta = Self::default();
         for chunk in chunks {
             match chunk {
                 Chunk::Equal(s) => {
@@ -704,7 +701,7 @@ impl EditorTextDelta {
                             start: Position::from_offset(position, content),
                             end: Position::from_offset(position, content),
                         },
-                        replacement: s.to_string(),
+                        replacement: s.clone(),
                     });
                 }
             }

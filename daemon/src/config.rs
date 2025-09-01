@@ -25,6 +25,7 @@ pub enum Peer {
 }
 
 #[derive(Clone)]
+#[must_use]
 pub struct AppConfig {
     pub peer: Option<Peer>,
     pub emit_join_code: bool,
@@ -32,6 +33,7 @@ pub struct AppConfig {
 }
 
 impl AppConfig {
+    #[must_use]
     pub fn from_config_file(config_file: &Path) -> Option<Self> {
         if config_file.exists() {
             let conf = Ini::load_from_file(config_file)
@@ -85,7 +87,7 @@ impl AppConfig {
                 bail!("Missing join code, and no peer=<secret address> in .ethersync/config");
             }
         };
-        Ok(AppConfig {
+        Ok(Self {
             peer: Some(peer),
             emit_join_code: self.emit_join_code,
             emit_secret_address: self.emit_secret_address,
@@ -122,6 +124,7 @@ pub fn store_peer_in_config(directory: &Path, config_file: &Path, peer: &str) ->
         .context("Failed to write to config file")
 }
 
+#[must_use]
 pub fn has_git_remote(path: &Path) -> bool {
     if let Ok(repo) = find_git_repo(path) {
         if let Ok(remotes) = repo.remotes() {
@@ -131,6 +134,7 @@ pub fn has_git_remote(path: &Path) -> bool {
     false
 }
 
+#[must_use]
 pub fn ethersync_directory_should_be_ignored_but_isnt(path: &Path) -> bool {
     if let Ok(repo) = find_git_repo(path) {
         let ethersync_dir = path.join(CONFIG_DIR);
@@ -141,6 +145,7 @@ pub fn ethersync_directory_should_be_ignored_but_isnt(path: &Path) -> bool {
     false
 }
 
+#[must_use]
 pub fn get_username(base_dir: &Path) -> Option<String> {
     local_git_username(base_dir)
         .or_else(|_| global_git_username())
@@ -172,10 +177,9 @@ pub fn add_ethersync_to_global_gitignore() -> Result<()> {
     let ignore_file_path = git_config_dir.join("ignore");
 
     sandbox::create_dir_all(&git_config_dir, &git_config_dir)?;
-    let bytes_in =
-        sandbox::read_file(&git_config_dir, &ignore_file_path).unwrap_or("".to_string().into());
+    let bytes_in = sandbox::read_file(&git_config_dir, &ignore_file_path).unwrap_or_default();
     let mut content = std::str::from_utf8(&bytes_in)?.to_string();
-    if !content.is_empty() && !content.ends_with("\n") {
+    if !content.is_empty() && !content.ends_with('\n') {
         content.push('\n');
     }
     content.push_str(".ethersync/\n");

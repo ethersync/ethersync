@@ -22,6 +22,7 @@ keywords = [
 ]
 categories = ["command-line-utilities", "text-editors"]
 edition = "2021"
+rust-version = "1.81.0"
 default-run = "ethersync"
 
 [lib]
@@ -33,6 +34,35 @@ test = false
 bench = false
 doc = false
 required-features = ["executable-deps"]
+
+[features]
+default = ["executable-deps"]
+executable-deps = ["dep:clap", "tokio/signal", "tokio/rt-multi-thread"]
+
+[lints.rust]
+unsafe_code = "forbid"
+unused_qualifications = "warn"
+[lints.clippy]
+pedantic = { level = "warn", priority = -1 }
+nursery = { level = "warn", priority = -1 }
+allow_attributes = "warn"
+map_with_unused_argument_over_ranges = "warn"
+
+filetype_is_file = "allow" # TODO: probably relevant for this project
+needless_continue = "allow" # TODO: probably a bug that needs to be fixed
+too_long_first_doc_paragraph = "allow"
+needless_pass_by_ref_mut = "allow" # TODO: could be a bug, could be intended
+
+cast_possible_truncation = "allow"
+cast_possible_wrap = "allow"
+cast_sign_loss = "allow"
+cognitive_complexity = "allow"
+missing_const_for_fn = "allow"
+missing_errors_doc = "allow"
+missing_panics_doc = "allow"
+must_use_candidate = "allow"
+should_panic_without_expect = "allow"
+too_many_lines = "allow"
 
 [dependencies]
 anyhow = "1.0.81"
@@ -72,10 +102,6 @@ tracing-subscriber = { version = "0.3.18", default-features = false, features = 
 [dependencies.tokio]
 version = "1"
 features = ["rt", "io-std", "io-util", "macros", "net", "time"]
-
-[features]
-executable-deps = ["dep:clap", "tokio/signal", "tokio/rt-multi-thread"]
-default = ["executable-deps"]
 
 [dev-dependencies]
 pretty_assertions = "1.4.0"

@@ -15,16 +15,17 @@ use std::{
 use tokio::sync::mpsc::{self, Receiver};
 use tracing::debug;
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum WatcherEvent {
     Created { file_path: PathBuf },
     Removed { file_path: PathBuf },
     Changed { file_path: PathBuf },
 }
 
-/// Returns events among the files in base_dir that are not ignored.
+/// Returns events among the files in `base_dir` that are not ignored.
+#[must_use]
 pub struct Watcher {
-    _watcher: RecommendedWatcher,
+    _inner: RecommendedWatcher,
     base_dir: PathBuf,
     notify_receiver: Receiver<NotifyResult<notify::Event>>,
     out_queue: VecDeque<WatcherEvent>,
@@ -46,13 +47,14 @@ impl Watcher {
 
         Self {
             // Keep the watcher, so that it's not dropped.
-            _watcher: watcher,
+            _inner: watcher,
             base_dir: dir.to_path_buf(),
             notify_receiver: rx,
             out_queue: VecDeque::new(),
         }
     }
 
+    #[must_use]
     pub async fn next(&mut self) -> Option<WatcherEvent> {
         loop {
             // If there's an event in the queue, return the oldest one.
@@ -133,10 +135,11 @@ impl Watcher {
                     debug!("Unhandled event in {:?}: {e:?}", event.paths);
                     continue;
                 }
-            };
+            }
         }
     }
 
+    #[must_use]
     fn maybe_created(&self, file_path: &Path) -> Option<WatcherEvent> {
         match sandbox::ignored(&self.base_dir, file_path) {
             Ok(is_ignored) => {
@@ -161,6 +164,8 @@ impl Watcher {
         })
     }
 
+    #[must_use]
+    #[expect(clippy::unnecessary_wraps, clippy::unused_self)]
     fn maybe_removed(&self, file_path: &Path) -> Option<WatcherEvent> {
         // TODO: We should check whether the file was ignored here. But how?
         Some(WatcherEvent::Removed {
@@ -168,6 +173,7 @@ impl Watcher {
         })
     }
 
+    #[must_use]
     fn maybe_modified(&self, file_path: &Path) -> Option<WatcherEvent> {
         match sandbox::ignored(&self.base_dir, file_path) {
             Ok(is_ignored) => {

@@ -3,7 +3,7 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-//! This module provides a ConnectionManager, which can be used to connect to other daemons.
+//! This module provides a [`ConnectionManager`], which can be used to connect to other daemons.
 
 use self::sync::{Connection, ConnectionError, PeerMessage, SyncActor};
 use crate::daemon::DocumentActorHandle;
@@ -32,13 +32,13 @@ struct SecretAddress {
 impl FromStr for SecretAddress {
     type Err = anyhow::Error;
     fn from_str(s: &str) -> Result<Self> {
-        let parts: Vec<&str> = s.split("#").collect();
+        let parts: Vec<&str> = s.split('#').collect();
         if parts.len() != 2 {
             bail!("Peer string must have format <node_id>#<passphrase>");
         }
 
         let node_addr = iroh::PublicKey::from_str(parts[0])?.into();
-        let passphrase = iroh::SecretKey::from_str(parts[1])?;
+        let passphrase = SecretKey::from_str(parts[1])?;
 
         Ok(Self {
             node_addr,
@@ -81,8 +81,9 @@ impl ConnectionManager {
         })
     }
 
-    pub fn secret_address(&self) -> String {
-        self.secret_address.clone()
+    #[must_use]
+    pub fn secret_address(&self) -> &str {
+        &self.secret_address
     }
 
     pub async fn connect(&self, secret_address: String) -> Result<()> {
@@ -122,14 +123,10 @@ impl ConnectionManager {
                 fs::metadata(&keyfile).expect("Expected to have access to metadata of the keyfile");
 
             let current_permissions = metadata.permissions().mode();
-            let allowed_permissions = 0o100600;
-            if current_permissions != allowed_permissions {
-                panic!("For security reasons, please make sure to set the key file to user-readable only (set the permissions to 600).");
-            }
+            let allowed_permissions = 0o100_600;
+            assert!(current_permissions == allowed_permissions, "For security reasons, please make sure to set the key file to user-readable only (set the permissions to 600).");
 
-            if metadata.len() != 64 {
-                panic!("Your keyfile is not 64 bytes long. This is a sign that it was created by an Ethersync version older than 0.7.0, which is not compatible. Please remove .ethersync/key, and try again.");
-            }
+            assert!(metadata.len() == 64, "Your keyfile is not 64 bytes long. This is a sign that it was created by an Ethersync version older than 0.7.0, which is not compatible. Please remove .ethersync/key, and try again.");
 
             debug!("Re-using existing keypair.");
             let mut file = File::open(keyfile).expect("Failed to open key file");
@@ -216,15 +213,12 @@ impl EndpointActor {
                 previous_attempts,
             } => {
                 let node_addr = secret_address.node_addr.clone();
-                let conn = match self.endpoint.connect(node_addr, ALPN).await {
-                    Ok(connection) => connection,
-                    Err(_) => {
-                        Self::reconnect(self.message_tx.clone(), secret_address, previous_attempts)
-                            .await
-                            .expect("Failed to initiate reconnection");
-                        // Not really Ok, but Ok enough.
-                        return Ok(());
-                    }
+                let Ok(conn) = self.endpoint.connect(node_addr, ALPN).await else {
+                    Self::reconnect(self.message_tx.clone(), secret_address, previous_attempts)
+                        .await
+                        .expect("Failed to initiate reconnection");
+                    // Not really Ok, but Ok enough.
+                    return Ok(());
                 };
 
                 info!(
@@ -418,9 +412,10 @@ impl IrohConnection {
 
     async fn read_next(receive: &mut RecvStream) -> Result<PeerMessage, ConnectionError> {
         fn map_timeout(err: ReadExactError) -> ConnectionError {
-            if let ReadExactError::ReadError(ReadError::ConnectionLost(
-                iroh::endpoint::ConnectionError::TimedOut,
-            )) = err
+            if err
+                == ReadExactError::ReadError(ReadError::ConnectionLost(
+                    iroh::endpoint::ConnectionError::TimedOut,
+                ))
             {
                 ConnectionError::TimedOut
             } else {
@@ -450,7 +445,7 @@ impl Connection<PeerMessage> for IrohConnection {
             u32::try_from(bytes.len()).expect("Converting a length to u32 should work");
 
         fn map_timeout(err: WriteError) -> ConnectionError {
-            if let WriteError::ConnectionLost(iroh::endpoint::ConnectionError::TimedOut) = err {
+            if err == WriteError::ConnectionLost(iroh::endpoint::ConnectionError::TimedOut) {
                 ConnectionError::TimedOut
             } else {
                 ConnectionError::Other(err.into())

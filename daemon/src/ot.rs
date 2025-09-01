@@ -62,6 +62,7 @@ use tracing::{debug, warn};
 ///
 ///
 #[derive(Debug, Default)]
+#[must_use]
 pub struct OTServer {
     editor_revision: usize,
     daemon_revision: usize,
@@ -194,8 +195,9 @@ impl OTServer {
         to_editor
     }
 
-    pub fn current_content(&mut self) -> String {
-        self.current_content.clone()
+    #[must_use]
+    pub fn current_content(&self) -> &str {
+        &self.current_content
     }
 
     #[must_use]
@@ -230,9 +232,9 @@ impl OTServer {
 ///
 fn transform_through_operations(
     mut their_op_seq: OperationSeq,
-    my_operations: &Vec<OperationSeq>,
+    my_operations: &[OperationSeq],
 ) -> (OperationSeq, Vec<OperationSeq>) {
-    let mut transformed_my_operations = vec![];
+    let mut transformed_my_operations = Vec::new();
     for my_op_seq in my_operations {
         let mut my_op_seq = my_op_seq.clone();
         // transform expects both operations to have the same base_len. See also:
@@ -474,19 +476,20 @@ mod tests {
         use operational_transform::Operation as OTOperation;
 
         fn ot_insert(at: usize, s: &str) -> OperationSeq {
-            let mut op_seq: OperationSeq = Default::default();
+            let mut op_seq = OperationSeq::default();
             op_seq.retain(at as u64);
             op_seq.insert(s);
             op_seq
         }
 
         fn ot_delete(from: usize, length: usize) -> OperationSeq {
-            let mut op_seq: OperationSeq = Default::default();
+            let mut op_seq = OperationSeq::default();
             op_seq.retain(from as u64);
             op_seq.delete(length as u64);
             op_seq
         }
 
+        #[expect(clippy::needless_pass_by_value)] // only used in tests
         pub fn ot_compose(mut op1: OperationSeq, op2: OperationSeq) -> OperationSeq {
             if op1.target_len() < op2.base_len() {
                 op1.retain((op2.base_len() - op1.target_len()) as u64);

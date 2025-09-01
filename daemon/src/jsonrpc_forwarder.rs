@@ -7,7 +7,7 @@
 //!
 //! The idea is that a daemon process communicates through newline separated jsonrpc messages,
 //! whereas LSP expects an HTTP-like Base Protocol:
-//! https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#baseProtocol
+//! <https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#baseProtocol>
 //!
 //! This forwarder thus
 //! - takes jsonrpc from a socket (usually a daemon) and wraps it content-length encoded data to stdout
@@ -69,9 +69,8 @@ impl Decoder for ContentLengthCodec {
     fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
         // Find the position of the Content-Length header.
         let c = b"Content-Length: ";
-        let start_of_header = match src.windows(c.len()).position(|window| window == c) {
-            Some(pos) => pos,
-            None => return Ok(None),
+        let Some(start_of_header) = src.windows(c.len()).position(|window| window == c) else {
+            return Ok(None);
         };
 
         // Find the end of the line after that.
@@ -84,7 +83,7 @@ impl Decoder for ContentLengthCodec {
             // accept plain newline separators in order to simplify manual testing.
             None => match src[start_of_header + c.len()..]
                 .windows(2)
-                .position(|window| (window == b"\n\n"))
+                .position(|window| window == b"\n\n")
             {
                 Some(pos) => (pos, 2),
                 None => return Ok(None),

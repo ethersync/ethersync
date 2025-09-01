@@ -13,6 +13,7 @@ use std::path::{self, Path, PathBuf};
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Eq, Hash, Deref, AsRef, Display)]
 #[as_ref(Path)]
 #[display("'{}'", self.0.display())]
+#[must_use]
 pub struct AbsolutePath(PathBuf);
 
 impl AbsolutePath {
@@ -51,6 +52,7 @@ impl TryFrom<&str> for AbsolutePath {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Eq, Hash, Deref, AsRef, Display)]
 #[as_ref(Path)]
 #[display("'{}'", self.0.display())]
+#[must_use]
 pub struct RelativePath(PathBuf);
 
 impl RelativePath {
@@ -88,11 +90,12 @@ impl RelativePath {
 
 impl From<&RelativePath> for Prop {
     fn from(val: &RelativePath) -> Self {
-        Prop::Map(val.0.display().to_string())
+        Self::Map(val.0.display().to_string())
     }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Deref)]
+#[must_use]
 pub struct FileUri(String);
 
 impl FileUri {
@@ -108,7 +111,7 @@ impl TryFrom<String> for FileUri {
 
     fn try_from(string: String) -> Result<Self, Self::Error> {
         if string.starts_with("file:///") {
-            Ok(Self(string.to_string()))
+            Ok(Self(string))
         } else {
             bail!("File URI '{}' does not start with 'file:///'", string);
         }

@@ -15,7 +15,7 @@ use tokio::sync::{broadcast, oneshot};
 use tracing::debug;
 
 #[derive(Deserialize, Serialize)]
-/// The PeerMessage is used for peer to peer data exchange.
+/// The `PeerMessage` is used for peer to peer data exchange.
 pub enum PeerMessage {
     /// The Sync message contains the changes to the CRDT
     Sync(Vec<u8>),
@@ -39,7 +39,7 @@ pub trait Connection<T>: Send + Sync {
 }
 
 /// Transport-agnostic logic of how to sync with another peer.
-/// Exchanges PeerMessages with the connection, and communicates with the document on the other side.
+/// Exchanges [`PeerMessage`]s with the connection, and communicates with the document on the other side.
 /// Maintains the sync state.
 pub struct SyncActor {
     peer_state: SyncState,

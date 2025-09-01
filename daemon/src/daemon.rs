@@ -43,6 +43,7 @@ use tracing::{debug, error, info, warn};
 pub const TEST_FILE_PATH: &str = "text";
 
 // These messages are sent to the task that owns the document.
+#[must_use]
 pub enum DocMessage {
     GetContent {
         response_tx: oneshot::Sender<Result<String>>,
@@ -69,17 +70,17 @@ pub enum DocMessage {
 impl fmt::Debug for DocMessage {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let repr = match self {
-            DocMessage::GetContent { .. } => "GetContent".to_string(),
-            DocMessage::FromEditor(id, s) => format!("FromEditor({id}, {s})"),
-            DocMessage::FromWatcher(e) => format!("FromWatcher({e:?}"),
-            DocMessage::RescanFiles => "RescanFiles".to_string(),
-            DocMessage::Persist => "Persist".to_string(),
-            DocMessage::RandomEdit => "RandomEdit".to_string(),
-            DocMessage::ReceiveSyncMessage { .. } => "ReceiveSyncMessage".to_string(),
-            DocMessage::GenerateSyncMessage { .. } => "GenerateSyncMessage".to_string(),
-            DocMessage::NewEditorConnection(id, _) => format!("NewEditorConnection({id})"),
-            DocMessage::CloseEditorConnection(id) => format!("CloseEditorConnection({id})"),
-            DocMessage::ReceiveEphemeral(m) => format!("ReceiveEphemeral({m:?})"),
+            Self::GetContent { .. } => "GetContent".to_string(),
+            Self::FromEditor(id, s) => format!("FromEditor({id}, {s})"),
+            Self::FromWatcher(e) => format!("FromWatcher({e:?}"),
+            Self::RescanFiles => "RescanFiles".to_string(),
+            Self::Persist => "Persist".to_string(),
+            Self::RandomEdit => "RandomEdit".to_string(),
+            Self::ReceiveSyncMessage { .. } => "ReceiveSyncMessage".to_string(),
+            Self::GenerateSyncMessage { .. } => "GenerateSyncMessage".to_string(),
+            Self::NewEditorConnection(id, _) => format!("NewEditorConnection({id})"),
+            Self::CloseEditorConnection(id) => format!("CloseEditorConnection({id})"),
+            Self::ReceiveEphemeral(m) => format!("ReceiveEphemeral({m:?})"),
         };
         write!(f, "{repr}")
     }
@@ -94,6 +95,7 @@ type EphemeralMessageReceiver = broadcast::Receiver<EphemeralMessage>;
 /// This Actor is responsible for applying changes to the document asynchronously.
 ///
 /// Any `DocMessage` that is emitted via `DocumentActorHandle` should have an effect eventually.
+#[must_use]
 pub struct DocumentActor {
     doc_message_rx: mpsc::Receiver<DocMessage>,
     doc_changed_ping_tx: DocChangedSender,
@@ -107,7 +109,6 @@ pub struct DocumentActor {
 }
 
 impl DocumentActor {
-    #[must_use]
     fn new(
         doc_message_rx: mpsc::Receiver<DocMessage>,
         doc_changed_ping_tx: DocChangedSender,
@@ -158,7 +159,8 @@ impl DocumentActor {
     }
 
     /// If any editor owns the file, it means that the daemon doesn't have ownership.
-    fn owns(&mut self, file_path: &RelativePath) -> bool {
+    #[must_use]
+    fn owns(&self, file_path: &RelativePath) -> bool {
         !self
             .editor_connections
             .values()
@@ -185,7 +187,7 @@ impl DocumentActor {
                 self.handle_message_from_editor(editor_id, message).await;
             }
             DocMessage::FromWatcher(watcher_event) => {
-                self.handle_watcher_event(watcher_event).await;
+                self.handle_watcher_event(watcher_event);
             }
             DocMessage::RescanFiles => {
                 self.read_current_content_from_dir(false);
@@ -198,7 +200,7 @@ impl DocumentActor {
                     sandbox::write_file(&self.base_dir, &persistence_file, &bytes).unwrap_or_else(
                         |_| panic!("Failed to persist to '{}'", persistence_file.display()),
                     );
-                    self.save_fully = false
+                    self.save_fully = false;
                 } else {
                     debug!("Persisting CRDT document incrementally.");
                     let bytes = self.crdt_doc.save_incremental();
@@ -263,15 +265,15 @@ impl DocumentActor {
                                 // If the file doesn't exist anymore after the sync message was
                                 // applied (which is now!), we'd like it to be there again. So
                                 // re-create an empty version.
-                                if !self.crdt_doc.file_exists(&file_path) {
-                                    info!("Peer deleted {file_path}, but you have it open in an editor. Bringing back an empty version.");
-                                    self.crdt_doc.update_text("", &file_path);
-                                } else {
+                                if self.crdt_doc.file_exists(&file_path) {
                                     // If the file is still there, the upcoming patches of the sync
                                     // message will re-add it for us. In that case, we don't want
                                     // to touch it in the doc, because we will send the
                                     // modifications to the editors, and these contents should be
                                     // consistent. So we don't need to do anything.
+                                } else {
+                                    info!("Peer deleted {file_path}, but you have it open in an editor. Bringing back an empty version.");
+                                    self.crdt_doc.update_text("", &file_path);
                                 }
                             }
                         }
@@ -345,8 +347,7 @@ impl DocumentActor {
                 self.maybe_delete_cursor_position(&cursor_id).await;
             }
             DocMessage::ReceiveEphemeral(ephemeral_message) => {
-                self.react_to_ephemeral_message(ephemeral_message.clone())
-                    .await;
+                self.react_to_ephemeral_message(ephemeral_message).await;
             }
         }
     }
@@ -387,6 +388,7 @@ impl DocumentActor {
         Ok(messages_to_editor)
     }
 
+    #[must_use]
     fn cursor_id(&self, editor_id: EditorId) -> String {
         self.crdt_doc.actor_id() + "-" + editor_id.to_string().as_str()
     }
@@ -425,7 +427,7 @@ impl DocumentActor {
                                 .await;
                             }
                         }
-                    };
+                    }
                 }
                 JSONRPCFromEditor::Notification { payload } => {
                     let _ = self.react_to_message_from_editor(editor_id, &payload).await;
@@ -447,13 +449,15 @@ impl DocumentActor {
         }
     }
 
-    async fn handle_watcher_event(&mut self, watcher_event: WatcherEvent) {
+    fn handle_watcher_event(&mut self, watcher_event: WatcherEvent) {
         match watcher_event {
             WatcherEvent::Created { file_path } => {
                 let relative_file_path = RelativePath::try_from_path(&self.base_dir, &file_path)
                     .expect("Watcher event should have a path within the base directory");
                 if self.owns(&relative_file_path) {
-                    if !self.crdt_doc.file_exists(&relative_file_path) {
+                    if self.crdt_doc.file_exists(&relative_file_path) {
+                        debug!("Received watcher creation event, but file already exists in CRDT.");
+                    } else {
                         let content = match sandbox::read_file(
                             &self.base_dir,
                             Path::new(&file_path),
@@ -473,8 +477,6 @@ impl DocumentActor {
                             self.crdt_doc.set_bytes(&content, &relative_file_path);
                         }
                         let _ = self.doc_changed_ping_tx.send(());
-                    } else {
-                        debug!("Received watcher creation event, but file already exists in CRDT.");
                     }
                 }
             }
@@ -516,6 +518,7 @@ impl DocumentActor {
         }
     }
 
+    #[must_use]
     fn apply_sync_message_to_doc(
         &mut self,
         message: AutomergeSyncMessage,
@@ -528,23 +531,24 @@ impl DocumentActor {
         patches
     }
 
+    #[must_use]
     fn get_heads(&mut self) -> Vec<ChangeHash> {
         self.crdt_doc.get_heads()
     }
 
+    #[must_use]
     fn random_delta(&self) -> TextDelta {
         let text = self
             .current_file_content(&RelativePath::new(TEST_FILE_PATH))
             .expect("Should have initialized text before performing random edit");
+        let mut rng = rand::thread_rng();
         let options = ["d", "ü", "🥕", "💚", "\n"];
-        let random_text: String = (1..5)
-            .map(|_| {
-                let random_option = rand::thread_rng().gen_range(0..options.len());
-                options[random_option]
-            })
-            .collect();
+        let random_text: String =
+            std::iter::repeat_with(|| options[rng.gen_range(0..options.len())])
+                .take(4)
+                .collect();
         let text_length = text.chars().count();
-        let random_position = rand::thread_rng().gen_range(0..=text_length);
+        let random_position = rng.gen_range(0..=text_length);
 
         let mut delta = TextDelta::default();
         delta.retain(random_position);
@@ -554,7 +558,7 @@ impl DocumentActor {
         // Goal is to make "more critical" edits more likely. Like an "inverted" gauss curve :D
         let mut deletion_length = 0;
         if (text_length - random_position) > 0 {
-            deletion_length = rand::thread_rng().gen_range(0..(text_length - random_position));
+            deletion_length = rng.gen_range(0..(text_length - random_position));
             deletion_length = deletion_length.min(3);
         }
         delta.delete(deletion_length);
@@ -574,7 +578,7 @@ impl DocumentActor {
         });
     }
 
-    fn write_files_changed_in_file_deltas(&mut self, file_deltas: &Vec<FileTextDelta>) {
+    fn write_files_changed_in_file_deltas(&mut self, file_deltas: &[FileTextDelta]) {
         // Collect file paths into a set, so we don't write files multiple times on complex
         // patches.
         let mut file_paths = HashSet::new();
@@ -607,22 +611,21 @@ impl DocumentActor {
     }
 
     // TODO: Join this code with the WalkBuilder in the sandbox module!
-    fn build_walk(&mut self) -> Walk {
-        let ignored_things = [".git", ".ethersync"];
+    #[must_use]
+    fn build_walk(&self) -> Walk {
+        const IGNORED: &[&str] = &[".git", ".ethersync"];
         // TODO: How to deal with binary files?
-        WalkBuilder::new(self.base_dir.clone())
+        WalkBuilder::new(&self.base_dir)
             .standard_filters(true)
             .hidden(false)
             .require_git(false)
             // Interestingly, the standard filters don't seem to ignore .git.
             .filter_entry(move |dir_entry| {
-                let name = dir_entry
+                dir_entry
                     .path()
                     .file_name()
-                    .expect("Failed to get file name from path.")
-                    .to_str()
-                    .expect("Failed to convert OsStr to str");
-                !ignored_things.contains(&name)
+                    .and_then(|name| name.to_str())
+                    .map_or(true, |name| !IGNORED.contains(&name))
             })
             .build()
     }
@@ -730,7 +733,7 @@ impl DocumentActor {
                     self.crdt_doc.initialize_text(content, file_path);
                     let _ = self.doc_changed_ping_tx.send(());
                     self.write_file(file_path);
-                };
+                }
             }
             ComponentMessage::Close { file_path } => {
                 self.write_file(file_path);
@@ -752,7 +755,7 @@ impl DocumentActor {
                     };
 
                 let new_cursor_state = EphemeralMessage {
-                    cursor_id: cursor_id.to_string(),
+                    cursor_id: cursor_id.clone(),
                     sequence_number: next_sequence_number,
                     cursor_state: cursor_state.clone(),
                 };
@@ -775,7 +778,7 @@ impl DocumentActor {
         exclude_id: Option<EditorId>,
         message: &ComponentMessage,
     ) {
-        let editor_ids: Vec<EditorId> = self.editor_connections.keys().cloned().collect();
+        let editor_ids: Vec<EditorId> = self.editor_connections.keys().copied().collect();
         for editor_id in editor_ids {
             if Some(editor_id) == exclude_id {
                 continue;
@@ -786,6 +789,7 @@ impl DocumentActor {
     }
 
     // Returns the protocol messages that should be sent to the editor.
+    #[must_use]
     fn process_in_editor(
         &mut self,
         editor_id: EditorId,
@@ -820,6 +824,8 @@ impl DocumentActor {
 
     async fn react_to_ephemeral_message(&mut self, new_ephemeral_message: EphemeralMessage) {
         let cursor_id = new_ephemeral_message.cursor_id.clone();
+        let cursor_state = new_ephemeral_message.cursor_state.clone();
+
         if let Some(existing_state) = self.ephemeral_states.get_mut(&cursor_id) {
             if new_ephemeral_message.sequence_number <= existing_state.sequence_number {
                 // We've already seen a newer ephemeral message for this cursor_id, thus ignoring
@@ -831,16 +837,14 @@ impl DocumentActor {
             .insert(cursor_id.clone(), new_ephemeral_message.clone());
 
         // Broadcast to peers.
-        let _ = self
-            .ephemeral_message_tx
-            .send(new_ephemeral_message.clone());
+        let _ = self.ephemeral_message_tx.send(new_ephemeral_message);
 
         // Broadcast to editors.
         self.broadcast_to_editors(
             None,
             &ComponentMessage::Cursor {
-                cursor_id: new_ephemeral_message.cursor_id,
-                cursor_state: new_ephemeral_message.cursor_state,
+                cursor_id,
+                cursor_state,
             },
         )
         .await;
@@ -879,6 +883,7 @@ impl DocumentActor {
 ///
 /// The rest of the methods are used for instrumentation (e.g. by the fuzzer).
 #[derive(Clone)]
+#[must_use]
 pub struct DocumentActorHandle {
     doc_message_tx: DocMessageSender,
     doc_changed_ping_tx: DocChangedSender,
@@ -926,10 +931,12 @@ impl DocumentActorHandle {
             .expect("DocumentActor task has been killed");
     }
 
+    #[must_use]
     pub fn subscribe_document_changes(&self) -> DocChangedReceiver {
         self.doc_changed_ping_tx.subscribe()
     }
 
+    #[must_use]
     pub fn subscribe_ephemeral_messages(&self) -> EphemeralMessageReceiver {
         self.ephemeral_message_tx.subscribe()
     }
@@ -950,17 +957,19 @@ impl DocumentActorHandle {
             .expect("Failed to send random edit to document task");
     }
 
+    #[must_use]
     pub fn next_editor_id(&self) -> EditorId {
         self.next_id.fetch_add(1, Ordering::Relaxed)
     }
 }
 
+#[must_use]
 pub struct Daemon {
     pub document_handle: DocumentActorHandle,
     pub address: String,
     socket_path: PathBuf,
     base_dir: PathBuf,
-    #[allow(dead_code)]
+    #[expect(dead_code)]
     // We need to store the connection manager in order to keep the connection alive.
     connection_manager: peer::ConnectionManager,
 }
@@ -980,15 +989,15 @@ impl Daemon {
 
         // Start socket listener.
         let socket_path = socket_path.to_path_buf();
-        editor::spawn_socket_listener(socket_path.clone(), document_handle.clone()).await?;
+        editor::spawn_socket_listener(&socket_path, document_handle.clone())?;
 
         // Start file watcher.
         let base_dir = base_dir.to_path_buf();
-        spawn_file_watcher(&base_dir, document_handle.clone()).await;
+        spawn_file_watcher(&base_dir, document_handle.clone());
 
         if persist {
             // Start persister.
-            spawn_persister(document_handle.clone()).await;
+            spawn_persister(document_handle.clone());
         }
 
         // Start connection manager.
@@ -1004,7 +1013,7 @@ impl Daemon {
             );
         }
         if app_config.emit_join_code {
-            put_secret_address_into_wormhole(&address).await;
+            put_secret_address_into_wormhole(address).await;
         }
         if let Some(config::Peer::SecretAddress(secret_address)) = app_config.peer {
             connection_manager
@@ -1015,7 +1024,7 @@ impl Daemon {
 
         Ok(Self {
             document_handle,
-            address,
+            address: address.to_owned(),
             socket_path,
             base_dir,
             connection_manager,
@@ -1034,7 +1043,7 @@ impl Drop for Daemon {
 // Spawn a file watcher and feed its events to the document_handle.
 // In addition, a short timeout after the last event, do a full re-scan, so that we don't miss any
 // file changes - the watcher isn't necessarily exhaustive.
-async fn spawn_file_watcher(base_dir: &Path, document_handle: DocumentActorHandle) {
+fn spawn_file_watcher(base_dir: &Path, document_handle: DocumentActorHandle) {
     let mut watcher = Watcher::new(base_dir);
 
     tokio::spawn(async move {
@@ -1063,7 +1072,7 @@ async fn spawn_file_watcher(base_dir: &Path, document_handle: DocumentActorHandl
                     }
                 }
 
-                _ = &mut debounce_timer, if rescan_required => {
+                () = &mut debounce_timer, if rescan_required => {
                     document_handle
                         .send_message(DocMessage::RescanFiles)
                         .await;
@@ -1074,7 +1083,7 @@ async fn spawn_file_watcher(base_dir: &Path, document_handle: DocumentActorHandl
     });
 }
 
-async fn spawn_persister(document_handle: DocumentActorHandle) {
+fn spawn_persister(document_handle: DocumentActorHandle) {
     tokio::spawn(async move {
         let mut doc_changed_ping_rx = document_handle.subscribe_document_changes();
 
@@ -1128,10 +1137,10 @@ mod tests {
                 let (ephemeral_message_tx, _ephemeral_message_rx) =
                     broadcast::channel::<EphemeralMessage>(100);
 
-                DocumentActor::new(
+                Self::new(
                     doc_message_rx,
-                    doc_changed_ping_tx.clone(),
-                    ephemeral_message_tx.clone(),
+                    doc_changed_ping_tx,
+                    ephemeral_message_tx,
                     directory.path().to_path_buf(),
                     true,
                     true,

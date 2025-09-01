@@ -20,11 +20,12 @@ use crate::{
 
 /// Represents a connection to an editor. Handles the OT. To keep the code testable and sync, we do
 /// the actual sending of messages in the daemon, and the functions here just *calculate* them.
+#[must_use]
 pub struct EditorConnection {
     id: String,
     // TODO: Feels a bit duplicated here?
     base_dir: PathBuf,
-    /// There's one OTServer per open buffer.
+    /// There's one [`OTServer`] per open buffer.
     ot_servers: HashMap<RelativePath, OTServer>,
     /// The name other people see.
     username: Option<String>,
@@ -40,12 +41,14 @@ impl EditorConnection {
         }
     }
 
+    #[must_use]
     pub fn owns(&self, file_path: &RelativePath) -> bool {
         self.ot_servers.contains_key(file_path)
     }
 
     /// A message from inside is either an edit from another local editor or an edit that came
     /// from another peer but is prepared to be applied to all components.
+    #[must_use]
     pub fn message_from_inside(
         &mut self,
         message: &ComponentMessage,
@@ -100,6 +103,7 @@ impl EditorConnection {
         message: &EditorProtocolMessageFromEditor,
     ) -> Result<(ComponentMessage, Vec<EditorProtocolMessageToEditor>), EditorProtocolMessageError>
     {
+        #[expect(clippy::needless_pass_by_value)] // map_err takes by value
         fn anyhow_err_to_protocol_err(error: anyhow::Error) -> EditorProtocolMessageError {
             EditorProtocolMessageError {
                 code: -1, // TODO: Should the error codes differ per error?
@@ -199,7 +203,7 @@ impl EditorConnection {
                 };
 
                 let (delta_for_crdt, rev_deltas_for_editor) =
-                    ot_server.apply_editor_operation(rev_delta.clone());
+                    ot_server.apply_editor_operation(rev_delta);
 
                 let uri = AbsolutePath::from_parts(&self.base_dir, &relative_path)
                     .expect("Should be able to construct absolute URI")
@@ -233,7 +237,7 @@ impl EditorConnection {
                         cursor_id: self.id.clone(),
                         cursor_state: CursorState {
                             name: self.username.clone(),
-                            file_path: relative_path.clone(),
+                            file_path: relative_path,
                             ranges: ranges.clone(),
                         },
                     },
@@ -260,7 +264,7 @@ mod tests {
         let result =
             editor_connection.message_from_editor(&EditorProtocolMessageFromEditor::Open {
                 uri: "file:///foobar/file".to_string(),
-                content: "".to_string(),
+                content: String::new(),
             });
 
         assert!(result.is_err());
