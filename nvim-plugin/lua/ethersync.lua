@@ -154,6 +154,13 @@ local function activate_config_for_buffer(config_name, buf_nr, root_dir)
     local lines = changetracker.get_all_lines_respecting_eol(buf_nr)
     local content = table.concat(lines, "\n")
 
+    -- Ensure that the file exists on disk before we "open" it in the daemon,
+    -- to prevent a warning that the file has been created externally (W13).
+    -- This resolves issue #92.
+    if string.find(uri, "file://") == 1 and not vim.fn.filereadable(filename) then
+        vim.cmd("silent write")
+    end
+
     client.connection:send_request("open", { uri = uri, content = content }, function()
         debug("Tracking Edits")
         ensure_autoread_is_off()
@@ -189,20 +196,6 @@ local function on_buffer_open()
             end
         end
     end
-end
-
-local function on_buffer_new_file()
-    -- Ensure that the file exists on disk before we "open" it in the daemon,
-    -- to prevent a warning that the file has been created externally (W13).
-    -- This resolves issue #92.
-    -- TODO: Only do this when file is going to be tracked.
-    local buf_nr = tonumber(vim.fn.expand("<abuf>"))
-    local uri = vim.uri_from_bufnr(buf_nr)
-    if string.find(uri, "file://") == 1 then
-        vim.cmd("silent write")
-    end
-
-    on_buffer_open()
 end
 
 local function on_buffer_close()
@@ -257,7 +250,7 @@ end
 
 local function activate_plugin()
     vim.api.nvim_create_autocmd({ "BufRead" }, { callback = on_buffer_open })
-    vim.api.nvim_create_autocmd({ "BufNewFile" }, { callback = on_buffer_new_file })
+    vim.api.nvim_create_autocmd({ "BufNewFile" }, { callback = on_buffer_open })
     vim.api.nvim_create_autocmd("BufUnload", { callback = on_buffer_close })
 
     -- This autocommand prevents that, when a file changes on disk while Neovim has the file open,
