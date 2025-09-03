@@ -224,17 +224,7 @@ local function on_buffer_close()
         return
     end
 
-    -- TODO: Do we also need this?
-    if not client.files[closed_file] then
-        return
-    end
-
     client.files[closed_file] = nil
-
-    -- TODO: Is the on_lines callback un-registered automatically when the buffer closes,
-    -- or should we detach it ourselves?
-    -- vim.api.nvim_buf_detach(0) isn't a thing. https://github.com/neovim/neovim/issues/17874
-    -- It's not a high priority, as we can only generate edits when the buffer exists anyways.
 
     local uri = vim.uri_from_bufnr(buf_nr)
     client.connection:send_notification("close", { uri = uri })
