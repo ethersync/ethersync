@@ -23,7 +23,17 @@ local configurations = {}
 local clients = {}
 
 function M.config(name, cfg)
-    -- TODO: check here if valid?
+    if cfg.cmd == nil then
+        error("Configuration '" .. name .. "' should have a `cmd` to specify which collaboration tool to launch.")
+    end
+
+    if cfg.root_markers == nil and cfg.root_dir == nil then
+        error(
+            "Configuration '"
+                .. name
+                .. "' should either have a `root_markers` or a `root_dir` to determine launch condition."
+        )
+    end
     configurations[name] = { cfg = cfg, enabled = false }
 end
 
