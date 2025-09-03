@@ -173,10 +173,18 @@ local function on_buffer_open()
                     activate_config_for_buffer(name, buf_nr, root_dir)
                 end)
             elseif server.cfg.root_markers then
-                -- TODO: What if buf_name is not a file name?
-                local root_dir = helpers.find_directory(buf_name, server.cfg.root_markers)
-                if root_dir then
-                    activate_config_for_buffer(name, buf_nr, root_dir)
+                local uri = vim.uri_from_bufnr(buf_nr)
+                if string.find(uri, "file://") == 1 then
+                    local root_dir = helpers.find_directory(buf_name, server.cfg.root_markers)
+                    if root_dir then
+                        activate_config_for_buffer(name, buf_nr, root_dir)
+                    end
+                else
+                    debug(
+                        "Did not activate '"
+                            .. name
+                            .. "' configuration for non-file buffer despite having a `root_markers` configured."
+                    )
                 end
             end
         end
