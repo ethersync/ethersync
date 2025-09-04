@@ -78,6 +78,7 @@ class Client {
     process: cp.ChildProcess
     connection: rpc.MessageConnection
     directory: string
+    textDocuments: vscode.TextDocument[] = []
 
     constructor(name: string, cmd: string[], directory: string) {
         this.name = name
@@ -223,7 +224,7 @@ async function processEditFromDaemon(client: Client, edit: Edit) {
             if (document) {
                 let textEdit = ethersyncDeltasToVSCodeTextEdits(document, edit.delta)
                 attemptedRemoteEdits.add(textEdit)
-                let worked = await applyEdit(document, edit)
+                let worked = await applyEdit(client, document, edit)
                 if (worked) {
                     revision.daemon += 1
                     // Attempt auto-save to avoid the situation where one user closes a modified
@@ -271,12 +272,7 @@ async function processCursorFromDaemon(cursor: CursorFromDaemon) {
     }
 }
 
-async function applyEdit(document: vscode.TextDocument, edit: Edit): Promise<boolean> {
-    let client = findOrCreateClient(document)
-    if (!client) {
-        return false
-    }
-
+async function applyEdit(client: Client, document: vscode.TextDocument, edit: Edit): Promise<boolean> {
     let edits = []
     for (const delta of edit.delta) {
         const range = ethersyncRangeToVSCodeRange(document, delta.range)
@@ -314,36 +310,24 @@ function findValidConfiguration(document: vscode.TextDocument): [string, Configu
     return ["none", null, "/tmp"]
 }
 
-function findOrCreateClient(document: vscode.TextDocument): Client | null {
-    let [name, configuration, directory] = findValidConfiguration(document)
-    if (!configuration) {
-        return null
-    }
-
-    // We re-use connections for configs with the same name and directory.
+function findOrCreateClient(name: string, directory: string): Client {
+    // We re-use clients for configs with the same name and directory.
     for (let client of clients) {
         if (client.name === name && client.directory === directory) {
             return client
         }
     }
 
-    // Otherwise, we create a new config.
+    // Otherwise, we create a new config and add it to the list of clients.
+    let configuration = configurations[name]
     let client = new Client(name, configuration.cmd, directory)
     clients.push(client)
     return client
 }
 
-async function processUserOpen(document: vscode.TextDocument) {
-    let client = findOrCreateClient(document)
-    if (!client) {
-        return false
-    }
-
-    // In particular, ignore documents using the git: scheme,
-    // which is used by VS Code's Git integration.
-    if (document.uri.scheme !== "file") {
-        return
-    }
+function activateConfigForTextDocument(name: string, document: vscode.TextDocument, directory: string) {
+    let client = findOrCreateClient(name, directory)
+    client.textDocuments.push(document)
 
     const fileUri = document.uri.toString()
     debug("OPEN " + decodeURI(fileUri))
@@ -356,24 +340,46 @@ async function processUserOpen(document: vscode.TextDocument) {
             debug("Successfully opened. Tracking changes.")
         })
         .catch(() => {
-            debug("OPEN rejected by daemon")
+            debug("OPEN failed")
         })
 }
 
-function processUserClose(document: vscode.TextDocument) {
-    let client = findOrCreateClient(document)
-    if (!client) {
-        return false
-    }
-
-    if (!(document.fileName in client.revisions)) {
-        // File is not currently tracked in ethersync.
+async function processUserOpen(document: vscode.TextDocument) {
+    // Ignore documents using the git: scheme, which is used by VS Code's Git integration.
+    if (document.uri.scheme !== "file") {
         return
     }
-    const fileUri = document.uri.toString()
-    client.connection.sendRequest(closeType, {uri: fileUri})
 
-    delete client.revisions[document.fileName]
+    for (let name of Object.keys(configurations)) {
+        let configuration = configurations[name]
+        const filename = document.fileName
+        for (let rootMarker of configuration.rootMarkers) {
+            const directory = findMarkerDirectory(path.dirname(filename), rootMarker)
+            if (directory) {
+                activateConfigForTextDocument(name, document, directory)
+            }
+        }
+    }
+}
+
+function clientsForDocument(document: vscode.TextDocument): Client[] {
+    return clients.filter(client => client.textDocuments.includes(document))
+}
+
+function processUserClose(document: vscode.TextDocument) {
+    for (let client of clientsForDocument(document)) {
+        if (!(document.fileName in client.revisions)) {
+            // File is not currently tracked by the client.
+            continue
+        }
+        const fileUri = document.uri.toString()
+        client.connection.sendRequest(closeType, {uri: fileUri})
+
+        // TODO: refactor redundancy of the revisions-key and textDocument in client
+        delete client.revisions[document.fileName]
+        const index = client.textDocuments.indexOf(document)
+        client.textDocuments.splice(index, 1)
+    }
 }
 
 function isTextEditsEqualToVSCodeContentChanges(
@@ -411,79 +417,73 @@ function isRemoteEdit(event: vscode.TextDocumentChangeEvent): boolean {
 // NOTE: We might get multiple events per document.version,
 // as the _state_ of the document might change (like isDirty).
 function processUserEdit(event: vscode.TextDocumentChangeEvent) {
-    let client = findOrCreateClient(event.document)
-    if (!client) {
-        return false
-    }
+    for (let client of clientsForDocument(event.document)) {
+        if (!(event.document.fileName in client.revisions)) {
+            // File is not currently tracked in the respective client.
+            continue
+        }
 
-    if (!(event.document.fileName in client.revisions)) {
-        // File is not currently tracked in Ethersync.
-        return
-    }
+        if (isRemoteEdit(event)) {
+            debug("Ignoring remote event (we have caused it)")
+            return
+        }
 
-    if (isRemoteEdit(event)) {
-        debug("Ignoring remote event (we have caused it)")
-        return
-    }
+        mutex
+            .runExclusive(() => {
+                let document = event.document
 
-    mutex
-        .runExclusive(() => {
-            let document = event.document
-
-            // For some reason we get multipe events per edit caused by us.
-            // Let's actively skip the empty ones to make debugging output below less noisy.
-            if (event.contentChanges.length == 0) {
-                if (document.isDirty == false) {
-                    debug("Ignoring empty docChange. (probably saving...)")
+                // For some reason we get multipe events per edit caused by us.
+                // Let's actively skip the empty ones to make debugging output below less noisy.
+                if (event.contentChanges.length == 0) {
+                    if (document.isDirty == false) {
+                        debug("Ignoring empty docChange. (probably saving...)")
+                    }
+                    return
                 }
-                return
-            }
 
-            const filename = document.fileName
+                const filename = document.fileName
 
-            let revision = client.revisions[filename]
+                let revision = client.revisions[filename]
 
-            let edits = vsCodeChangeEventToEthersyncEdits(client, event)
+                let edits = vsCodeChangeEventToEthersyncEdits(client, event)
 
-            for (const theEdit of edits) {
-                // interestingly this seems to block when it can't send
-                // TODO: Catch exceptions, for example when daemon disconnects/crashes.
-                client.connection.sendRequest(editType, theEdit)
-                revision.editor += 1
+                for (const theEdit of edits) {
+                    // interestingly this seems to block when it can't send
+                    // TODO: Catch exceptions, for example when daemon disconnects/crashes.
+                    client.connection.sendRequest(editType, theEdit)
+                    revision.editor += 1
 
-                debug(`sent edit for dR ${revision.daemon} (having edR ${revision.editor})`)
-            }
+                    debug(`sent edit for dR ${revision.daemon} (having edR ${revision.editor})`)
+                }
 
-            // TODO: Make this more efficient by replacing only the changed lines.
-            // The challenge with that is that we need to compute how many lines are
-            // left after the edit.
-            updateContents(client, document)
+                // TODO: Make this more efficient by replacing only the changed lines.
+                // The challenge with that is that we need to compute how many lines are
+                // left after the edit.
+                updateContents(client, document)
 
-            // Attempt auto-save to avoid the situation where one user closes a modified
-            // document without saving, which will cause VS Code to undo the dirty changes.
-            document.save()
-        })
-        .catch((e: Error) => {
-            vscode.window.showErrorMessage(`Error while sending edit to Ethersync daemon: ${e}`)
-        })
+                // Attempt auto-save to avoid the situation where one user closes a modified
+                // document without saving, which will cause VS Code to undo the dirty changes.
+                document.save()
+            })
+            .catch((e: Error) => {
+                vscode.window.showErrorMessage(`Error while sending edit to Ethersync daemon: ${e}`)
+            })
+    }
 }
 
 function processSelection(event: vscode.TextEditorSelectionChangeEvent) {
-    let client = findOrCreateClient(event.textEditor.document)
-    if (!client) {
-        return false
+    for (let client of clients) {
+        if (!(event.textEditor.document.fileName in client.revisions)) {
+            // File is not currently tracked in ethersync.
+            return
+        }
+        let uri = event.textEditor.document.uri.toString()
+        let content = client.contents[event.textEditor.document.fileName]
+        let ranges = event.selections.map((s) => {
+            return vsCodeRangeToEthersyncRange(content, s)
+        })
+        client.connection.sendNotification(cursorType, {uri, ranges})
     }
-
-    if (!(event.textEditor.document.fileName in client.revisions)) {
-        // File is not currently tracked in ethersync.
-        return
-    }
-    let uri = event.textEditor.document.uri.toString()
-    let content = client.contents[event.textEditor.document.fileName]
-    let ranges = event.selections.map((s) => {
-        return vsCodeRangeToEthersyncRange(content, s)
-    })
-    client.connection.sendNotification(cursorType, {uri, ranges})
 }
 
 function vsCodeChangeEventToEthersyncEdits(client: Client, event: vscode.TextDocumentChangeEvent): Edit[] {
