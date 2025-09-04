@@ -66,7 +66,6 @@ class Revision {
 }
 
 interface Configuration {
-    name: string
     cmd: string[]
     enabled: boolean
     rootMarkers: string[]
@@ -116,7 +115,7 @@ class Client {
     }
 }
 
-let configurations: Configuration[] = []
+let configurations: {[key: string]: Configuration} = {}
 let clients: Client[] = []
 
 // TODO: if we load from disk, this will also cause edits :-/
@@ -299,8 +298,9 @@ async function applyEdit(document: vscode.TextDocument, edit: Edit): Promise<boo
     return worked
 }
 
-function findValidConfiguration(document: vscode.TextDocument): [Configuration | null, string] {
-    for (let configuration of configurations) {
+function findValidConfiguration(document: vscode.TextDocument): [string, Configuration | null, string] {
+    for (let name of Object.keys(configurations)) {
+        let configuration = configurations[name]
         if (configuration.activatePattern) {
             let regexp = new RegExp(configuration.activatePattern)
             if (regexp.test(document.fileName)) {
@@ -317,18 +317,18 @@ function findValidConfiguration(document: vscode.TextDocument): [Configuration |
             }
         }
     }
-    return [null, "/tmp"]
+    return ["none", null, "/tmp"]
 }
 
 function findOrCreateClient(document: vscode.TextDocument): Client | null {
-    let [configuration, directory] = findValidConfiguration(document)
+    let [name, configuration, directory] = findValidConfiguration(document)
     if (!configuration) {
         return null
     }
 
     // We re-use connections for configs with the same name and directory.
     for (let client of clients) {
-        if (client.name === configuration.name && client.directory === directory) {
+        if (client.name === name && client.directory === directory) {
             return client
         }
     }
@@ -524,9 +524,7 @@ function showCursorNotification() {
 export function activate(context: vscode.ExtensionContext) {
     debug("Ethersync extension activated!")
 
-    configurations = vscode.workspace
-        .getConfiguration("ethersync")
-        .get<Map<string, Configuration>>("configs", new Map())
+    configurations = vscode.workspace.getConfiguration("ethersync").get<{[key: string]: Configuration}>("configs", {})
 
     context.subscriptions.push(
         vscode.workspace.onDidChangeTextDocument(processUserEdit),
