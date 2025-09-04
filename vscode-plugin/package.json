@@ -46,22 +46,10 @@
                                     "type": "string"
                                 },
                                 "description": "List of marker files that indicate the root"
-                            },
-                            "activatePattern": {
-                                "type": "string",
-                                "description": "If file matches this regular expression, the configuration will be activated"
                             }
                         },
                         "required": [
-                            "cmd"
-                        ],
-                        "anyOf": [
-                            {
-                                "required": "rootMarkers"
-                            },
-                            {
-                                "required": "activatePattern"
-                            }
+                            "cmd", "rootMarkers"
                         ]
                     },
                     "default": {

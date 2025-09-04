@@ -69,7 +69,6 @@ interface Configuration {
     cmd: string[]
     enabled: boolean
     rootMarkers: string[]
-    activatePattern: string | null
 }
 
 class Client {
@@ -301,22 +300,17 @@ async function applyEdit(document: vscode.TextDocument, edit: Edit): Promise<boo
 function findValidConfiguration(document: vscode.TextDocument): [string, Configuration | null, string] {
     for (let name of Object.keys(configurations)) {
         let configuration = configurations[name]
-        if (configuration.activatePattern) {
-            let regexp = new RegExp(configuration.activatePattern)
-            if (regexp.test(document.fileName)) {
-                // TODO: /tmp?
-                return [name, configuration, "/tmp"]
-            }
-        } else if (configuration.rootMarkers) {
-            const filename = document.fileName
-            for (let rootMarker of configuration.rootMarkers) {
-                const directory = findMarkerDirectory(path.dirname(filename), rootMarker)
-                if (directory) {
-                    return [name, configuration, directory]
-                }
+        const filename = document.fileName
+        for (let rootMarker of configuration.rootMarkers) {
+            const directory = findMarkerDirectory(path.dirname(filename), rootMarker)
+            if (directory) {
+                return [name, configuration, directory]
             }
         }
     }
+    // TODO: fix return type:
+    // - what if no config matches?
+    // - multiple configs matching?
     return ["none", null, "/tmp"]
 }
 
