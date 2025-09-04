@@ -41,7 +41,8 @@
                             },
                             "enabled": {
                                 "type": "boolean",
-                                "description": "Whether or not to enable this configuration"
+                                "description": "Whether or not to enable this configuration",
+                                "default": false
                             },
                             "rootMarkers": {
                                 "type": "array",

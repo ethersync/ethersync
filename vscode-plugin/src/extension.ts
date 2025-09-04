@@ -65,21 +65,12 @@ class Revision {
     editor = 0
 }
 
-class Configuration {
+interface Configuration {
     name: string
     cmd: string[]
     enabled: boolean
     rootMarkers: string[]
     activatePattern: string | null
-
-    constructor(config: any) {
-        this.name = config.name || "unnamed"
-        // TODO: []???
-        this.cmd = config.cmd || []
-        this.enabled = config.enabled || false
-        this.rootMarkers = config.rootMarkers || []
-        this.activatePattern = config.activatePattern || null
-    }
 }
 
 class Client {
@@ -532,10 +523,9 @@ function showCursorNotification() {
 export function activate(context: vscode.ExtensionContext) {
     debug("Ethersync extension activated!")
 
-    let configs: any = vscode.workspace.getConfiguration("ethersync").get("configs")
-    for (let config of configs) {
-        configurations.push(new Configuration(config))
-    }
+    configurations = vscode.workspace
+        .getConfiguration("ethersync")
+        .get<Map<string, Configuration>>("configs", new Map())
 
     context.subscriptions.push(
         vscode.workspace.onDidChangeTextDocument(processUserEdit),
