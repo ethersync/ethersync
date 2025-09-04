@@ -75,7 +75,7 @@ class Client {
     name: string
     revisions: {[filename: string]: Revision} = {}
     contents: {[filename: string]: string[]} = {}
-    ethersyncClient: cp.ChildProcess
+    process: cp.ChildProcess
     connection: rpc.MessageConnection
     directory: string
 
@@ -83,27 +83,27 @@ class Client {
         this.name = name
         this.directory = directory
 
-        this.ethersyncClient = cp.spawn(cmd[0], cmd.slice(1), {cwd: directory})
+        this.process = cp.spawn(cmd[0], cmd.slice(1), {cwd: directory})
 
-        this.ethersyncClient.on("error", (err) => {
+        this.process.on("error", (err) => {
             vscode.window.showErrorMessage(
                 `Failed to start Ethersync client. Maybe the command is not in your PATH?: ${err.message}`,
             )
         })
 
-        this.ethersyncClient.on("exit", () => {
+        this.process.on("exit", () => {
             vscode.window.showErrorMessage(
                 `Connection to Ethersync daemon in '${directory}' lost or failed to initiate. Maybe there's no daemon running there?`,
             )
         })
 
-        if (!this.ethersyncClient.stdout || !this.ethersyncClient.stdin) {
+        if (!this.process.stdout || !this.process.stdin) {
             die("Failed to spawn Ethersync client (no stdin/stdout)")
         }
 
         this.connection = rpc.createMessageConnection(
-            new rpc.StreamMessageReader(this.ethersyncClient.stdout),
-            new rpc.StreamMessageWriter(this.ethersyncClient.stdin),
+            new rpc.StreamMessageReader(this.process.stdout),
+            new rpc.StreamMessageWriter(this.process.stdin),
         )
 
         this.connection.onNotification("edit", (edit) => processEditFromDaemon(this, edit))
