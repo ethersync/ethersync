@@ -220,25 +220,17 @@ local function on_buffer_close()
     debug("on_buffer_close: " .. closed_file)
 
     -- Find the correct client, and remove this buffer from it.
-    local client = nil
-    for _, c in ipairs(clients) do
-        for j, buffer in ipairs(c.buffers) do
+    for _, client in ipairs(clients) do
+        for j, buffer in ipairs(client.buffers) do
             if buffer == buf_nr then
-                client = c
-                table.remove(c.buffers, j)
-                break
+                client.files[closed_file] = nil
+
+                local uri = vim.uri_from_bufnr(buf_nr)
+                client.connection:send_notification("close", { uri = uri })
+                table.remove(client.buffers, j)
             end
         end
     end
-
-    if not client then
-        return
-    end
-
-    client.files[closed_file] = nil
-
-    local uri = vim.uri_from_bufnr(buf_nr)
-    client.connection:send_notification("close", { uri = uri })
 end
 
 local function print_info()
