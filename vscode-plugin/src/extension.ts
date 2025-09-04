@@ -88,7 +88,9 @@ class Client {
         this.ethersyncClient = cp.spawn(cmd[0], cmd.slice(1), {cwd: directory})
 
         this.ethersyncClient.on("error", (err) => {
-            vscode.window.showErrorMessage(`Failed to start ethersync client: ${err.message}`)
+            vscode.window.showErrorMessage(
+                `Failed to start Ethersync client. Maybe the command is not in your PATH?: ${err.message}`,
+            )
         })
 
         this.ethersyncClient.on("exit", () => {
@@ -98,8 +100,7 @@ class Client {
         })
 
         if (!this.ethersyncClient.stdout || !this.ethersyncClient.stdin) {
-            vscode.window.showErrorMessage("Connection to Ethersync daemon has no stdin/stdout.")
-            throw new Error("TODO")
+            die("Failed to spawn Ethersync client (no stdin/stdout)")
         }
 
         this.connection = rpc.createMessageConnection(
@@ -546,6 +547,11 @@ export function deactivate() {}
 function debug(text: string) {
     // Disabled because we don't need it right now.
     // console.log(Date.now() - t0 + " " + text)
+}
+
+function die(text: string): never {
+    vscode.window.showErrorMessage(text)
+    throw new Error(text)
 }
 
 function updateContents(client: Client, document: vscode.TextDocument) {
