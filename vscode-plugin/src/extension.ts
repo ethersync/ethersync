@@ -293,23 +293,6 @@ async function applyEdit(client: Client, document: vscode.TextDocument, edit: Ed
     return worked
 }
 
-function findValidConfiguration(document: vscode.TextDocument): [string, Configuration | null, string] {
-    for (let name of Object.keys(configurations)) {
-        let configuration = configurations[name]
-        const filename = document.fileName
-        for (let rootMarker of configuration.rootMarkers) {
-            const directory = findMarkerDirectory(path.dirname(filename), rootMarker)
-            if (directory) {
-                return [name, configuration, directory]
-            }
-        }
-    }
-    // TODO: fix return type:
-    // - what if no config matches?
-    // - multiple configs matching?
-    return ["none", null, "/tmp"]
-}
-
 function findOrCreateClient(name: string, directory: string): Client {
     // We re-use clients for configs with the same name and directory.
     for (let client of clients) {
