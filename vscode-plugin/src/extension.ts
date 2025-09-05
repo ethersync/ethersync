@@ -67,7 +67,6 @@ class Revision {
 
 interface Configuration {
     cmd: string[]
-    enabled: boolean
     rootMarkers: string[]
 }
 
