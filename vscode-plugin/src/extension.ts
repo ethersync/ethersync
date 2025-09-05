@@ -71,14 +71,17 @@ interface Configuration {
     rootMarkers: string[]
 }
 
+interface DocumentOTState {
+    revision: Revision
+    content: string[]
+}
+
 class Client {
     name: string
-    revisions: {[filename: string]: Revision} = {}
-    contents: {[filename: string]: string[]} = {}
+    ot_states: {[uri: string]: DocumentOTState} = {}
     process: cp.ChildProcess
     connection: rpc.MessageConnection
     directory: string
-    textDocuments: vscode.TextDocument[] = []
 
     constructor(name: string, cmd: string[], directory: string) {
         this.name = name
@@ -209,8 +212,7 @@ function documentForUri(uri: string): vscode.TextDocument | undefined {
 async function processEditFromDaemon(client: Client, edit: Edit) {
     try {
         await mutex.runExclusive(async () => {
-            const filename = uriToFname(edit.uri)
-            let revision = client.revisions[filename]
+            let revision = client.ot_states[edit.uri].revision
             if (edit.revision !== revision.editor) {
                 debug(`Received edit for revision ${edit.revision} (!= ${revision.editor}), ignoring`)
                 return
@@ -310,15 +312,18 @@ function findOrCreateClient(name: string, directory: string): Client {
 
 function activateConfigForTextDocument(name: string, document: vscode.TextDocument, directory: string) {
     let client = findOrCreateClient(name, directory)
-    client.textDocuments.push(document)
 
-    const fileUri = document.uri.toString()
-    debug("OPEN " + decodeURI(fileUri))
+    const uri = document.uri.toString()
+    debug("OPEN " + decodeURI(uri))
     const content = document.getText()
     client.connection
-        .sendRequest(openType, {uri: fileUri, content: content})
+        .sendRequest(openType, {uri, content})
         .then(() => {
-            client.revisions[document.fileName] = new Revision()
+            client.ot_states[uri] = {
+                revision: new Revision(),
+                content: getLines(document),
+            }
+
             updateContents(client, document)
             debug("Successfully opened. Tracking changes.")
         })
@@ -346,22 +351,19 @@ async function processUserOpen(document: vscode.TextDocument) {
 }
 
 function clientsForDocument(document: vscode.TextDocument): Client[] {
-    return clients.filter(client => client.textDocuments.includes(document))
+    return clients.filter((client) => clientTracksDocument(client, document))
+}
+
+function clientTracksDocument(client: Client, document: vscode.TextDocument): boolean {
+    return Object.keys(client.ot_states).includes(document.uri.toString())
 }
 
 function processUserClose(document: vscode.TextDocument) {
     for (let client of clientsForDocument(document)) {
-        if (!(document.fileName in client.revisions)) {
-            // File is not currently tracked by the client.
-            continue
-        }
-        const fileUri = document.uri.toString()
-        client.connection.sendRequest(closeType, {uri: fileUri})
+        const uri = document.uri.toString()
+        client.connection.sendRequest(closeType, {uri})
 
-        // TODO: refactor redundancy of the revisions-key and textDocument in client
-        delete client.revisions[document.fileName]
-        const index = client.textDocuments.indexOf(document)
-        client.textDocuments.splice(index, 1)
+        delete client.ot_states[uri]
     }
 }
 
@@ -401,11 +403,6 @@ function isRemoteEdit(event: vscode.TextDocumentChangeEvent): boolean {
 // as the _state_ of the document might change (like isDirty).
 function processUserEdit(event: vscode.TextDocumentChangeEvent) {
     for (let client of clientsForDocument(event.document)) {
-        if (!(event.document.fileName in client.revisions)) {
-            // File is not currently tracked in the respective client.
-            continue
-        }
-
         if (isRemoteEdit(event)) {
             debug("Ignoring remote event (we have caused it)")
             return
@@ -424,9 +421,9 @@ function processUserEdit(event: vscode.TextDocumentChangeEvent) {
                     return
                 }
 
-                const filename = document.fileName
+                const uri = document.uri.toString()
 
-                let revision = client.revisions[filename]
+                let revision = client.ot_states[uri].revision
 
                 let edits = vsCodeChangeEventToEthersyncEdits(client, event)
 
@@ -455,13 +452,9 @@ function processUserEdit(event: vscode.TextDocumentChangeEvent) {
 }
 
 function processSelection(event: vscode.TextEditorSelectionChangeEvent) {
-    for (let client of clients) {
-        if (!(event.textEditor.document.fileName in client.revisions)) {
-            // File is not currently tracked in ethersync.
-            return
-        }
+    for (let client of clientsForDocument(event.textEditor.document)) {
         let uri = event.textEditor.document.uri.toString()
-        let content = client.contents[event.textEditor.document.fileName]
+        let content = client.ot_states[uri].content
         let ranges = event.selections.map((s) => {
             return vsCodeRangeToEthersyncRange(content, s)
         })
@@ -471,16 +464,16 @@ function processSelection(event: vscode.TextEditorSelectionChangeEvent) {
 
 function vsCodeChangeEventToEthersyncEdits(client: Client, event: vscode.TextDocumentChangeEvent): Edit[] {
     let document = event.document
-    let filename = document.fileName
+    let uri = document.uri.toString()
 
-    let revision = client.revisions[filename]
+    let ot_state = client.ot_states[uri]
+    let revision = ot_state.revision
 
-    let content = client.contents[filename]
+    let content = ot_state.content
     let edits = []
 
     for (const change of event.contentChanges) {
         let delta = vsCodeChangeToEthersyncDelta(content, change)
-        let uri = document.uri.toString()
         let theEdit: Edit = {uri, revision: revision.daemon, delta: [delta]}
         edits.push(theEdit)
     }
@@ -530,8 +523,13 @@ function die(text: string): never {
 }
 
 function updateContents(client: Client, document: vscode.TextDocument) {
-    client.contents[document.fileName] = new Array(document.lineCount)
+    client.ot_states[document.uri.toString()].content = getLines(document)
+}
+
+function getLines(document: vscode.TextDocument): string[] {
+    let lines = new Array(document.lineCount)
     for (let line = 0; line < document.lineCount; line++) {
-        client.contents[document.fileName][line] = document.lineAt(line).text
+        lines[line] = document.lineAt(line).text
     }
+    return lines
 }
