@@ -123,7 +123,7 @@ let clients: Client[] = []
 // TODO: if we load from disk, this will also cause edits :-/
 let t0 = Date.now()
 const mutex = new Mutex()
-let attemptedRemoteEdits: Set<vscode.TextEdit[]> = new Set()
+let attemptedRemoteEdits: number = 0
 
 const openType = new rpc.RequestType<{uri: string; content: string}, string, void>("open")
 const closeType = new rpc.RequestType<{uri: string}, string, void>("close")
@@ -224,7 +224,7 @@ async function processEditFromDaemon(client: Client, edit: Edit) {
             const document = documentForUri(uri)
             if (document) {
                 let textEdit = ethersyncDeltasToVSCodeTextEdits(document, edit.delta)
-                attemptedRemoteEdits.add(textEdit)
+                attemptedRemoteEdits++
                 let worked = await applyEdit(client, document, edit)
                 if (worked) {
                     revision.daemon += 1
@@ -383,26 +383,22 @@ function isTextEditsEqualToVSCodeContentChanges(
     return true
 }
 
-function isRemoteEdit(event: vscode.TextDocumentChangeEvent): boolean {
-    let found: vscode.TextEdit[] | null = null
-    for (let attemptedEdit of attemptedRemoteEdits) {
-        if (isTextEditsEqualToVSCodeContentChanges(attemptedEdit, event.contentChanges)) {
-            found = attemptedEdit
-            break
-        }
-    }
-    if (found !== null) {
-        attemptedRemoteEdits.delete(found)
-        return true
-    }
-    return false
-}
-
 // NOTE: We might get multiple events per document.version,
 // as the _state_ of the document might change (like isDirty).
 function processUserEdit(event: vscode.TextDocumentChangeEvent) {
     for (let client of clientsForDocument(event.document)) {
-        if (isRemoteEdit(event)) {
+
+        // For some reason we get multipe events per edit caused by us.
+        // Let's actively skip the empty ones to make debugging output below less noisy.
+        if (event.contentChanges.length == 0) {
+            if (event.document.isDirty == false) {
+                debug("Ignoring empty docChange. (probably saving...)")
+            }
+            return
+        }
+
+        if (attemptedRemoteEdits) {
+            attemptedRemoteEdits--
             debug("Ignoring remote event (we have caused it)")
             return
         }
@@ -410,15 +406,6 @@ function processUserEdit(event: vscode.TextDocumentChangeEvent) {
         mutex
             .runExclusive(() => {
                 let document = event.document
-
-                // For some reason we get multipe events per edit caused by us.
-                // Let's actively skip the empty ones to make debugging output below less noisy.
-                if (event.contentChanges.length == 0) {
-                    if (document.isDirty == false) {
-                        debug("Ignoring empty docChange. (probably saving...)")
-                    }
-                    return
-                }
 
                 const uri = document.uri.toString()
 
