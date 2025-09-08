@@ -133,7 +133,6 @@ impl Watcher {
                     // Don't handle other events.
                     // But log them! I'm curious what they are!
                     debug!("Unhandled event in {:?}: {e:?}", event.paths);
-                    continue;
                 }
             }
         }
