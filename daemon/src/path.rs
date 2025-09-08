@@ -102,7 +102,7 @@ pub struct FileUri(String);
 
 impl FileUri {
     pub fn to_absolute_path(&self) -> AbsolutePath {
-        let path_buf = Url::parse(&self)
+        let path_buf = Url::parse(self)
             .expect("Should be able to parse file:// URL as Url")
             .to_file_path()
             .expect("Should be able to convert Url to PathBuf");
