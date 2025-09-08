@@ -205,7 +205,7 @@ impl EndpointActor {
         }
     }
 
-    async fn handle_message(&mut self, message: EndpointMessage) -> Result<()> {
+    async fn handle_message(&self, message: EndpointMessage) -> Result<()> {
         match message {
             EndpointMessage::Connect {
                 secret_address,
