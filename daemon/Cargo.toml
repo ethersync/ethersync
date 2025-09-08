@@ -48,7 +48,6 @@ nursery = { level = "warn", priority = -1 }
 allow_attributes = "warn"
 map_with_unused_argument_over_ranges = "warn"
 
-filetype_is_file = "allow" # TODO: probably relevant for this project
 needless_continue = "allow" # TODO: probably a bug that needs to be fixed
 too_long_first_doc_paragraph = "allow"
 needless_pass_by_ref_mut = "allow" # TODO: could be a bug, could be intended
