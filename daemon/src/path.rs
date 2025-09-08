@@ -178,13 +178,13 @@ mod test {
 
     #[test]
     fn test_uri_encoding_works_with_spaces() {
-        let uri = FileUri::try_from(format!("file:///a/b/file with spaces")).unwrap();
+        let uri = FileUri::try_from("file:///a/b/file with spaces".to_string()).unwrap();
         assert_eq!("file:///a/b/file%20with%20spaces", uri.0);
     }
 
     #[test]
     fn test_uri_decoding_works_with_spaces() {
-        let uri = FileUri::try_from(format!("file:///a/b/file with spaces")).unwrap();
+        let uri = FileUri::try_from("file:///a/b/file with spaces".to_string()).unwrap();
         let absolute_path = AbsolutePath::try_from("/a/b/file with spaces").unwrap();
         assert_eq!(absolute_path, uri.to_absolute_path());
     }
