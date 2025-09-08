@@ -125,10 +125,10 @@ pub fn ignored(absolute_base_dir: &Path, absolute_file_path: &Path) -> Result<bo
     return Ok(!walk
         .filter_map(Result::ok)
         .filter(|dir_entry| {
-            dir_entry
+            !dir_entry
                 .file_type()
                 .expect("Couldn't get file type of dir entry")
-                .is_file()
+                .is_dir()
         })
         .map(|dir_entry| absolute_and_canonicalized(dir_entry.path()))
         .filter_map(Result::ok)
