@@ -578,7 +578,7 @@ impl DocumentActor {
         });
     }
 
-    fn write_files_changed_in_file_deltas(&mut self, file_deltas: &[FileTextDelta]) {
+    fn write_files_changed_in_file_deltas(&self, file_deltas: &[FileTextDelta]) {
         // Collect file paths into a set, so we don't write files multiple times on complex
         // patches.
         let mut file_paths = HashSet::new();
@@ -591,7 +591,7 @@ impl DocumentActor {
         }
     }
 
-    fn write_file(&mut self, file_path: &RelativePath) {
+    fn write_file(&self, file_path: &RelativePath) {
         if let Ok(text) = self.current_file_content(file_path) {
             let abs_path = self.absolute_path_for_file_path(file_path);
             debug!("Writing to {abs_path}.");
@@ -949,7 +949,7 @@ impl DocumentActorHandle {
         recv.await.expect("DocumentActor task has been killed")
     }
 
-    pub async fn apply_random_delta(&mut self) {
+    pub async fn apply_random_delta(&self) {
         let message = DocMessage::RandomEdit;
         self.doc_message_tx
             .send(message)

@@ -49,7 +49,6 @@ allow_attributes = "warn"
 map_with_unused_argument_over_ranges = "warn"
 
 too_long_first_doc_paragraph = "allow"
-needless_pass_by_ref_mut = "allow" # TODO: could be a bug, could be intended
 
 cast_possible_truncation = "allow"
 cast_possible_wrap = "allow"
