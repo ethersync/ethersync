@@ -50,9 +50,11 @@ map_with_unused_argument_over_ranges = "warn"
 
 too_long_first_doc_paragraph = "allow"
 
+# TODO: add 'expect' to the places where casts are happening and enable the lints
 cast_possible_truncation = "allow"
 cast_possible_wrap = "allow"
 cast_sign_loss = "allow"
+
 cognitive_complexity = "allow"
 missing_const_for_fn = "allow"
 missing_errors_doc = "allow"
