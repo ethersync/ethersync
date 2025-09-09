@@ -7,7 +7,7 @@ use anyhow::Result;
 use magic_wormhole::{transfer, AppID, Code, MailboxConnection, Wormhole};
 use std::{str::FromStr, time::Duration};
 use tokio::time::sleep;
-use tracing::{info, warn};
+use tracing::{error, info, warn};
 
 pub async fn put_secret_address_into_wormhole(address: &str) {
     let config = transfer::APP_CONFIG.id(AppID::new("ethersync"));
@@ -15,7 +15,12 @@ pub async fn put_secret_address_into_wormhole(address: &str) {
 
     tokio::spawn(async move {
         loop {
-            let mailbox_connection = MailboxConnection::create(config.clone(), 2).await.unwrap();
+            let Ok(mailbox_connection) = MailboxConnection::create(config.clone(), 2).await else {
+                error!(
+                    "Failed to share join code via magic wormhole. Restart Ethersync to try again."
+                );
+                return;
+            };
             let code = mailbox_connection.code().clone();
 
             info!(
