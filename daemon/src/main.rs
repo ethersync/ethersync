@@ -93,13 +93,9 @@ async fn main() -> Result<()> {
                 );
             }
 
+            // Silently make sure that .ethersync is ignored.
             if config::ethersync_directory_should_be_ignored_but_isnt(&directory) {
-                if ask("Ethersync uses the directory .ethersync/ to store sensitive secrets. Add it to your global ~/.config/git/ignore?")? {
-                    config::add_ethersync_to_global_gitignore()?;
-                    info!("Added! Resuming launch.");
-                } else {
-                    bail!("Aborting launch. We *really* don't want you to accidentally commit your secrets. Add .ethersync/ to a (global or local) .gitignore and try again.");
-                }
+                config::add_ethersync_to_local_gitignore(&directory)?;
             }
 
             let mut init_doc = false;
