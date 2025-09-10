@@ -611,32 +611,29 @@ impl DocumentActor {
 
     fn read_current_content_from_dir(&mut self, init: bool) {
         debug!("Reading current contents from disk (init: {init}).");
-        sandbox::enumerate_non_ignored_files(&self.base_dir)
-            .unwrap_or_default()
-            .into_iter()
-            .for_each(
-                |file_path| match sandbox::read_file(&self.base_dir, &file_path) {
-                    Ok(bytes) => {
-                        let relative_file_path =
-                            RelativePath::try_from_path(&self.base_dir, &file_path)
-                                .expect("Walked file path should be within base directory");
-                        if self.owns(&relative_file_path) {
-                            if let Ok(text) = String::from_utf8(bytes.clone()) {
-                                if init {
-                                    self.crdt_doc.initialize_text(&text, &relative_file_path);
-                                } else {
-                                    self.crdt_doc.update_text(&text, &relative_file_path);
-                                }
+        for file_path in sandbox::enumerate_non_ignored_files(&self.base_dir) {
+            match sandbox::read_file(&self.base_dir, &file_path) {
+                Ok(bytes) => {
+                    let relative_file_path =
+                        RelativePath::try_from_path(&self.base_dir, &file_path)
+                            .expect("Walked file path should be within base directory");
+                    if self.owns(&relative_file_path) {
+                        if let Ok(text) = String::from_utf8(bytes.clone()) {
+                            if init {
+                                self.crdt_doc.initialize_text(&text, &relative_file_path);
                             } else {
-                                self.crdt_doc.set_bytes(&bytes, &relative_file_path);
+                                self.crdt_doc.update_text(&text, &relative_file_path);
                             }
+                        } else {
+                            self.crdt_doc.set_bytes(&bytes, &relative_file_path);
                         }
                     }
-                    Err(e) => {
-                        warn!("Failed to read file '{}': {e}", file_path.display());
-                    }
-                },
-            );
+                }
+                Err(e) => {
+                    warn!("Failed to read file '{}': {e}", file_path.display());
+                }
+            }
+        }
 
         for relative_file_path in self.crdt_doc.files() {
             let absolute_file_path = self.absolute_path_for_file_path(&relative_file_path);
