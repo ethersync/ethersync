@@ -25,7 +25,6 @@ use automerge::{
     Patch,
 };
 use futures::SinkExt;
-use ignore::{Walk, WalkBuilder};
 use rand::Rng;
 use std::collections::{HashMap, HashSet};
 use std::fmt;
@@ -610,42 +609,16 @@ impl DocumentActor {
         }
     }
 
-    // TODO: Join this code with the WalkBuilder in the sandbox module!
-    #[must_use]
-    fn build_walk(&self) -> Walk {
-        const IGNORED: &[&str] = &[".git", ".ethersync"];
-        // TODO: How to deal with binary files?
-        WalkBuilder::new(&self.base_dir)
-            .standard_filters(true)
-            .hidden(false)
-            .require_git(false)
-            // Interestingly, the standard filters don't seem to ignore .git.
-            .filter_entry(move |dir_entry| {
-                dir_entry
-                    .path()
-                    .file_name()
-                    .and_then(|name| name.to_str())
-                    .map_or(true, |name| !IGNORED.contains(&name))
-            })
-            .build()
-    }
-
     fn read_current_content_from_dir(&mut self, init: bool) {
         debug!("Reading current contents from disk (init: {init}).");
-        self.build_walk()
-            .filter_map(Result::ok)
-            .filter(|dir_entry| {
-                dir_entry
-                    .file_type()
-                    .expect("Couldn't get file type of dir entry.")
-                    .is_file()
-            })
-            .for_each(|dir_entry| {
-                let file_path = dir_entry.path();
-                match sandbox::read_file(&self.base_dir, file_path) {
+        sandbox::enumerate_non_ignored_files(&self.base_dir)
+            .unwrap_or_default()
+            .into_iter()
+            .for_each(
+                |file_path| match sandbox::read_file(&self.base_dir, &file_path) {
                     Ok(bytes) => {
                         let relative_file_path =
-                            RelativePath::try_from_path(&self.base_dir, file_path)
+                            RelativePath::try_from_path(&self.base_dir, &file_path)
                                 .expect("Walked file path should be within base directory");
                         if self.owns(&relative_file_path) {
                             if let Ok(text) = String::from_utf8(bytes.clone()) {
@@ -662,8 +635,8 @@ impl DocumentActor {
                     Err(e) => {
                         warn!("Failed to read file '{}': {e}", file_path.display());
                     }
-                }
-            });
+                },
+            );
 
         for relative_file_path in self.crdt_doc.files() {
             let absolute_file_path = self.absolute_path_for_file_path(&relative_file_path);

@@ -95,18 +95,12 @@ pub fn exists(absolute_base_dir: &Path, absolute_file_path: &Path) -> Result<boo
     Ok(canonical_file_path.exists())
 }
 
-// TODO: Don't build the list of ignored files on every call.
-// TODO: Allow calling this for non-existing files.
-pub fn ignored(absolute_base_dir: &Path, absolute_file_path: &Path) -> Result<bool> {
-    let canonical_file_path =
-        check_inside_base_dir_and_canonicalize(absolute_base_dir, absolute_file_path)?;
+pub fn enumerate_non_ignored_files(absolute_base_dir: &Path) -> Result<Vec<PathBuf>> {
+    let canonical_base_dir = absolute_and_canonicalized(absolute_base_dir)?;
 
     let ignored_things = [".git", ".ethersync"];
 
-    // To use the same logic for which files are ignored, iterate through all files
-    // using ignore::Walk, and try to find this file.
-    // This has the downside that the file must already exist.
-    let walk = WalkBuilder::new(absolute_base_dir)
+    let walk = WalkBuilder::new(canonical_base_dir)
         .standard_filters(true)
         .hidden(false)
         .require_git(false)
@@ -122,7 +116,7 @@ pub fn ignored(absolute_base_dir: &Path, absolute_file_path: &Path) -> Result<bo
         })
         .build();
 
-    return Ok(!walk
+    Ok(walk
         .filter_map(Result::ok)
         .filter(|dir_entry| {
             !dir_entry
@@ -132,7 +126,16 @@ pub fn ignored(absolute_base_dir: &Path, absolute_file_path: &Path) -> Result<bo
         })
         .map(|dir_entry| absolute_and_canonicalized(dir_entry.path()))
         .filter_map(Result::ok)
-        .any(|path| path == canonical_file_path));
+        .collect())
+}
+
+// TODO: Don't build the list of ignored files on every call.
+// TODO: Allow calling this for non-existing files.
+pub fn ignored(absolute_base_dir: &Path, absolute_file_path: &Path) -> Result<bool> {
+    let canonical_file_path =
+        check_inside_base_dir_and_canonicalize(absolute_base_dir, absolute_file_path)?;
+
+    Ok(!enumerate_non_ignored_files(absolute_base_dir)?.contains(&canonical_file_path))
 }
 
 fn check_inside_base_dir_and_canonicalize(base_dir: &Path, path: &Path) -> Result<PathBuf> {
