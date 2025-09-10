@@ -95,12 +95,10 @@ pub fn exists(absolute_base_dir: &Path, absolute_file_path: &Path) -> Result<boo
     Ok(canonical_file_path.exists())
 }
 
-pub fn enumerate_non_ignored_files(absolute_base_dir: &Path) -> Result<Vec<PathBuf>> {
-    let canonical_base_dir = absolute_and_canonicalized(absolute_base_dir)?;
-
+pub fn enumerate_non_ignored_files(absolute_base_dir: &Path) -> Vec<PathBuf> {
     let ignored_things = [".git", ".ethersync"];
 
-    let walk = WalkBuilder::new(canonical_base_dir)
+    let walk = WalkBuilder::new(absolute_base_dir)
         .standard_filters(true)
         .hidden(false)
         .require_git(false)
@@ -116,17 +114,15 @@ pub fn enumerate_non_ignored_files(absolute_base_dir: &Path) -> Result<Vec<PathB
         })
         .build();
 
-    Ok(walk
-        .filter_map(Result::ok)
+    walk.filter_map(Result::ok)
         .filter(|dir_entry| {
             !dir_entry
                 .file_type()
                 .expect("Couldn't get file type of dir entry")
                 .is_dir()
         })
-        .map(|dir_entry| absolute_and_canonicalized(dir_entry.path()))
-        .filter_map(Result::ok)
-        .collect())
+        .map(|dir_entry| dir_entry.path().to_path_buf())
+        .collect()
 }
 
 // TODO: Don't build the list of ignored files on every call.
@@ -135,7 +131,11 @@ pub fn ignored(absolute_base_dir: &Path, absolute_file_path: &Path) -> Result<bo
     let canonical_file_path =
         check_inside_base_dir_and_canonicalize(absolute_base_dir, absolute_file_path)?;
 
-    Ok(!enumerate_non_ignored_files(absolute_base_dir)?.contains(&canonical_file_path))
+    Ok(!enumerate_non_ignored_files(absolute_base_dir)
+        .into_iter()
+        .map(|path_buf| absolute_and_canonicalized(&path_buf))
+        .collect::<Result<Vec<_>>>()?
+        .contains(&canonical_file_path))
 }
 
 fn check_inside_base_dir_and_canonicalize(base_dir: &Path, path: &Path) -> Result<PathBuf> {
