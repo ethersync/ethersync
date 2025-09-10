@@ -96,7 +96,7 @@ pub fn exists(absolute_base_dir: &Path, absolute_file_path: &Path) -> Result<boo
 }
 
 pub fn enumerate_non_ignored_files(absolute_base_dir: &Path) -> Vec<PathBuf> {
-    let ignored_things = [".git", ".ethersync"];
+    let ignored_things = [".ethersync", ".git", ".bzr", ".hg", ".jj", ".pijul", ".svn"];
 
     let walk = WalkBuilder::new(absolute_base_dir)
         .standard_filters(true)
