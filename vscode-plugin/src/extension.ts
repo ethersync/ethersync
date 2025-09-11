@@ -11,7 +11,7 @@ import * as fs from "fs"
 var Mutex = require("async-mutex").Mutex
 
 import {setCursor, getCursorInfo, drawCursors} from "./cursor"
-import {computeMoreMinimalEdits} from "./minimal"
+import {computeMoreMinimalEdits, compareRangesUsingStarts} from "./minimal"
 
 function findMarkerDirectory(dir: string, marker: string) {
     if (fs.existsSync(path.join(dir, marker))) {
@@ -375,6 +375,12 @@ function isTextEditsEqualToVSCodeContentChanges(
     if (textEdits.length !== changes.length) {
         return false
     }
+
+    // TODO: Might not be sufficient?
+    changes = changes.slice(0).sort((a, b) => {
+        return compareRangesUsingStarts(a.range, b.range)
+    })
+
     for (let i = 0; i < textEdits.length; i++) {
         let textEdit = textEdits[i]
         let change = changes[i]
