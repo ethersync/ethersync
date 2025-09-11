@@ -11,6 +11,7 @@ import * as fs from "fs"
 var Mutex = require("async-mutex").Mutex
 
 import {setCursor, getCursorInfo, drawCursors} from "./cursor"
+import {computeMoreMinimalEdits} from "./minimal"
 
 function findMarkerDirectory(dir: string, marker: string) {
     if (fs.existsSync(path.join(dir, marker))) {
@@ -224,6 +225,7 @@ async function processEditFromDaemon(client: Client, edit: Edit) {
             const document = documentForUri(uri)
             if (document) {
                 let textEdit = ethersyncDeltasToVSCodeTextEdits(document, edit.delta)
+                textEdit = computeMoreMinimalEdits(document, textEdit)
                 attemptedRemoteEdits.add(textEdit)
                 let worked = await applyEdit(client, document, edit)
                 if (worked) {
