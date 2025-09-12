@@ -95,17 +95,9 @@ pub fn exists(absolute_base_dir: &Path, absolute_file_path: &Path) -> Result<boo
     Ok(canonical_file_path.exists())
 }
 
-// TODO: Don't build the list of ignored files on every call.
-// TODO: Allow calling this for non-existing files.
-pub fn ignored(absolute_base_dir: &Path, absolute_file_path: &Path) -> Result<bool> {
-    let canonical_file_path =
-        check_inside_base_dir_and_canonicalize(absolute_base_dir, absolute_file_path)?;
+pub fn enumerate_non_ignored_files(absolute_base_dir: &Path) -> Vec<PathBuf> {
+    let ignored_things = [".ethersync", ".git", ".bzr", ".hg", ".jj", ".pijul", ".svn"];
 
-    let ignored_things = [".git", ".ethersync"];
-
-    // To use the same logic for which files are ignored, iterate through all files
-    // using ignore::Walk, and try to find this file.
-    // This has the downside that the file must already exist.
     let walk = WalkBuilder::new(absolute_base_dir)
         .standard_filters(true)
         .hidden(false)
@@ -122,17 +114,28 @@ pub fn ignored(absolute_base_dir: &Path, absolute_file_path: &Path) -> Result<bo
         })
         .build();
 
-    return Ok(!walk
-        .filter_map(Result::ok)
+    walk.filter_map(Result::ok)
         .filter(|dir_entry| {
             !dir_entry
                 .file_type()
                 .expect("Couldn't get file type of dir entry")
                 .is_dir()
         })
-        .map(|dir_entry| absolute_and_canonicalized(dir_entry.path()))
-        .filter_map(Result::ok)
-        .any(|path| path == canonical_file_path));
+        .map(|dir_entry| dir_entry.path().to_path_buf())
+        .collect()
+}
+
+// TODO: Don't build the list of ignored files on every call.
+// TODO: Allow calling this for non-existing files.
+pub fn ignored(absolute_base_dir: &Path, absolute_file_path: &Path) -> Result<bool> {
+    let canonical_file_path =
+        check_inside_base_dir_and_canonicalize(absolute_base_dir, absolute_file_path)?;
+
+    Ok(!enumerate_non_ignored_files(absolute_base_dir)
+        .into_iter()
+        .map(|path_buf| absolute_and_canonicalized(&path_buf))
+        .collect::<Result<Vec<_>>>()?
+        .contains(&canonical_file_path))
 }
 
 fn check_inside_base_dir_and_canonicalize(base_dir: &Path, path: &Path) -> Result<PathBuf> {

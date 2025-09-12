@@ -171,20 +171,21 @@ fn find_git_repo(path: &Path) -> Result<git2::Repository, git2::Error> {
     git2::Repository::discover(path)
 }
 
-pub fn add_ethersync_to_global_gitignore() -> Result<()> {
-    let home_dir = std::env::home_dir().expect("Could not find home directory");
-    let git_config_dir = home_dir.join(".config/git");
-    let ignore_file_path = git_config_dir.join("ignore");
+pub fn add_ethersync_to_local_gitignore(directory: &Path) -> Result<()> {
+    let mut ignore_file_path = directory.join(CONFIG_DIR);
+    ignore_file_path.push(".gitignore");
 
-    sandbox::create_dir_all(&git_config_dir, &git_config_dir)?;
-    let bytes_in = sandbox::read_file(&git_config_dir, &ignore_file_path).unwrap_or_default();
+    // It's very unlikely that .ethersync/.gitignore will already contain something, but let's
+    // still append.
+    let bytes_in = sandbox::read_file(directory, &ignore_file_path).unwrap_or_default();
     let mut content = std::str::from_utf8(&bytes_in)?.to_string();
+
     if !content.is_empty() && !content.ends_with('\n') {
         content.push('\n');
     }
-    content.push_str(".ethersync/\n");
+    content.push_str("/*\n");
     let bytes_out = content.as_bytes();
-    sandbox::write_file(&git_config_dir, &ignore_file_path, bytes_out)?;
+    sandbox::write_file(directory, &ignore_file_path, bytes_out)?;
 
     Ok(())
 }
