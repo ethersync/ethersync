@@ -160,6 +160,7 @@ pub enum EditorProtocolMessageFromEditor {
     Open {
         uri: DocumentUri,
         content: String,
+        version: String,
     },
     Close {
         uri: DocumentUri,

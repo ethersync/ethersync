@@ -113,7 +113,21 @@ impl EditorConnection {
         }
 
         match message {
-            EditorProtocolMessageFromEditor::Open { uri, content } => {
+            EditorProtocolMessageFromEditor::Open {
+                uri,
+                content,
+                version,
+            } => {
+                // TODO: put version and version check elsewhere
+                if version != "0.7.0" {
+                    return Err(EditorProtocolMessageError {
+                        code: -1,
+                        message: "Wrong Version".into(),
+                        data: Some(format!(
+                            "The editor plugin expects version {version}, but the daemon is on X"
+                        )),
+                    });
+                }
                 let uri = FileUri::try_from(uri.clone()).map_err(anyhow_err_to_protocol_err)?;
                 let absolute_path = uri.to_absolute_path();
                 let relative_path = RelativePath::try_from_absolute(&self.base_dir, &absolute_path)
