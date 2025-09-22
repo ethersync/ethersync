@@ -123,7 +123,7 @@ let clients: Client[] = []
 // TODO: if we load from disk, this will also cause edits :-/
 let t0 = Date.now()
 const mutex = new Mutex()
-let attemptedRemoteEdits: Set<vscode.TextEdit[]> = new Set()
+let expectedContentAfterRemoteEdit: string | null = null
 
 const openType = new rpc.RequestType<{uri: string; content: string}, string, void>("open")
 const closeType = new rpc.RequestType<{uri: string}, string, void>("close")
@@ -208,6 +208,27 @@ function documentForUri(uri: string): vscode.TextDocument | undefined {
     return vscode.workspace.textDocuments.find((doc) => doc.uri.toString() === uri)
 }
 
+// Apply given TextEdits to content of the TextDocument, and return the resulting content.
+export function contentAfterEdits(document: vscode.TextDocument, edits: vscode.TextEdit[]): string {
+    let result = document.getText()
+
+    // Sort edits by start offset DESCENDING (so we apply from end → start)
+    const sorted = edits.slice().sort((a, b) => {
+        const aStart = document.offsetAt(a.range.start)
+        const bStart = document.offsetAt(b.range.start)
+        return bStart - aStart
+    })
+
+    for (const edit of sorted) {
+        const startOffset = document.offsetAt(edit.range.start)
+        const endOffset = document.offsetAt(edit.range.end)
+
+        result = result.slice(0, startOffset) + edit.newText + result.slice(endOffset)
+    }
+
+    return result
+}
+
 async function processEditFromDaemon(client: Client, edit: Edit) {
     try {
         await mutex.runExclusive(async () => {
@@ -223,8 +244,8 @@ async function processEditFromDaemon(client: Client, edit: Edit) {
 
             const document = documentForUri(uri)
             if (document) {
-                let textEdit = ethersyncDeltasToVSCodeTextEdits(document, edit.delta)
-                attemptedRemoteEdits.add(textEdit)
+                let textEdits = ethersyncDeltasToVSCodeTextEdits(document, edit.delta)
+                expectedContentAfterRemoteEdit = contentAfterEdits(document, textEdits)
                 let worked = await applyEdit(client, document, edit)
                 if (worked) {
                     revision.daemon += 1
@@ -233,9 +254,23 @@ async function processEditFromDaemon(client: Client, edit: Edit) {
                     document.save()
                 } else {
                     debug("rejected an applyEdit, sending empty delta")
-                    let theEdit: Edit = {uri, revision: revision.daemon, delta: []}
-                    client.connection.sendRequest(editType, theEdit)
-                    revision.editor += 1
+
+                    if (expectedContentAfterRemoteEdit === null) {
+                        // The user made an edit that resulted in the same content, we (wrongly) ignored it, and didn't
+                        // send it to the daemon.
+                        // We're going to accept this edge-case, but should increase the daemon revision, to simulate
+                        // a successfull application of the remote edit.
+                        // TODO: We could even try to send out the edit again now!
+                        debug("the case")
+                        revision.daemon += 1
+                    } else {
+                        debug("the other case")
+                        // Otherwise, send back an empty delta (TODO I don't remember why?)
+                        let theEdit: Edit = {uri, revision: revision.daemon, delta: []}
+                        client.connection.sendRequest(editType, theEdit)
+                        revision.editor += 1
+                        expectedContentAfterRemoteEdit = null
+                    }
                 }
             } else {
                 throw new Error(`No document for URI ${uri}, why is the daemon sending me this?`)
@@ -366,47 +401,25 @@ function processUserClose(document: vscode.TextDocument) {
     }
 }
 
-function isTextEditsEqualToVSCodeContentChanges(
-    textEdits: vscode.TextEdit[],
-    changes: readonly vscode.TextDocumentContentChangeEvent[],
-): boolean {
-    if (textEdits.length !== changes.length) {
+function isRemoteEdit(event: vscode.TextDocumentChangeEvent): boolean {
+    let actualContent = event.document.getText()
+    if (actualContent === expectedContentAfterRemoteEdit) {
+        expectedContentAfterRemoteEdit = null
+        return true
+    } else {
         return false
     }
-    for (let i = 0; i < textEdits.length; i++) {
-        let textEdit = textEdits[i]
-        let change = changes[i]
-        if (textEdit.newText !== change.text || !textEdit.range.isEqual(change.range)) {
-            return false
-        }
-    }
-    return true
-}
-
-function isRemoteEdit(event: vscode.TextDocumentChangeEvent): boolean {
-    let found: vscode.TextEdit[] | null = null
-    for (let attemptedEdit of attemptedRemoteEdits) {
-        if (isTextEditsEqualToVSCodeContentChanges(attemptedEdit, event.contentChanges)) {
-            found = attemptedEdit
-            break
-        }
-    }
-    if (found !== null) {
-        attemptedRemoteEdits.delete(found)
-        return true
-    }
-    return false
 }
 
 // NOTE: We might get multiple events per document.version,
 // as the _state_ of the document might change (like isDirty).
 function processUserEdit(event: vscode.TextDocumentChangeEvent) {
-    for (let client of clientsForDocument(event.document)) {
-        if (isRemoteEdit(event)) {
-            debug("Ignoring remote event (we have caused it)")
-            return
-        }
+    if (isRemoteEdit(event)) {
+        debug("Ignoring remote event (we have caused it)")
+        return
+    }
 
+    for (let client of clientsForDocument(event.document)) {
         mutex
             .runExclusive(() => {
                 let document = event.document
