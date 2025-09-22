@@ -442,7 +442,11 @@ function processUserEdit(event: vscode.TextDocumentChangeEvent) {
 
                 // Attempt auto-save to avoid the situation where one user closes a modified
                 // document without saving, which will cause VS Code to undo the dirty changes.
-                document.save()
+                // If the document is empty, don't save - this will trigger a
+                // "The content of the file is newer." warning.
+                if (document.getText() !== "") {
+                    document.save()
+                }
             })
             .catch((e: Error) => {
                 vscode.window.showErrorMessage(`Error while sending edit to Ethersync daemon: ${e}`)
