@@ -93,10 +93,7 @@ async fn main() -> Result<()> {
                 );
             }
 
-            // Silently make sure that .ethersync is ignored.
-            if config::ethersync_directory_should_be_ignored_but_isnt(&directory) {
-                config::add_ethersync_to_local_gitignore(&directory)?;
-            }
+            config::ensure_ethersync_is_ignored(&directory)?;
 
             let mut init_doc = false;
             let mut app_config;
