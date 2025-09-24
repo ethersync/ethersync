@@ -66,7 +66,7 @@ too_many_lines = "allow"
 [dependencies]
 anyhow = "1.0.81"
 async-trait = "0.1.88"
-automerge = "0.6.1"
+automerge = "1.0.0-beta.3"
 clap = { version = "4.5.3", features = ["derive", "env"], optional = true }
 constant_time_eq = "0.3.1"
 derive_more = { version = "2.0.1", features = ["as_ref", "deref", "display"] }
