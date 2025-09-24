@@ -403,18 +403,14 @@ function processUserClose(document: vscode.TextDocument) {
 
 function isRemoteEdit(event: vscode.TextDocumentChangeEvent): boolean {
     let actualContent = event.document.getText()
-    if (actualContent === expectedContentAfterRemoteEdit) {
-        expectedContentAfterRemoteEdit = null
-        return true
-    } else {
-        return false
-    }
+    return actualContent === expectedContentAfterRemoteEdit
 }
 
 // NOTE: We might get multiple events per document.version,
 // as the _state_ of the document might change (like isDirty).
 function processUserEdit(event: vscode.TextDocumentChangeEvent) {
     if (isRemoteEdit(event)) {
+        expectedContentAfterRemoteEdit = null
         debug("Ignoring remote event (we have caused it)")
         return
     }
