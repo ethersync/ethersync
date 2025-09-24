@@ -212,18 +212,22 @@ function documentForUri(uri: string): vscode.TextDocument | undefined {
 export function contentAfterEdits(document: vscode.TextDocument, edits: vscode.TextEdit[]): string {
     let result = document.getText()
 
-    // Sort edits by start offset DESCENDING (so we apply from end → start)
-    const sorted = edits.slice().sort((a, b) => {
-        const aStart = document.offsetAt(a.range.start)
-        const bStart = document.offsetAt(b.range.start)
-        return bStart - aStart
-    })
+    // Precompute offsets (from the original document) and keep original index
+    const editsWithOffsets = edits.map((e, i) => ({
+        start: document.offsetAt(e.range.start),
+        end: document.offsetAt(e.range.end),
+        newText: e.newText,
+    }))
 
-    for (const edit of sorted) {
-        const startOffset = document.offsetAt(edit.range.start)
-        const endOffset = document.offsetAt(edit.range.end)
+    // Sort by start offset descendingly.
+    // If they are equal (and thus, falsy), sort by end offset descendingly.
+    // Reason: If two edits are "replace character 0-0 with xxx" and "replace character 0-1 with nothing",
+    // they don't overlap, but the intended resulting edit should NOT remove the first x of xxx, it should
+    // remove a character from the original content.
+    editsWithOffsets.sort((a, b) => b.start - a.start || b.end - a.end)
 
-        result = result.slice(0, startOffset) + edit.newText + result.slice(endOffset)
+    for (const edit of editsWithOffsets) {
+        result = result.slice(0, edit.start) + edit.newText + result.slice(edit.end)
     }
 
     return result
