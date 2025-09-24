@@ -135,7 +135,7 @@ pub fn has_git_remote(path: &Path) -> bool {
 }
 
 #[must_use]
-pub fn ethersync_directory_should_be_ignored_but_isnt(path: &Path) -> bool {
+fn ethersync_directory_should_be_ignored_but_isnt(path: &Path) -> bool {
     if let Ok(repo) = find_git_repo(path) {
         let ethersync_dir = path.join(CONFIG_DIR);
         return !repo
@@ -171,7 +171,7 @@ fn find_git_repo(path: &Path) -> Result<git2::Repository, git2::Error> {
     git2::Repository::discover(path)
 }
 
-pub fn add_ethersync_to_local_gitignore(directory: &Path) -> Result<()> {
+fn add_ethersync_to_local_gitignore(directory: &Path) -> Result<()> {
     let mut ignore_file_path = directory.join(CONFIG_DIR);
     ignore_file_path.push(".gitignore");
 
@@ -187,5 +187,12 @@ pub fn add_ethersync_to_local_gitignore(directory: &Path) -> Result<()> {
     let bytes_out = content.as_bytes();
     sandbox::write_file(directory, &ignore_file_path, bytes_out)?;
 
+    Ok(())
+}
+
+pub fn ensure_ethersync_is_ignored(directory: &Path) -> Result<()> {
+    if ethersync_directory_should_be_ignored_but_isnt(directory) {
+        add_ethersync_to_local_gitignore(directory)?;
+    }
     Ok(())
 }
