@@ -18,7 +18,7 @@ use crate::types::{
 use crate::watcher::Watcher;
 use crate::watcher::WatcherEvent;
 use crate::wormhole::put_secret_address_into_wormhole;
-use anyhow::Result;
+use anyhow::{Context, Result};
 use automerge::ChangeHash;
 use automerge::{
     sync::{Message as AutomergeSyncMessage, State as SyncState},
@@ -989,7 +989,7 @@ impl Daemon {
             connection_manager
                 .connect(secret_address)
                 .await
-                .expect("Failed to connect to specified peer");
+                .context("Failed to connect to specified peer")?;
         }
 
         Ok(Self {
