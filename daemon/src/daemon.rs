@@ -7,6 +7,7 @@ use crate::config;
 use crate::document::Document;
 use crate::editor::{self, EditorId, EditorWriter};
 use crate::editor_connection::EditorConnection;
+use crate::keypair::get_keypair_from_basedir;
 use crate::path::{AbsolutePath, RelativePath};
 use crate::peer;
 use crate::sandbox;
@@ -971,7 +972,8 @@ impl Daemon {
         }
 
         // Start connection manager.
-        let connection_manager = peer::ConnectionManager::new(document_handle.clone(), &base_dir)
+        let keypair = get_keypair_from_basedir(&base_dir);
+        let connection_manager = peer::ConnectionManager::new(document_handle.clone(), keypair)
             .await
             .expect("Failed to start connection manager");
         let address = connection_manager.secret_address();
