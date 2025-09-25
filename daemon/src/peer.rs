@@ -5,11 +5,11 @@
 
 //! This module provides a [`ConnectionManager`], which can be used to connect to other daemons.
 
-use self::sync::{Connection, ConnectionError, PeerMessage, SyncActor};
+use self::sync::{Connection, PeerMessage, SyncActor};
 use crate::daemon::DocumentActorHandle;
 use anyhow::{bail, Context, Result};
 use async_trait::async_trait;
-use iroh::endpoint::{ReadError, ReadExactError, RecvStream, SendStream, WriteError};
+use iroh::endpoint::{RecvStream, SendStream};
 use iroh::{NodeAddr, SecretKey};
 use postcard::{from_bytes, to_allocvec};
 use std::fs::{self, File, OpenOptions};
@@ -17,7 +17,9 @@ use std::io::{Read, Write};
 use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
 use std::path::Path;
 use std::str::FromStr;
+use std::time::Duration;
 use tokio::sync::{mpsc, oneshot};
+use tokio::time::sleep;
 use tracing::{debug, info, warn};
 
 mod sync;
@@ -213,12 +215,21 @@ impl EndpointActor {
                 previous_attempts,
             } => {
                 let node_addr = secret_address.node_addr.clone();
-                let Ok(conn) = self.endpoint.connect(node_addr, ALPN).await else {
-                    Self::reconnect(self.message_tx.clone(), secret_address, previous_attempts)
-                        .await
-                        .expect("Failed to initiate reconnection");
-                    // Not really Ok, but Ok enough.
-                    return Ok(());
+                let connect_result = self.endpoint.connect(node_addr, ALPN).await;
+                let conn = match connect_result {
+                    Ok(conn) => conn,
+                    Err(err) => {
+                        if let Some(response_tx) = response_tx {
+                            response_tx
+                                .send(Err(err))
+                                .expect("Connect receiver dropped");
+                        }
+                        Self::reconnect(self.message_tx.clone(), secret_address, previous_attempts)
+                            .await
+                            .expect("Failed to initiate reconnection");
+                        // Not really Ok, but Ok enough.
+                        return Ok(());
+                    }
                 };
 
                 info!(
@@ -234,25 +245,18 @@ impl EndpointActor {
                 let document_handle_clone = self.document_handle.clone();
                 let message_tx_clone = self.message_tx.clone();
                 tokio::spawn(async move {
-                    // If handle_peer returns an Ok, the connection timed out. In that case,
-                    // reconnect.
-                    // In other cases, we got a more serious error, so don't reconnect.
-                    match Self::handle_peer(
+                    if let Err(err) = Self::handle_peer(
                         document_handle_clone,
                         conn,
                         PeerAuth::YourPassphrase(secret_address.passphrase.clone()),
                     )
                     .await
                     {
-                        Ok(()) => {
-                            Self::reconnect(message_tx_clone, secret_address, 0)
-                                .await
-                                .expect("Failed to initiate reconnection");
-                        }
-                        Err(err) => {
-                            panic!("Making a connection failed: {err}");
-                        }
+                        debug!("Error while handling a peer: {:?}", err);
                     }
+                    Self::reconnect(message_tx_clone, secret_address, 0)
+                        .await
+                        .expect("Failed to initiate reconnection");
                 });
             }
         }
@@ -271,6 +275,7 @@ impl EndpointActor {
                 secret_address.node_addr.node_id
             );
         } else {
+            sleep(Duration::from_secs(10)).await;
             debug!(
                 "Making another attempt to connect to peer {}...",
                 secret_address.node_addr.node_id
@@ -361,7 +366,7 @@ impl EndpointActor {
 // Sends/receives PeerMessages to/from and Iroh connection.
 struct IrohConnection {
     send: SendStream,
-    message_rx: mpsc::Receiver<Result<PeerMessage, ConnectionError>>,
+    message_rx: mpsc::Receiver<Result<PeerMessage>>,
 }
 
 impl IrohConnection {
@@ -401,7 +406,7 @@ impl IrohConnection {
 
     async fn read_loop(
         mut receive: RecvStream,
-        message_tx: mpsc::Sender<Result<PeerMessage, ConnectionError>>,
+        message_tx: mpsc::Sender<Result<PeerMessage>>,
     ) -> Result<()> {
         loop {
             let result = Self::read_next(&mut receive).await;
@@ -410,58 +415,32 @@ impl IrohConnection {
         }
     }
 
-    async fn read_next(receive: &mut RecvStream) -> Result<PeerMessage, ConnectionError> {
-        fn map_timeout(err: ReadExactError) -> ConnectionError {
-            if err
-                == ReadExactError::ReadError(ReadError::ConnectionLost(
-                    iroh::endpoint::ConnectionError::TimedOut,
-                ))
-            {
-                ConnectionError::TimedOut
-            } else {
-                ConnectionError::Other(err.into())
-            }
-        }
-
+    async fn read_next(receive: &mut RecvStream) -> Result<PeerMessage> {
         let mut message_len_buf = [0; 4];
-        receive
-            .read_exact(&mut message_len_buf)
-            .await
-            .map_err(map_timeout)?;
+        receive.read_exact(&mut message_len_buf).await?;
         let byte_count = u32::from_be_bytes(message_len_buf);
 
         let mut bytes = vec![0; byte_count as usize];
-        receive.read_exact(&mut bytes).await.map_err(map_timeout)?;
-        Ok(from_bytes(&bytes).context("Failed to convert bytes to PeerMessage")?)
+        receive.read_exact(&mut bytes).await?;
+        from_bytes(&bytes).context("Failed to convert bytes to PeerMessage")
     }
 }
 
 #[async_trait]
 impl Connection<PeerMessage> for IrohConnection {
-    async fn send(&mut self, message: PeerMessage) -> Result<(), ConnectionError> {
+    async fn send(&mut self, message: PeerMessage) -> Result<()> {
         let bytes: Vec<u8> =
             to_allocvec(&message).context("Failed to convert PeerMessage to bytes")?;
         let byte_count =
             u32::try_from(bytes.len()).expect("Converting a length to u32 should work");
 
-        fn map_timeout(err: WriteError) -> ConnectionError {
-            if err == WriteError::ConnectionLost(iroh::endpoint::ConnectionError::TimedOut) {
-                ConnectionError::TimedOut
-            } else {
-                ConnectionError::Other(err.into())
-            }
-        }
-
-        self.send
-            .write_all(&byte_count.to_be_bytes())
-            .await
-            .map_err(map_timeout)?;
-        self.send.write_all(&bytes).await.map_err(map_timeout)?;
+        self.send.write_all(&byte_count.to_be_bytes()).await?;
+        self.send.write_all(&bytes).await?;
 
         Ok(())
     }
 
-    async fn next(&mut self) -> Result<PeerMessage, ConnectionError> {
+    async fn next(&mut self) -> Result<PeerMessage> {
         self.message_rx
             .recv()
             .await

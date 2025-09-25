@@ -10,7 +10,6 @@ use async_trait::async_trait;
 use automerge::sync::{Message as AutomergeSyncMessage, State as SyncState};
 use serde::{Deserialize, Serialize};
 use std::mem;
-use thiserror::Error;
 use tokio::sync::{broadcast, oneshot};
 use tracing::debug;
 
@@ -24,18 +23,10 @@ pub enum PeerMessage {
     Ephemeral(EphemeralMessage),
 }
 
-#[derive(Error, Debug)]
-pub enum ConnectionError {
-    #[error("Connection timed out")]
-    TimedOut,
-    #[error(transparent)]
-    Other(#[from] anyhow::Error),
-}
-
 #[async_trait]
 pub trait Connection<T>: Send + Sync {
-    async fn send(&mut self, message: T) -> Result<(), ConnectionError>;
-    async fn next(&mut self) -> Result<T, ConnectionError>;
+    async fn send(&mut self, message: T) -> Result<()>;
+    async fn next(&mut self) -> Result<T>;
 }
 
 /// Transport-agnostic logic of how to sync with another peer.
@@ -134,20 +125,7 @@ impl SyncActor {
                 ephemeral_message = ephemeral_messages_rx.recv() => {
                     match ephemeral_message {
                         Ok(ephemeral_message) => {
-                            match self.connection.send(PeerMessage::Ephemeral(ephemeral_message))
-                                .await {
-                                    Ok(()) => {
-                                        // Continue the loop. :)
-                                    },
-                                    Err(ConnectionError::TimedOut) => {
-                                        // On timeout, return Ok, so that the caller
-                                        // knows that this was a timeout.
-                                        return Ok(());
-                                    },
-                                    Err(err) => {
-                                        return Err(err.into());
-                                    },
-                            }
+                            self.connection.send(PeerMessage::Ephemeral(ephemeral_message)).await?;
                         }
                         Err(broadcast::error::RecvError::Closed) => {
                             panic!("Ephemeral message channel has been closed");
@@ -160,19 +138,7 @@ impl SyncActor {
                     }
                 }
                 message = self.connection.next() => {
-                    match message {
-                        Ok(message) => {
-                            self.receive_peer_message(message).await?;
-                        }
-                        Err(ConnectionError::TimedOut) => {
-                            // On timeout, return Ok, so that the caller
-                            // knows that this was a timeout.
-                            return Ok(());
-                        }
-                        Err(err) => {
-                            return Err(err.into());
-                        },
-                    }
+                    self.receive_peer_message(message?).await?;
                 }
             }
         }
