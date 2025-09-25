@@ -1,0 +1,13 @@
+# SPDX-FileCopyrightText: 2025 blinry <mail@blinry.org>
+# SPDX-FileCopyrightText: 2025 zormit <nt4u@kpvn.de>
+#
+# SPDX-License-Identifier: AGPL-3.0-or-later
+[package]
+name = "ethersync-shared"
+description = "Cross-platform portion of the code."
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+iroh = "0.35.0"
