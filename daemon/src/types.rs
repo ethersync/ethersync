@@ -157,6 +157,9 @@ impl JSONRPCFromEditor {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "method", content = "params", rename_all = "camelCase")]
 pub enum EditorProtocolMessageFromEditor {
+    Initialize {
+        version: String,
+    },
     Open {
         uri: DocumentUri,
         content: String,
@@ -194,6 +197,7 @@ pub enum ComponentMessage {
         cursor_id: CursorId,
         cursor_state: CursorState,
     },
+    None,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

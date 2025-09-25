@@ -171,11 +171,14 @@ local function activate_config_for_buffer(config_name, buf_nr, root_dir)
         vim.cmd("silent write")
     end
 
-    client.connection:send_request("open", { uri = uri, content = content }, function()
-        debug("Tracking Edits")
-        ensure_autoread_is_off()
-        disable_writing()
-        track_edits(client, filename, uri, lines)
+    -- TODO: Get version number from elsewhere?
+    client.connection:send_request("initialize", { version = "0.9.0" }, function()
+        client.connection:send_request("open", { uri = uri, content = content }, function()
+            debug("Tracking Edits")
+            ensure_autoread_is_off()
+            disable_writing()
+            track_edits(client, filename, uri, lines)
+        end)
     end)
 end
 
