@@ -1263,6 +1263,7 @@ dependencies = [
  "constant_time_eq",
  "derive_more 2.0.1",
  "dissimilar",
+ "ethersync-shared",
  "futures",
  "git2",
  "ignore",
@@ -1286,6 +1287,13 @@ dependencies = [
  "tracing-subscriber",
  "tracing-test",
  "url",
+]
+
+[[package]]
+name = "ethersync-shared"
+version = "0.0.0"
+dependencies = [
+ "iroh",
 ]
 
 [[package]]
