@@ -57,7 +57,7 @@ Inspired by a collaboration with [Braid](https://braid.org) (a project that exte
 
 Configurations to connect with the regular Ethersync daemon are provided and enabled by default, so if you don't need this configurability, you don't need to do anything.
 
-For example, here's a configuration block to launch a (fictional) `ethersync-http` "collaboration server" for any buffer that starts with "https://":
+For example, here's a Neovim configuration block to launch a (fictional) `ethersync-http` "collaboration server" for any buffer that starts with "https://":
 
 ```lua
 ethersync.config("http", {
