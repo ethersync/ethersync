@@ -5,6 +5,100 @@ SPDX-FileCopyrightText: 2024 zormit <nt4u@kpvn.de>
 SPDX-License-Identifier: CC-BY-SA-4.0
 -->
 
+# 0.8.0 (2025-09-26)
+
+Ethersync enables real-time collaborative editing of local text files, with plugins for Neovim and VS Code.
+
+Our 0.7.0 release got a lot of attention, and this repository quickly reached 1000 stars on GitHub! We also did two Community Calls, so it has been a busy month!
+
+Here's whats new in this release:
+
+## Breaking change: "open" message now has a "content" field
+
+When an editor opens a file, it now has to send along the current file content. The messages now look like this:
+
+```json
+{"jsonrpc": "2.0", "id": 1, "method": "open", "params": {"uri": "file:///path/to/project/file", "content": "initial content"}}
+```
+
+We added the "content" field to avoid race conditions, where the file content changes after the editor has loaded the content into its buffer. This now makes it safe to open the file at any point, even if other people are currently typing in it. We took inspiration from LSP's [`textdocument/didOpen`](https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#textDocument_didOpen) message. You can find more information in the [editor plugin developmend guide](https://ethersync.github.io/ethersync/editor-plugin-dev-guide.html).
+
+## Binary file support
+
+Ethersync now will also sync binary files that are in a project. Previously, they were just ignored. This allows you to collaborate on projects that involve image files, for example, so you could do web or game development together!
+
+The synchronization algorithm works in a way that the "latest write" of the same file will win in case of a conflict, essentially.
+
+While you *could* now use Ethersync synchronize your photo galleries between computers (and in our tests, synchronizing video files that are over 1 GB large seemed to work), note that this is definitely not our main use case (check out [Syncthing](https://syncthing.net) for an alternative).
+
+## Follow mode for Neovim
+
+@MichaelBitard contributed a "follow mode" for the Neovim plugin: You can run `:EthersyncFollow` to follow another person, and see what they're editing -- even if they're switching files, you will follow them. Run `:EthersyncUnfollow` to stop following them. These are super convenient, and we'd recommend creating mappings for them (see the [ethersync-nvim](https://github.com/ethersync/ethersync-nvim/tree/develop) repo for examples).
+
+## Automatically reconnecting to peers
+
+Once you've established a connection to another peer (by using `ethersync join`), Ethersync will now try to keep this connection active. This means that, if the peer temporarily goes offline (for example because they're in a train that's going through a tunnel), the connection will be re-established once they are reachable again.
+
+This allows a better "launch once and forget" usage.
+
+## Update to Automerge 1.0 - reduced memory usage
+
+We updated Automerge (the library that we use for synchronizing edits without a central server) to version 1.0.0! (1.0.0-*beta.3*, to be precise.) This brings, as [their announcement puts it](https://automerge.org/blog/automerge-3/), dramatic reduction in memory-usage, in an entirely backwards-compatible way. In our tests, memory usage went down from ~1 GB to 180 MB, in one case, and document loading times are also improved by about half!
+
+Note that the linked announcement describes the JavaScript library for Automerge, which was updated to version 3.0, while we're using the foundational Rust library directly, which is being updated to version 1.0.
+
+## Official packages for Arch Linux and nixpkgs
+
+There are now official packages for [Arch Linux](https://archlinux.org/packages/extra/x86_64/ethersync/) (maintained by @svenstaro and @alerque), and in the [nixpkgs](https://search.nixos.org/packages?channel=unstable&show=ethersync) (maintained by the NGI team). These should make it easier to install Ethersync for many people. Thanks!
+
+## Configuring the plugins for arbitrary collaboration software
+
+Inspired by a collaboration with [Braid](https://braid.org) (a project that extends HTTP as a state synchronization protocol), we wanted to make it possible to use our Neovim and VS Code plugins with other collaborative software. You can now configure the plugins to work with any program that speaks our [editor protocol](https://ethersync.github.io/ethersync/editor-plugin-dev-guide.html). This works similarly to how you can configure Language Servers in your editors.
+
+Configurations to connect with the regular Ethersync daemon are provided and enabled by default, so if you don't need this configurability, you don't need to do anything.
+
+For example, here's a configuration block to launch a (fictional) `ethersync-http` "collaboration server" for any buffer that starts with "https://":
+
+```lua
+ethersync.config("http", {
+    cmd = { "ethersync-http" },
+    root_dir = function(bufnr, on_dir)
+        local name = vim.api.nvim_buf_get_name(bufnr)
+        if string.find(name, "https://") == 1 then
+            on_dir("/tmp")
+        end
+    end,
+})
+ethersync.enable("http")
+```
+
+For VS Code, you can add a setting like this, based on "root markers" (files or directories that must be in the root of your project directories):
+
+```jsonc
+"ethersync.configs": {
+  "http": {
+    "cmd": [ "ethersync-http" ],
+    "rootMarkers": [ ".ethersync-http" ]
+  },
+}
+```
+
+An actual prototype for another program that speaks our protocol is @dglittle's [braid-ethersync](https://github.com/braid-org/braid-ethersync) bridge.
+
+You can find in-depth documentation about this in the [VS Code plugin README](https://github.com/ethersync/ethersync/tree/main/vscode-plugin) and new [Neovim help file](https://github.com/ethersync/ethersync-nvim/blob/develop/doc/ethersync.txt).
+
+## Other improvements in this release
+
+- @edjopato enabled a lot of lints for [Clippy](https://github.com/rust-lang/rust-clippy) in our Rust code, and introduced dozens of tiny refactorings.
+- @aileot made sure that the Neovim code is in an "ethersync" namespace, instead of exporting functions at the top level.
+- To avoid issues where the file watcher sometimes missed newly created files, we're now doing full re-scans of the project directory after any file events.
+- Daemons use a UNIX socket in `.ethersync/socket` to communicate with the plugins. They now remove this socket after a clean exit. Which means that we can now warn you if you're trying to start *two* daemons for the same project! You get asked whether or not you want to continue the launch of the second daemon. This can also happen if the first daemon crashed.
+- We deploy the Neovim plugin to the main branch on [ethersync-nvim](https://github.com/ethersync/ethersync-nvim) only for releases, which means if you install it from there, you'll always get a stable version. If you want to use the latest release, you can install the plugin from the "develop" branch.
+- When a peer deletes a file, but another peer has that file open in an editor, the file will immediately be re-created, but it will be empty. This allows a smooth handling of this case - the second peer can keep typing into the file.
+- In addition to `.git`, we're now ignoring plenty of other version control directories (and don't share their content to peers): `.bzr`, `.hg`, `.jj`, `.pijul`, `.svn`
+- We're now providing a binary for ARM64 devices in each release. These are mainly meant to be used on Android! We recommend using it from within the [Termux](https://termux.dev) terminal emulator. The target triple is `aarch64-unknown-linux-musl`
+- We're trying a better method of recognizing remote edits that are sent to the VS Code plugin, after finding out that VS Code tries to do some clever "minification" of the edits it receives. This approach isn't perfect yet, and you might occasionally run into inconsistencies, unfortunately. We'll keep iterating on this!
+
 # 0.7.0 (2025-07-27)
 
 Update instructions for plugin authors:
