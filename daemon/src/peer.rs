@@ -11,8 +11,9 @@ use anyhow::{bail, Context, Result};
 use async_trait::async_trait;
 use ethersync_shared::keypair::Keypair;
 use ethersync_shared::messages::PeerMessage;
+use ethersync_shared::secret_address::SecretAddress;
 use iroh::endpoint::{RecvStream, SendStream};
-use iroh::{NodeAddr, SecretKey};
+use iroh::SecretKey;
 use postcard::{from_bytes, to_allocvec};
 use std::str::FromStr;
 use std::time::Duration;
@@ -23,29 +24,6 @@ use tracing::{debug, info, warn};
 mod sync;
 
 const ALPN: &[u8] = b"/ethersync/0";
-
-struct SecretAddress {
-    node_addr: NodeAddr,
-    passphrase: SecretKey,
-}
-
-impl FromStr for SecretAddress {
-    type Err = anyhow::Error;
-    fn from_str(s: &str) -> Result<Self> {
-        let parts: Vec<&str> = s.split('#').collect();
-        if parts.len() != 2 {
-            bail!("Peer string must have format <node_id>#<passphrase>");
-        }
-
-        let node_addr = iroh::PublicKey::from_str(parts[0])?.into();
-        let passphrase = SecretKey::from_str(parts[1])?;
-
-        Ok(Self {
-            node_addr,
-            passphrase,
-        })
-    }
-}
 
 enum PeerAuth {
     MyPassphrase(SecretKey),
