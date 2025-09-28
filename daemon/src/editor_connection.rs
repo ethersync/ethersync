@@ -7,11 +7,10 @@ use std::{collections::HashMap, path::PathBuf};
 
 use tracing::debug;
 
-use crate::{
-    config,
-    ot::OTServer,
+use crate::{config, ot::OTServer, sandbox};
+
+use ethersync_shared::{
     path::{AbsolutePath, FileUri, RelativePath},
-    sandbox,
     types::{
         ComponentMessage, CursorState, EditorProtocolMessageError, EditorProtocolMessageFromEditor,
         EditorProtocolMessageToEditor, RevisionedEditorTextDelta,
@@ -251,7 +250,7 @@ impl EditorConnection {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::types::factories::*;
+    use ethersync_shared::types::factories::*;
     use pretty_assertions::assert_eq;
     use temp_dir::TempDir;
 

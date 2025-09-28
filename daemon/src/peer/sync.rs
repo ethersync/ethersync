@@ -4,10 +4,10 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 use crate::daemon::{DocMessage, DocumentActorHandle};
-use crate::types::EphemeralMessage;
 use anyhow::{Context, Result};
 use async_trait::async_trait;
 use automerge::sync::{Message as AutomergeSyncMessage, State as SyncState};
+use ethersync_shared::types::EphemeralMessage;
 use serde::{Deserialize, Serialize};
 use std::mem;
 use tokio::sync::{broadcast, oneshot};

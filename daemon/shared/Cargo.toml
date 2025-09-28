@@ -10,4 +10,14 @@ edition = "2021"
 publish = false
 
 [dependencies]
+anyhow = "1.0.81"
+automerge = "1.0.0-beta.3"
+derive_more = { version = "2.0.1", features = ["as_ref", "deref", "display"] }
+dissimilar = "1.0.9"
 iroh = "0.35.0"
+operational-transform = "0.6.1"
+ropey = "1.6.1"
+serde = { version = "1.0.198", features = ["derive"] }
+serde_json = "1"
+tracing = "0.1.40"
+url = "2.5.7"

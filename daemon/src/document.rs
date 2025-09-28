@@ -3,10 +3,6 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-use crate::{
-    path::RelativePath,
-    types::{EditorTextDelta, TextDelta},
-};
 use anyhow::Result;
 use automerge::{
     patches::TextRepresentation,
@@ -15,6 +11,10 @@ use automerge::{
     AutoCommit, ChangeHash, ObjType, Patch, PatchLog, ReadDoc, TextEncoding,
 };
 use dissimilar::Chunk;
+use ethersync_shared::{
+    path::RelativePath,
+    types::{EditorTextDelta, TextDelta},
+};
 use tracing::{debug, info};
 
 /// Encapsulates the Automerge `AutoCommit` and provides a generic interface,
@@ -305,7 +305,7 @@ impl Document {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::types::factories::*;
+    use ethersync_shared::types::factories::*;
 
     impl Document {
         fn assert_file_content(&self, file_path: &RelativePath, content: &str) {

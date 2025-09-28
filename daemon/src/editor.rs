@@ -7,8 +7,8 @@
 use crate::cli::ask;
 use crate::daemon::{DocMessage, DocumentActorHandle};
 use crate::sandbox;
-use crate::types::EditorProtocolObject;
 use anyhow::{bail, Context, Result};
+use ethersync_shared::types::EditorProtocolObject;
 use futures::StreamExt;
 use std::{fs, os::unix::fs::PermissionsExt, path::Path};
 use tokio::{

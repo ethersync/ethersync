@@ -5,7 +5,7 @@
 
 use ethersync_integration_tests::actors::*;
 
-use ethersync::types::{
+use ethersync_shared::types::{
     factories::*, EditorProtocolMessageFromEditor, EditorProtocolMessageToEditor,
     EditorProtocolObject, EditorTextDelta, EditorTextOp, JSONRPCFromEditor,
 };

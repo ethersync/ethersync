@@ -8,14 +8,8 @@ use crate::document::Document;
 use crate::editor::{self, EditorId, EditorWriter};
 use crate::editor_connection::EditorConnection;
 use crate::keypair::get_keypair_from_basedir;
-use crate::path::{AbsolutePath, RelativePath};
 use crate::peer;
 use crate::sandbox;
-use crate::types::{
-    ComponentMessage, CursorId, CursorState, EditorProtocolMessageError,
-    EditorProtocolMessageFromEditor, EditorProtocolMessageToEditor, EditorProtocolObject,
-    EphemeralMessage, FileTextDelta, JSONRPCFromEditor, JSONRPCResponse, PatchEffect, TextDelta,
-};
 use crate::watcher::Watcher;
 use crate::watcher::WatcherEvent;
 use crate::wormhole::put_secret_address_into_wormhole;
@@ -24,6 +18,12 @@ use automerge::ChangeHash;
 use automerge::{
     sync::{Message as AutomergeSyncMessage, State as SyncState},
     Patch,
+};
+use ethersync_shared::path::{AbsolutePath, RelativePath};
+use ethersync_shared::types::{
+    ComponentMessage, CursorId, CursorState, EditorProtocolMessageError,
+    EditorProtocolMessageFromEditor, EditorProtocolMessageToEditor, EditorProtocolObject,
+    EphemeralMessage, FileTextDelta, JSONRPCFromEditor, JSONRPCResponse, PatchEffect, TextDelta,
 };
 use futures::SinkExt;
 use rand::Rng;
@@ -1088,7 +1088,7 @@ fn spawn_persister(document_handle: DocumentActorHandle) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    //use crate::types::factories::*;
+    //use ethersync_shared::types::factories::*;
 
     mod document_actor {
         use super::*;

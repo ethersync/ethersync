@@ -1293,7 +1293,17 @@ dependencies = [
 name = "ethersync-shared"
 version = "0.0.0"
 dependencies = [
+ "anyhow",
+ "automerge",
+ "derive_more 2.0.1",
+ "dissimilar",
  "iroh",
+ "operational-transform",
+ "ropey",
+ "serde",
+ "serde_json",
+ "tracing",
+ "url",
 ]
 
 [[package]]

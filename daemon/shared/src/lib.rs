@@ -3,3 +3,5 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-or-later
 pub mod keypair;
+pub mod path;
+pub mod types;
