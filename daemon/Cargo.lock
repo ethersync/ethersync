@@ -1298,10 +1298,12 @@ dependencies = [
  "derive_more 2.0.1",
  "dissimilar",
  "iroh",
+ "magic-wormhole",
  "operational-transform",
  "ropey",
  "serde",
  "serde_json",
+ "tokio",
  "tracing",
 ]
 

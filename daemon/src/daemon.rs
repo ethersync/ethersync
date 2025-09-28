@@ -12,7 +12,6 @@ use crate::peer;
 use crate::sandbox;
 use crate::watcher::Watcher;
 use crate::watcher::WatcherEvent;
-use crate::wormhole::put_secret_address_into_wormhole;
 use anyhow::{Context, Result};
 use automerge::ChangeHash;
 use automerge::{
@@ -26,6 +25,7 @@ use ethersync_shared::types::{
     EditorProtocolMessageFromEditor, EditorProtocolMessageToEditor, EditorProtocolObject,
     FileTextDelta, JSONRPCFromEditor, JSONRPCResponse, PatchEffect, TextDelta,
 };
+use ethersync_shared::wormhole::put_secret_address_into_wormhole;
 use futures::SinkExt;
 use rand::Rng;
 use std::collections::{HashMap, HashSet};

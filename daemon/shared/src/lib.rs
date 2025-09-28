@@ -6,3 +6,4 @@ pub mod keypair;
 pub mod messages;
 pub mod path;
 pub mod types;
+pub mod wormhole;

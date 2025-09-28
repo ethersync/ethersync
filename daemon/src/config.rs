@@ -5,8 +5,8 @@
 
 //! Data structures and helper methods around influencing the configuration of the application.
 use crate::sandbox;
-use crate::wormhole::get_secret_address_from_wormhole;
 use anyhow::{bail, Context, Result};
+use ethersync_shared::wormhole::get_secret_address_from_wormhole;
 use ini::Ini;
 use std::path::Path;
 use tracing::info;
