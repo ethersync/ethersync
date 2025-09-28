@@ -41,7 +41,10 @@ impl ConnectionManager {
 
         let (endpoint, my_passphrase) = Self::build_endpoint(keypair).await?;
 
-        let secret_address = SecretAddress { node_addr: endpoint.node_id().into(), passphrase: my_passphrase.clone() };
+        let secret_address = SecretAddress {
+            node_addr: endpoint.node_id().into(),
+            passphrase: my_passphrase.clone(),
+        };
 
         let mut actor = EndpointActor::new(
             endpoint,

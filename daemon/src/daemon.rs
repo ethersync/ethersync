@@ -977,7 +977,7 @@ impl Daemon {
         let connection_manager = peer::ConnectionManager::new(document_handle.clone(), keypair)
             .await
             .expect("Failed to start connection manager");
-        let address = connection_manager.secret_address();
+        let address = connection_manager.secret_address().clone();
 
         if app_config.emit_secret_address {
             info!(
@@ -986,7 +986,12 @@ impl Daemon {
             );
         }
         if app_config.emit_join_code {
-            put_secret_address_into_wormhole(&address.to_string()).await;
+            let address = connection_manager.secret_address().clone();
+            tokio::spawn(async move {
+                loop {
+                    put_secret_address_into_wormhole(&address).await;
+                }
+            });
         }
         if let Some(config::Peer::SecretAddress(secret_address)) = app_config.peer {
             connection_manager

@@ -15,6 +15,15 @@ pub struct SecretAddress {
     pub passphrase: SecretKey,
 }
 
+impl Clone for SecretAddress {
+    fn clone(&self) -> Self {
+        Self {
+            node_id: self.node_id,
+            passphrase: self.passphrase.clone(),
+        }
+    }
+}
+
 impl Display for SecretAddress {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}{}{}", self.node_addr.node_id, ADDRESS_DELIMITER, self.passphrase)
