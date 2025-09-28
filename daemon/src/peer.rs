@@ -32,7 +32,7 @@ enum PeerAuth {
 
 pub struct ConnectionManager {
     message_tx: mpsc::Sender<EndpointMessage>,
-    secret_address: String,
+    secret_address: SecretAddress,
 }
 
 impl ConnectionManager {
@@ -41,7 +41,7 @@ impl ConnectionManager {
 
         let (endpoint, my_passphrase) = Self::build_endpoint(keypair).await?;
 
-        let secret_address = format!("{}#{}", endpoint.node_id(), my_passphrase);
+        let secret_address = SecretAddress { node_addr: endpoint.node_id().into(), passphrase: my_passphrase.clone() };
 
         let mut actor = EndpointActor::new(
             endpoint,
@@ -60,7 +60,7 @@ impl ConnectionManager {
     }
 
     #[must_use]
-    pub fn secret_address(&self) -> &str {
+    pub fn secret_address(&self) -> &SecretAddress {
         &self.secret_address
     }
 
