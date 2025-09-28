@@ -5,11 +5,12 @@
 
 //! This module provides a [`ConnectionManager`], which can be used to connect to other daemons.
 
-use self::sync::{Connection, PeerMessage, SyncActor};
+use self::sync::{Connection, SyncActor};
 use crate::daemon::DocumentActorHandle;
 use anyhow::{bail, Context, Result};
 use async_trait::async_trait;
 use ethersync_shared::keypair::Keypair;
+use ethersync_shared::messages::PeerMessage;
 use iroh::endpoint::{RecvStream, SendStream};
 use iroh::{NodeAddr, SecretKey};
 use postcard::{from_bytes, to_allocvec};

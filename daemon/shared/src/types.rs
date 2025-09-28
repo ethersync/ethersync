@@ -100,13 +100,6 @@ pub struct CursorState {
     pub ranges: Vec<Range>,
 }
 
-#[derive(Serialize, Deserialize, PartialEq, Eq, Clone, Debug)]
-pub struct EphemeralMessage {
-    pub cursor_id: CursorId,
-    pub sequence_number: usize,
-    pub cursor_state: CursorState,
-}
-
 pub enum PatchEffect {
     FileChange(FileTextDelta),
     FileRemoval(RelativePath),

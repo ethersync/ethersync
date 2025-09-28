@@ -19,11 +19,12 @@ use automerge::{
     sync::{Message as AutomergeSyncMessage, State as SyncState},
     Patch,
 };
+use ethersync_shared::messages::EphemeralMessage;
 use ethersync_shared::path::{AbsolutePath, RelativePath};
 use ethersync_shared::types::{
     ComponentMessage, CursorId, CursorState, EditorProtocolMessageError,
     EditorProtocolMessageFromEditor, EditorProtocolMessageToEditor, EditorProtocolObject,
-    EphemeralMessage, FileTextDelta, JSONRPCFromEditor, JSONRPCResponse, PatchEffect, TextDelta,
+    FileTextDelta, JSONRPCFromEditor, JSONRPCResponse, PatchEffect, TextDelta,
 };
 use futures::SinkExt;
 use rand::Rng;
