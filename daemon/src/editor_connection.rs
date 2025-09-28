@@ -29,6 +29,8 @@ pub struct EditorConnection {
     ot_servers: HashMap<RelativePath, OTServer>,
     /// The name other people see.
     username: Option<String>,
+    /// Whether we got a valid "initialize" message by the editor
+    initialized: bool,
 }
 
 impl EditorConnection {
@@ -38,6 +40,7 @@ impl EditorConnection {
             username: config::get_username(&base_dir),
             base_dir,
             ot_servers: HashMap::new(),
+            initialized: false,
         }
     }
 
@@ -113,7 +116,25 @@ impl EditorConnection {
         }
 
         match message {
+            EditorProtocolMessageFromEditor::Initialize { version } => {
+                if version != "0.8.0" {
+                    return Err(EditorProtocolMessageError {
+                        code: -1,
+                        message: "Wrong Version".into(),
+                        data: Some(format!("Got {version}, wanted something else.")),
+                    });
+                }
+                self.initialized = true;
+                Ok((ComponentMessage::None, vec![]))
+            }
             EditorProtocolMessageFromEditor::Open { uri, content } => {
+                if !self.initialized {
+                    return Err(EditorProtocolMessageError {
+                        code: -1,
+                        message: "Invalid Open".into(),
+                        data: Some("The editor needs to send an initialize message first.".into()),
+                    });
+                }
                 let uri = FileUri::try_from(uri.clone()).map_err(anyhow_err_to_protocol_err)?;
                 let absolute_path = uri.to_absolute_path();
                 let relative_path = RelativePath::try_from_absolute(&self.base_dir, &absolute_path)
