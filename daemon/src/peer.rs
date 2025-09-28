@@ -42,7 +42,7 @@ impl ConnectionManager {
         let (endpoint, my_passphrase) = Self::build_endpoint(keypair).await?;
 
         let secret_address = SecretAddress {
-            node_addr: endpoint.node_id().into(),
+            node_id: endpoint.node_id(),
             passphrase: my_passphrase.clone(),
         };
 
@@ -143,8 +143,7 @@ impl EndpointActor {
                 response_tx,
                 previous_attempts,
             } => {
-                let node_addr = secret_address.node_addr.clone();
-                let connect_result = self.endpoint.connect(node_addr, ALPN).await;
+                let connect_result = self.endpoint.connect(secret_address.node_id, ALPN).await;
                 let conn = match connect_result {
                     Ok(conn) => conn,
                     Err(err) => {
@@ -201,13 +200,13 @@ impl EndpointActor {
         if previous_attempts == 0 {
             info!(
                 "Connection to peer {} lost, will keep trying to reconnect...",
-                secret_address.node_addr.node_id
+                secret_address.node_id
             );
         } else {
             sleep(Duration::from_secs(10)).await;
             debug!(
                 "Making another attempt to connect to peer {}...",
-                secret_address.node_addr.node_id
+                secret_address.node_id
             );
         }
         // We don't need to be notified, so we don't need to use the response channel.
