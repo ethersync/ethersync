@@ -10,10 +10,18 @@ use dissimilar::Chunk;
 use operational_transform::{Operation as OTOperation, OperationSeq};
 use ropey::Rope;
 use serde::{Deserialize, Serialize};
+use std::fmt;
 use tracing::{debug, warn};
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct TextDelta(pub Vec<TextOp>);
+
+impl fmt::Display for TextDelta {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let op_strings: Vec<String> = self.0.iter().map(|op| format!("{op}")).collect();
+        write!(f, "[{}]", op_strings.join(", "))
+    }
+}
 
 impl IntoIterator for TextDelta {
     type Item = TextOp;
@@ -29,6 +37,16 @@ pub enum TextOp {
     Retain(usize),
     Insert(String),
     Delete(usize),
+}
+
+impl fmt::Display for TextOp {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Self::Retain(n) => write!(f, "{n}"),
+            Self::Insert(str) => write!(f, "\"{str}\""),
+            Self::Delete(n) => write!(f, "-{n}"),
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -107,6 +125,7 @@ pub struct EphemeralMessage {
     pub cursor_state: CursorState,
 }
 
+#[derive(Debug)]
 pub enum PatchEffect {
     FileChange(FileTextDelta),
     FileRemoval(RelativePath),
