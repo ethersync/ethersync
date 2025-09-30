@@ -7,7 +7,7 @@ use crate::{
     path::RelativePath,
     types::{EditorTextDelta, TextDelta},
 };
-use anyhow::Result;
+use anyhow::{bail, Result};
 use automerge::{
     patches::TextRepresentation,
     sync::{Message as AutomergeSyncMessage, State as SyncState, SyncDoc},
@@ -126,6 +126,7 @@ impl Document {
         })
     }
 
+    // TODO: Refactor such that file_content_at can also return bytes (and get rid of get_bytes_at)
     pub fn file_content_at(
         &self,
         file_path: &RelativePath,
@@ -136,6 +137,46 @@ impl Document {
                 .text_at(to, heads)
                 .expect("Failed to get string from Automerge text object")
         })
+    }
+
+    /// Used to get the contents of a binary file.
+    pub fn get_bytes(&mut self, file_path: &RelativePath) -> Result<Vec<u8>> {
+        let heads = self.get_heads();
+        self.get_bytes_at(file_path, &heads)
+    }
+
+    /// Used to get the contents of a binary file at a specific state.
+    pub fn get_bytes_at(
+        &mut self,
+        file_path: &RelativePath,
+        heads: &[ChangeHash],
+    ) -> Result<Vec<u8>> {
+        let file_map = self
+            .top_level_map_obj("files")
+            .expect("Failed to get files Map object");
+
+        // If the content hasn't changed, don't write to the file. This prevents irrelevant watcher events.
+
+        match self.doc.get_at(&file_map, file_path, heads) {
+            Ok(Some((
+                automerge::Value::Scalar(std::borrow::Cow::Owned(automerge::ScalarValue::Bytes(
+                    bytes,
+                ))),
+                _,
+            ))) => return Ok(bytes),
+            Ok(Some((
+                automerge::Value::Scalar(std::borrow::Cow::Borrowed(
+                    automerge::ScalarValue::Bytes(bytes),
+                )),
+                _,
+            ))) => {
+                // TODO: Potentially memory-heavy operation. Figure out how to deal with Cows. Moo.
+                return Ok(bytes.clone());
+            }
+            _ => {
+                bail!("Failed to provide contents of binary file at {file_path}");
+            }
+        }
     }
 
     pub fn initialize_text(&mut self, text: &str, file_path: &RelativePath) {
@@ -206,13 +247,7 @@ impl Document {
             .expect("Failed to get files Map object");
 
         // If the content hasn't changed, don't write to the file. This prevents irrelevant watcher events.
-        if let Ok(Some((
-            automerge::Value::Scalar(std::borrow::Cow::Borrowed(automerge::ScalarValue::Bytes(
-                current_bytes,
-            ))),
-            _,
-        ))) = self.doc.get(&file_map, file_path)
-        {
+        if let Ok(current_bytes) = self.get_bytes(file_path) {
             if current_bytes == bytes {
                 return;
             }

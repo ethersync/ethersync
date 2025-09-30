@@ -8,8 +8,8 @@ use clap::{CommandFactory, FromArgMatches, Parser, Subcommand};
 use ethersync::{
     cli::ask,
     config::{self, AppConfig},
-    daemon::Daemon, history,
-    logging, sandbox,
+    daemon::Daemon,
+    history, logging, sandbox,
 };
 use std::path::{Path, PathBuf};
 use tokio::signal;
@@ -157,11 +157,14 @@ async fn main() -> Result<()> {
         Commands::Seenit => {
             history::seenit(&directory)?;
         }
-        Commands::Snapshot { target_directory, seenit} => {
+        Commands::Snapshot {
+            target_directory,
+            seenit,
+        } => {
             history::snapshot(&directory, &target_directory, seenit)?;
         }
         Commands::Whatsnew => {
-                unimplemented!()
+            unimplemented!()
         }
         Commands::Client => {
             jsonrpc_forwarder::connection(&socket_path)
