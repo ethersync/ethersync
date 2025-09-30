@@ -5,7 +5,11 @@
 use crate::{config, document::Document, path::AbsolutePath, sandbox};
 use anyhow::Result;
 use automerge::ChangeHash;
-use std::{path::Path, process::Command, io::{self, Write}};
+use std::{
+    io::{self, Write},
+    path::Path,
+    process::Command,
+};
 use temp_dir::TempDir;
 
 fn load_doc(directory: &Path) -> Result<Document> {
