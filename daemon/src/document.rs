@@ -49,6 +49,7 @@ impl Default for Document {
 }
 
 impl Document {
+    // TODO: use sth like try_load + Result to bubble up potential errors.
     pub fn load(bytes: &[u8]) -> Self {
         let doc =
             AutoCommit::load(bytes).expect("Failed to load Automerge document from given bytes");
@@ -280,6 +281,18 @@ impl Document {
             .map(|file_map| {
                 self.doc
                     .keys(file_map)
+                    .map(|k| RelativePath::new(&k))
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
+
+    #[must_use]
+    pub fn files_at(&self, heads: &[ChangeHash]) -> Vec<RelativePath> {
+        self.top_level_map_obj("files")
+            .map(|file_map| {
+                self.doc
+                    .keys_at(file_map, heads)
                     .map(|k| RelativePath::new(&k))
                     .collect()
             })

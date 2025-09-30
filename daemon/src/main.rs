@@ -54,7 +54,7 @@ enum Commands {
     /// Render the "seenit" state or latest state to a directory.
     Snapshot {
         /// Directory to render the snapshot to.
-        directory: String,
+        target_directory: PathBuf,
         /// Whether to snapshot the "seenit" state. If not provided, snapshot the latest
         /// state.
         #[arg(long)]
@@ -157,8 +157,8 @@ async fn main() -> Result<()> {
         Commands::Seenit => {
             history::seenit(&directory)?;
         }
-        Commands::Snapshot { directory, seenit} => {
-                unimplemented!()
+        Commands::Snapshot { target_directory, seenit} => {
+            history::snapshot(&directory, &target_directory, seenit)?;
         }
         Commands::Whatsnew => {
                 unimplemented!()
