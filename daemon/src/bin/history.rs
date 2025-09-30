@@ -1,3 +1,8 @@
+// SPDX-FileCopyrightText: 2025 blinry <mail@blinry.org>
+// SPDX-FileCopyrightText: 2025 zormit <nt4u@kpvn.de>
+//
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 #![allow(unused, dead_code)]
 
 use automerge::{
@@ -30,11 +35,27 @@ fn ethersync_file_history(doc_path: &str) {
     //dbg!(&doc.keys(&file_map).collect::<Vec<_>>());
     let heads = doc.get_heads();
     let mut current_head = heads[0];
-    for _ in 0..10 {
+    let mut snapshot_head = current_head;
+    let mut previous_actor_id: Option<ActorId> = None;
+    loop {
         let change = doc.get_change_by_hash(&current_head).unwrap().clone();
+        let actor_id = change.actor_id().clone();
         let parents = change.deps();
-        let patches = doc.diff(parents, &[current_head]);
-        println!("* {}", summarize_diff(patches));
+        if parents.len() > 1 {
+            dbg!(current_head);
+        }
+        // TODO: Can we prevent this clone somehow?
+        if let Some(pa) = previous_actor_id.clone() {
+            if pa != actor_id {
+                let patches = doc.diff(parents, &[snapshot_head]);
+                println!("* {}", summarize_diff(patches));
+                snapshot_head = parents[0];
+                previous_actor_id = Some(actor_id);
+                return;
+            }
+        } else {
+            previous_actor_id = Some(actor_id.clone());
+        }
         current_head = parents[0];
     }
 
@@ -92,23 +113,31 @@ fn summarize_diff(patches: Vec<Patch>) -> String {
         0 => "zero effects ???".into(),
         1 => {
             // diplay nicely
-            dbg!(&effects[0]);
-            match &effects[0] {
-                PatchEffect::FileChange(file_text_delta) => {
-                    format!(
-                        "file change in {}: {}",
-                        file_text_delta.file_path, file_text_delta.delta
-                    )
-                }
-                PatchEffect::FileRemoval(relative_path) => {
-                    format!("file removed: {relative_path}")
-                }
-                _ => "binary or no effect".into(),
-            }
+            //dbg!(&effects[0]);
+            summarize_effect(&effects[0])
         }
         _ => {
             // count types
-            format!("{} effects", effects.len())
+            let mut s = format!("{} effects", effects.len());
+            for effect in effects {
+                s += format!("   {}\n\n\n\n", summarize_effect(&effect)).as_str();
+            }
+            s
         }
+    }
+}
+
+fn summarize_effect(patch_effect: &PatchEffect) -> String {
+    match patch_effect {
+        PatchEffect::FileChange(file_text_delta) => {
+            format!(
+                "file change in {}: {}",
+                file_text_delta.file_path, file_text_delta.delta
+            )
+        }
+        PatchEffect::FileRemoval(relative_path) => {
+            format!("file removed: {relative_path}")
+        }
+        _ => "binary or no effect".into(),
     }
 }
