@@ -10,7 +10,7 @@ use std::path::Path;
 fn load_doc(directory: &Path) -> Result<Document> {
     let doc_path = directory.join(config::CONFIG_DIR).join(config::DOC_FILE);
 
-    let bytes = sandbox::read_file(&directory, &doc_path)?;
+    let bytes = sandbox::read_file(directory, &doc_path)?;
     Ok(Document::load(&bytes))
 }
 
@@ -24,7 +24,7 @@ pub fn seenit(directory: &Path) -> Result<()> {
     let heads = doc.get_heads();
     let json = serde_json::to_string(&heads)?;
     let bytes = json.as_bytes();
-    sandbox::write_file(&directory, &bookmark_path, &bytes)?;
+    sandbox::write_file(directory, &bookmark_path, bytes)?;
 
     Ok(())
 }
@@ -37,7 +37,7 @@ pub fn snapshot(directory: &Path, target_directory: &Path, seenit: bool) -> Resu
         .join(config::BOOKMARK_FILE);
 
     let heads: Vec<ChangeHash> = if seenit {
-        let bytes = sandbox::read_file(&directory, &bookmark_path)?;
+        let bytes = sandbox::read_file(directory, &bookmark_path)?;
         let json = String::from_utf8(bytes)?;
         serde_json::from_str(&json)?
     } else {
@@ -49,11 +49,11 @@ pub fn snapshot(directory: &Path, target_directory: &Path, seenit: bool) -> Resu
 
         if let Ok(content) = doc.file_content_at(relative_file_path, &heads) {
             let bytes = content.as_bytes();
-            sandbox::write_file(target_directory, &absolute_path, &bytes)?;
+            sandbox::write_file(target_directory, &absolute_path, bytes)?;
         } else {
             let bytes = doc.get_bytes_at(relative_file_path, &heads)?;
             sandbox::write_file(target_directory, &absolute_path, &bytes)?;
-        };
+        }
     }
 
     Ok(())

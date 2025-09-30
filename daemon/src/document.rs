@@ -146,11 +146,7 @@ impl Document {
     }
 
     /// Used to get the contents of a binary file at a specific state.
-    pub fn get_bytes_at(
-        &mut self,
-        file_path: &RelativePath,
-        heads: &[ChangeHash],
-    ) -> Result<Vec<u8>> {
+    pub fn get_bytes_at(&self, file_path: &RelativePath, heads: &[ChangeHash]) -> Result<Vec<u8>> {
         let file_map = self
             .top_level_map_obj("files")
             .expect("Failed to get files Map object");
@@ -163,7 +159,7 @@ impl Document {
                     bytes,
                 ))),
                 _,
-            ))) => return Ok(bytes),
+            ))) => Ok(bytes),
             Ok(Some((
                 automerge::Value::Scalar(std::borrow::Cow::Borrowed(
                     automerge::ScalarValue::Bytes(bytes),
@@ -171,7 +167,7 @@ impl Document {
                 _,
             ))) => {
                 // TODO: Potentially memory-heavy operation. Figure out how to deal with Cows. Moo.
-                return Ok(bytes.clone());
+                Ok(bytes.clone())
             }
             _ => {
                 bail!("Failed to provide contents of binary file at {file_path}");
