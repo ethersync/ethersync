@@ -8,7 +8,7 @@ use clap::{CommandFactory, FromArgMatches, Parser, Subcommand};
 use ethersync::{
     cli::ask,
     config::{self, AppConfig},
-    daemon::Daemon,
+    daemon::Daemon, history,
     logging, sandbox,
 };
 use std::path::{Path, PathBuf};
@@ -49,6 +49,19 @@ enum Commands {
         /// Specify to connect to a new peer. Otherwise, try to connect to the most recent peer.
         join_code: Option<String>,
     },
+    /// Remember the current state of the directory, allowing you to compare it later.
+    Seenit,
+    /// Render the "seenit" state or latest state to a directory.
+    Snapshot {
+        /// Directory to render the snapshot to.
+        directory: String,
+        /// Whether to snapshot the "seenit" state. If not provided, snapshot the latest
+        /// state.
+        #[arg(long)]
+        seenit: bool,
+    },
+    /// Print a summary of changes since the last "seenit" command run.
+    Whatsnew,
     /// Open a JSON-RPC connection to the Ethersync daemon on stdin/stdout. Used by text editor plugins.
     Client,
 }
@@ -130,7 +143,7 @@ async fn main() -> Result<()> {
                         .await
                         .context("Failed to resolve peer")?;
                 }
-                Commands::Client => {
+                _ => {
                     panic!("This can't happen, as we earlier matched on Share|Join.")
                 }
             }
@@ -140,6 +153,15 @@ async fn main() -> Result<()> {
                 .await
                 .context("Failed to launch the daemon")?;
             wait_for_shutdown().await;
+        }
+        Commands::Seenit => {
+            history::seenit(&directory)?;
+        }
+        Commands::Snapshot { directory, seenit} => {
+                unimplemented!()
+        }
+        Commands::Whatsnew => {
+                unimplemented!()
         }
         Commands::Client => {
             jsonrpc_forwarder::connection(&socket_path)

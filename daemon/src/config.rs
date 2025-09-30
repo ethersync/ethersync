@@ -11,9 +11,11 @@ use ini::Ini;
 use std::path::Path;
 use tracing::info;
 
+pub const DOC_FILE: &str = "doc";
 pub const DEFAULT_SOCKET_NAME: &str = "socket";
 pub const CONFIG_DIR: &str = ".ethersync";
 pub const CONFIG_FILE: &str = "config";
+pub const BOOKMARK_FILE: &str = "bookmark";
 
 const EMIT_JOIN_CODE_DEFAULT: bool = true;
 const EMIT_SECRET_ADDRESS_DEFAULT: bool = false;
