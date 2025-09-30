@@ -11,9 +11,11 @@ use ini::Ini;
 use std::path::Path;
 use tracing::info;
 
+pub const DOC_FILE: &str = "doc";
 pub const DEFAULT_SOCKET_NAME: &str = "socket";
 pub const CONFIG_DIR: &str = ".ethersync";
 pub const CONFIG_FILE: &str = "config";
+pub const BOOKMARK_FILE: &str = "bookmark";
 
 const EMIT_JOIN_CODE_DEFAULT: bool = true;
 const EMIT_SECRET_ADDRESS_DEFAULT: bool = false;
@@ -178,6 +180,7 @@ fn add_ethersync_to_local_gitignore(directory: &Path) -> Result<()> {
     // It's very unlikely that .ethersync/.gitignore will already contain something, but let's
     // still append.
     let bytes_in = sandbox::read_file(directory, &ignore_file_path).unwrap_or_default();
+    // TODO: use String::from_utf8
     let mut content = std::str::from_utf8(&bytes_in)?.to_string();
 
     if !content.is_empty() && !content.ends_with('\n') {

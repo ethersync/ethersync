@@ -9,7 +9,7 @@ use ethersync::{
     cli::ask,
     config::{self, AppConfig},
     daemon::Daemon,
-    logging, sandbox,
+    history, logging, sandbox,
 };
 use std::path::{Path, PathBuf};
 use tokio::signal;
@@ -48,6 +48,23 @@ enum Commands {
     Join {
         /// Specify to connect to a new peer. Otherwise, try to connect to the most recent peer.
         join_code: Option<String>,
+    },
+    /// Remember the current state of the directory, allowing you to compare it later.
+    Seenit,
+    /// Render the "seenit" state or latest state to a directory.
+    Snapshot {
+        /// Directory to render the snapshot to.
+        target_directory: PathBuf,
+        /// Whether to snapshot the "seenit" state. If not provided, snapshot the latest
+        /// state.
+        #[arg(long)]
+        seenit: bool,
+    },
+    /// Print a summary of changes since the last "seenit" command run.
+    Whatsnew {
+        /// Which external command to use to compare the two revisions.
+        #[arg(long)]
+        tool: String,
     },
     /// Open a JSON-RPC connection to the Ethersync daemon on stdin/stdout. Used by text editor plugins.
     Client,
@@ -130,7 +147,7 @@ async fn main() -> Result<()> {
                         .await
                         .context("Failed to resolve peer")?;
                 }
-                Commands::Client => {
+                _ => {
                     panic!("This can't happen, as we earlier matched on Share|Join.")
                 }
             }
@@ -140,6 +157,18 @@ async fn main() -> Result<()> {
                 .await
                 .context("Failed to launch the daemon")?;
             wait_for_shutdown().await;
+        }
+        Commands::Seenit => {
+            history::seenit(&directory)?;
+        }
+        Commands::Snapshot {
+            target_directory,
+            seenit,
+        } => {
+            history::snapshot(&directory, &target_directory, seenit)?;
+        }
+        Commands::Whatsnew { tool } => {
+            history::whatsnew(&directory, tool)?;
         }
         Commands::Client => {
             jsonrpc_forwarder::connection(&socket_path)
