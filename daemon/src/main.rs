@@ -61,7 +61,11 @@ enum Commands {
         seenit: bool,
     },
     /// Print a summary of changes since the last "seenit" command run.
-    Whatsnew,
+    Whatsnew {
+        /// Which external command to use to compare the two revisions.
+        #[arg(long)]
+        tool: String,
+    },
     /// Open a JSON-RPC connection to the Ethersync daemon on stdin/stdout. Used by text editor plugins.
     Client,
 }
@@ -163,8 +167,8 @@ async fn main() -> Result<()> {
         } => {
             history::snapshot(&directory, &target_directory, seenit)?;
         }
-        Commands::Whatsnew => {
-            unimplemented!()
+        Commands::Whatsnew {tool} => {
+            history::whatsnew(&directory, tool)?;
         }
         Commands::Client => {
             jsonrpc_forwarder::connection(&socket_path)
