@@ -13,7 +13,10 @@ publish = false
 anyhow = "1.0.81"
 automerge = "1.0.0-beta.3"
 derive_more = { version = "2.0.1", features = ["as_ref", "deref", "display"] }
+dioxus-core = "0.6.0"
+dioxus-hooks = "0.6.0"
 dissimilar = "1.0.9"
+futures-util = "0.3.31"
 iroh = "0.35.0"
 magic-wormhole = "0.7.6"
 operational-transform = "0.6.1"

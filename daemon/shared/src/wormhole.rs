@@ -5,37 +5,37 @@
 
 use anyhow::Result;
 use magic_wormhole::{transfer, AppID, Code, MailboxConnection, Wormhole};
-use std::{str::FromStr, time::Duration};
-use tokio::time::sleep;
-use tracing::{error, info, warn};
+use std::{str::FromStr};
+use tracing::{error, warn};
 use crate::secret_address::SecretAddress;
+use crate::platform::{spawn, Sender};
 
-pub async fn put_secret_address_into_wormhole(address: &SecretAddress) {
+#[cfg(all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none")))]
+use futures_util::sink::SinkExt;
+
+pub fn put_secret_address_into_wormhole(address: &SecretAddress, join_code_tx: Sender<Code>) {
     let config = transfer::APP_CONFIG.id(AppID::new("ethersync"));
     let payload: Vec<u8> = address.to_string().into();
 
-    let Ok(mailbox_connection) = MailboxConnection::create(config.clone(), 2).await else {
-        error!(
+    spawn(async move {
+        let Ok(mailbox_connection) = MailboxConnection::create(config.clone(), 2).await else {
+            error!(
             "Failed to share join code via magic wormhole. Restart Ethersync to try again."
         );
-        return;
-    };
-    let code = mailbox_connection.code().clone();
+            return;
+        };
 
-    info!(
-        "\n\tOne other person can use this to connect to you:\n\n\tethersync join {}\n",
-        &code
-    );
+        let code = mailbox_connection.code().clone();
+        if join_code_tx.to_owned().send(code).await.is_err() {
+            return;
+        }
 
-    if let Ok(mut wormhole) = Wormhole::connect(mailbox_connection).await {
-        let _ = wormhole.send(payload.clone()).await;
-    } else {
-        warn!("Failed to share secret address. Did your peer mistype the join code?");
-    }
-
-    // Print a new join code in the next iteration of the foor loop, to allow more people
-    // to join.
-    sleep(Duration::from_millis(500)).await;
+        if let Ok(mut wormhole) = Wormhole::connect(mailbox_connection).await {
+            let _ = wormhole.send(payload.clone()).await;
+        } else {
+            warn!("Failed to share secret address. Did your peer mistype the join code?");
+        }
+    });
 }
 
 pub async fn get_secret_address_from_wormhole(code: &str) -> Result<SecretAddress> {

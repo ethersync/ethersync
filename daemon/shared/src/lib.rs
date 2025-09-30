@@ -5,6 +5,7 @@
 pub mod keypair;
 pub mod messages;
 pub mod path;
+pub mod platform;
 pub mod secret_address;
 pub mod types;
 pub mod wormhole;

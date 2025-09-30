@@ -987,9 +987,18 @@ impl Daemon {
         }
         if app_config.emit_join_code {
             let address = connection_manager.secret_address().clone();
+            let (join_code_tx, mut join_code_rx) = mpsc::channel(1);
+            put_secret_address_into_wormhole(&address, join_code_tx);
+
             tokio::spawn(async move {
-                loop {
-                    put_secret_address_into_wormhole(&address).await;
+                while let Some(code) = join_code_rx.recv().await {
+                    info!(
+                        "\n\tOne other person can use this to connect to you:\n\n\tethersync join {}\n",
+                        &code
+                    );
+
+                    // Print a new join code in the next iteration, to allow more people to join.
+                    tokio::time::sleep(Duration::from_millis(500)).await;
                 }
             });
         }
