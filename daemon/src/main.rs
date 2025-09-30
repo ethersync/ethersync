@@ -167,7 +167,7 @@ async fn main() -> Result<()> {
         } => {
             history::snapshot(&directory, &target_directory, seenit)?;
         }
-        Commands::Whatsnew {tool} => {
+        Commands::Whatsnew { tool } => {
             history::whatsnew(&directory, tool)?;
         }
         Commands::Client => {
