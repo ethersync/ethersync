@@ -967,7 +967,7 @@ impl Daemon {
         editor::spawn_socket_listener(&socket_path, document_handle.clone())?;
 
         // Start file watcher.
-        let base_dir = app_config.base_dir.to_path_buf();
+        let base_dir = app_config.base_dir.clone();
         spawn_file_watcher(&app_config, document_handle.clone());
 
         if persist {
