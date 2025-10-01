@@ -7,6 +7,7 @@
 //! The functions in this module are supposed to prevent file I/O outside the base directory.
 //! All our file I/O should go through them.
 
+use crate::config::AppConfig;
 use anyhow::{bail, Context, Result};
 use ignore::WalkBuilder;
 use path_clean::PathClean;

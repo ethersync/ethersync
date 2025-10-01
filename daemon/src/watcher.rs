@@ -205,18 +205,30 @@ mod tests {
 
     use super::*;
 
-    #[tokio::test]
-    async fn create() {
+    fn create_temp_dir_and_app_config() -> (TempDir, PathBuf, AppConfig) {
         let dir = TempDir::new().expect("Failed to create temp directory");
 
         // We canonicalize the path here, because on macOS, TempDir gives us paths in /var/, which
         // symlinks to /private/var/. But the paths in the file events are always in /private/var/.
         // If we wouldn't canonicalize, the watcher would ignore basically all events.
         let dir_path = dir.path().canonicalize().unwrap();
+
+        let app_config = AppConfig {
+            base_dir: dir_path.clone(),
+            ..Default::default()
+        };
+
+        (dir, dir_path, app_config)
+    }
+
+    #[tokio::test]
+    async fn create() {
+        let (_dir, dir_path, app_config) = create_temp_dir_and_app_config();
+
         let mut file = dir_path.clone();
         file.push("file");
 
-        let mut watcher = Watcher::new(&dir_path);
+        let mut watcher = Watcher::new(app_config);
         sandbox::write_file(&dir_path, &file, b"hi").unwrap();
 
         assert_eq!(
@@ -230,14 +242,13 @@ mod tests {
 
     #[tokio::test]
     async fn change() {
-        let dir = TempDir::new().expect("Failed to create temp directory");
+        let (_dir, dir_path, app_config) = create_temp_dir_and_app_config();
 
-        let dir_path = dir.path().canonicalize().unwrap();
         let mut file = dir_path.clone();
         file.push("file");
         sandbox::write_file(&dir_path, &file, b"hi").unwrap();
 
-        let mut watcher = Watcher::new(&dir_path);
+        let mut watcher = Watcher::new(app_config);
 
         sandbox::write_file(&dir_path, &file, b"yo").unwrap();
 
@@ -249,14 +260,13 @@ mod tests {
 
     #[tokio::test]
     async fn remove() {
-        let dir = TempDir::new().expect("Failed to create temp directory");
+        let (_dir, dir_path, app_config) = create_temp_dir_and_app_config();
 
-        let dir_path = dir.path().canonicalize().unwrap();
         let mut file = dir_path.clone();
         file.push("file");
         sandbox::write_file(&dir_path, &file, b"hi").unwrap();
 
-        let mut watcher = Watcher::new(&dir_path);
+        let mut watcher = Watcher::new(app_config);
 
         sandbox::remove_file(&dir_path, &file).unwrap();
 
@@ -268,16 +278,15 @@ mod tests {
 
     #[tokio::test]
     async fn rename() {
-        let dir = TempDir::new().expect("Failed to create temp directory");
+        let (_dir, dir_path, app_config) = create_temp_dir_and_app_config();
 
-        let dir_path = dir.path().canonicalize().unwrap();
         let mut file = dir_path.clone();
         file.push("file");
         let mut file_new = dir_path.clone();
         file_new.push("file2");
         sandbox::write_file(&dir_path, &file, b"hi").unwrap();
 
-        let mut watcher = Watcher::new(&dir_path);
+        let mut watcher = Watcher::new(app_config);
 
         sandbox::rename_file(&dir_path, &file, &file_new).unwrap();
 
@@ -296,14 +305,13 @@ mod tests {
 
     #[tokio::test]
     async fn ignore() {
-        let dir = TempDir::new().expect("Failed to create temp directory");
-        let dir_path = dir.path().canonicalize().unwrap();
+        let (_dir, dir_path, app_config) = create_temp_dir_and_app_config();
 
         let mut gitignore = dir_path.clone();
         gitignore.push(".ignore");
         sandbox::write_file(&dir_path, &gitignore, b"file").unwrap();
 
-        let mut watcher = Watcher::new(&dir_path);
+        let mut watcher = Watcher::new(app_config);
 
         let mut file = dir_path.clone();
         file.push("file");
