@@ -83,7 +83,7 @@ impl AppConfig {
     pub async fn resolve_peer(self) -> Result<Self> {
         let peer = match self.peer {
             Some(Peer::JoinCode(ref join_code)) => {
-                let secret_address = get_secret_address_from_wormhole(&join_code).await.context(
+                let secret_address = get_secret_address_from_wormhole(join_code).await.context(
                     "Failed to retreive secret address, was this join code already used?",
                 )?;
                 info!(
@@ -119,7 +119,7 @@ impl AppConfig {
     /// It depends on the attribute how we're merging it:
     /// - For strings, the existing (calling) attribute has precedence.
     /// - For booleans, if a value deviates from the default, it "wins".
-    /// - The base_dir will be taken from the caller.
+    /// - The `base_dir` will be taken from the caller.
     pub fn merge(self, other: Option<Self>) -> Self {
         match other {
             None => self,
