@@ -196,16 +196,18 @@ impl DocumentActor {
                 if self.save_fully {
                     debug!("Persisting CRDT document fully.");
                     let bytes = self.crdt_doc.save();
-                    sandbox::write_file(&self.app_config.base_dir, &persistence_file, &bytes).unwrap_or_else(
-                        |_| panic!("Failed to persist to '{}'", persistence_file.display()),
-                    );
+                    sandbox::write_file(&self.app_config.base_dir, &persistence_file, &bytes)
+                        .unwrap_or_else(|_| {
+                            panic!("Failed to persist to '{}'", persistence_file.display())
+                        });
                     self.save_fully = false;
                 } else {
                     debug!("Persisting CRDT document incrementally.");
                     let bytes = self.crdt_doc.save_incremental();
-                    sandbox::append_file(&self.app_config.base_dir, &persistence_file, &bytes).unwrap_or_else(
-                        |_| panic!("Failed to persist to '{}'", persistence_file.display()),
-                    );
+                    sandbox::append_file(&self.app_config.base_dir, &persistence_file, &bytes)
+                        .unwrap_or_else(|_| {
+                            panic!("Failed to persist to '{}'", persistence_file.display())
+                        });
                 }
             }
             DocMessage::ReceiveSyncMessage {
@@ -452,8 +454,9 @@ impl DocumentActor {
     fn handle_watcher_event(&mut self, watcher_event: WatcherEvent) {
         match watcher_event {
             WatcherEvent::Created { file_path } => {
-                let relative_file_path = RelativePath::try_from_path(&self.app_config.base_dir, &file_path)
-                    .expect("Watcher event should have a path within the base directory");
+                let relative_file_path =
+                    RelativePath::try_from_path(&self.app_config.base_dir, &file_path)
+                        .expect("Watcher event should have a path within the base directory");
                 if self.owns(&relative_file_path) {
                     if self.crdt_doc.file_exists(&relative_file_path) {
                         debug!("Received watcher creation event, but file already exists in CRDT.");
@@ -481,16 +484,18 @@ impl DocumentActor {
                 }
             }
             WatcherEvent::Removed { file_path } => {
-                let relative_file_path = RelativePath::try_from_path(&self.app_config.base_dir, &file_path)
-                    .expect("Watcher event should have a path within the base directory");
+                let relative_file_path =
+                    RelativePath::try_from_path(&self.app_config.base_dir, &file_path)
+                        .expect("Watcher event should have a path within the base directory");
                 if self.owns(&relative_file_path) {
                     self.remove_file(&relative_file_path);
                     let _ = self.doc_changed_ping_tx.send(());
                 }
             }
             WatcherEvent::Changed { file_path } => {
-                let relative_file_path = RelativePath::try_from_path(&self.app_config.base_dir, &file_path)
-                    .expect("Watcher event should have a path within the base directory");
+                let relative_file_path =
+                    RelativePath::try_from_path(&self.app_config.base_dir, &file_path)
+                        .expect("Watcher event should have a path within the base directory");
                 if self.owns(&relative_file_path) {
                     let new_content = match sandbox::read_file(
                         &self.app_config.base_dir,
@@ -1111,7 +1116,10 @@ mod tests {
                     doc_message_rx,
                     doc_changed_ping_tx,
                     ephemeral_message_tx,
-                    directory.path().to_path_buf(),
+                    AppConfig {
+                        base_dir: directory.path().to_path_buf(),
+                        ..Default::default()
+                    },
                     true,
                     true,
                     false,

@@ -26,7 +26,7 @@ pub enum Peer {
     JoinCode(String),
 }
 
-#[derive(Clone)]
+#[derive(Clone, Default)]
 #[must_use]
 pub struct AppConfig {
     pub base_dir: PathBuf,
