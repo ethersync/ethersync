@@ -3,7 +3,7 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-use crate::config;
+use crate::config::{self, AppConfig};
 use crate::document::Document;
 use crate::editor::{self, EditorId, EditorWriter};
 use crate::editor_connection::EditorConnection;
@@ -103,7 +103,7 @@ pub struct DocumentActor {
     ephemeral_states: HashMap<CursorId, EphemeralMessage>,
     /// The Document is the main I/O managed resource of this actor.
     crdt_doc: Document,
-    base_dir: PathBuf,
+    app_config: AppConfig,
     save_fully: bool,
 }
 
@@ -112,15 +112,15 @@ impl DocumentActor {
         doc_message_rx: mpsc::Receiver<DocMessage>,
         doc_changed_ping_tx: DocChangedSender,
         ephemeral_message_tx: EphemeralMessageSender,
-        base_dir: PathBuf,
+        app_config: AppConfig,
         init: bool,
         is_host: bool,
         persist: bool,
     ) -> Self {
         // If there is a persisted version in base_dir/.ethersync/doc, load it.
         // TODO: Pull out ".ethersync" string into a constant.
-        let persistence_file = base_dir.join(".ethersync/doc");
-        let persistence_file_exists = sandbox::exists(&base_dir, &persistence_file)
+        let persistence_file = app_config.base_dir.join(".ethersync/doc");
+        let persistence_file_exists = sandbox::exists(&app_config.base_dir, &persistence_file)
             .expect("Could not check for the existence of the persistence file");
 
         let load_crdt_doc = persistence_file_exists && !init && persist;
@@ -129,7 +129,7 @@ impl DocumentActor {
                 "Loading persisted CRDT document from '{}'.",
                 persistence_file.display()
             );
-            let bytes = sandbox::read_file(&base_dir, &persistence_file)
+            let bytes = sandbox::read_file(&app_config.base_dir, &persistence_file)
                 .unwrap_or_else(|_| panic!("Could not read file '{}'", persistence_file.display()));
             Document::load(&bytes)
         } else {
@@ -143,7 +143,7 @@ impl DocumentActor {
             ephemeral_message_tx,
             editor_connections: HashMap::default(),
             ephemeral_states: HashMap::default(),
-            base_dir,
+            app_config,
             crdt_doc,
             save_fully: true,
         };
@@ -192,18 +192,18 @@ impl DocumentActor {
                 self.read_current_content_from_dir(false);
             }
             DocMessage::Persist => {
-                let persistence_file = self.base_dir.join(".ethersync/doc");
+                let persistence_file = self.app_config.base_dir.join(".ethersync/doc");
                 if self.save_fully {
                     debug!("Persisting CRDT document fully.");
                     let bytes = self.crdt_doc.save();
-                    sandbox::write_file(&self.base_dir, &persistence_file, &bytes).unwrap_or_else(
+                    sandbox::write_file(&self.app_config.base_dir, &persistence_file, &bytes).unwrap_or_else(
                         |_| panic!("Failed to persist to '{}'", persistence_file.display()),
                     );
                     self.save_fully = false;
                 } else {
                     debug!("Persisting CRDT document incrementally.");
                     let bytes = self.crdt_doc.save_incremental();
-                    sandbox::append_file(&self.base_dir, &persistence_file, &bytes).unwrap_or_else(
+                    sandbox::append_file(&self.app_config.base_dir, &persistence_file, &bytes).unwrap_or_else(
                         |_| panic!("Failed to persist to '{}'", persistence_file.display()),
                     );
                 }
@@ -231,7 +231,7 @@ impl DocumentActor {
                                 info!("Removing file {file_path}.");
 
                                 sandbox::remove_file(
-                                    &self.base_dir,
+                                    &self.app_config.base_dir,
                                     &self.absolute_path_for_file_path(&file_path),
                                 )
                                 .unwrap_or_else(|err| {
@@ -280,13 +280,13 @@ impl DocumentActor {
                             let absolute_path = &self.absolute_path_for_file_path(&file_path);
 
                             // If the file didn't exist before, log it.
-                            if !sandbox::exists(&self.base_dir, absolute_path)
+                            if !sandbox::exists(&self.app_config.base_dir, absolute_path)
                                 .expect("Failed to check for file existence before writing to it")
                             {
                                 info!("Creating binary file {file_path}.");
                             }
 
-                            sandbox::write_file(&self.base_dir, absolute_path, &bytes)
+                            sandbox::write_file(&self.app_config.base_dir, absolute_path, &bytes)
                                 .unwrap_or_else(|err| {
                                     warn!("Failed to write to file {file_path}: {err}");
                                 });
@@ -324,7 +324,7 @@ impl DocumentActor {
                 self.editor_connections.insert(
                     id,
                     (
-                        EditorConnection::new(editor_connection_id, self.base_dir.clone()),
+                        EditorConnection::new(editor_connection_id, self.app_config.clone()),
                         editor_writer,
                     ),
                 );
@@ -352,7 +352,8 @@ impl DocumentActor {
     }
 
     fn absolute_path_for_file_path(&self, file_path: &RelativePath) -> AbsolutePath {
-        AbsolutePath::from_parts(&self.base_dir, file_path).expect("base_dir should be absolute")
+        AbsolutePath::from_parts(&self.app_config.base_dir, file_path)
+            .expect("base_dir should be absolute")
     }
 
     // Returns the messages to send back to the editor which made the request.
@@ -451,14 +452,14 @@ impl DocumentActor {
     fn handle_watcher_event(&mut self, watcher_event: WatcherEvent) {
         match watcher_event {
             WatcherEvent::Created { file_path } => {
-                let relative_file_path = RelativePath::try_from_path(&self.base_dir, &file_path)
+                let relative_file_path = RelativePath::try_from_path(&self.app_config.base_dir, &file_path)
                     .expect("Watcher event should have a path within the base directory");
                 if self.owns(&relative_file_path) {
                     if self.crdt_doc.file_exists(&relative_file_path) {
                         debug!("Received watcher creation event, but file already exists in CRDT.");
                     } else {
                         let content = match sandbox::read_file(
-                            &self.base_dir,
+                            &self.app_config.base_dir,
                             Path::new(&file_path),
                         ) {
                             Ok(content) => content,
@@ -480,7 +481,7 @@ impl DocumentActor {
                 }
             }
             WatcherEvent::Removed { file_path } => {
-                let relative_file_path = RelativePath::try_from_path(&self.base_dir, &file_path)
+                let relative_file_path = RelativePath::try_from_path(&self.app_config.base_dir, &file_path)
                     .expect("Watcher event should have a path within the base directory");
                 if self.owns(&relative_file_path) {
                     self.remove_file(&relative_file_path);
@@ -488,11 +489,11 @@ impl DocumentActor {
                 }
             }
             WatcherEvent::Changed { file_path } => {
-                let relative_file_path = RelativePath::try_from_path(&self.base_dir, &file_path)
+                let relative_file_path = RelativePath::try_from_path(&self.app_config.base_dir, &file_path)
                     .expect("Watcher event should have a path within the base directory");
                 if self.owns(&relative_file_path) {
                     let new_content = match sandbox::read_file(
-                        &self.base_dir,
+                        &self.app_config.base_dir,
                         Path::new(&file_path),
                     ) {
                         Ok(content) => content,
@@ -596,13 +597,13 @@ impl DocumentActor {
             debug!("Writing to {abs_path}.");
 
             // If the file didn't exist before, log it.
-            if !sandbox::exists(&self.base_dir, &abs_path)
+            if !sandbox::exists(&self.app_config.base_dir, &abs_path)
                 .expect("Failed to check for file existence before writing to it")
             {
                 info!("Creating file {file_path}.");
             }
 
-            sandbox::write_file(&self.base_dir, &abs_path, &text.into_bytes())
+            sandbox::write_file(&self.app_config.base_dir, &abs_path, &text.into_bytes())
                 .unwrap_or_else(|_| panic!("Could not write to file {abs_path}"));
         } else {
             warn!("Failed to get content of file '{file_path}' when writing to disk. Key should have existed?");
@@ -611,11 +612,11 @@ impl DocumentActor {
 
     fn read_current_content_from_dir(&mut self, init: bool) {
         debug!("Reading current contents from disk (init: {init}).");
-        for file_path in sandbox::enumerate_non_ignored_files(&self.base_dir) {
-            match sandbox::read_file(&self.base_dir, &file_path) {
+        for file_path in sandbox::enumerate_non_ignored_files(&self.app_config) {
+            match sandbox::read_file(&self.app_config.base_dir, &file_path) {
                 Ok(bytes) => {
                     let relative_file_path =
-                        RelativePath::try_from_path(&self.base_dir, &file_path)
+                        RelativePath::try_from_path(&self.app_config.base_dir, &file_path)
                             .expect("Walked file path should be within base directory");
                     if self.owns(&relative_file_path) {
                         if let Ok(text) = String::from_utf8(bytes.clone()) {
@@ -637,7 +638,7 @@ impl DocumentActor {
 
         for relative_file_path in self.crdt_doc.files() {
             let absolute_file_path = self.absolute_path_for_file_path(&relative_file_path);
-            if !sandbox::exists(&self.base_dir, &absolute_file_path)
+            if !sandbox::exists(&self.app_config.base_dir, &absolute_file_path)
                 .expect(
                     "Should have been able to check for file existence while reading current directory content"
                 )
@@ -862,7 +863,7 @@ pub struct DocumentActorHandle {
 }
 
 impl DocumentActorHandle {
-    pub fn new(base_dir: &Path, init: bool, is_host: bool, persist: bool) -> Self {
+    pub fn new(app_config: &AppConfig, init: bool, is_host: bool, persist: bool) -> Self {
         // The document task will receive messages on this channel.
         let (doc_message_tx, doc_message_rx) = mpsc::channel(1);
 
@@ -878,7 +879,7 @@ impl DocumentActorHandle {
             doc_message_rx,
             doc_changed_ping_tx.clone(),
             ephemeral_message_tx.clone(),
-            base_dir.into(),
+            app_config.clone(),
             init,
             is_host,
             persist,
@@ -938,7 +939,7 @@ pub struct Daemon {
     pub document_handle: DocumentActorHandle,
     pub address: String,
     socket_path: PathBuf,
-    base_dir: PathBuf,
+    app_config: AppConfig,
     #[expect(dead_code)]
     // We need to store the connection manager in order to keep the connection alive.
     connection_manager: peer::ConnectionManager,
@@ -947,14 +948,14 @@ pub struct Daemon {
 impl Daemon {
     // Launch the daemon. Optionally, connect to given peer.
     pub async fn new(
-        app_config: config::AppConfig,
+        app_config: AppConfig,
         socket_path: &Path,
         init: bool,
         persist: bool,
     ) -> Result<Self> {
         let is_host = app_config.is_host();
 
-        let document_handle = DocumentActorHandle::new(&app_config.base_dir, init, is_host, persist);
+        let document_handle = DocumentActorHandle::new(&app_config, init, is_host, persist);
 
         // Start socket listener.
         let socket_path = socket_path.to_path_buf();
@@ -962,7 +963,7 @@ impl Daemon {
 
         // Start file watcher.
         let base_dir = app_config.base_dir.to_path_buf();
-        spawn_file_watcher(&base_dir, document_handle.clone());
+        spawn_file_watcher(&app_config, document_handle.clone());
 
         if persist {
             // Start persister.
@@ -984,9 +985,9 @@ impl Daemon {
         if app_config.emit_join_code {
             put_secret_address_into_wormhole(address).await;
         }
-        if let Some(config::Peer::SecretAddress(secret_address)) = app_config.peer {
+        if let Some(config::Peer::SecretAddress(ref secret_address)) = app_config.peer {
             connection_manager
-                .connect(secret_address)
+                .connect(secret_address.to_string())
                 .await
                 .context("Failed to connect to specified peer")?;
         }
@@ -995,7 +996,7 @@ impl Daemon {
             document_handle,
             address: address.to_owned(),
             socket_path,
-            base_dir,
+            app_config,
             connection_manager,
         })
     }
@@ -1004,7 +1005,7 @@ impl Daemon {
 impl Drop for Daemon {
     fn drop(&mut self) {
         debug!("Daemon dropped, removing socket");
-        sandbox::remove_file(Path::new(&self.base_dir), &self.socket_path)
+        sandbox::remove_file(Path::new(&self.app_config.base_dir), &self.socket_path)
             .expect("Could not remove socket");
     }
 }
@@ -1012,8 +1013,8 @@ impl Drop for Daemon {
 // Spawn a file watcher and feed its events to the document_handle.
 // In addition, a short timeout after the last event, do a full re-scan, so that we don't miss any
 // file changes - the watcher isn't necessarily exhaustive.
-fn spawn_file_watcher(base_dir: &Path, document_handle: DocumentActorHandle) {
-    let mut watcher = Watcher::new(base_dir);
+fn spawn_file_watcher(app_config: &AppConfig, document_handle: DocumentActorHandle) {
+    let mut watcher = Watcher::new(app_config.clone());
 
     tokio::spawn(async move {
         let debounce_duration = Duration::from_millis(100);
