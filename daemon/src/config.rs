@@ -8,7 +8,7 @@ use crate::sandbox;
 use crate::wormhole::get_secret_address_from_wormhole;
 use anyhow::{bail, Context, Result};
 use ini::Ini;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use tracing::info;
 
 pub const DOC_FILE: &str = "doc";
@@ -29,9 +29,12 @@ pub enum Peer {
 #[derive(Clone)]
 #[must_use]
 pub struct AppConfig {
+    pub base_dir: PathBuf,
     pub peer: Option<Peer>,
     pub emit_join_code: bool,
     pub emit_secret_address: bool,
+    // Whether to sync version control directories like .git, .jj, ...
+    pub sync_vcs: bool,
 }
 
 impl AppConfig {
@@ -42,6 +45,9 @@ impl AppConfig {
                 .expect("Could not access config file, even though it exists");
             let general_section = conf.general_section();
             Some(Self {
+                // TODO: extract all the other fields to its own struct, s.t. we don't have to work
+                // around the fact that base_dir won't ever be in the config file.
+                base_dir: Path::new("/does-not-exist").to_path_buf(),
                 peer: general_section
                     .get("peer")
                     .map(|p| Peer::SecretAddress(p.to_string())),
@@ -60,25 +66,30 @@ impl AppConfig {
                         )
                     },
                 ),
+                sync_vcs: false,
             })
         } else {
             None
         }
     }
 
+    fn config_file(&self) -> PathBuf {
+        self.base_dir.join(CONFIG_DIR).join(CONFIG_FILE)
+    }
+
     /// If we have a join code, try to use that and overwrite the config file.
     /// If we don't have a join code, try to use the configured peer.
     /// Otherwise, fail.
-    pub async fn resolve_peer(self, directory: &Path, config_file: &Path) -> Result<Self> {
+    pub async fn resolve_peer(self) -> Result<Self> {
         let peer = match self.peer {
-            Some(Peer::JoinCode(join_code)) => {
+            Some(Peer::JoinCode(ref join_code)) => {
                 let secret_address = get_secret_address_from_wormhole(&join_code).await.context(
                     "Failed to retreive secret address, was this join code already used?",
                 )?;
                 info!(
                     "Derived peer from join code. Storing in config (overwriting previous config)."
                 );
-                store_peer_in_config(directory, config_file, &secret_address)?;
+                store_peer_in_config(&self.base_dir, &self.config_file(), &secret_address)?;
                 Peer::SecretAddress(secret_address)
             }
             Some(Peer::SecretAddress(secret_address)) => {
@@ -90,9 +101,11 @@ impl AppConfig {
             }
         };
         Ok(Self {
+            base_dir: self.base_dir,
             peer: Some(peer),
             emit_join_code: self.emit_join_code,
             emit_secret_address: self.emit_secret_address,
+            sync_vcs: self.sync_vcs,
         })
     }
 
@@ -106,13 +119,16 @@ impl AppConfig {
     /// It depends on the attribute how we're merging it:
     /// - For strings, the existing (calling) attribute has precedence.
     /// - For booleans, if a value deviates from the default, it "wins".
+    /// - The base_dir will be taken from the caller.
     pub fn merge(self, other: Option<Self>) -> Self {
         match other {
             None => self,
             Some(other) => Self {
+                base_dir: self.base_dir,
                 peer: self.peer.or(other.peer),
                 emit_join_code: self.emit_join_code && other.emit_join_code,
                 emit_secret_address: self.emit_secret_address || other.emit_secret_address,
+                sync_vcs: self.sync_vcs || other.sync_vcs,
             },
         }
     }

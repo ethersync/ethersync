@@ -43,11 +43,19 @@ enum Commands {
         /// Print the secret address. Useful for sharing with multiple people.
         #[arg(long)]
         show_secret_address: bool,
+        /// Whether to also synchronize version-control directories like .git or .jj.
+        /// Experimental approach, use at your own risk (but can be fun!).
+        #[arg(long)]
+        sync_vcs: bool,
     },
     /// Join a shared directory via a join code, or connect to the most recent one.
     Join {
         /// Specify to connect to a new peer. Otherwise, try to connect to the most recent peer.
         join_code: Option<String>,
+        /// Whether to also synchronize version-control directories like .git or .jj.
+        /// Experimental approach, use at your own risk (but can be fun!).
+        #[arg(long)]
+        sync_vcs: bool,
     },
     /// Remember the current state of the directory, allowing you to compare it later.
     Bookmark,
@@ -120,30 +128,39 @@ async fn main() -> Result<()> {
                     init,
                     no_join_code,
                     show_secret_address,
+                    sync_vcs,
                     ..
                 } => {
                     init_doc = init;
                     let app_config_cli = AppConfig {
+                        base_dir: directory,
                         peer: None,
                         emit_join_code: !no_join_code,
                         emit_secret_address: show_secret_address,
+                        sync_vcs,
                     };
                     app_config = app_config_cli.merge(AppConfig::from_config_file(&config_file));
 
                     // Because of the "share" subcommand, explicitly don't connect anywhere.
                     app_config.peer = None;
                 }
-                Commands::Join { join_code, .. } => {
+                Commands::Join {
+                    join_code,
+                    sync_vcs,
+                    ..
+                } => {
                     let app_config_cli = AppConfig {
+                        base_dir: directory,
                         peer: join_code.map(config::Peer::JoinCode),
                         emit_join_code: false,
                         emit_secret_address: false,
+                        sync_vcs,
                     };
 
                     app_config = app_config_cli.merge(AppConfig::from_config_file(&config_file));
 
                     app_config = app_config
-                        .resolve_peer(&directory, &config_file)
+                        .resolve_peer()
                         .await
                         .context("Failed to resolve peer")?;
                 }
@@ -152,8 +169,10 @@ async fn main() -> Result<()> {
                 }
             }
 
-            debug!("Starting Ethersync on {}.", directory.display());
-            let _daemon = Daemon::new(app_config, &socket_path, &directory, init_doc, persist)
+            debug!("Starting Ethersync on {}.", app_config.base_dir.display());
+
+            // TODO: Derive socket_path inside the constructor.
+            let _daemon = Daemon::new(app_config, &socket_path, init_doc, persist)
                 .await
                 .context("Failed to launch the daemon")?;
             wait_for_shutdown().await;

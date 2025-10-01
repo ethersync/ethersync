@@ -949,20 +949,19 @@ impl Daemon {
     pub async fn new(
         app_config: config::AppConfig,
         socket_path: &Path,
-        base_dir: &Path,
         init: bool,
         persist: bool,
     ) -> Result<Self> {
         let is_host = app_config.is_host();
 
-        let document_handle = DocumentActorHandle::new(base_dir, init, is_host, persist);
+        let document_handle = DocumentActorHandle::new(&app_config.base_dir, init, is_host, persist);
 
         // Start socket listener.
         let socket_path = socket_path.to_path_buf();
         editor::spawn_socket_listener(&socket_path, document_handle.clone())?;
 
         // Start file watcher.
-        let base_dir = base_dir.to_path_buf();
+        let base_dir = app_config.base_dir.to_path_buf();
         spawn_file_watcher(&base_dir, document_handle.clone());
 
         if persist {
