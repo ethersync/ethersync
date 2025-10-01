@@ -4,13 +4,13 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 #[cfg(all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none")))]
-pub(crate) use dioxus_core::prelude::spawn;
-
-#[cfg(not(all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none"))))]
-pub(crate) use tokio::spawn;
+pub mod webassembly;
 
 #[cfg(all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none")))]
-pub(crate) use dioxus_hooks::UnboundedSender as Sender;
+pub use webassembly::*;
 
 #[cfg(not(all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none"))))]
-pub(crate) use tokio::sync::mpsc::Sender;
+pub mod desktop;
+
+#[cfg(not(all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none"))))]
+pub use desktop::*;
