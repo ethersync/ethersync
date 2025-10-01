@@ -59,36 +59,19 @@ async fn main() -> Result<()> {
     let (dir2, file2, socket_path2) = initialize_directory();
 
     // Set up the actors.
-    let daemon = Daemon::new(
-        AppConfig {
-            peer: None,
-            emit_join_code: false,
-            emit_secret_address: false,
-        },
-        &socket_path,
-        dir.path(),
-        true,
-        false,
-    )
-    .await?;
+    let mut app_config = AppConfig::default();
+    app_config.base_dir = dir.path().to_path_buf();
+    let daemon = Daemon::new(app_config, &socket_path, true, false).await?;
 
     // Wait until iroh's DNS discovery (hopefully) works.
     sleep(Duration::from_millis(1000)).await;
 
     let nvim = Neovim::new(file).await;
 
-    let peer = Daemon::new(
-        AppConfig {
-            peer: Some(config::Peer::SecretAddress(daemon.address.clone())),
-            emit_join_code: false,
-            emit_secret_address: false,
-        },
-        &socket_path2,
-        dir2.path(),
-        false,
-        false,
-    )
-    .await?;
+    let mut app_config2 = AppConfig::default();
+    app_config2.base_dir = dir2.path().to_path_buf();
+    app_config2.peer = Some(config::Peer::SecretAddress(daemon.address.clone()));
+    let peer = Daemon::new(app_config2, &socket_path2, false, false).await?;
 
     // Wait until file2 appears.
     while !file2.exists() {
