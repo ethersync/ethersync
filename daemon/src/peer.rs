@@ -5,17 +5,16 @@
 
 //! This module provides a [`ConnectionManager`], which can be used to connect to other daemons.
 
-use self::sync::{Connection, PeerMessage, SyncActor};
+use self::sync::{Connection, SyncActor};
 use crate::daemon::DocumentActorHandle;
 use anyhow::{bail, Context, Result};
 use async_trait::async_trait;
+use ethersync_shared::keypair::Keypair;
+use ethersync_shared::messages::PeerMessage;
+use ethersync_shared::secret_address::SecretAddress;
 use iroh::endpoint::{RecvStream, SendStream};
-use iroh::{NodeAddr, SecretKey};
+use iroh::SecretKey;
 use postcard::{from_bytes, to_allocvec};
-use std::fs::{self, File, OpenOptions};
-use std::io::{Read, Write};
-use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
-use std::path::Path;
 use std::str::FromStr;
 use std::time::Duration;
 use tokio::sync::{mpsc, oneshot};
@@ -26,29 +25,6 @@ mod sync;
 
 const ALPN: &[u8] = b"/ethersync/0";
 
-struct SecretAddress {
-    node_addr: NodeAddr,
-    passphrase: SecretKey,
-}
-
-impl FromStr for SecretAddress {
-    type Err = anyhow::Error;
-    fn from_str(s: &str) -> Result<Self> {
-        let parts: Vec<&str> = s.split('#').collect();
-        if parts.len() != 2 {
-            bail!("Peer string must have format <node_id>#<passphrase>");
-        }
-
-        let node_addr = iroh::PublicKey::from_str(parts[0])?.into();
-        let passphrase = SecretKey::from_str(parts[1])?;
-
-        Ok(Self {
-            node_addr,
-            passphrase,
-        })
-    }
-}
-
 enum PeerAuth {
     MyPassphrase(SecretKey),
     YourPassphrase(SecretKey),
@@ -56,16 +32,19 @@ enum PeerAuth {
 
 pub struct ConnectionManager {
     message_tx: mpsc::Sender<EndpointMessage>,
-    secret_address: String,
+    secret_address: SecretAddress,
 }
 
 impl ConnectionManager {
-    pub async fn new(document_handle: DocumentActorHandle, base_dir: &Path) -> Result<Self> {
+    pub async fn new(document_handle: DocumentActorHandle, keypair: Keypair) -> Result<Self> {
         let (message_tx, message_rx) = mpsc::channel(1);
 
-        let (endpoint, my_passphrase) = Self::build_endpoint(base_dir).await?;
+        let (endpoint, my_passphrase) = Self::build_endpoint(keypair).await?;
 
-        let secret_address = format!("{}#{}", endpoint.node_id(), my_passphrase);
+        let secret_address = SecretAddress {
+            node_id: endpoint.node_id(),
+            passphrase: my_passphrase.clone(),
+        };
 
         let mut actor = EndpointActor::new(
             endpoint,
@@ -84,7 +63,7 @@ impl ConnectionManager {
     }
 
     #[must_use]
-    pub fn secret_address(&self) -> &str {
+    pub fn secret_address(&self) -> &SecretAddress {
         &self.secret_address
     }
 
@@ -105,65 +84,15 @@ impl ConnectionManager {
         Ok(())
     }
 
-    async fn build_endpoint(base_dir: &Path) -> Result<(iroh::Endpoint, SecretKey)> {
-        let (secret_key, my_passphrase) = Self::get_keypair(base_dir);
-
+    async fn build_endpoint(keypair: Keypair) -> Result<(iroh::Endpoint, SecretKey)> {
         let endpoint = iroh::Endpoint::builder()
-            .secret_key(secret_key)
+            .secret_key(keypair.secret_key)
             .alpns(vec![ALPN.to_vec()])
             .discovery_n0()
             .bind()
             .await?;
 
-        Ok((endpoint, my_passphrase))
-    }
-
-    fn get_keypair(base_dir: &Path) -> (SecretKey, SecretKey) {
-        let keyfile = base_dir.join(".ethersync").join("key");
-        if keyfile.exists() {
-            let metadata =
-                fs::metadata(&keyfile).expect("Expected to have access to metadata of the keyfile");
-
-            let current_permissions = metadata.permissions().mode();
-            let allowed_permissions = 0o100_600;
-            assert!(current_permissions == allowed_permissions, "For security reasons, please make sure to set the key file to user-readable only (set the permissions to 600).");
-
-            assert!(metadata.len() == 64, "Your keyfile is not 64 bytes long. This is a sign that it was created by an Ethersync version older than 0.7.0, which is not compatible. Please remove .ethersync/key, and try again.");
-
-            debug!("Re-using existing keypair.");
-            let mut file = File::open(keyfile).expect("Failed to open key file");
-
-            let mut secret_key = [0; 32];
-            file.read_exact(&mut secret_key)
-                .expect("Failed to read from key file");
-
-            let mut passphrase = [0; 32];
-            file.read_exact(&mut passphrase)
-                .expect("Failed to read from key file");
-
-            (
-                SecretKey::from_bytes(&secret_key),
-                SecretKey::from_bytes(&passphrase),
-            )
-        } else {
-            debug!("Generating new keypair.");
-            let secret_key = SecretKey::generate(rand::rngs::OsRng);
-            let passphrase = SecretKey::generate(rand::rngs::OsRng);
-
-            let mut file = OpenOptions::new()
-                .create_new(true)
-                .write(true)
-                .mode(0o600)
-                .open(keyfile)
-                .expect("Should have been able to create key file that did not exist before");
-
-            file.write_all(&secret_key.to_bytes())
-                .expect("Failed to write to key file");
-            file.write_all(&passphrase.to_bytes())
-                .expect("Failed to write to key file");
-
-            (secret_key, passphrase)
-        }
+        Ok((endpoint, keypair.passphrase))
     }
 }
 
@@ -214,8 +143,7 @@ impl EndpointActor {
                 response_tx,
                 previous_attempts,
             } => {
-                let node_addr = secret_address.node_addr.clone();
-                let connect_result = self.endpoint.connect(node_addr, ALPN).await;
+                let connect_result = self.endpoint.connect(secret_address.node_id, ALPN).await;
                 let conn = match connect_result {
                     Ok(conn) => conn,
                     Err(err) => {
@@ -272,13 +200,13 @@ impl EndpointActor {
         if previous_attempts == 0 {
             info!(
                 "Connection to peer {} lost, will keep trying to reconnect...",
-                secret_address.node_addr.node_id
+                secret_address.node_id
             );
         } else {
             sleep(Duration::from_secs(10)).await;
             debug!(
                 "Making another attempt to connect to peer {}...",
-                secret_address.node_addr.node_id
+                secret_address.node_id
             );
         }
         // We don't need to be notified, so we don't need to use the response channel.

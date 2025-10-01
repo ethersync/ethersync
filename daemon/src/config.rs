@@ -5,8 +5,9 @@
 
 //! Data structures and helper methods around influencing the configuration of the application.
 use crate::sandbox;
-use crate::wormhole::get_secret_address_from_wormhole;
 use anyhow::{bail, Context, Result};
+use ethersync_shared::secret_address::SecretAddress;
+use ethersync_shared::wormhole::get_secret_address_from_wormhole;
 use ini::Ini;
 use std::path::Path;
 use tracing::info;
@@ -77,7 +78,7 @@ impl AppConfig {
                     "Derived peer from join code. Storing in config (overwriting previous config)."
                 );
                 store_peer_in_config(directory, config_file, &secret_address)?;
-                Peer::SecretAddress(secret_address)
+                Peer::SecretAddress(secret_address.to_string())
             }
             Some(Peer::SecretAddress(secret_address)) => {
                 info!("Using peer from config file.");
@@ -116,7 +117,11 @@ impl AppConfig {
     }
 }
 
-pub fn store_peer_in_config(directory: &Path, config_file: &Path, peer: &str) -> Result<()> {
+pub fn store_peer_in_config(
+    directory: &Path,
+    config_file: &Path,
+    peer: &SecretAddress,
+) -> Result<()> {
     info!("Storing peer's address in .ethersync/config.");
 
     let content = format!("peer={peer}\n");

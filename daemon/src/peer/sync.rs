@@ -4,24 +4,13 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 use crate::daemon::{DocMessage, DocumentActorHandle};
-use crate::types::EphemeralMessage;
 use anyhow::{Context, Result};
 use async_trait::async_trait;
 use automerge::sync::{Message as AutomergeSyncMessage, State as SyncState};
-use serde::{Deserialize, Serialize};
+use ethersync_shared::messages::PeerMessage;
 use std::mem;
 use tokio::sync::{broadcast, oneshot};
 use tracing::debug;
-
-#[derive(Deserialize, Serialize)]
-/// The `PeerMessage` is used for peer to peer data exchange.
-pub enum PeerMessage {
-    /// The Sync message contains the changes to the CRDT
-    Sync(Vec<u8>),
-    /// The Ephemeral message currently is used for cursor messages, but can later be used for
-    /// other things that should not be persisted.
-    Ephemeral(EphemeralMessage),
-}
 
 #[async_trait]
 pub trait Connection<T>: Send + Sync {

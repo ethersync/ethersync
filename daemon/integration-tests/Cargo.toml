@@ -28,6 +28,10 @@ serde_json = "1"
 path = ".."
 default-features = false
 
+[dependencies.ethersync-shared]
+path = "../shared"
+default-features = false
+
 [dev-dependencies]
 futures = { version = "0.3.30", default-features = false }
 pretty_assertions = "1.4.0"

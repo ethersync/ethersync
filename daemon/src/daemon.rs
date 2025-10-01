@@ -7,23 +7,25 @@ use crate::config;
 use crate::document::Document;
 use crate::editor::{self, EditorId, EditorWriter};
 use crate::editor_connection::EditorConnection;
-use crate::path::{AbsolutePath, RelativePath};
+use crate::keypair::get_keypair_from_basedir;
 use crate::peer;
 use crate::sandbox;
-use crate::types::{
-    ComponentMessage, CursorId, CursorState, EditorProtocolMessageError,
-    EditorProtocolMessageFromEditor, EditorProtocolMessageToEditor, EditorProtocolObject,
-    EphemeralMessage, FileTextDelta, JSONRPCFromEditor, JSONRPCResponse, PatchEffect, TextDelta,
-};
 use crate::watcher::Watcher;
 use crate::watcher::WatcherEvent;
-use crate::wormhole::put_secret_address_into_wormhole;
 use anyhow::{Context, Result};
 use automerge::ChangeHash;
 use automerge::{
     sync::{Message as AutomergeSyncMessage, State as SyncState},
     Patch,
 };
+use ethersync_shared::messages::EphemeralMessage;
+use ethersync_shared::path::{AbsolutePath, RelativePath};
+use ethersync_shared::types::{
+    ComponentMessage, CursorId, CursorState, EditorProtocolMessageError,
+    EditorProtocolMessageFromEditor, EditorProtocolMessageToEditor, EditorProtocolObject,
+    FileTextDelta, JSONRPCFromEditor, JSONRPCResponse, PatchEffect, TextDelta,
+};
+use ethersync_shared::wormhole::put_secret_address_into_wormhole;
 use futures::SinkExt;
 use rand::Rng;
 use std::collections::{HashMap, HashSet};
@@ -971,10 +973,11 @@ impl Daemon {
         }
 
         // Start connection manager.
-        let connection_manager = peer::ConnectionManager::new(document_handle.clone(), &base_dir)
+        let keypair = get_keypair_from_basedir(&base_dir);
+        let connection_manager = peer::ConnectionManager::new(document_handle.clone(), keypair)
             .await
             .expect("Failed to start connection manager");
-        let address = connection_manager.secret_address();
+        let address = connection_manager.secret_address().clone();
 
         if app_config.emit_secret_address {
             info!(
@@ -983,7 +986,21 @@ impl Daemon {
             );
         }
         if app_config.emit_join_code {
-            put_secret_address_into_wormhole(address).await;
+            let address = connection_manager.secret_address().clone();
+            let (join_code_tx, mut join_code_rx) = mpsc::channel(1);
+            put_secret_address_into_wormhole(&address, join_code_tx);
+
+            tokio::spawn(async move {
+                while let Some(code) = join_code_rx.recv().await {
+                    info!(
+                        "\n\tOne other person can use this to connect to you:\n\n\tethersync join {}\n",
+                        &code
+                    );
+
+                    // Print a new join code in the next iteration, to allow more people to join.
+                    tokio::time::sleep(Duration::from_millis(500)).await;
+                }
+            });
         }
         if let Some(config::Peer::SecretAddress(secret_address)) = app_config.peer {
             connection_manager
@@ -994,7 +1011,7 @@ impl Daemon {
 
         Ok(Self {
             document_handle,
-            address: address.to_owned(),
+            address: address.to_string(),
             socket_path,
             base_dir,
             connection_manager,
@@ -1086,7 +1103,7 @@ fn spawn_persister(document_handle: DocumentActorHandle) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    //use crate::types::factories::*;
+    //use ethersync_shared::types::factories::*;
 
     mod document_actor {
         use super::*;

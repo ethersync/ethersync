@@ -5,7 +5,9 @@
 
 #![allow(dead_code)]
 
-use crate::types::{EditorTextDelta, RevisionedEditorTextDelta, RevisionedTextDelta, TextDelta};
+use ethersync_shared::types::{
+    EditorTextDelta, RevisionedEditorTextDelta, RevisionedTextDelta, TextDelta,
+};
 use operational_transform::OperationSeq;
 use tracing::{debug, warn};
 
@@ -265,7 +267,7 @@ fn transform_through_operations(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::types::factories::*;
+    use ethersync_shared::types::factories::*;
     use tracing_test::traced_test;
 
     fn compose(delta1: TextDelta, delta2: TextDelta) -> TextDelta {
