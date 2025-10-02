@@ -27,6 +27,8 @@ SPDX-License-Identifier: CC-BY-SA-4.0
     - [Pair programming](pair-programming.md)
     - [Shared notes](shared-notes.md)
     - [Working with Git](git-integration.md)
+        - [Manual](git-integration-manual.md)
+        - [Synchronized](git-integration-synchronized.md)
 - [Related projects](related-projects.md)
 
 # Developer documentation
