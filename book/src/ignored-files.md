@@ -7,10 +7,10 @@ SPDX-License-Identifier: CC-BY-SA-4.0
 
 # Ignored files
 
-Some files and directories are ignored by default. Also you have the option to specify files that should be ignored.
-Files that might contain sensitive information, like secrets, that should not be shared with your peers.
+Ethersync ignores
 
-Ethersync
-- ignores `.git` and everything in it.
-- ignores `.ethersync` and everything in it.
-- it respects everything that Git would [ignore](https://git-scm.com/docs/gitignore).
+- `.ethersync` and everything in it,
+- everything that Git would [ignore](https://git-scm.com/docs/gitignore), and
+- version control directories including `.git`, `.jj`, `.bzr`, `.hg`, `.pijul`, and even `.svn`, and everything in them by default. The `--sync-vcs` flag enables sharing these directories, see [here](git-integration-synchronized.md) for details.
+
+To prevent Ethersync from sharing files that contain sensitive information, like secrets, with your peers, add them to a `.gitignore` file.
