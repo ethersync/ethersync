@@ -174,7 +174,7 @@ pub fn has_local_user_config(base_dir: &Path) -> Result<bool> {
             _ => {}
         }
     }
-    return Ok(false);
+    Ok(false)
 }
 
 #[must_use]
