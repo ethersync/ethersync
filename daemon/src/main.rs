@@ -169,6 +169,12 @@ async fn main() -> Result<()> {
                 }
             }
 
+            if app_config.sync_vcs
+                && config::has_local_user_config(&app_config.base_dir).is_ok_and(|v| v)
+            {
+                warn!("You have a local user configuration in your .git/config. In --sync-vcs mode, this file will also be synchronized between peers. If your version \"wins\", all peers will have the same Git identity. As a workaround, you could use `git commit --author`.");
+            }
+
             debug!("Starting Ethersync on {}.", app_config.base_dir.display());
 
             // TODO: Derive socket_path inside the constructor.

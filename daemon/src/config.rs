@@ -7,6 +7,7 @@
 use crate::sandbox;
 use crate::wormhole::get_secret_address_from_wormhole;
 use anyhow::{bail, Context, Result};
+use git2::ConfigLevel;
 use ini::Ini;
 use std::path::{Path, PathBuf};
 use tracing::info;
@@ -161,6 +162,19 @@ fn ethersync_directory_should_be_ignored_but_isnt(path: &Path) -> bool {
             .expect("Should have been able to determine ignore state of path");
     }
     false
+}
+
+/// Test if the local Git config has *any* user config.
+pub fn has_local_user_config(base_dir: &Path) -> Result<bool> {
+    let snapshot = find_git_repo(base_dir)?.config()?.snapshot()?;
+    let mut entries = snapshot.entries(Some("user\\."))?;
+    while let Some(Ok(entry)) = entries.next() {
+        match entry.level() {
+            ConfigLevel::Local | ConfigLevel::Worktree | ConfigLevel::App => return Ok(true),
+            _ => {}
+        }
+    }
+    return Ok(false);
 }
 
 #[must_use]
