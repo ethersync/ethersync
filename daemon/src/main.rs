@@ -43,8 +43,9 @@ enum Commands {
         /// Print the secret address. Useful for sharing with multiple people.
         #[arg(long)]
         show_secret_address: bool,
-        /// Whether to also synchronize version-control directories like .git or .jj.
-        /// Experimental approach, use at your own risk (but can be fun!).
+        /// Also synchronize version-control directories like .git/ or .jj/, which are normally
+        /// ignored. For Git, this will synchronize all branches, commits, etc. as well as your .git/config.
+        /// This means that new commits will immediately appear at all peers, you can change branches together, etc.
         #[arg(long)]
         sync_vcs: bool,
     },
