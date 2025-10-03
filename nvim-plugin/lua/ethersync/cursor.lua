@@ -62,7 +62,7 @@ end
 function M.set_cursor(uri, user_id, name, ranges)
     -- Find correct buffer to apply edits to.
     local bufnr = vim.uri_to_bufnr(uri)
-
+    local new_cursor = false
     if user_cursors[user_id] then
         for _, user_cursor in ipairs(user_cursors[user_id].cursors) do
             if user_cursor.extmark then
@@ -71,6 +71,8 @@ function M.set_cursor(uri, user_id, name, ranges)
                 vim.api.nvim_buf_del_extmark(old_bufnr, cursor_namespace, old_id)
             end
         end
+    else
+        new_cursor = true
     end
     user_cursors[user_id] = { name = name, cursors = {} }
 
@@ -143,6 +145,12 @@ function M.set_cursor(uri, user_id, name, ranges)
                     { uri = uri, range = range, extmark = { id = extmark_id, bufnr = bufnr } }
                 )
             end)
+        end
+    end
+    if new_cursor then
+        local _, cursor = next(user_cursors[user_id].cursors)
+        if cursor then
+            print("New cursor connected\n\n" .. show_cursor_information(name, cursor))
         end
     end
     if following_user_id == user_id then
