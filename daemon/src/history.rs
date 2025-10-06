@@ -3,7 +3,7 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-or-later
 use crate::{config, document::Document, path::AbsolutePath, sandbox};
-use anyhow::Result;
+use anyhow::{Context, Result};
 use automerge::ChangeHash;
 use std::{
     io::{self, Write},
@@ -15,7 +15,11 @@ use temp_dir::TempDir;
 fn load_doc(directory: &Path) -> Result<Document> {
     let doc_path = directory.join(config::CONFIG_DIR).join(config::DOC_FILE);
 
-    let bytes = sandbox::read_file(directory, &doc_path)?;
+    let bytes = sandbox::read_file(directory, &doc_path).context(
+        "Loading the CRDT document failed. \
+        Are you in a pair-programming use case? Or was the daemon never started?",
+    )?;
+
     Ok(Document::load(&bytes))
 }
 

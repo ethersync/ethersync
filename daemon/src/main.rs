@@ -104,6 +104,7 @@ async fn main() -> Result<()> {
         Commands::Share { .. } | Commands::Join { .. } => {
             let persist = !config::has_git_remote(&directory);
             if !persist {
+                // TODO: drop .ethersync/doc here? Would that be rude?
                 info!(
                     "Detected a Git remote: Assuming a pair-programming use-case and starting a new history."
                 );
@@ -158,16 +159,17 @@ async fn main() -> Result<()> {
             wait_for_shutdown().await;
         }
         Commands::Bookmark => {
-            history::bookmark(&directory)?;
+            history::bookmark(&directory).context("Bookmark command failed")?;
         }
         Commands::Snapshot {
             target_directory,
             bookmark,
         } => {
-            history::snapshot(&directory, &target_directory, bookmark)?;
+            history::snapshot(&directory, &target_directory, bookmark)
+                .context("Could not create snapshot")?;
         }
         Commands::Diff { tool } => {
-            history::diff(&directory, tool)?;
+            history::diff(&directory, tool).context("Diff command failed")?;
         }
         Commands::Client => {
             jsonrpc_forwarder::connection(&socket_path)
