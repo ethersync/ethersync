@@ -19,7 +19,7 @@ fn load_doc(directory: &Path) -> Result<Document> {
     Ok(Document::load(&bytes))
 }
 
-pub fn seenit(directory: &Path) -> Result<()> {
+pub fn bookmark(directory: &Path) -> Result<()> {
     let mut doc = load_doc(directory)?;
 
     let bookmark_path = directory
@@ -34,7 +34,7 @@ pub fn seenit(directory: &Path) -> Result<()> {
     Ok(())
 }
 
-fn read_seenit(directory: &Path) -> Result<Vec<ChangeHash>> {
+fn read_bookmark(directory: &Path) -> Result<Vec<ChangeHash>> {
     let bookmark_path = directory
         .join(config::CONFIG_DIR)
         .join(config::BOOKMARK_FILE);
@@ -63,11 +63,11 @@ fn write_doc_contents_to_dir(
     Ok(())
 }
 
-pub fn snapshot(directory: &Path, target_directory: &Path, seenit: bool) -> Result<()> {
+pub fn snapshot(directory: &Path, target_directory: &Path, bookmark: bool) -> Result<()> {
     let mut doc = load_doc(directory)?;
 
-    let heads: Vec<ChangeHash> = if seenit {
-        read_seenit(directory)?
+    let heads: Vec<ChangeHash> = if bookmark {
+        read_bookmark(directory)?
     } else {
         doc.get_heads()
     };
@@ -75,17 +75,17 @@ pub fn snapshot(directory: &Path, target_directory: &Path, seenit: bool) -> Resu
     write_doc_contents_to_dir(&doc, target_directory, &heads)
 }
 
-pub fn whatsnew(directory: &Path, tool: String) -> Result<()> {
+pub fn diff(directory: &Path, tool: String) -> Result<()> {
     let mut doc = load_doc(directory)?;
 
     let current_heads = doc.get_heads();
-    let seenit_heads = read_seenit(directory)?;
+    let bookmark_heads = read_bookmark(directory)?;
 
     let temp_dir = TempDir::new()?;
     let left_dir = temp_dir.child("left");
     let right_dir = temp_dir.child("right");
 
-    write_doc_contents_to_dir(&doc, &left_dir, &seenit_heads)?;
+    write_doc_contents_to_dir(&doc, &left_dir, &bookmark_heads)?;
     write_doc_contents_to_dir(&doc, &right_dir, &current_heads)?;
 
     let output = Command::new(tool).args([left_dir, right_dir]).output()?;

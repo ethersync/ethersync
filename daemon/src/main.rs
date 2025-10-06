@@ -50,19 +50,18 @@ enum Commands {
         join_code: Option<String>,
     },
     /// Remember the current state of the directory, allowing you to compare it later.
-    Seenit,
-    /// Render the "seenit" state or latest state to a directory.
+    Bookmark,
+    /// Copy all files of the bookmark or the current state to a directory.
     Snapshot {
-        /// Directory to render the snapshot to.
+        /// Directory to copy the files to.
         target_directory: PathBuf,
-        /// Whether to snapshot the "seenit" state. If not provided, snapshot the latest
-        /// state.
+        /// Whether to use the bookmark. If not provided, use the current state.
         #[arg(long)]
-        seenit: bool,
+        bookmark: bool,
     },
-    /// Print a summary of changes since the last "seenit" command run.
-    Whatsnew {
-        /// Which external command to use to compare the two revisions.
+    /// Show the differences between the bookmark and the current state with a tool of your choice.
+    Diff {
+        /// Which external command to use to compare the two revisions. A good option is `meld`.
         #[arg(long)]
         tool: String,
     },
@@ -158,17 +157,17 @@ async fn main() -> Result<()> {
                 .context("Failed to launch the daemon")?;
             wait_for_shutdown().await;
         }
-        Commands::Seenit => {
-            history::seenit(&directory)?;
+        Commands::Bookmark => {
+            history::bookmark(&directory)?;
         }
         Commands::Snapshot {
             target_directory,
-            seenit,
+            bookmark,
         } => {
-            history::snapshot(&directory, &target_directory, seenit)?;
+            history::snapshot(&directory, &target_directory, bookmark)?;
         }
-        Commands::Whatsnew { tool } => {
-            history::whatsnew(&directory, tool)?;
+        Commands::Diff { tool } => {
+            history::diff(&directory, tool)?;
         }
         Commands::Client => {
             jsonrpc_forwarder::connection(&socket_path)
