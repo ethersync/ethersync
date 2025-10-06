@@ -49,3 +49,11 @@ Then, they can connect anytime using
 ```bash
 ethersync join
 ```
+
+## Tracking edits over time
+
+To keep track of edits over time, you can use the `bookmark` and `diff` subcommands.
+
+`ethersync bookmark` will remember the current directory contents, so that you can compare to that state later. You can run this before connecting to your peer, for example, so that you can see which changes the peer introduced.
+
+`ethersync diff --tool <tool>` will create snapshots of the bookmark and the current state and opens a diff-viewer of your choice to compare them. A good graphical diff viewer is [meld](https://meldmerge.org/).
