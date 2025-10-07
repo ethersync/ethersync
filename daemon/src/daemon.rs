@@ -279,19 +279,7 @@ impl DocumentActor {
                             }
                         }
                         PatchEffect::FileBytes(file_path, bytes) => {
-                            let absolute_path = &self.absolute_path_for_file_path(&file_path);
-
-                            // If the file didn't exist before, log it.
-                            if !sandbox::exists(&self.app_config.base_dir, absolute_path)
-                                .expect("Failed to check for file existence before writing to it")
-                            {
-                                info!("Creating binary file {file_path}.");
-                            }
-
-                            sandbox::write_file(&self.app_config.base_dir, absolute_path, &bytes)
-                                .unwrap_or_else(|err| {
-                                    warn!("Failed to write to file {file_path}: {err}");
-                                });
+                            self.ensure_file_has_bytes(&file_path, &bytes);
                         }
                         PatchEffect::NoEffect => {}
                     }
@@ -598,21 +586,32 @@ impl DocumentActor {
 
     fn write_file(&self, file_path: &RelativePath) {
         if let Ok(text) = self.current_file_content(file_path) {
-            let abs_path = self.absolute_path_for_file_path(file_path);
-            debug!("Writing to {abs_path}.");
-
-            // If the file didn't exist before, log it.
-            if !sandbox::exists(&self.app_config.base_dir, &abs_path)
-                .expect("Failed to check for file existence before writing to it")
-            {
-                info!("Creating file {file_path}.");
-            }
-
-            sandbox::write_file(&self.app_config.base_dir, &abs_path, &text.into_bytes())
-                .unwrap_or_else(|_| panic!("Could not write to file {abs_path}"));
+            let bytes = text.into_bytes();
+            self.ensure_file_has_bytes(file_path, &bytes);
         } else {
             warn!("Failed to get content of file '{file_path}' when writing to disk. Key should have existed?");
         }
+    }
+
+    fn ensure_file_has_bytes(&self, file_path: &RelativePath, bytes: &[u8]) {
+        let abs_path = self.absolute_path_for_file_path(file_path);
+        if sandbox::exists(&self.app_config.base_dir, &abs_path)
+            .expect("Failed to check for file existence before writing to it")
+        {
+            if let Ok(current_bytes) = sandbox::read_file(&self.app_config.base_dir, &abs_path) {
+                if bytes == current_bytes {
+                    debug!("File content is already the desired one, not writing.");
+                    return;
+                }
+            } else {
+                debug!("Failed to read {abs_path} to check for equal content before writing.");
+            }
+        } else {
+            info!("Creating file {file_path}.");
+        }
+
+        sandbox::write_file(&self.app_config.base_dir, &abs_path, bytes)
+            .unwrap_or_else(|err| panic!("Failed to write to file {abs_path}: {err}"));
     }
 
     fn read_current_content_from_dir(&mut self, init: bool) {
