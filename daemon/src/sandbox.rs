@@ -9,6 +9,7 @@
 
 use crate::config::AppConfig;
 use anyhow::{bail, Context, Result};
+use ignore::overrides::OverrideBuilder;
 use ignore::WalkBuilder;
 use path_clean::PathClean;
 use std::fs::{self, OpenOptions};
@@ -118,7 +119,8 @@ pub fn enumerate_non_ignored_files(app_config: &AppConfig) -> Vec<PathBuf> {
         })
         .build();
 
-    walk.filter_map(Result::ok)
+    let mut files: Vec<PathBuf> = walk
+        .filter_map(Result::ok)
         .filter(|dir_entry| {
             !dir_entry
                 .file_type()
@@ -126,7 +128,40 @@ pub fn enumerate_non_ignored_files(app_config: &AppConfig) -> Vec<PathBuf> {
                 .is_dir()
         })
         .map(|dir_entry| dir_entry.path().to_path_buf())
-        .collect()
+        .collect();
+
+    // When jj is used colocatedly with Git, there will be a .jj/.gitignore that ignores .jj.
+    // With --sync-vcs, we want to un-ignore it, though! The ignore crate's override functionality
+    // doesn't seem to allow for that - as soon as we positive-list something, everything else gets
+    // ignored.
+    // So do a second walk, and merge the results.
+    if app_config.sync_vcs {
+        let overrides = OverrideBuilder::new(app_config.base_dir.clone())
+            .add(".jj/")
+            .expect("Failed to add pattern to OverrideBuilder")
+            .add(".jj/**")
+            .expect("Failed to add pattern to OverrideBuilder")
+            .build()
+            .expect("Failed to build Overrides");
+        let walk = WalkBuilder::new(&app_config.base_dir)
+            .overrides(overrides)
+            .build();
+        let jj_files: Vec<PathBuf> = walk
+            .filter_map(Result::ok)
+            .filter(|dir_entry| {
+                !dir_entry
+                    .file_type()
+                    .expect("Couldn't get file type of dir entry")
+                    .is_dir()
+            })
+            .map(|dir_entry| dir_entry.path().to_path_buf())
+            .collect();
+
+        // TODO: Remove duplictes, in the case that jj is used non-colocatedly.
+        files.extend(jj_files);
+    }
+
+    files
 }
 
 // TODO: Don't build the list of ignored files on every call.
