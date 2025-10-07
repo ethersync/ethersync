@@ -169,7 +169,7 @@ async fn main() -> Result<()> {
                 .context("Could not create snapshot")?;
         }
         Commands::Diff { tool } => {
-            history::diff(&directory, tool).context("Diff command failed")?;
+            history::diff(&directory, &tool).context("Diff command failed")?;
         }
         Commands::Client => {
             jsonrpc_forwarder::connection(&socket_path)
