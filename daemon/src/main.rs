@@ -4,7 +4,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 use anyhow::{bail, Context, Result};
-use clap::{CommandFactory, FromArgMatches, Parser, Subcommand};
+use clap::{Args, CommandFactory, FromArgMatches, Parser, Subcommand};
 use ethersync::{
     cli::ask,
     config::{self, AppConfig},
@@ -29,6 +29,15 @@ struct Cli {
     directory: Option<PathBuf>,
 }
 
+#[derive(Args)]
+struct SyncVcsFlag {
+    /// EXPERIMENTAL: Also synchronize version-control directories like .git/ or .jj/, which are normally
+    /// ignored. For Git, this will synchronize all branches, commits, etc. as well as your .git/config.
+    /// This means that new commits will immediately appear at all peers, you can change branches together, etc.
+    #[arg(long)]
+    sync_vcs: bool,
+}
+
 #[derive(Subcommand)]
 enum Commands {
     /// Share a directory with a new peer.
@@ -43,20 +52,15 @@ enum Commands {
         /// Print the secret address. Useful for sharing with multiple people.
         #[arg(long)]
         show_secret_address: bool,
-        /// Also synchronize version-control directories like .git/ or .jj/, which are normally
-        /// ignored. For Git, this will synchronize all branches, commits, etc. as well as your .git/config.
-        /// This means that new commits will immediately appear at all peers, you can change branches together, etc.
-        #[arg(long)]
-        sync_vcs: bool,
+        #[command(flatten)]
+        sync_vcs: SyncVcsFlag,
     },
     /// Join a shared directory via a join code, or connect to the most recent one.
     Join {
         /// Specify to connect to a new peer. Otherwise, try to connect to the most recent peer.
         join_code: Option<String>,
-        /// Whether to also synchronize version-control directories like .git or .jj.
-        /// Experimental approach, use at your own risk (but can be fun!).
-        #[arg(long)]
-        sync_vcs: bool,
+        #[command(flatten)]
+        sync_vcs: SyncVcsFlag,
     },
     /// Remember the current state of the directory, allowing you to compare it later.
     Bookmark,
@@ -129,7 +133,7 @@ async fn main() -> Result<()> {
                     init,
                     no_join_code,
                     show_secret_address,
-                    sync_vcs,
+                    sync_vcs: SyncVcsFlag { sync_vcs },
                     ..
                 } => {
                     init_doc = init;
@@ -147,7 +151,7 @@ async fn main() -> Result<()> {
                 }
                 Commands::Join {
                     join_code,
-                    sync_vcs,
+                    sync_vcs: SyncVcsFlag { sync_vcs },
                     ..
                 } => {
                     let app_config_cli = AppConfig {
