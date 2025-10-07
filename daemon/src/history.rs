@@ -3,7 +3,7 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-or-later
 use crate::{config, document::Document, path::AbsolutePath, sandbox};
-use anyhow::{Context, Result};
+use anyhow::{bail, Context, Result};
 use automerge::ChangeHash;
 use std::{
     io::{self, Write},
@@ -11,6 +11,7 @@ use std::{
     process::Command,
 };
 use temp_dir::TempDir;
+use tracing::info;
 
 fn load_doc(directory: &Path) -> Result<Document> {
     let doc_path = directory.join(config::CONFIG_DIR).join(config::DOC_FILE);
@@ -79,7 +80,7 @@ pub fn snapshot(directory: &Path, target_directory: &Path, bookmark: bool) -> Re
     write_doc_contents_to_dir(&doc, target_directory, &heads)
 }
 
-pub fn diff(directory: &Path, tool: String) -> Result<()> {
+pub fn diff(directory: &Path, invocation: &str) -> Result<()> {
     let mut doc = load_doc(directory)?;
 
     let current_heads = doc.get_heads();
@@ -92,7 +93,24 @@ pub fn diff(directory: &Path, tool: String) -> Result<()> {
     write_doc_contents_to_dir(&doc, &left_dir, &bookmark_heads)?;
     write_doc_contents_to_dir(&doc, &right_dir, &current_heads)?;
 
-    let output = Command::new(tool).args([left_dir, right_dir]).output()?;
+    let mut invocation_split = invocation.split_whitespace();
+    let Some(tool) = invocation_split.next() else {
+        bail!("Tried to invoke diff with empty tool argument");
+    };
+
+    let mut args = invocation_split.collect::<Vec<_>>();
+
+    let left_dir = left_dir.as_path().to_str().expect("");
+    let right_dir = right_dir.as_path().to_str().expect("");
+    args.extend_from_slice(&[left_dir, right_dir]);
+
+    info!(
+        "Running provided diff tool as follows:\n\t{} {}\n",
+        &tool,
+        &args.join(" ")
+    );
+
+    let output = Command::new(tool).args(args).output()?;
     io::stdout().write_all(&output.stdout)?;
     io::stderr().write_all(&output.stderr)?;
 
