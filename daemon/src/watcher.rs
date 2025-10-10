@@ -11,9 +11,12 @@ use notify::{
 use std::{
     collections::HashMap,
     path::{Path, PathBuf},
-    time::SystemTime,
+    time::{Duration, SystemTime},
 };
-use tokio::sync::mpsc::{self, Receiver, Sender};
+use tokio::{
+    sync::mpsc::{self, Receiver, Sender},
+    time::sleep,
+};
 use tracing::debug;
 
 // TODO: refactor: use WatcherEventType.
@@ -24,7 +27,7 @@ pub enum WatcherEvent {
     Changed { file_path: PathBuf },
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 enum WatcherEventType {
     Created,
     Removed,
@@ -32,8 +35,16 @@ enum WatcherEventType {
 }
 
 struct PendingEvent {
-    event: WatcherEventType,
+    event_type: WatcherEventType,
     timestamp: SystemTime,
+}
+
+enum TimeoutEvent {
+    PendingEvent {
+        file_path: PathBuf,
+        event_type: WatcherEventType,
+    },
+    None,
 }
 
 /// Returns events among the files in `base_dir` that are not ignored.
@@ -52,6 +63,7 @@ impl Watcher {
 
         let (tx, rx) = mpsc::channel(1);
         let mut watcher = notify::recommended_watcher(move |res: NotifyResult<notify::Event>| {
+            dbg!(&res);
             futures::executor::block_on(async {
                 tx.send(res).await.unwrap();
             });
@@ -80,29 +92,81 @@ impl Watcher {
 
     async fn run(&mut self) {
         loop {
+            let fallback_timer = (
+                Duration::from_secs(60 * 24 * 365 * 1000),
+                TimeoutEvent::None,
+            );
+
+            let (duration, event) = if let Some((next_file_path, next_pending_event)) = self
+                .pending_events
+                .iter()
+                .min_by_key(|(_, pending_event)| pending_event.timestamp)
+            {
+                let now = SystemTime::now();
+                next_pending_event.timestamp.duration_since(now).map_or(
+                    fallback_timer,
+                    |duration| {
+                        (
+                            duration,
+                            TimeoutEvent::PendingEvent {
+                                file_path: next_file_path.clone(),
+                                event_type: next_pending_event.event_type.clone(),
+                            },
+                        )
+                    },
+                )
+            } else {
+                fallback_timer
+            };
+
             tokio::select! {
+                () = sleep(duration) => {
+                    match event {
+                        TimeoutEvent::PendingEvent { file_path, event_type } => {
+                            // TODO: Refactor, obviously.
+                            match event_type {
+                                WatcherEventType::Created => {
+                                    self.event_tx.send(WatcherEvent::Created {
+                                         file_path: file_path.clone(),
+                                    }).await.expect("Channel closed");
+                                }
+                                WatcherEventType::Removed => {
+                                    self.event_tx.send(WatcherEvent::Removed {
+                                         file_path: file_path.clone(),
+                                    }).await.expect("Channel closed");
+                                }
+                                WatcherEventType::Changed => {
+                                    self.event_tx.send(WatcherEvent::Changed {
+                                         file_path: file_path.clone(),
+                                    }).await.expect("Channel closed");
+                                }
+                            }
+                        },
+                        TimeoutEvent::None => {}
+                    }
+                }
                 event = self.notify_receiver.recv() => {
                     // TODO: Better errors?
                     let event = event.unwrap().unwrap();
                     match event.kind {
                         EventKind::Create(notify::event::CreateKind::File) => {
                             assert!(event.paths.len() == 1);
-                            self.maybe_created(&event.paths[0]).await;
+                            self.maybe_created(&event.paths[0]);
                         }
                         EventKind::Remove(notify::event::RemoveKind::File) => {
                             assert!(event.paths.len() == 1);
-                            self.maybe_removed(&event.paths[0]).await;
+                            self.maybe_removed(&event.paths[0]);
                         }
                         EventKind::Modify(notify::event::ModifyKind::Data(_)) => {
                             assert!(event.paths.len() == 1);
-                            self.maybe_modified(&event.paths[0]).await;
+                            self.maybe_modified(&event.paths[0]);
                         }
                         EventKind::Modify(notify::event::ModifyKind::Name(
                             notify::event::RenameMode::Both,
                         )) => {
                             assert!(event.paths.len() == 2);
-                            self.maybe_removed(&event.paths[0]).await;
-                            self.maybe_created(&event.paths[1]).await;
+                            self.maybe_removed(&event.paths[0]);
+                            self.maybe_created(&event.paths[1]);
                         }
                         // MacOS doesn't give us details on moving a file, so we need to infer what
                         // happened.
@@ -114,9 +178,9 @@ impl Watcher {
                             match sandbox::exists(&self.app_config.base_dir, &file_path) {
                                 Ok(path_exists) => {
                                     if path_exists {
-                                        self.maybe_created(&file_path).await;
+                                        self.maybe_created(&file_path);
                                     } else {
-                                        self.maybe_removed(&file_path).await;
+                                        self.maybe_removed(&file_path);
                                     }
                                 }
                                 Err(error) => {
@@ -142,7 +206,7 @@ impl Watcher {
         }
     }
 
-    async fn maybe_created(&self, file_path: &Path) {
+    fn maybe_created(&mut self, file_path: &Path) {
         match sandbox::ignored(&self.app_config, file_path) {
             Ok(is_ignored) => {
                 if is_ignored {
@@ -161,25 +225,15 @@ impl Watcher {
             }
         }
 
-        self.event_tx
-            .send(WatcherEvent::Created {
-                file_path: file_path.to_path_buf(),
-            })
-            .await
-            .expect("Channel closed");
+        self.add_pending(file_path, WatcherEventType::Created);
     }
 
-    async fn maybe_removed(&self, file_path: &Path) {
+    fn maybe_removed(&mut self, file_path: &Path) {
         // TODO: We should check whether the file was ignored here. But how?
-        self.event_tx
-            .send(WatcherEvent::Removed {
-                file_path: file_path.to_path_buf(),
-            })
-            .await
-            .expect("Channel closed");
+        self.add_pending(file_path, WatcherEventType::Removed);
     }
 
-    async fn maybe_modified(&self, file_path: &Path) {
+    fn maybe_modified(&mut self, file_path: &Path) {
         match sandbox::ignored(&self.app_config, file_path) {
             Ok(is_ignored) => {
                 if is_ignored {
@@ -198,12 +252,38 @@ impl Watcher {
             }
         }
 
-        self.event_tx
-            .send(WatcherEvent::Changed {
-                file_path: file_path.to_path_buf(),
-            })
-            .await
-            .expect("Channel closed");
+        self.add_pending(file_path, WatcherEventType::Changed);
+    }
+
+    fn add_pending(&mut self, file_path: &Path, mut event_type: WatcherEventType) {
+        if let Some(pending_event) = self.pending_events.get(file_path) {
+            event_type = match (pending_event.event_type.clone(), event_type.clone()) {
+                (WatcherEventType::Created, WatcherEventType::Changed) => {
+                    // Keep the type at "Created", even if it is modified afterwards.
+                    WatcherEventType::Created
+                }
+                (
+                    WatcherEventType::Removed | WatcherEventType::Changed,
+                    WatcherEventType::Created,
+                ) => {
+                    // Because the file seems to have existed before, change the type to "Changed".
+                    WatcherEventType::Changed
+                }
+                _ => {
+                    // Set the desired `event_type`.
+                    event_type
+                }
+            }
+        }
+
+        let timestamp = SystemTime::now() + Duration::from_millis(100);
+        self.pending_events.insert(
+            file_path.into(),
+            PendingEvent {
+                event_type,
+                timestamp,
+            },
+        );
     }
 }
 
