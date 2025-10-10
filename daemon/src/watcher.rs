@@ -51,13 +51,12 @@ impl Watcher {
         let (event_tx, event_rx) = mpsc::channel(1);
 
         let (tx, rx) = mpsc::channel(1);
-        let mut watcher =
-            notify::recommended_watcher(move |res: NotifyResult<notify::Event>| {
-                futures::executor::block_on(async {
-                    tx.send(res).await.unwrap();
-                });
-            })
-            .expect("Could not construct watcher");
+        let mut watcher = notify::recommended_watcher(move |res: NotifyResult<notify::Event>| {
+            futures::executor::block_on(async {
+                tx.send(res).await.unwrap();
+            });
+        })
+        .expect("Could not construct watcher");
 
         watcher
             .watch(&app_config.base_dir, RecursiveMode::Recursive)
@@ -88,35 +87,22 @@ impl Watcher {
                     match event.kind {
                         EventKind::Create(notify::event::CreateKind::File) => {
                             assert!(event.paths.len() == 1);
-                            if let Some(e) = self.maybe_created(&event.paths[0]) {
-                                self.event_tx.send(e).await.expect("Channel closed");
-                            }
+                            self.maybe_created(&event.paths[0]).await;
                         }
                         EventKind::Remove(notify::event::RemoveKind::File) => {
                             assert!(event.paths.len() == 1);
-                            if let Some(e) = self.maybe_removed(&event.paths[0]) {
-                                self.event_tx.send(e).await.expect("Channel closed");
-                            }
+                            self.maybe_removed(&event.paths[0]).await;
                         }
                         EventKind::Modify(notify::event::ModifyKind::Data(_)) => {
                             assert!(event.paths.len() == 1);
-                            if let Some(e) = self.maybe_modified(&event.paths[0]) {
-                                self.event_tx.send(e).await.expect("Channel closed");
-                            }
+                            self.maybe_modified(&event.paths[0]).await;
                         }
                         EventKind::Modify(notify::event::ModifyKind::Name(
                             notify::event::RenameMode::Both,
                         )) => {
                             assert!(event.paths.len() == 2);
-                            let removed = self.maybe_removed(&event.paths[0]);
-                            let created = self.maybe_created(&event.paths[1]);
-
-                            if let Some(e) = removed {
-                                self.event_tx.send(e).await.expect("Channel closed");
-                            }
-                            if let Some(e) = created {
-                                self.event_tx.send(e).await.expect("Channel closed");
-                            }
+                            self.maybe_removed(&event.paths[0]).await;
+                            self.maybe_created(&event.paths[1]).await;
                         }
                         // MacOS doesn't give us details on moving a file, so we need to infer what
                         // happened.
@@ -128,11 +114,9 @@ impl Watcher {
                             match sandbox::exists(&self.app_config.base_dir, &file_path) {
                                 Ok(path_exists) => {
                                     if path_exists {
-                                        if let Some(e) = self.maybe_created(&file_path) {
-                                            self.event_tx.send(e).await.expect("Channel closed");
-                                        }
-                                    } else if let Some(e) = self.maybe_removed(&file_path) {
-                                        self.event_tx.send(e).await.expect("Channel closed");
+                                        self.maybe_created(&file_path).await;
+                                    } else {
+                                        self.maybe_removed(&file_path).await;
                                     }
                                 }
                                 Err(error) => {
@@ -158,13 +142,12 @@ impl Watcher {
         }
     }
 
-    #[must_use]
-    fn maybe_created(&self, file_path: &Path) -> Option<WatcherEvent> {
+    async fn maybe_created(&self, file_path: &Path) {
         match sandbox::ignored(&self.app_config, file_path) {
             Ok(is_ignored) => {
                 if is_ignored {
                     debug!("Ignoring creation of '{}'", file_path.display());
-                    return None;
+                    return;
                 }
                 // We only dispatch the event, if ignore check worked and it's not ignored.
             }
@@ -174,31 +157,34 @@ impl Watcher {
                     file_path.display(),
                     error
                 );
-                return None;
+                return;
             }
         }
 
-        Some(WatcherEvent::Created {
-            file_path: file_path.to_path_buf(),
-        })
+        self.event_tx
+            .send(WatcherEvent::Created {
+                file_path: file_path.to_path_buf(),
+            })
+            .await
+            .expect("Channel closed");
     }
 
-    #[must_use]
-    #[expect(clippy::unnecessary_wraps, clippy::unused_self)]
-    fn maybe_removed(&self, file_path: &Path) -> Option<WatcherEvent> {
+    async fn maybe_removed(&self, file_path: &Path) {
         // TODO: We should check whether the file was ignored here. But how?
-        Some(WatcherEvent::Removed {
-            file_path: file_path.to_path_buf(),
-        })
+        self.event_tx
+            .send(WatcherEvent::Removed {
+                file_path: file_path.to_path_buf(),
+            })
+            .await
+            .expect("Channel closed");
     }
 
-    #[must_use]
-    fn maybe_modified(&self, file_path: &Path) -> Option<WatcherEvent> {
+    async fn maybe_modified(&self, file_path: &Path) {
         match sandbox::ignored(&self.app_config, file_path) {
             Ok(is_ignored) => {
                 if is_ignored {
                     debug!("Ignoring modification of '{}'", file_path.display());
-                    return None;
+                    return;
                 }
                 // We only dispatch the event, if ignore check worked and it's not ignored.
             }
@@ -208,13 +194,16 @@ impl Watcher {
                     file_path.display(),
                     error
                 );
-                return None;
+                return;
             }
         }
 
-        Some(WatcherEvent::Changed {
-            file_path: file_path.to_path_buf(),
-        })
+        self.event_tx
+            .send(WatcherEvent::Changed {
+                file_path: file_path.to_path_buf(),
+            })
+            .await
+            .expect("Channel closed");
     }
 }
 
