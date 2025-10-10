@@ -39,6 +39,7 @@ struct PendingEvent {
     timestamp: SystemTime,
 }
 
+#[derive(Clone)]
 enum TimeoutEvent {
     PendingEvent {
         file_path: PathBuf,
@@ -63,7 +64,6 @@ impl Watcher {
 
         let (tx, rx) = mpsc::channel(1);
         let mut watcher = notify::recommended_watcher(move |res: NotifyResult<notify::Event>| {
-            dbg!(&res);
             futures::executor::block_on(async {
                 tx.send(res).await.unwrap();
             });
@@ -97,30 +97,37 @@ impl Watcher {
                 TimeoutEvent::None,
             );
 
-            let (duration, event) = if let Some((next_file_path, next_pending_event)) = self
+            let next_pending_maybe = self
                 .pending_events
                 .iter()
                 .min_by_key(|(_, pending_event)| pending_event.timestamp)
-            {
-                let now = SystemTime::now();
-                next_pending_event.timestamp.duration_since(now).map_or(
-                    fallback_timer,
-                    |duration| {
-                        (
-                            duration,
-                            TimeoutEvent::PendingEvent {
-                                file_path: next_file_path.clone(),
-                                event_type: next_pending_event.event_type.clone(),
-                            },
-                        )
-                    },
-                )
-            } else {
-                fallback_timer
-            };
+                // Clone the key, so that we don't immutably borrow `self`...
+                .map(|(k, v)| ((*k).clone(), v));
+            let (duration, event) =
+                if let Some((ref next_file_path, next_pending_event)) = next_pending_maybe {
+                    let now = SystemTime::now();
+
+                    let pending_event = TimeoutEvent::PendingEvent {
+                        file_path: next_file_path.clone(),
+                        event_type: next_pending_event.event_type.clone(),
+                    };
+
+                    // If duration_since fails, the timestamp is already in the past - trigger it
+                    // immediately.
+                    next_pending_event.timestamp.duration_since(now).map_or(
+                        (Duration::from_secs(0), pending_event.clone()),
+                        |duration| (duration, pending_event),
+                    )
+                } else {
+                    fallback_timer
+                };
 
             tokio::select! {
                 () = sleep(duration) => {
+                    // Removed triggered pending event.
+                    let file_name = next_pending_maybe.expect("Since we timed out, we sould have a pending event").0;
+                    self.pending_events.remove(&file_name);
+
                     match event {
                         TimeoutEvent::PendingEvent { file_path, event_type } => {
                             // TODO: Refactor, obviously.
@@ -412,6 +419,25 @@ mod tests {
         assert_eq!(
             watcher.recv().await,
             Some(WatcherEvent::Created { file_path: file2 })
+        );
+    }
+
+    #[tokio::test]
+    async fn remove_then_create() {
+        let (_dir, dir_path, app_config) = create_temp_dir_and_app_config();
+
+        let mut file = dir_path.clone();
+        file.push("file");
+        sandbox::write_file(&dir_path, &file, b"hi").unwrap();
+
+        let mut watcher = Watcher::spawn(app_config);
+
+        sandbox::remove_file(&dir_path, &file).unwrap();
+        sandbox::write_file(&dir_path, &file, b"i'm back").unwrap();
+
+        assert_eq!(
+            watcher.recv().await,
+            Some(WatcherEvent::Changed { file_path: file })
         );
     }
 }
