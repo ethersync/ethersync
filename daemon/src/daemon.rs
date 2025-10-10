@@ -1018,7 +1018,7 @@ impl Drop for Daemon {
 // In addition, a short timeout after the last event, do a full re-scan, so that we don't miss any
 // file changes - the watcher isn't necessarily exhaustive.
 fn spawn_file_watcher(app_config: &AppConfig, document_handle: DocumentActorHandle) {
-    let mut watcher = Watcher::new(app_config.clone());
+    let mut event_rx = Watcher::spawn(app_config.clone());
 
     tokio::spawn(async move {
         let debounce_duration = Duration::from_millis(100);
@@ -1032,7 +1032,7 @@ fn spawn_file_watcher(app_config: &AppConfig, document_handle: DocumentActorHand
 
         loop {
             tokio::select! {
-                maybe_event = watcher.next() => {
+                maybe_event = event_rx.recv() => {
                     if let Some(watcher_event) = maybe_event {
                         document_handle
                             .send_message(DocMessage::FromWatcher(watcher_event))

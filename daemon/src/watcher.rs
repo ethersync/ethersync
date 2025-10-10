@@ -9,17 +9,43 @@ use notify::{
     Watcher as NotifyWatcher,
 };
 use std::{
-    collections::VecDeque,
+    collections::HashMap,
     path::{Path, PathBuf},
+    time::{Duration, SystemTime},
 };
-use tokio::sync::mpsc::{self, Receiver};
+use tokio::{
+    sync::mpsc::{self, Receiver, Sender},
+    time::sleep,
+};
 use tracing::debug;
 
+// TODO: refactor: use WatcherEventType.
 #[derive(Debug, PartialEq, Eq)]
 pub enum WatcherEvent {
     Created { file_path: PathBuf },
     Removed { file_path: PathBuf },
     Changed { file_path: PathBuf },
+}
+
+#[derive(Debug, PartialEq, Eq, Clone)]
+enum WatcherEventType {
+    Created,
+    Removed,
+    Changed,
+}
+
+struct PendingEvent {
+    event_type: WatcherEventType,
+    timestamp: SystemTime,
+}
+
+#[derive(Clone)]
+enum TimeoutEvent {
+    PendingEvent {
+        file_path: PathBuf,
+        event_type: WatcherEventType,
+    },
+    None,
 }
 
 /// Returns events among the files in `base_dir` that are not ignored.
@@ -28,11 +54,14 @@ pub struct Watcher {
     _inner: RecommendedWatcher,
     app_config: AppConfig,
     notify_receiver: Receiver<NotifyResult<notify::Event>>,
-    out_queue: VecDeque<WatcherEvent>,
+    event_tx: Sender<WatcherEvent>,
+    pending_events: HashMap<PathBuf, PendingEvent>,
 }
 
 impl Watcher {
-    pub fn new(app_config: AppConfig) -> Self {
+    pub fn spawn(app_config: AppConfig) -> Receiver<WatcherEvent> {
+        let (event_tx, event_rx) = mpsc::channel(1);
+
         let (tx, rx) = mpsc::channel(1);
         let mut watcher = notify::recommended_watcher(move |res: NotifyResult<notify::Event>| {
             futures::executor::block_on(async {
@@ -45,106 +74,151 @@ impl Watcher {
             .watch(&app_config.base_dir, RecursiveMode::Recursive)
             .expect("Failed to watch directory");
 
-        Self {
+        let mut watcher = Self {
             // Keep the watcher, so that it's not dropped.
             _inner: watcher,
             app_config,
             notify_receiver: rx,
-            out_queue: VecDeque::new(),
-        }
+            event_tx,
+            pending_events: HashMap::default(),
+        };
+
+        tokio::spawn(async move {
+            watcher.run().await;
+        });
+
+        event_rx
     }
 
-    #[must_use]
-    pub async fn next(&mut self) -> Option<WatcherEvent> {
+    async fn run(&mut self) {
         loop {
-            // If there's an event in the queue, return the oldest one.
-            if let Some(event) = self.out_queue.pop_front() {
-                return Some(event);
-            }
+            let fallback_timer = (
+                Duration::from_secs(60 * 24 * 365 * 1000),
+                TimeoutEvent::None,
+            );
 
-            // Otherwise, wait for the next event from the watcher.
-            let event = self.notify_receiver.recv().await.unwrap().unwrap();
+            let next_pending_maybe = self
+                .pending_events
+                .iter()
+                .min_by_key(|(_, pending_event)| pending_event.timestamp)
+                // Clone the key, so that we don't immutably borrow `self`...
+                .map(|(k, v)| ((*k).clone(), v));
+            let (duration, event) =
+                if let Some((ref next_file_path, next_pending_event)) = next_pending_maybe {
+                    let now = SystemTime::now();
 
-            match event.kind {
-                EventKind::Create(notify::event::CreateKind::File) => {
-                    assert!(event.paths.len() == 1);
-                    if let Some(e) = self.maybe_created(&event.paths[0]) {
-                        return Some(e);
-                    }
-                }
-                EventKind::Remove(notify::event::RemoveKind::File) => {
-                    assert!(event.paths.len() == 1);
-                    if let Some(e) = self.maybe_removed(&event.paths[0]) {
-                        return Some(e);
-                    }
-                }
-                EventKind::Modify(notify::event::ModifyKind::Data(_)) => {
-                    assert!(event.paths.len() == 1);
-                    if let Some(e) = self.maybe_modified(&event.paths[0]) {
-                        return Some(e);
-                    }
-                }
-                EventKind::Modify(notify::event::ModifyKind::Name(
-                    notify::event::RenameMode::Both,
-                )) => {
-                    assert!(event.paths.len() == 2);
-                    let removed = self.maybe_removed(&event.paths[0]);
-                    let created = self.maybe_created(&event.paths[1]);
+                    let pending_event = TimeoutEvent::PendingEvent {
+                        file_path: next_file_path.clone(),
+                        event_type: next_pending_event.event_type.clone(),
+                    };
 
-                    // Queue the create event for later, return the remove event.
-                    if let Some(e) = created {
-                        self.out_queue.push_back(e);
-                    }
+                    // If duration_since fails, the timestamp is already in the past - trigger it
+                    // immediately.
+                    next_pending_event.timestamp.duration_since(now).map_or(
+                        (Duration::from_secs(0), pending_event.clone()),
+                        |duration| (duration, pending_event),
+                    )
+                } else {
+                    fallback_timer
+                };
 
-                    if let Some(e) = removed {
-                        return Some(e);
-                    }
-                }
-                // MacOS doesn't give us details on moving a file, so we need to infer what
-                // happened.
-                EventKind::Modify(notify::event::ModifyKind::Name(
-                    notify::event::RenameMode::Any,
-                )) => {
-                    assert!(event.paths.len() == 1);
-                    let file_path = event.paths[0].clone();
-                    match sandbox::exists(&self.app_config.base_dir, &file_path) {
-                        Ok(path_exists) => {
-                            if path_exists {
-                                if let Some(e) = self.maybe_created(&file_path) {
-                                    return Some(e);
+            tokio::select! {
+                () = sleep(duration) => {
+                    // Removed triggered pending event.
+                    let file_name = next_pending_maybe.expect("Since we timed out, we sould have a pending event").0;
+                    self.pending_events.remove(&file_name);
+
+                    match event {
+                        TimeoutEvent::PendingEvent { file_path, event_type } => {
+                            // TODO: Refactor, obviously.
+                            match event_type {
+                                WatcherEventType::Created => {
+                                    self.event_tx.send(WatcherEvent::Created {
+                                         file_path: file_path.clone(),
+                                    }).await.expect("Channel closed");
                                 }
-                            } else if let Some(e) = self.maybe_removed(&file_path) {
-                                return Some(e);
+                                WatcherEventType::Removed => {
+                                    self.event_tx.send(WatcherEvent::Removed {
+                                         file_path: file_path.clone(),
+                                    }).await.expect("Channel closed");
+                                }
+                                WatcherEventType::Changed => {
+                                    self.event_tx.send(WatcherEvent::Changed {
+                                         file_path: file_path.clone(),
+                                    }).await.expect("Channel closed");
+                                }
+                            }
+                        },
+                        TimeoutEvent::None => {}
+                    }
+                }
+                event = self.notify_receiver.recv() => {
+                    // TODO: Better errors?
+                    let event = event.unwrap().unwrap();
+                    match event.kind {
+                        EventKind::Create(notify::event::CreateKind::File) => {
+                            assert!(event.paths.len() == 1);
+                            self.maybe_created(&event.paths[0]);
+                        }
+                        EventKind::Remove(notify::event::RemoveKind::File) => {
+                            assert!(event.paths.len() == 1);
+                            self.maybe_removed(&event.paths[0]);
+                        }
+                        EventKind::Modify(notify::event::ModifyKind::Data(_)) => {
+                            assert!(event.paths.len() == 1);
+                            self.maybe_modified(&event.paths[0]);
+                        }
+                        EventKind::Modify(notify::event::ModifyKind::Name(
+                            notify::event::RenameMode::Both,
+                        )) => {
+                            assert!(event.paths.len() == 2);
+                            self.maybe_removed(&event.paths[0]);
+                            self.maybe_created(&event.paths[1]);
+                        }
+                        // MacOS doesn't give us details on moving a file, so we need to infer what
+                        // happened.
+                        EventKind::Modify(notify::event::ModifyKind::Name(
+                            notify::event::RenameMode::Any,
+                        )) => {
+                            assert!(event.paths.len() == 1);
+                            let file_path = event.paths[0].clone();
+                            match sandbox::exists(&self.app_config.base_dir, &file_path) {
+                                Ok(path_exists) => {
+                                    if path_exists {
+                                        self.maybe_created(&file_path);
+                                    } else {
+                                        self.maybe_removed(&file_path);
+                                    }
+                                }
+                                Err(error) => {
+                                    debug!(
+                                        "Ignoring creation/removal of '{}' because of an error: {}",
+                                        &file_path.display(),
+                                        error
+                                    );
+                                }
                             }
                         }
-                        Err(error) => {
-                            debug!(
-                                "Ignoring creation/removal of '{}' because of an error: {}",
-                                &file_path.display(),
-                                error
-                            );
+                        EventKind::Access(_) => {
+                            // We're not interested in these, ignore them.
+                        }
+                        e => {
+                            // Don't handle other events.
+                            // But log them! I'm curious what they are!
+                            debug!("Unhandled event in {:?}: {e:?}", event.paths);
                         }
                     }
                 }
-                EventKind::Access(_) => {
-                    // We're not interested in these, ignore them.
-                }
-                e => {
-                    // Don't handle other events.
-                    // But log them! I'm curious what they are!
-                    debug!("Unhandled event in {:?}: {e:?}", event.paths);
-                }
-            }
+            };
         }
     }
 
-    #[must_use]
-    fn maybe_created(&self, file_path: &Path) -> Option<WatcherEvent> {
+    fn maybe_created(&mut self, file_path: &Path) {
         match sandbox::ignored(&self.app_config, file_path) {
             Ok(is_ignored) => {
                 if is_ignored {
                     debug!("Ignoring creation of '{}'", file_path.display());
-                    return None;
+                    return;
                 }
                 // We only dispatch the event, if ignore check worked and it's not ignored.
             }
@@ -154,31 +228,24 @@ impl Watcher {
                     file_path.display(),
                     error
                 );
-                return None;
+                return;
             }
         }
 
-        Some(WatcherEvent::Created {
-            file_path: file_path.to_path_buf(),
-        })
+        self.add_pending(file_path, WatcherEventType::Created);
     }
 
-    #[must_use]
-    #[expect(clippy::unnecessary_wraps, clippy::unused_self)]
-    fn maybe_removed(&self, file_path: &Path) -> Option<WatcherEvent> {
+    fn maybe_removed(&mut self, file_path: &Path) {
         // TODO: We should check whether the file was ignored here. But how?
-        Some(WatcherEvent::Removed {
-            file_path: file_path.to_path_buf(),
-        })
+        self.add_pending(file_path, WatcherEventType::Removed);
     }
 
-    #[must_use]
-    fn maybe_modified(&self, file_path: &Path) -> Option<WatcherEvent> {
+    fn maybe_modified(&mut self, file_path: &Path) {
         match sandbox::ignored(&self.app_config, file_path) {
             Ok(is_ignored) => {
                 if is_ignored {
                     debug!("Ignoring modification of '{}'", file_path.display());
-                    return None;
+                    return;
                 }
                 // We only dispatch the event, if ignore check worked and it's not ignored.
             }
@@ -188,18 +255,46 @@ impl Watcher {
                     file_path.display(),
                     error
                 );
-                return None;
+                return;
             }
         }
 
-        Some(WatcherEvent::Changed {
-            file_path: file_path.to_path_buf(),
-        })
+        self.add_pending(file_path, WatcherEventType::Changed);
+    }
+
+    fn add_pending(&mut self, file_path: &Path, mut event_type: WatcherEventType) {
+        if let Some(pending_event) = self.pending_events.get(file_path) {
+            event_type = match (pending_event.event_type.clone(), event_type.clone()) {
+                (WatcherEventType::Created, WatcherEventType::Changed) => {
+                    // Keep the type at "Created", even if it is modified afterwards.
+                    WatcherEventType::Created
+                }
+                (
+                    WatcherEventType::Removed | WatcherEventType::Changed,
+                    WatcherEventType::Created,
+                ) => {
+                    // Because the file seems to have existed before, change the type to "Changed".
+                    WatcherEventType::Changed
+                }
+                _ => {
+                    // Set the desired `event_type`.
+                    event_type
+                }
+            }
+        }
+
+        let timestamp = SystemTime::now() + Duration::from_millis(100);
+        self.pending_events.insert(
+            file_path.into(),
+            PendingEvent {
+                event_type,
+                timestamp,
+            },
+        );
     }
 }
 
 #[cfg(test)]
-#[cfg(target_os = "linux")] // TODO: For some reason, these tests hang forever on macOS.
 mod tests {
     use temp_dir::TempDir;
 
@@ -228,11 +323,11 @@ mod tests {
         let mut file = dir_path.clone();
         file.push("file");
 
-        let mut watcher = Watcher::new(app_config);
+        let mut watcher = Watcher::spawn(app_config);
         sandbox::write_file(&dir_path, &file, b"hi").unwrap();
 
         assert_eq!(
-            watcher.next().await,
+            watcher.recv().await,
             Some(WatcherEvent::Created {
                 // TODO: Should the file_paths maybe be relative to the base dir already?
                 file_path: file,
@@ -248,12 +343,12 @@ mod tests {
         file.push("file");
         sandbox::write_file(&dir_path, &file, b"hi").unwrap();
 
-        let mut watcher = Watcher::new(app_config);
+        let mut watcher = Watcher::spawn(app_config);
 
         sandbox::write_file(&dir_path, &file, b"yo").unwrap();
 
         assert_eq!(
-            watcher.next().await,
+            watcher.recv().await,
             Some(WatcherEvent::Changed { file_path: file })
         );
     }
@@ -266,12 +361,12 @@ mod tests {
         file.push("file");
         sandbox::write_file(&dir_path, &file, b"hi").unwrap();
 
-        let mut watcher = Watcher::new(app_config);
+        let mut watcher = Watcher::spawn(app_config);
 
         sandbox::remove_file(&dir_path, &file).unwrap();
 
         assert_eq!(
-            watcher.next().await,
+            watcher.recv().await,
             Some(WatcherEvent::Removed { file_path: file })
         );
     }
@@ -286,17 +381,17 @@ mod tests {
         file_new.push("file2");
         sandbox::write_file(&dir_path, &file, b"hi").unwrap();
 
-        let mut watcher = Watcher::new(app_config);
+        let mut watcher = Watcher::spawn(app_config);
 
         sandbox::rename_file(&dir_path, &file, &file_new).unwrap();
 
         assert_eq!(
-            watcher.next().await,
+            watcher.recv().await,
             Some(WatcherEvent::Removed { file_path: file })
         );
 
         assert_eq!(
-            watcher.next().await,
+            watcher.recv().await,
             Some(WatcherEvent::Created {
                 file_path: file_new,
             })
@@ -311,7 +406,7 @@ mod tests {
         gitignore.push(".ignore");
         sandbox::write_file(&dir_path, &gitignore, b"file").unwrap();
 
-        let mut watcher = Watcher::new(app_config);
+        let mut watcher = Watcher::spawn(app_config);
 
         let mut file = dir_path.clone();
         file.push("file");
@@ -322,8 +417,27 @@ mod tests {
         sandbox::write_file(&dir_path, &file2, b"ho").unwrap();
 
         assert_eq!(
-            watcher.next().await,
+            watcher.recv().await,
             Some(WatcherEvent::Created { file_path: file2 })
+        );
+    }
+
+    #[tokio::test]
+    async fn remove_then_create() {
+        let (_dir, dir_path, app_config) = create_temp_dir_and_app_config();
+
+        let mut file = dir_path.clone();
+        file.push("file");
+        sandbox::write_file(&dir_path, &file, b"hi").unwrap();
+
+        let mut watcher = Watcher::spawn(app_config);
+
+        sandbox::remove_file(&dir_path, &file).unwrap();
+        sandbox::write_file(&dir_path, &file, b"i'm back").unwrap();
+
+        assert_eq!(
+            watcher.recv().await,
+            Some(WatcherEvent::Changed { file_path: file })
         );
     }
 }
