@@ -92,44 +92,13 @@ impl Watcher {
 
     async fn run(&mut self) {
         loop {
-            let fallback_timer = (
-                Duration::from_secs(60 * 24 * 365 * 1000),
-                TimeoutEvent::None,
-            );
-
-            let next_pending_maybe = self
-                .pending_events
-                .iter()
-                .min_by_key(|(_, pending_event)| pending_event.timestamp)
-                // Clone the key, so that we don't immutably borrow `self`...
-                .map(|(k, v)| ((*k).clone(), v));
-            let (duration, event) =
-                if let Some((ref next_file_path, next_pending_event)) = next_pending_maybe {
-                    let now = SystemTime::now();
-
-                    let pending_event = TimeoutEvent::PendingEvent {
-                        file_path: next_file_path.clone(),
-                        event_type: next_pending_event.event_type.clone(),
-                    };
-
-                    // If duration_since fails, the timestamp is already in the past - trigger it
-                    // immediately.
-                    next_pending_event.timestamp.duration_since(now).map_or(
-                        (Duration::from_secs(0), pending_event.clone()),
-                        |duration| (duration, pending_event),
-                    )
-                } else {
-                    fallback_timer
-                };
-
+            let (duration, event) = self.upcoming_timeout();
             tokio::select! {
                 () = sleep(duration) => {
-                    // Removed triggered pending event.
-                    let file_name = next_pending_maybe.expect("Since we timed out, we sould have a pending event").0;
-                    self.pending_events.remove(&file_name);
-
                     match event {
                         TimeoutEvent::PendingEvent { file_path, event_type } => {
+                            // Removed triggered pending event.
+                            self.pending_events.remove(&file_path);
                             // TODO: Refactor, obviously.
                             match event_type {
                                 WatcherEventType::Created => {
@@ -149,7 +118,9 @@ impl Watcher {
                                 }
                             }
                         },
-                        TimeoutEvent::None => {}
+                        TimeoutEvent::None => {
+                            panic!("Watcher timed out without an event. This is a bug.");
+                        }
                     }
                 }
                 event = self.notify_receiver.recv() => {
@@ -210,6 +181,29 @@ impl Watcher {
                     }
                 }
             };
+        }
+    }
+
+    fn upcoming_timeout(&self) -> (Duration, TimeoutEvent) {
+        let next_pending_maybe = self
+            .pending_events
+            .iter()
+            .min_by_key(|(_, pending_event)| pending_event.timestamp);
+        if let Some((next_file_path, next_pending_event)) = next_pending_maybe {
+            let pending_event = TimeoutEvent::PendingEvent {
+                file_path: next_file_path.clone(),
+                event_type: next_pending_event.event_type.clone(),
+            };
+
+            let now = SystemTime::now();
+            match next_pending_event.timestamp.duration_since(now) {
+                Ok(duration) => (duration, pending_event),
+                // If duration_since fails, the timestamp is already in the past.
+                // Trigger it immediately.
+                Err(_) => (Duration::from_secs(0), pending_event),
+            }
+        } else {
+            (Duration::MAX, TimeoutEvent::None)
         }
     }
 
