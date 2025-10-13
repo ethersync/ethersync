@@ -210,7 +210,8 @@ impl Document {
             }
 
             let text_delta: TextDelta = chunks.into();
-            info!("Updating {file_path} with delta: {text_delta:?}");
+            info!("Detected change of {file_path}. Updating.");
+            debug!("Full delta of this update: {text_delta}");
             self.apply_delta_to_doc(&text_delta, file_path);
             Some(text_delta)
         } else {
