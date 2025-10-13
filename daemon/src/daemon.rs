@@ -441,73 +441,50 @@ impl DocumentActor {
 
     fn handle_watcher_event(&mut self, watcher_event: WatcherEvent) {
         match watcher_event {
-            WatcherEvent::Created { file_path } => {
-                let relative_file_path =
-                    RelativePath::try_from_path(&self.app_config.base_dir, &file_path)
-                        .expect("Watcher event should have a path within the base directory");
-                if self.owns(&relative_file_path) {
-                    if self.crdt_doc.file_exists(&relative_file_path) {
-                        debug!("Received watcher creation event, but file already exists in CRDT.");
-                    } else {
-                        let content = match sandbox::read_file(
-                            &self.app_config.base_dir,
-                            Path::new(&file_path),
-                        ) {
-                            Ok(content) => content,
-                            Err(e) => {
-                                warn!(
-                                    "The file watcher noticed a file creation for {relative_file_path}, \
-                                    but we couldn't read it: {e} (probably it disappeared again already?)"
-                                );
-                                return;
-                            }
-                        };
-                        if let Ok(content) = String::from_utf8(content.clone()) {
-                            self.crdt_doc.initialize_text(&content, &relative_file_path);
-                        } else {
-                            self.crdt_doc.set_bytes(&content, &relative_file_path);
-                        }
-                        let _ = self.doc_changed_ping_tx.send(());
-                    }
-                }
+            WatcherEvent::Created { file_path } | WatcherEvent::Changed { file_path } => {
+                self.file_created_or_changed(&file_path);
             }
             WatcherEvent::Removed { file_path } => {
-                let relative_file_path =
-                    RelativePath::try_from_path(&self.app_config.base_dir, &file_path)
-                        .expect("Watcher event should have a path within the base directory");
-                if self.owns(&relative_file_path) {
-                    self.remove_file(&relative_file_path);
-                    let _ = self.doc_changed_ping_tx.send(());
-                }
+                self.file_removed(&file_path);
             }
-            WatcherEvent::Changed { file_path } => {
-                let relative_file_path =
-                    RelativePath::try_from_path(&self.app_config.base_dir, &file_path)
-                        .expect("Watcher event should have a path within the base directory");
-                if self.owns(&relative_file_path) {
-                    let new_content = match sandbox::read_file(
-                        &self.app_config.base_dir,
-                        Path::new(&file_path),
-                    ) {
-                        Ok(content) => content,
-                        Err(e) => {
-                            warn!(
-                                "The file watcher noticed a file change for {relative_file_path}, \
-                                but we couldn't read it: {e} (probably it was deleted after the change?)"
-                            );
-                            return;
-                        }
-                    };
-                    if let Ok(new_content) = String::from_utf8(new_content.clone()) {
-                        self.crdt_doc.update_text(&new_content, &relative_file_path);
-                        // TODO: Once we get back to processing file changes while editors have it
-                        // open, send the delta returned by update_text to editors.
-                    } else {
-                        self.crdt_doc.set_bytes(&new_content, &relative_file_path);
+        }
+    }
+
+    fn file_removed(&mut self, file_path: &Path) {
+        let relative_file_path = RelativePath::try_from_path(&self.app_config.base_dir, file_path)
+            .expect("Watcher event should have a path within the base directory");
+        if self.owns(&relative_file_path) {
+            self.remove_file(&relative_file_path);
+            let _ = self.doc_changed_ping_tx.send(());
+        }
+    }
+
+    // We react to file creations and changes in the same way because macOS sometimes
+    // registers a creation when the file is only changed. We check whether or not the CRDT
+    // contains the file already in the `update_text` method anyway.
+    fn file_created_or_changed(&mut self, file_path: &Path) {
+        let relative_file_path = RelativePath::try_from_path(&self.app_config.base_dir, file_path)
+            .expect("Watcher event should have a path within the base directory");
+        if self.owns(&relative_file_path) {
+            let new_content =
+                match sandbox::read_file(&self.app_config.base_dir, Path::new(&file_path)) {
+                    Ok(content) => content,
+                    Err(e) => {
+                        warn!(
+                        "The file watcher noticed a file creation/change for {relative_file_path}, \
+                        but we couldn't read it: {e} (probably it was deleted after the change?)"
+                    );
+                        return;
                     }
-                    let _ = self.doc_changed_ping_tx.send(());
-                }
+                };
+            if let Ok(new_content) = String::from_utf8(new_content.clone()) {
+                self.crdt_doc.update_text(&new_content, &relative_file_path);
+                // TODO: Once we get back to processing file changes while editors have it
+                // open, send the delta returned by update_text to editors.
+            } else {
+                self.crdt_doc.set_bytes(&new_content, &relative_file_path);
             }
+            let _ = self.doc_changed_ping_tx.send(());
         }
     }
 
