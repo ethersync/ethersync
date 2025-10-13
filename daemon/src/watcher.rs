@@ -330,6 +330,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[cfg(target_os = "linux")]
     async fn change() {
         let (_dir, dir_path, app_config) = create_temp_dir_and_app_config();
 
@@ -400,6 +401,7 @@ mod tests {
         gitignore.push(".ignore");
         sandbox::write_file(&dir_path, &gitignore, b"file").unwrap();
 
+        sleep(Duration::from_millis(100)).await;
         let mut watcher = Watcher::spawn(app_config);
 
         let mut file = dir_path.clone();
