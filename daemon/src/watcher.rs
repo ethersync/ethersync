@@ -81,22 +81,16 @@ impl Watcher {
 
     async fn run(&mut self) {
         loop {
-            let (duration, event) = self.upcoming_timeout();
+            let timeout_maybe = self.upcoming_timeout();
             tokio::select! {
-                () = sleep(duration) => {
-                    match event {
-                        Some(WatcherEvent{ file_path, event_type }) => {
-                            // Removed triggered pending event.
-                            self.pending_events.remove(&file_path);
-                            self.event_tx.send(WatcherEvent{
-                                file_path,
-                                event_type,
-                            }).await.expect("Channel closed");
-                        },
-                        None => {
-                            panic!("Watcher timed out without an event. This is a bug.");
-                        }
-                    }
+                WatcherEvent{ file_path, event_type } = Self::await_timeout(timeout_maybe) => {
+                    // Remove triggered pending event.
+                    self.pending_events.remove(&file_path);
+
+                    self.event_tx.send(WatcherEvent{
+                        file_path,
+                        event_type,
+                    }).await.expect("Channel closed");
                 }
                 event = self.notify_receiver.recv() => {
                     // TODO: Better errors?
@@ -159,26 +153,36 @@ impl Watcher {
         }
     }
 
-    fn upcoming_timeout(&self) -> (Duration, Option<WatcherEvent>) {
+    fn upcoming_timeout(&self) -> Option<(Duration, WatcherEvent)> {
         let next_pending_maybe = self
             .pending_events
             .iter()
             .min_by_key(|(_, pending_event)| pending_event.timestamp);
         if let Some((next_file_path, next_pending_event)) = next_pending_maybe {
-            let pending_event = Some(WatcherEvent {
+            let pending_event = WatcherEvent {
                 file_path: next_file_path.clone(),
                 event_type: next_pending_event.event_type.clone(),
-            });
+            };
 
             let now = SystemTime::now();
             match next_pending_event.timestamp.duration_since(now) {
-                Ok(duration) => (duration, pending_event),
+                Ok(duration) => Some((duration, pending_event)),
                 // If duration_since fails, the timestamp is already in the past.
                 // Trigger it immediately.
-                Err(_) => (Duration::from_secs(0), pending_event),
+                Err(_) => Some((Duration::from_secs(0), pending_event)),
             }
         } else {
-            (Duration::MAX, None)
+            None
+        }
+    }
+
+    async fn await_timeout(timeout: Option<(Duration, WatcherEvent)>) -> WatcherEvent {
+        if let Some((duration, event)) = timeout {
+            sleep(duration).await;
+            event
+        } else {
+            // Await forever.
+            std::future::pending::<WatcherEvent>().await
         }
     }
 
