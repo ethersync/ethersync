@@ -19,16 +19,14 @@ use tokio::{
 };
 use tracing::debug;
 
-// TODO: refactor: use WatcherEventType.
 #[derive(Debug, PartialEq, Eq)]
-pub enum WatcherEvent {
-    Created { file_path: PathBuf },
-    Removed { file_path: PathBuf },
-    Changed { file_path: PathBuf },
+pub struct WatcherEvent {
+    pub file_path: PathBuf,
+    pub event_type: WatcherEventType,
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
-enum WatcherEventType {
+pub enum WatcherEventType {
     Created,
     Removed,
     Changed,
@@ -99,24 +97,10 @@ impl Watcher {
                         TimeoutEvent::PendingEvent { file_path, event_type } => {
                             // Removed triggered pending event.
                             self.pending_events.remove(&file_path);
-                            // TODO: Refactor, obviously.
-                            match event_type {
-                                WatcherEventType::Created => {
-                                    self.event_tx.send(WatcherEvent::Created {
-                                         file_path: file_path.clone(),
-                                    }).await.expect("Channel closed");
-                                }
-                                WatcherEventType::Removed => {
-                                    self.event_tx.send(WatcherEvent::Removed {
-                                         file_path: file_path.clone(),
-                                    }).await.expect("Channel closed");
-                                }
-                                WatcherEventType::Changed => {
-                                    self.event_tx.send(WatcherEvent::Changed {
-                                         file_path: file_path.clone(),
-                                    }).await.expect("Channel closed");
-                                }
-                            }
+                            self.event_tx.send(WatcherEvent{
+                                file_path,
+                                event_type,
+                            }).await.expect("Channel closed");
                         },
                         TimeoutEvent::None => {
                             panic!("Watcher timed out without an event. This is a bug.");
@@ -322,9 +306,9 @@ mod tests {
 
         assert_eq!(
             watcher.recv().await,
-            Some(WatcherEvent::Created {
-                // TODO: Should the file_paths maybe be relative to the base dir already?
+            Some(WatcherEvent {
                 file_path: file,
+                event_type: WatcherEventType::Created,
             })
         );
     }
@@ -344,7 +328,10 @@ mod tests {
 
         assert_eq!(
             watcher.recv().await,
-            Some(WatcherEvent::Changed { file_path: file })
+            Some(WatcherEvent {
+                file_path: file,
+                event_type: WatcherEventType::Changed,
+            })
         );
     }
 
@@ -362,7 +349,10 @@ mod tests {
 
         assert_eq!(
             watcher.recv().await,
-            Some(WatcherEvent::Removed { file_path: file })
+            Some(WatcherEvent {
+                file_path: file,
+                event_type: WatcherEventType::Removed,
+            })
         );
     }
 
@@ -382,13 +372,17 @@ mod tests {
 
         assert_eq!(
             watcher.recv().await,
-            Some(WatcherEvent::Removed { file_path: file })
+            Some(WatcherEvent {
+                file_path: file,
+                event_type: WatcherEventType::Removed,
+            })
         );
 
         assert_eq!(
             watcher.recv().await,
-            Some(WatcherEvent::Created {
+            Some(WatcherEvent {
                 file_path: file_new,
+                event_type: WatcherEventType::Created,
             })
         );
     }
@@ -414,7 +408,10 @@ mod tests {
 
         assert_eq!(
             watcher.recv().await,
-            Some(WatcherEvent::Created { file_path: file2 })
+            Some(WatcherEvent {
+                file_path: file2,
+                event_type: WatcherEventType::Created,
+            })
         );
     }
 
@@ -433,7 +430,10 @@ mod tests {
 
         assert_eq!(
             watcher.recv().await,
-            Some(WatcherEvent::Changed { file_path: file })
+            Some(WatcherEvent {
+                file_path: file,
+                event_type: WatcherEventType::Changed,
+            })
         );
     }
 }
