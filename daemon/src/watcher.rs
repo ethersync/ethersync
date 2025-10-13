@@ -37,15 +37,6 @@ struct PendingEvent {
     timestamp: SystemTime,
 }
 
-#[derive(Clone)]
-enum TimeoutEvent {
-    PendingEvent {
-        file_path: PathBuf,
-        event_type: WatcherEventType,
-    },
-    None,
-}
-
 /// Returns events among the files in `base_dir` that are not ignored.
 #[must_use]
 pub struct Watcher {
@@ -94,7 +85,7 @@ impl Watcher {
             tokio::select! {
                 () = sleep(duration) => {
                     match event {
-                        TimeoutEvent::PendingEvent { file_path, event_type } => {
+                        Some(WatcherEvent{ file_path, event_type }) => {
                             // Removed triggered pending event.
                             self.pending_events.remove(&file_path);
                             self.event_tx.send(WatcherEvent{
@@ -102,7 +93,7 @@ impl Watcher {
                                 event_type,
                             }).await.expect("Channel closed");
                         },
-                        TimeoutEvent::None => {
+                        None => {
                             panic!("Watcher timed out without an event. This is a bug.");
                         }
                     }
@@ -168,16 +159,16 @@ impl Watcher {
         }
     }
 
-    fn upcoming_timeout(&self) -> (Duration, TimeoutEvent) {
+    fn upcoming_timeout(&self) -> (Duration, Option<WatcherEvent>) {
         let next_pending_maybe = self
             .pending_events
             .iter()
             .min_by_key(|(_, pending_event)| pending_event.timestamp);
         if let Some((next_file_path, next_pending_event)) = next_pending_maybe {
-            let pending_event = TimeoutEvent::PendingEvent {
+            let pending_event = Some(WatcherEvent {
                 file_path: next_file_path.clone(),
                 event_type: next_pending_event.event_type.clone(),
-            };
+            });
 
             let now = SystemTime::now();
             match next_pending_event.timestamp.duration_since(now) {
@@ -187,7 +178,7 @@ impl Watcher {
                 Err(_) => (Duration::from_secs(0), pending_event),
             }
         } else {
-            (Duration::MAX, TimeoutEvent::None)
+            (Duration::MAX, None)
         }
     }
 
