@@ -33,7 +33,7 @@ This allows a very "smooth" collaboration, where you don't need to pull or push 
 ## Committing together
 
 When one of the participants initiates `git commit`, Git will, depending on your setup, open an editor where you can write the commit message.
-The temporary file for this is `git/COMMIT_EDITMSG`, which is now synced, so any peer can open it as well and you can edit it together.
+The temporary file for this is `.git/COMMIT_EDITMSG`, which is now synced, so any peer can open it as well and you can edit it together.
 The initiator of the commit has the "power" to finalize the commit by closing the file, their Git will create the commit.
 
 ## Recommendation: Use a separate directory to try this
