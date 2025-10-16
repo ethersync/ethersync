@@ -573,6 +573,15 @@ impl DocumentActor {
         if sandbox::exists(&self.app_config.base_dir, &abs_path)
             .expect("Failed to check for file existence before writing to it")
         {
+            // Special case: If we want to write a .git/objects/... file, and there's one already
+            // there, assume that it's content will be okay. We do this because Git marks object
+            // files as read-only, and we'd need to force-overwrite it. But because the objects are
+            // content-addressable, its content should be fine anyway.
+            if file_path.starts_with(".git/objects") {
+                debug!("Not trying to replace existing file in .git/objects.");
+                return;
+            }
+
             if let Ok(current_bytes) = sandbox::read_file(&self.app_config.base_dir, &abs_path) {
                 if bytes == current_bytes {
                     debug!("File content is already the desired one, not writing.");
