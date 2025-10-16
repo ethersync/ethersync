@@ -182,6 +182,7 @@ async fn main() -> Result<()> {
         }
         Commands::Bookmark => {
             history::bookmark(&directory).context("Bookmark command failed")?;
+            info!("Successfully created a bookmark. Use `ethersync diff` to later see what changed since bookmarking.");
         }
         Commands::Diff { tool } => {
             history::diff(&directory, &tool).context("Diff command failed")?;
