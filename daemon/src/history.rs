@@ -68,18 +68,6 @@ fn write_doc_contents_to_dir(
     Ok(())
 }
 
-pub fn snapshot(directory: &Path, target_directory: &Path, bookmark: bool) -> Result<()> {
-    let mut doc = load_doc(directory)?;
-
-    let heads: Vec<ChangeHash> = if bookmark {
-        read_bookmark(directory)?
-    } else {
-        doc.get_heads()
-    };
-
-    write_doc_contents_to_dir(&doc, target_directory, &heads)
-}
-
 pub fn diff(directory: &Path, invocation: &str) -> Result<()> {
     let mut doc = load_doc(directory)?;
 

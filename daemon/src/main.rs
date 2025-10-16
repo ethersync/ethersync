@@ -64,14 +64,6 @@ enum Commands {
     },
     /// Remember the current state of the directory, allowing you to compare it later.
     Bookmark,
-    /// Copy all files of the bookmark or the current state to a directory.
-    Snapshot {
-        /// Directory to copy the files to.
-        target_directory: PathBuf,
-        /// Whether to use the bookmark. If not provided, use the current state.
-        #[arg(long)]
-        bookmark: bool,
-    },
     /// Show the differences between the bookmark and the current state with a tool of your choice.
     Diff {
         /// Which external command to use to compare the two revisions. A good option is `meld`.
@@ -190,13 +182,6 @@ async fn main() -> Result<()> {
         }
         Commands::Bookmark => {
             history::bookmark(&directory).context("Bookmark command failed")?;
-        }
-        Commands::Snapshot {
-            target_directory,
-            bookmark,
-        } => {
-            history::snapshot(&directory, &target_directory, bookmark)
-                .context("Could not create snapshot")?;
         }
         Commands::Diff { tool } => {
             history::diff(&directory, &tool).context("Diff command failed")?;
