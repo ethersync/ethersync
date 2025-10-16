@@ -210,7 +210,7 @@ fn get_directory(directory: Option<PathBuf>) -> Result<PathBuf> {
         );
 
         if ask(&format!(
-            "Create an {}/ directory to allow live collaboration?",
+            "Do you want to enable live collaboration here? (This will create an {}/ directory.)",
             config::CONFIG_DIR
         ))? {
             sandbox::create_dir(&directory, &ethersync_dir)?;
