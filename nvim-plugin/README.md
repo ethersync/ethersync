@@ -38,7 +38,6 @@ Usually, you will add the string `"ethersync/ethersync-nvim"` to your plugin man
   keys = { 
     { "<leader>ej", "<cmd>EthersyncJumpToCursor<cr>" },
     { "<leader>ef", "<cmd>EthersyncFollow<cr>" },
-    { "<esc>", mode = { "n" }, "<cmd>EthersyncUnfollow<cr>" },
   },
   lazy = false,
 }
@@ -52,7 +51,6 @@ Usually, you will add the string `"ethersync/ethersync-nvim"` to your plugin man
   config = function()
     vim.keymap.set('n', '<leader>ej', '<cmd>EthersyncJumpToCursor<cr>')
     vim.keymap.set('n', '<leader>ef', '<cmd>EthersyncFollow<cr>')
-    vim.keymap.set('n', '<esc>', '<cmd>EthersyncUnfollow<cr>')
   end
 }
 ```
@@ -71,7 +69,7 @@ To confirm that the plugin is installed, try running the `:EthersyncInfo` comman
 
 ## Tips
 
-We recommend creating mappings for the `:EthersyncJumpToCursor`, `:EthersyncFollow` and `EthersyncUnfollow` command, see above configurations for examples.
+We recommend creating mappings for the `:EthersyncJumpToCursor` and `:EthersyncFollow` command, see above configurations for examples.
 
 ## Configuration
 

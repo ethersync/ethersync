@@ -262,7 +262,6 @@ local function activate_plugin()
     vim.api.nvim_create_user_command("EthersyncInfo", print_info, {})
     vim.api.nvim_create_user_command("EthersyncJumpToCursor", cursor.jump_to_cursor, {})
     vim.api.nvim_create_user_command("EthersyncFollow", cursor.follow_cursor, {})
-    vim.api.nvim_create_user_command("EthersyncUnfollow", cursor.unfollow_cursor, {})
 end
 
 activate_plugin()
