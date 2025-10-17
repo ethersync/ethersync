@@ -4,7 +4,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 //! This module is all about daemon to editor communication.
-use crate::cli::ask;
+use crate::cli_ask::ask;
 use crate::daemon::{DocMessage, DocumentActorHandle};
 use crate::sandbox;
 use crate::types::EditorProtocolObject;
