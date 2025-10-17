@@ -63,6 +63,11 @@ must_use_candidate = "allow"
 should_panic_without_expect = "allow"
 too_many_lines = "allow"
 
+[build-dependencies]
+clap = { version = "4", features = ["derive", "env"] }
+clap_complete = "4"
+clap_mangen = "0.2"
+
 [dependencies]
 anyhow = "1.0.81"
 async-trait = "0.1.88"

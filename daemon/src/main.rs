@@ -3,11 +3,12 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+use self::cli::{Cli, Commands, SyncVcsFlag};
 use anyhow::{bail, Context, Result};
-use clap::{Args, CommandFactory, FromArgMatches, Parser, Subcommand};
+use clap::{CommandFactory as _, FromArgMatches as _};
 use std::path::{Path, PathBuf};
 use teamtype::{
-    cli::ask,
+    cli_ask::ask,
     config::{self, AppConfig},
     daemon::Daemon,
     history, logging, sandbox,
@@ -15,64 +16,8 @@ use teamtype::{
 use tokio::signal;
 use tracing::{debug, info, warn};
 
+mod cli;
 mod jsonrpc_forwarder;
-
-// TODO: Define these constants in the teamtype crate, and use them here.
-#[derive(Parser)]
-#[command(version, about, long_about = None)]
-#[command(propagate_version = true)]
-struct Cli {
-    #[command(subcommand)]
-    command: Commands,
-    /// The shared directory. Defaults to current directory.
-    #[arg(long, global = true)]
-    directory: Option<PathBuf>,
-}
-
-#[derive(Args)]
-struct SyncVcsFlag {
-    /// EXPERIMENTAL: Also synchronize version-control directories like .git/ or .jj/, which are normally
-    /// ignored. For Git, this will synchronize all branches, commits, etc. as well as your .git/config.
-    /// This means that new commits will immediately appear at all peers, you can change branches together, etc.
-    #[arg(long)]
-    sync_vcs: bool,
-}
-
-#[derive(Subcommand)]
-enum Commands {
-    /// Share a directory with a new peer.
-    Share {
-        /// Re-initialize the history of the shared directory. You will loose previous history.
-        #[arg(long)]
-        init: bool,
-        /// Do not generate a join code. To prevent unintended sharing or simply if you want to
-        /// keep Magic Wormhole out of the loop.
-        #[arg(long)]
-        no_join_code: bool,
-        /// Print the secret address. Useful for sharing with multiple people.
-        #[arg(long)]
-        show_secret_address: bool,
-        #[command(flatten)]
-        sync_vcs: SyncVcsFlag,
-    },
-    /// Join a shared directory via a join code, or connect to the most recent one.
-    Join {
-        /// Specify to connect to a new peer. Otherwise, try to connect to the most recent peer.
-        join_code: Option<String>,
-        #[command(flatten)]
-        sync_vcs: SyncVcsFlag,
-    },
-    /// Remember the current state of the directory, allowing you to compare it later.
-    Bookmark,
-    /// Show the differences between the bookmark and the current state with a tool of your choice.
-    Diff {
-        /// Which external command to use to compare the two revisions. A good option is `meld`.
-        #[arg(long)]
-        tool: String,
-    },
-    /// Open a JSON-RPC connection to the Teamtype daemon on stdin/stdout. Used by text editor plugins.
-    Client,
-}
 
 fn has_ethersync_directory(dir: &Path) -> bool {
     let ethersync_dir = dir.join(config::LEGACY_CONFIG_DIR);
