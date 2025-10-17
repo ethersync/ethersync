@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2025 EdJoPaTo <ethersync@edjopato.de>
+//
+// SPDX-License-Identifier: CC0-1.0
+
 include!("src/cli.rs");
 
 fn main() -> std::io::Result<()> {
