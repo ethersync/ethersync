@@ -94,8 +94,6 @@ USAGE                                                          *ethersync-usage*
 :EthersyncFollow                                              *:EthersyncFollow*
     Follows another peer, keeping their cursor in view. If multiple cursors
     are present, gives you a selection menu.
-
-:EthersyncUnfollow                                          *:EthersyncUnfollow*
-    Stops following another peer.
+    It will automatically unfollow as soon as a key is pressed.
 
  vim:tw=78:ts=8:sw=4:sts=4:et:ft=help:norl:
