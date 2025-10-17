@@ -45,6 +45,21 @@ function M.enable(name, enable)
     configurations[name].enabled = enable
 end
 
+function M.status()
+    if #clients == 0 then
+        return ""
+    end
+
+    local result = "Teamtyping"
+
+    local n = cursor.number_of_cursors()
+    if n > 0 then
+        result = result .. " with " .. cursor.short_cursor_description()
+    end
+
+    return result
+end
+
 -- Take an operation from the daemon and apply it to the editor.
 local function process_operation_for_editor(client, method, parameters)
     if method == "edit" then
