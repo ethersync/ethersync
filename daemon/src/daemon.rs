@@ -7,13 +7,16 @@ use crate::config::{self, AppConfig};
 use crate::document::Document;
 use crate::editor::{self, EditorId, EditorWriter};
 use crate::editor_connection::EditorConnection;
+use crate::editor_protocol::{
+    EditorProtocolMessageError, EditorProtocolMessageFromEditor, EditorProtocolMessageToEditor,
+    EditorProtocolObject, JSONRPCFromEditor, JSONRPCResponse,
+};
 use crate::path::{AbsolutePath, RelativePath};
 use crate::peer;
 use crate::sandbox;
 use crate::types::{
-    ComponentMessage, CursorId, CursorState, EditorProtocolMessageError,
-    EditorProtocolMessageFromEditor, EditorProtocolMessageToEditor, EditorProtocolObject,
-    EphemeralMessage, FileTextDelta, JSONRPCFromEditor, JSONRPCResponse, PatchEffect, TextDelta,
+    ComponentMessage, CursorId, CursorState, EphemeralMessage, FileTextDelta, PatchEffect,
+    TextDelta,
 };
 use crate::watcher::WatcherEvent;
 use crate::watcher::{Watcher, WatcherEventType};

@@ -5,9 +5,12 @@
 
 use ethersync_integration_tests::actors::*;
 
-use ethersync::types::{
-    factories::*, EditorProtocolMessageFromEditor, EditorProtocolMessageToEditor,
-    EditorProtocolObject, EditorTextDelta, EditorTextOp, JSONRPCFromEditor,
+use ethersync::{
+    editor_protocol::{
+        EditorProtocolMessageFromEditor, EditorProtocolMessageToEditor, EditorProtocolObject,
+        JSONRPCFromEditor,
+    },
+    types::{factories::*, EditorTextDelta, EditorTextOp},
 };
 
 use pretty_assertions::assert_eq;

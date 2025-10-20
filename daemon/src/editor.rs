@@ -6,8 +6,8 @@
 //! This module is all about daemon to editor communication.
 use crate::cli::ask;
 use crate::daemon::{DocMessage, DocumentActorHandle};
+use crate::editor_protocol::EditorProtocolObject;
 use crate::sandbox;
-use crate::types::EditorProtocolObject;
 use anyhow::{bail, Context, Result};
 use futures::StreamExt;
 use std::{fs, os::unix::fs::PermissionsExt, path::Path};

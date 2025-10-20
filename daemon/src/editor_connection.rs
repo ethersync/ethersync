@@ -9,13 +9,13 @@ use tracing::debug;
 
 use crate::{
     config::{self, AppConfig},
+    editor_protocol::{
+        EditorProtocolMessageError, EditorProtocolMessageFromEditor, EditorProtocolMessageToEditor,
+    },
     ot::OTServer,
     path::{AbsolutePath, FileUri, RelativePath},
     sandbox,
-    types::{
-        ComponentMessage, CursorState, EditorProtocolMessageError, EditorProtocolMessageFromEditor,
-        EditorProtocolMessageToEditor, RevisionedEditorTextDelta,
-    },
+    types::{ComponentMessage, CursorState, RevisionedEditorTextDelta},
 };
 
 /// Represents a connection to an editor. Handles the OT. To keep the code testable and sync, we do
