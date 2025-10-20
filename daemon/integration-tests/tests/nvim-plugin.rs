@@ -7,7 +7,7 @@ use ethersync_integration_tests::actors::*;
 
 use ethersync::{
     editor_protocol::{
-        EditorProtocolMessageFromEditor, EditorProtocolMessageToEditor, JSONRPCFromEditor,
+        EditorProtocolMessageFromEditor, EditorProtocolMessageToEditor, IncomingMessage,
         OutgoingMessage,
     },
     types::{factories::*, EditorTextDelta, EditorTextOp},
@@ -152,9 +152,9 @@ async fn assert_nvim_input_yields_replacements(
                 // expected ones.
                 while !expected_replacements.is_empty() {
                     let msg = socket.recv().await;
-                    let message: JSONRPCFromEditor = serde_json::from_str(&msg.to_string())
+                    let message: IncomingMessage = serde_json::from_str(&msg.to_string())
                         .expect("Could not parse EditorProtocolMessage");
-                    let JSONRPCFromEditor::Request{
+                    let IncomingMessage::Request{
                         payload: EditorProtocolMessageFromEditor::Edit{ delta, ..},
                         ..
                     } = message else {continue;};

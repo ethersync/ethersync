@@ -9,7 +9,7 @@ use crate::editor::{self, EditorId, EditorWriter};
 use crate::editor_connection::EditorConnection;
 use crate::editor_protocol::{
     EditorProtocolMessageError, EditorProtocolMessageFromEditor, EditorProtocolMessageToEditor,
-    JSONRPCFromEditor, JSONRPCResponse, OutgoingMessage,
+    IncomingMessage, JSONRPCResponse, OutgoingMessage,
 };
 use crate::path::{AbsolutePath, RelativePath};
 use crate::peer;
@@ -387,9 +387,9 @@ impl DocumentActor {
     }
 
     async fn handle_message_from_editor(&mut self, editor_id: EditorId, message: String) {
-        match JSONRPCFromEditor::from_jsonrpc(&message) {
+        match IncomingMessage::from_jsonrpc(&message) {
             Ok(parsed_message) => match parsed_message {
-                JSONRPCFromEditor::Request { id, payload } => {
+                IncomingMessage::Request { id, payload } => {
                     let result = self.react_to_message_from_editor(editor_id, &payload).await;
                     match result {
                         Err(error) => {
@@ -422,7 +422,7 @@ impl DocumentActor {
                         }
                     }
                 }
-                JSONRPCFromEditor::Notification { payload } => {
+                IncomingMessage::Notification { payload } => {
                     let _ = self.react_to_message_from_editor(editor_id, &payload).await;
                 }
             },

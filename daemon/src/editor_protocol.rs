@@ -30,6 +30,26 @@ impl OutgoingMessage {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum IncomingMessage {
+    Request {
+        id: usize,
+        #[serde(flatten)]
+        payload: EditorProtocolMessageFromEditor,
+    },
+    Notification {
+        #[serde(flatten)]
+        payload: EditorProtocolMessageFromEditor,
+    },
+}
+impl IncomingMessage {
+    pub fn from_jsonrpc(jsonrpc: &str) -> Result<Self, anyhow::Error> {
+        let message = serde_json::from_str(jsonrpc)?;
+        Ok(message)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "method", content = "params", rename_all = "camelCase")]
 pub enum EditorProtocolMessageToEditor {
     Edit {
@@ -67,26 +87,6 @@ pub struct EditorProtocolMessageError {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(untagged)]
-pub enum JSONRPCFromEditor {
-    Request {
-        id: usize,
-        #[serde(flatten)]
-        payload: EditorProtocolMessageFromEditor,
-    },
-    Notification {
-        #[serde(flatten)]
-        payload: EditorProtocolMessageFromEditor,
-    },
-}
-impl JSONRPCFromEditor {
-    pub fn from_jsonrpc(jsonrpc: &str) -> Result<Self, anyhow::Error> {
-        let message = serde_json::from_str(jsonrpc)?;
-        Ok(message)
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "method", content = "params", rename_all = "camelCase")]
 pub enum EditorProtocolMessageFromEditor {
     Open {
@@ -115,12 +115,12 @@ mod test_serde {
 
     #[test]
     fn open() {
-        let message = JSONRPCFromEditor::from_jsonrpc(
+        let message = IncomingMessage::from_jsonrpc(
             r#"{"jsonrpc":"2.0","id":1,"method":"open","params":{"uri":"file:\/\/\/tmp\/file","content":"initial content"}}"#,
         );
         assert_eq!(
             message.unwrap(),
-            JSONRPCFromEditor::Request {
+            IncomingMessage::Request {
                 id: 1,
                 payload: EditorProtocolMessageFromEditor::Open {
                     uri: "file:///tmp/file".into(),
