@@ -10,12 +10,12 @@ type DocumentUri = String;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(untagged)]
-pub enum EditorProtocolObject {
+pub enum OutgoingMessage {
     Request(EditorProtocolMessageToEditor),
     Response(JSONRPCResponse),
 }
 
-impl EditorProtocolObject {
+impl OutgoingMessage {
     pub fn to_jsonrpc(&self) -> Result<String, anyhow::Error> {
         let json_value =
             serde_json::to_value(self).expect("Failed to convert editor message to a JSON value");
@@ -132,7 +132,7 @@ mod test_serde {
 
     #[test]
     fn success() {
-        let message = EditorProtocolObject::Response(JSONRPCResponse::RequestSuccess {
+        let message = OutgoingMessage::Response(JSONRPCResponse::RequestSuccess {
             id: 1,
             result: "success".to_string(),
         });
@@ -145,7 +145,7 @@ mod test_serde {
 
     #[test]
     fn error() {
-        let message = EditorProtocolObject::Response(JSONRPCResponse::RequestError {
+        let message = OutgoingMessage::Response(JSONRPCResponse::RequestError {
             id: Some(1),
             error: EditorProtocolMessageError {
                 code: -1,

@@ -6,7 +6,7 @@
 //! This module is all about daemon to editor communication.
 use crate::cli::ask;
 use crate::daemon::{DocMessage, DocumentActorHandle};
-use crate::editor_protocol::EditorProtocolObject;
+use crate::editor_protocol::OutgoingMessage;
 use crate::sandbox;
 use anyhow::{bail, Context, Result};
 use futures::StreamExt;
@@ -28,14 +28,10 @@ pub type EditorWriter = FramedWrite<WriteHalf<UnixStream>, EditorProtocolCodec>;
 #[derive(Debug)]
 pub struct EditorProtocolCodec;
 
-impl Encoder<EditorProtocolObject> for EditorProtocolCodec {
+impl Encoder<OutgoingMessage> for EditorProtocolCodec {
     type Error = anyhow::Error;
 
-    fn encode(
-        &mut self,
-        item: EditorProtocolObject,
-        dst: &mut BytesMut,
-    ) -> Result<(), Self::Error> {
+    fn encode(&mut self, item: OutgoingMessage, dst: &mut BytesMut) -> Result<(), Self::Error> {
         let payload = item.to_jsonrpc()?;
         dst.extend_from_slice(format!("{payload}\n").as_bytes());
         Ok(())

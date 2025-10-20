@@ -9,7 +9,7 @@ use crate::editor::{self, EditorId, EditorWriter};
 use crate::editor_connection::EditorConnection;
 use crate::editor_protocol::{
     EditorProtocolMessageError, EditorProtocolMessageFromEditor, EditorProtocolMessageToEditor,
-    EditorProtocolObject, JSONRPCFromEditor, JSONRPCResponse,
+    JSONRPCFromEditor, JSONRPCResponse, OutgoingMessage,
 };
 use crate::path::{AbsolutePath, RelativePath};
 use crate::peer;
@@ -396,7 +396,7 @@ impl DocumentActor {
                             error!("Error for JSON-RPC request: {:?}", error);
                             self.send_to_editor_client(
                                 &editor_id,
-                                EditorProtocolObject::Response(JSONRPCResponse::RequestError {
+                                OutgoingMessage::Response(JSONRPCResponse::RequestError {
                                     id: Some(id),
                                     error,
                                 }),
@@ -406,7 +406,7 @@ impl DocumentActor {
                         Ok(messages) => {
                             self.send_to_editor_client(
                                 &editor_id,
-                                EditorProtocolObject::Response(JSONRPCResponse::RequestSuccess {
+                                OutgoingMessage::Response(JSONRPCResponse::RequestSuccess {
                                     id,
                                     result: "success".into(),
                                 }),
@@ -415,7 +415,7 @@ impl DocumentActor {
                             for message in messages {
                                 self.send_to_editor_client(
                                     &editor_id,
-                                    EditorProtocolObject::Request(message),
+                                    OutgoingMessage::Request(message),
                                 )
                                 .await;
                             }
@@ -436,7 +436,7 @@ impl DocumentActor {
                     },
                 };
                 error!("Error for JSON-RPC request: {:?}", response);
-                self.send_to_editor_client(&editor_id, EditorProtocolObject::Response(response))
+                self.send_to_editor_client(&editor_id, OutgoingMessage::Response(response))
                     .await;
             }
         }
@@ -537,7 +537,7 @@ impl DocumentActor {
         delta
     }
 
-    async fn send_to_editor_client(&mut self, editor_id: &EditorId, message: EditorProtocolObject) {
+    async fn send_to_editor_client(&mut self, editor_id: &EditorId, message: OutgoingMessage) {
         let connection = self
             .editor_connections
             .get_mut(editor_id)
@@ -776,11 +776,8 @@ impl DocumentActor {
         let messages_to_editor = self.process_in_editor(editor_id, vec![message.clone()]);
 
         for message_to_editor in messages_to_editor {
-            self.send_to_editor_client(
-                &editor_id,
-                EditorProtocolObject::Request(message_to_editor),
-            )
-            .await;
+            self.send_to_editor_client(&editor_id, OutgoingMessage::Request(message_to_editor))
+                .await;
         }
     }
 

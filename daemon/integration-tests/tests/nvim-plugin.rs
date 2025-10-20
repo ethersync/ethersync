@@ -7,8 +7,8 @@ use ethersync_integration_tests::actors::*;
 
 use ethersync::{
     editor_protocol::{
-        EditorProtocolMessageFromEditor, EditorProtocolMessageToEditor, EditorProtocolObject,
-        JSONRPCFromEditor,
+        EditorProtocolMessageFromEditor, EditorProtocolMessageToEditor, JSONRPCFromEditor,
+        OutgoingMessage,
     },
     types::{factories::*, EditorTextDelta, EditorTextOp},
 };
@@ -68,7 +68,7 @@ async fn assert_nvim_deltas_yield_content(
             revision: 0,
             delta: EditorTextDelta(vec![op.clone()]),
         };
-        let payload = EditorProtocolObject::Request(editor_message)
+        let payload = OutgoingMessage::Request(editor_message)
             .to_jsonrpc()
             .expect("Could not serialize EditorTextDelta");
         socket.send(&format!("{payload}\n")).await;
