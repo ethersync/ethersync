@@ -6,7 +6,7 @@
 //! This module is all about daemon to editor communication.
 use crate::cli::ask;
 use crate::daemon::{DocMessage, DocumentActorHandle};
-use crate::editor_protocol::OutgoingMessage;
+use crate::editor_protocol::{IncomingMessage, OutgoingMessage};
 use crate::sandbox;
 use anyhow::{bail, Context, Result};
 use futures::StreamExt;
@@ -17,24 +17,39 @@ use tokio::{
 };
 use tokio_util::{
     bytes::BytesMut,
-    codec::{Encoder, FramedRead, FramedWrite, LinesCodec},
+    codec::{Decoder, Encoder, FramedRead, FramedWrite, LinesCodec},
 };
 use tracing::{debug, info};
 
 pub type EditorId = usize;
 
-pub type EditorWriter = FramedWrite<WriteHalf<UnixStream>, EditorProtocolCodec>;
+pub type EditorWriter = FramedWrite<WriteHalf<UnixStream>, OutgoingProtocolCodec>;
 
 #[derive(Debug)]
-pub struct EditorProtocolCodec;
+pub struct OutgoingProtocolCodec;
 
-impl Encoder<OutgoingMessage> for EditorProtocolCodec {
+impl Encoder<OutgoingMessage> for OutgoingProtocolCodec {
     type Error = anyhow::Error;
 
     fn encode(&mut self, item: OutgoingMessage, dst: &mut BytesMut) -> Result<(), Self::Error> {
         let payload = item.to_jsonrpc()?;
         dst.extend_from_slice(format!("{payload}\n").as_bytes());
         Ok(())
+    }
+}
+
+#[derive(Debug)]
+pub struct IncomingProtocolCodec;
+
+impl Decoder for IncomingProtocolCodec {
+    type Item = IncomingMessage;
+    type Error = anyhow::Error;
+
+    fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
+        LinesCodec::new()
+            .decode(src)?
+            .map(|line| IncomingMessage::from_jsonrpc(&line))
+            .transpose()
     }
 }
 
@@ -110,19 +125,33 @@ async fn handle_editor_connection(
     editor_id: EditorId,
 ) {
     let (stream_read, stream_write) = tokio::io::split(stream);
-    let mut reader = FramedRead::new(stream_read, LinesCodec::new());
-    let writer = FramedWrite::new(stream_write, EditorProtocolCodec);
+    let mut reader = FramedRead::new(stream_read, IncomingProtocolCodec);
+    let writer = FramedWrite::new(stream_write, OutgoingProtocolCodec);
 
     document_handle
         .send_message(DocMessage::NewEditorConnection(editor_id, writer))
         .await;
     info!("Editor #{editor_id} connected.");
 
-    while let Some(Ok(line)) = reader.next().await {
+    // TODO: handle error case and send appropriate responses
+    while let Some(Ok(message)) = reader.next().await {
         document_handle
-            .send_message(DocMessage::FromEditor(editor_id, line))
+            .send_message(DocMessage::FromEditor(editor_id, message))
             .await;
     }
+    // Err(e) => {
+    //     let response = JSONRPCResponse::RequestError {
+    //         id: None,
+    //         error: EditorProtocolMessageError {
+    //             code: -32700,
+    //             message: format!("Invalid request: {e}"),
+    //             data: None,
+    //         },
+    //     };
+    //     error!("Error for JSON-RPC request: {:?}", response);
+    //     self.send_to_editor_client(&editor_id, OutgoingMessage::Response(response))
+    //         .await;
+    // }
 
     document_handle
         .send_message(DocMessage::CloseEditorConnection(editor_id))
