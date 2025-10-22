@@ -348,6 +348,26 @@ function M.jump_to_cursor()
     pick_cursor_menu(callback)
 end
 
+function M.number_of_cursors()
+    local count = 0
+    for _, v in pairs(user_cursors) do
+        if #v.cursors > 0 then
+            count = count + 1
+        end
+    end
+    return count
+end
+
+function M.short_cursor_description()
+    local users = {}
+    for _, data in pairs(user_cursors) do
+        if #data.cursors > 0 then
+            table.insert(users, data.name)
+        end
+    end
+    return table.concat(users, ", ")
+end
+
 function M.list_cursors()
     local message = ""
 
