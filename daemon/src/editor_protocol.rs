@@ -11,7 +11,7 @@ type DocumentUri = String;
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum OutgoingMessage {
-    Request(EditorProtocolMessageToEditor),
+    Notification(EditorProtocolMessageToEditor),
     Response(JSONRPCResponse),
 }
 

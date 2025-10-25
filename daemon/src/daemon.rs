@@ -414,7 +414,7 @@ impl DocumentActor {
                         for message in messages {
                             self.send_to_editor_client(
                                 &editor_id,
-                                OutgoingMessage::Request(message),
+                                OutgoingMessage::Notification(message),
                             )
                             .await;
                         }
@@ -761,8 +761,11 @@ impl DocumentActor {
         let messages_to_editor = self.process_in_editor(editor_id, vec![message.clone()]);
 
         for message_to_editor in messages_to_editor {
-            self.send_to_editor_client(&editor_id, OutgoingMessage::Request(message_to_editor))
-                .await;
+            self.send_to_editor_client(
+                &editor_id,
+                OutgoingMessage::Notification(message_to_editor),
+            )
+            .await;
         }
     }
 
