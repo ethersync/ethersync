@@ -51,6 +51,7 @@ pub enum DocMessage {
         response_tx: oneshot::Sender<Result<String>>,
     },
     FromEditor(EditorId, IncomingMessage),
+    ToEditor(EditorId, OutgoingMessage),
     FromWatcher(WatcherEvent),
     RescanFiles,
     Persist,
@@ -74,6 +75,7 @@ impl fmt::Debug for DocMessage {
         let repr = match self {
             Self::GetContent { .. } => "GetContent".to_string(),
             Self::FromEditor(id, m) => format!("FromEditor({id}, {m:?})"),
+            Self::ToEditor(id, m) => format!("ToEditor({id}, {m:?})"),
             Self::FromWatcher(e) => format!("FromWatcher({e:?}"),
             Self::RescanFiles => "RescanFiles".to_string(),
             Self::Persist => "Persist".to_string(),
@@ -187,6 +189,9 @@ impl DocumentActor {
             }
             DocMessage::FromEditor(editor_id, message) => {
                 self.handle_message_from_editor(editor_id, message).await;
+            }
+            DocMessage::ToEditor(editor_id, message) => {
+                self.send_to_editor_client(&editor_id, message).await;
             }
             DocMessage::FromWatcher(watcher_event) => {
                 self.handle_watcher_event(&watcher_event);

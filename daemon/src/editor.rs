@@ -6,7 +6,9 @@
 //! This module is all about daemon to editor communication.
 use crate::cli::ask;
 use crate::daemon::{DocMessage, DocumentActorHandle};
-use crate::editor_protocol::{IncomingMessage, OutgoingMessage};
+use crate::editor_protocol::{
+    EditorProtocolMessageError, IncomingMessage, JSONRPCResponse, OutgoingMessage,
+};
 use crate::sandbox;
 use anyhow::{bail, Context, Result};
 use futures::StreamExt;
@@ -19,7 +21,7 @@ use tokio_util::{
     bytes::BytesMut,
     codec::{Decoder, Encoder, FramedRead, FramedWrite, LinesCodec},
 };
-use tracing::{debug, info};
+use tracing::{debug, error, info};
 
 pub type EditorId = usize;
 
@@ -133,24 +135,31 @@ async fn handle_editor_connection(
         .await;
     info!("Editor #{editor_id} connected.");
 
-    // TODO: handle error case and send appropriate responses
-    while let Some(Ok(message)) = reader.next().await {
-        document_handle
-            .send_message(DocMessage::FromEditor(editor_id, message))
-            .await;
+    while let Some(message) = reader.next().await {
+        match message {
+            Ok(message) => {
+                document_handle
+                    .send_message(DocMessage::FromEditor(editor_id, message))
+                    .await;
+            }
+            Err(e) => {
+                let response = JSONRPCResponse::RequestError {
+                    id: None,
+                    error: EditorProtocolMessageError {
+                        code: -32700,
+                        message: format!("Invalid request: {e}"),
+                        data: None,
+                    },
+                };
+                error!("Error for JSON-RPC request: {:?}", response);
+                let message = OutgoingMessage::Response(response);
+                document_handle
+                    .send_message(DocMessage::ToEditor(editor_id, message))
+                    .await;
+            }
+        }
     }
     // Err(e) => {
-    //     let response = JSONRPCResponse::RequestError {
-    //         id: None,
-    //         error: EditorProtocolMessageError {
-    //             code: -32700,
-    //             message: format!("Invalid request: {e}"),
-    //             data: None,
-    //         },
-    //     };
-    //     error!("Error for JSON-RPC request: {:?}", response);
-    //     self.send_to_editor_client(&editor_id, OutgoingMessage::Response(response))
-    //         .await;
     // }
 
     document_handle
