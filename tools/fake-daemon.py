@@ -43,6 +43,14 @@ while True:
     response = {"jsonrpc": "2.0", "id": initialize["id"], "result": "success"}
     send(conn, response)
 
+    # to test the error-case:
+    # response = {
+    #     "jsonrpc": "2.0",
+    #     "id": initialize["id"],
+    #     "error": {"code": -1, "data": "can't let you in", "message": "wrong version"},
+    # }
+    # send(conn, response)
+
     open = read_line(conn)
     print(open)
     response = {"jsonrpc": "2.0", "id": open["id"], "result": "success"}

@@ -7,11 +7,12 @@
 use crate::cli::ask;
 use crate::daemon::{DocMessage, DocumentActorHandle};
 use crate::editor_protocol::{
-    EditorProtocolMessageError, IncomingMessage, JSONRPCResponse, OutgoingMessage,
+    EditorProtocolMessageError, EditorProtocolMessageFromEditor, IncomingMessage, JSONRPCResponse,
+    OutgoingMessage,
 };
 use crate::sandbox;
 use anyhow::{bail, Context, Result};
-use futures::StreamExt;
+use futures::{SinkExt, StreamExt};
 use std::{fs, os::unix::fs::PermissionsExt, path::Path};
 use tokio::{
     io::WriteHalf,
@@ -128,42 +129,87 @@ async fn handle_editor_connection(
 ) {
     let (stream_read, stream_write) = tokio::io::split(stream);
     let mut reader = FramedRead::new(stream_read, IncomingProtocolCodec);
-    let writer = FramedWrite::new(stream_write, OutgoingProtocolCodec);
+    let mut writer = FramedWrite::new(stream_write, OutgoingProtocolCodec);
 
-    document_handle
-        .send_message(DocMessage::NewEditorConnection(editor_id, writer))
-        .await;
-    info!("Editor #{editor_id} connected.");
+    debug!("Editor #{editor_id} connected to socket. Awaiting initialization.");
 
-    while let Some(message) = reader.next().await {
+    if let Some(message) = reader.next().await {
         match message {
-            Ok(message) => {
-                document_handle
-                    .send_message(DocMessage::FromEditor(editor_id, message))
-                    .await;
+            Ok(incoming_message) => {
+                match incoming_message {
+                    IncomingMessage::Request {
+                        id,
+                        payload: EditorProtocolMessageFromEditor::Initialize { version },
+                    } => {
+                        // TODO: check version here!
+                        let message = OutgoingMessage::Response(JSONRPCResponse::RequestSuccess {
+                            id,
+                            result: "success".to_string(),
+                        });
+                        writer.send(message).await.unwrap_or_else(|err| {
+                            error!("Failed to send message to editor: {err} Removing editor.");
+                        });
+                        info!("Editor #{editor_id} connected.");
+                    }
+                    // wrong first request
+                    IncomingMessage::Request { id, payload } => {
+                        todo!("respond with an error?");
+                    }
+                    // just ignoring notifications? Or Err?
+                    IncomingMessage::Notification { payload } => {}
+                }
             }
             Err(e) => {
-                let response = JSONRPCResponse::RequestError {
-                    id: None,
-                    error: EditorProtocolMessageError {
-                        code: -32700,
-                        message: format!("Invalid request: {e}"),
-                        data: None,
-                    },
-                };
-                error!("Error for JSON-RPC request: {:?}", response);
-                let message = OutgoingMessage::Response(response);
-                document_handle
-                    .send_message(DocMessage::ToEditor(editor_id, message))
-                    .await;
+                // let response = JSONRPCResponse::RequestError {
+                //     id: None,
+                //     error: EditorProtocolMessageError {
+                //         code: -32700,
+                //         message: format!("Invalid request: {e}"),
+                //         data: None,
+                //     },
+                // };
+                error!("Error for JSON-RPC request: {:?}", e);
+                todo!("handle error case");
+                //self.send_to_editor_client(&editor_id, OutgoingMessage::Response(response))
+                //    .await;
             }
         }
+
+        document_handle
+            .send_message(DocMessage::NewEditorConnection(editor_id, writer))
+            .await;
+
+        while let Some(message) = reader.next().await {
+            match message {
+                Ok(message) => {
+                    document_handle
+                        .send_message(DocMessage::FromEditor(editor_id, message))
+                        .await;
+                }
+                Err(e) => {
+                    let response = JSONRPCResponse::RequestError {
+                        id: None,
+                        error: EditorProtocolMessageError {
+                            code: -32700,
+                            message: format!("Invalid request: {e}"),
+                            data: None,
+                        },
+                    };
+                    error!("Error for JSON-RPC request: {:?}", response);
+                    let message = OutgoingMessage::Response(response);
+                    document_handle
+                        .send_message(DocMessage::ToEditor(editor_id, message))
+                        .await;
+                }
+            }
+        }
+
+        document_handle
+            .send_message(DocMessage::CloseEditorConnection(editor_id))
+            .await;
     }
     // Err(e) => {
     // }
 
-    document_handle
-        .send_message(DocMessage::CloseEditorConnection(editor_id))
-        .await;
     info!("Editor #{editor_id} disconnected.");
 }

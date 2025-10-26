@@ -114,6 +114,9 @@ impl EditorConnection {
         }
 
         match message {
+            EditorProtocolMessageFromEditor::Initialize { version } => {
+                Ok((ComponentMessage::None, vec![]))
+            }
             EditorProtocolMessageFromEditor::Open { uri, content } => {
                 let uri = FileUri::try_from(uri.clone()).map_err(anyhow_err_to_protocol_err)?;
                 let absolute_path = uri.to_absolute_path();
