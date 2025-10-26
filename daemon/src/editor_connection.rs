@@ -114,7 +114,7 @@ impl EditorConnection {
         }
 
         match message {
-            EditorProtocolMessageFromEditor::Initialize { version } => {
+            EditorProtocolMessageFromEditor::Initialize { version: _ } => {
                 Ok((ComponentMessage::None, vec![]))
             }
             EditorProtocolMessageFromEditor::Open { uri, content } => {

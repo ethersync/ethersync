@@ -92,7 +92,7 @@ function M.connect(cmd, directory, on_connect, on_notification)
     setmetatable(the_connection, { __index = Connection })
 
     -- TODO: Get version number from elsewhere?
-    the_connection:send_request("initialize", { version = "0.8.0" }, function()
+    the_connection:send_request("initialize", { version = "0.8" }, function()
         print("Connected to Ethersync daemon!")
         on_connect(the_connection)
     end, report_error)

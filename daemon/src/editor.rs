@@ -136,28 +136,54 @@ async fn handle_editor_connection(
     if let Some(message) = reader.next().await {
         match message {
             Ok(incoming_message) => {
-                match incoming_message {
+                // TODO: refactor this into a helper
+                let response = match incoming_message {
                     IncomingMessage::Request {
                         id,
                         payload: EditorProtocolMessageFromEditor::Initialize { version },
                     } => {
-                        // TODO: check version here!
-                        let message = OutgoingMessage::Response(JSONRPCResponse::RequestSuccess {
-                            id,
-                            result: "success".to_string(),
-                        });
-                        writer.send(message).await.unwrap_or_else(|err| {
-                            error!("Failed to send message to editor: {err} Removing editor.");
-                        });
-                        info!("Editor #{editor_id} connected.");
+                        let expected_protocol_version = "0.8";
+                        if version == expected_protocol_version {
+                            info!("Editor #{editor_id} connected.");
+                            JSONRPCResponse::RequestSuccess {
+                                id,
+                                result: "success".to_string(),
+                            }
+                        } else {
+                            let response = JSONRPCResponse::RequestError {
+                                id: None,
+                                error: EditorProtocolMessageError {
+                                    code: -1,
+                                    message: "Wrong Version".into(),
+                                    data: Some(format!(
+                                        "Got {version}, wanted {expected_protocol_version}"
+                                    )),
+                                },
+                            };
+                            error!("Error for JSON-RPC request: {:?}", response);
+                            response
+                        }
                     }
-                    // wrong first request
-                    IncomingMessage::Request { id, payload } => {
-                        todo!("respond with an error?");
+                    // wrong initial request
+                    IncomingMessage::Request { .. } | IncomingMessage::Notification { .. } => {
+                        let response = JSONRPCResponse::RequestError {
+                                id: None,
+                                error: EditorProtocolMessageError {
+                                    code: -32700,
+                                    message: "Send 'initialize' request first".into(),
+                                    data: Some(
+                                        "Before anything else, the client needs to introduce itself by sending the expected version".into()
+                                    ),
+                                },
+                            };
+                        error!("Error for JSON-RPC request: {:?}", response);
+                        response
                     }
-                    // just ignoring notifications? Or Err?
-                    IncomingMessage::Notification { payload } => {}
-                }
+                };
+                let message = OutgoingMessage::Response(response);
+                writer.send(message).await.unwrap_or_else(|err| {
+                    error!("Failed to send message to editor: {err} Removing editor.");
+                });
             }
             Err(e) => {
                 // let response = JSONRPCResponse::RequestError {
