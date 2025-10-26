@@ -123,11 +123,12 @@ local function track_edits(client, filename, uri, initial_lines)
     end)
 end
 
-local function find_or_create_client(config_name, root_dir)
+local function find_or_create_client(config_name, root_dir, on_client_available)
     -- We re-use connections for configs with the same name and root_dir.
     for _, client in ipairs(clients) do
         if client.name == config_name and client.root_dir == root_dir then
-            return client
+            on_client_available(client)
+            return
         end
     end
 
@@ -139,43 +140,44 @@ local function find_or_create_client(config_name, root_dir)
         buffers = {},
         connection = nil,
     }
-    local the_connection = connection.connect(configurations[config_name].cfg.cmd, root_dir, function(m, p)
+    connection.connect(configurations[config_name].cfg.cmd, root_dir, function(the_connection)
+        client.connection = the_connection
+        table.insert(clients, client)
+        on_client_available(client)
+    end, function(m, p)
         process_operation_for_editor(client, m, p)
     end)
-    client.connection = the_connection
-    table.insert(clients, client)
-
-    return client
 end
 
 local function activate_config_for_buffer(config_name, buf_nr, root_dir)
-    local client = find_or_create_client(config_name, root_dir)
-    table.insert(client.buffers, buf_nr)
+    find_or_create_client(config_name, root_dir, function(client)
+        table.insert(client.buffers, buf_nr)
 
-    local filename = vim.api.nvim_buf_get_name(buf_nr)
-    local uri = vim.uri_from_bufnr(buf_nr)
+        local filename = vim.api.nvim_buf_get_name(buf_nr)
+        local uri = vim.uri_from_bufnr(buf_nr)
 
-    -- Neovim enables eol for an empty file, but we do use this option values
-    -- assuming there's a trailing newline iff eol is true.
-    if vim.fn.getfsize(vim.api.nvim_buf_get_name(buf_nr)) == 0 then
-        vim.bo.eol = false
-    end
+        -- Neovim enables eol for an empty file, but we do use this option values
+        -- assuming there's a trailing newline iff eol is true.
+        if vim.fn.getfsize(vim.api.nvim_buf_get_name(buf_nr)) == 0 then
+            vim.bo.eol = false
+        end
 
-    local lines = changetracker.get_all_lines_respecting_eol(buf_nr)
-    local content = table.concat(lines, "\n")
+        local lines = changetracker.get_all_lines_respecting_eol(buf_nr)
+        local content = table.concat(lines, "\n")
 
-    -- Ensure that the file exists on disk before we "open" it in the daemon,
-    -- to prevent a warning that the file has been created externally (W13).
-    -- This resolves issue #92.
-    if string.find(uri, "file://") == 1 and not vim.fn.filereadable(filename) then
-        vim.cmd("silent write")
-    end
+        -- Ensure that the file exists on disk before we "open" it in the daemon,
+        -- to prevent a warning that the file has been created externally (W13).
+        -- This resolves issue #92.
+        if string.find(uri, "file://") == 1 and not vim.fn.filereadable(filename) then
+            vim.cmd("silent write")
+        end
 
-    client.connection:send_request("open", { uri = uri, content = content }, function()
-        debug("Tracking Edits")
-        ensure_autoread_is_off()
-        disable_writing()
-        track_edits(client, filename, uri, lines)
+        client.connection:send_request("open", { uri = uri, content = content }, function()
+            debug("Tracking Edits")
+            ensure_autoread_is_off()
+            disable_writing()
+            track_edits(client, filename, uri, lines)
+        end)
     end)
 end
 

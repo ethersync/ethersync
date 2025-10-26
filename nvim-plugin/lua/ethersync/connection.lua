@@ -35,8 +35,12 @@ function Connection:send_request(method, params, result_callback, err_callback)
     end)
 end
 
--- Connect to the daemon, and return a handle on the connection.
-function M.connect(cmd, directory, on_notification)
+local function report_error(code, ...)
+    print("Ethersync connection error: ", code, vim.inspect({ ... }))
+end
+
+-- Connect to the daemon, and call on_connect with the initialized connection.
+function M.connect(cmd, directory, on_connect, on_notification)
     local executable = cmd[1]
     if vim.fn.executable(executable) == 0 then
         vim.api.nvim_err_writeln(
@@ -49,9 +53,7 @@ function M.connect(cmd, directory, on_notification)
 
     local dispatchers = {
         notification = on_notification,
-        on_error = function(code, ...)
-            print("Ethersync connection error: ", code, vim.inspect({ ... }))
-        end,
+        on_error = report_error,
         on_exit = function(code, _)
             if code == 0 then
                 vim.schedule(function()
@@ -86,11 +88,14 @@ function M.connect(cmd, directory, on_notification)
         connection = vim.lsp.rpc.start(cmd, dispatchers, extra_spawn_params)
     end
 
-    print("Connected to Ethersync daemon!")
+    local the_connection = { connection = connection }
+    setmetatable(the_connection, { __index = Connection })
 
-    local result = { connection = connection }
-    setmetatable(result, { __index = Connection })
-    return result
+    -- TODO: Get version number from elsewhere?
+    the_connection:send_request("initialize", { version = "0.8.0" }, function()
+        print("Connected to Ethersync daemon!")
+        on_connect(the_connection)
+    end, report_error)
 end
 
 return M

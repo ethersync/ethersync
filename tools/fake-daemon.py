@@ -28,6 +28,7 @@ def send(conn, json_):
     conn.send(message_json.encode("utf-8"))
     conn.send(b"\n")
 
+
 if os.path.exists(socket_path):
     os.remove(socket_path)
 
@@ -37,10 +38,16 @@ while True:
     server.listen()
     conn, addr = server.accept()
 
+    initialize = read_line(conn)
+    print(initialize)
+    response = {"jsonrpc": "2.0", "id": initialize["id"], "result": "success"}
+    send(conn, response)
+
     open = read_line(conn)
     print(open)
     response = {"jsonrpc": "2.0", "id": open["id"], "result": "success"}
     send(conn, response)
+
     the_beautiful_edit = {
         "jsonrpc": "2.0",
         "method": "edit",
