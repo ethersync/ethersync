@@ -80,7 +80,7 @@ local function ensure_autoread_is_off()
     end
 end
 
--- In teamtype-ed buffers, "writing" is no longer a concept. We also want to avoid error messages
+-- In teamtype-enabled buffers, "writing" is no longer a concept. We also want to avoid error messages
 -- when the file has changed on disk, so make all writing operations a no-op.
 local function disable_writing()
     local buf = vim.api.nvim_get_current_buf()
