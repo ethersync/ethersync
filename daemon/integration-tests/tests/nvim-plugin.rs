@@ -5,9 +5,12 @@
 
 use ethersync_integration_tests::actors::*;
 
-use ethersync::types::{
-    factories::*, EditorProtocolMessageFromEditor, EditorProtocolMessageToEditor,
-    EditorProtocolObject, EditorTextDelta, EditorTextOp, JSONRPCFromEditor,
+use ethersync::{
+    editor_protocol::{
+        EditorProtocolMessageFromEditor, EditorProtocolMessageToEditor, IncomingMessage,
+        OutgoingMessage,
+    },
+    types::{factories::*, EditorTextDelta, EditorTextOp},
 };
 
 use pretty_assertions::assert_eq;
@@ -65,7 +68,7 @@ async fn assert_nvim_deltas_yield_content(
             revision: 0,
             delta: EditorTextDelta(vec![op.clone()]),
         };
-        let payload = EditorProtocolObject::Request(editor_message)
+        let payload = OutgoingMessage::Notification(editor_message)
             .to_jsonrpc()
             .expect("Could not serialize EditorTextDelta");
         socket.send(&format!("{payload}\n")).await;
@@ -149,9 +152,9 @@ async fn assert_nvim_input_yields_replacements(
                 // expected ones.
                 while !expected_replacements.is_empty() {
                     let msg = socket.recv().await;
-                    let message: JSONRPCFromEditor = serde_json::from_str(&msg.to_string())
+                    let message: IncomingMessage = serde_json::from_str(&msg.to_string())
                         .expect("Could not parse EditorProtocolMessage");
-                    let JSONRPCFromEditor::Request{
+                    let IncomingMessage::Request{
                         payload: EditorProtocolMessageFromEditor::Edit{ delta, ..},
                         ..
                     } = message else {continue;};

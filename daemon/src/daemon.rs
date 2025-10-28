@@ -7,13 +7,16 @@ use crate::config::{self, AppConfig};
 use crate::document::Document;
 use crate::editor::{self, EditorId, EditorWriter};
 use crate::editor_connection::EditorConnection;
+use crate::editor_protocol::{
+    EditorProtocolMessageError, EditorProtocolMessageFromEditor, EditorProtocolMessageToEditor,
+    IncomingMessage, JSONRPCResponse, OutgoingMessage,
+};
 use crate::path::{AbsolutePath, RelativePath};
 use crate::peer;
 use crate::sandbox;
 use crate::types::{
-    ComponentMessage, CursorId, CursorState, EditorProtocolMessageError,
-    EditorProtocolMessageFromEditor, EditorProtocolMessageToEditor, EditorProtocolObject,
-    EphemeralMessage, FileTextDelta, JSONRPCFromEditor, JSONRPCResponse, PatchEffect, TextDelta,
+    ComponentMessage, CursorId, CursorState, EphemeralMessage, FileTextDelta, PatchEffect,
+    TextDelta,
 };
 use crate::watcher::WatcherEvent;
 use crate::watcher::{Watcher, WatcherEventType};
@@ -47,7 +50,8 @@ pub enum DocMessage {
     GetContent {
         response_tx: oneshot::Sender<Result<String>>,
     },
-    FromEditor(EditorId, String),
+    FromEditor(EditorId, IncomingMessage),
+    ToEditor(EditorId, OutgoingMessage),
     FromWatcher(WatcherEvent),
     RescanFiles,
     Persist,
@@ -70,7 +74,8 @@ impl fmt::Debug for DocMessage {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let repr = match self {
             Self::GetContent { .. } => "GetContent".to_string(),
-            Self::FromEditor(id, s) => format!("FromEditor({id}, {s})"),
+            Self::FromEditor(id, m) => format!("FromEditor({id}, {m:?})"),
+            Self::ToEditor(id, m) => format!("ToEditor({id}, {m:?})"),
             Self::FromWatcher(e) => format!("FromWatcher({e:?}"),
             Self::RescanFiles => "RescanFiles".to_string(),
             Self::Persist => "Persist".to_string(),
@@ -184,6 +189,9 @@ impl DocumentActor {
             }
             DocMessage::FromEditor(editor_id, message) => {
                 self.handle_message_from_editor(editor_id, message).await;
+            }
+            DocMessage::ToEditor(editor_id, message) => {
+                self.send_to_editor_client(&editor_id, message).await;
             }
             DocMessage::FromWatcher(watcher_event) => {
                 self.handle_watcher_event(&watcher_event);
@@ -383,58 +391,43 @@ impl DocumentActor {
         self.crdt_doc.actor_id() + "-" + editor_id.to_string().as_str()
     }
 
-    async fn handle_message_from_editor(&mut self, editor_id: EditorId, message: String) {
-        match JSONRPCFromEditor::from_jsonrpc(&message) {
-            Ok(parsed_message) => match parsed_message {
-                JSONRPCFromEditor::Request { id, payload } => {
-                    let result = self.react_to_message_from_editor(editor_id, &payload).await;
-                    match result {
-                        Err(error) => {
-                            error!("Error for JSON-RPC request: {:?}", error);
+    async fn handle_message_from_editor(&mut self, editor_id: EditorId, message: IncomingMessage) {
+        match message {
+            IncomingMessage::Request { id, payload } => {
+                let result = self.react_to_message_from_editor(editor_id, &payload).await;
+                match result {
+                    Err(error) => {
+                        error!("Error for JSON-RPC request: {:?}", error);
+                        self.send_to_editor_client(
+                            &editor_id,
+                            OutgoingMessage::Response(JSONRPCResponse::RequestError {
+                                id: Some(id),
+                                error,
+                            }),
+                        )
+                        .await;
+                    }
+                    Ok(messages) => {
+                        self.send_to_editor_client(
+                            &editor_id,
+                            OutgoingMessage::Response(JSONRPCResponse::RequestSuccess {
+                                id,
+                                result: "success".into(),
+                            }),
+                        )
+                        .await;
+                        for message in messages {
                             self.send_to_editor_client(
                                 &editor_id,
-                                EditorProtocolObject::Response(JSONRPCResponse::RequestError {
-                                    id: Some(id),
-                                    error,
-                                }),
+                                OutgoingMessage::Notification(message),
                             )
                             .await;
-                        }
-                        Ok(messages) => {
-                            self.send_to_editor_client(
-                                &editor_id,
-                                EditorProtocolObject::Response(JSONRPCResponse::RequestSuccess {
-                                    id,
-                                    result: "success".into(),
-                                }),
-                            )
-                            .await;
-                            for message in messages {
-                                self.send_to_editor_client(
-                                    &editor_id,
-                                    EditorProtocolObject::Request(message),
-                                )
-                                .await;
-                            }
                         }
                     }
                 }
-                JSONRPCFromEditor::Notification { payload } => {
-                    let _ = self.react_to_message_from_editor(editor_id, &payload).await;
-                }
-            },
-            Err(e) => {
-                let response = JSONRPCResponse::RequestError {
-                    id: None,
-                    error: EditorProtocolMessageError {
-                        code: -32700,
-                        message: format!("Invalid request: {e}"),
-                        data: None,
-                    },
-                };
-                error!("Error for JSON-RPC request: {:?}", response);
-                self.send_to_editor_client(&editor_id, EditorProtocolObject::Response(response))
-                    .await;
+            }
+            IncomingMessage::Notification { payload } => {
+                let _ = self.react_to_message_from_editor(editor_id, &payload).await;
             }
         }
     }
@@ -534,7 +527,7 @@ impl DocumentActor {
         delta
     }
 
-    async fn send_to_editor_client(&mut self, editor_id: &EditorId, message: EditorProtocolObject) {
+    async fn send_to_editor_client(&mut self, editor_id: &EditorId, message: OutgoingMessage) {
         let connection = self
             .editor_connections
             .get_mut(editor_id)
@@ -775,7 +768,7 @@ impl DocumentActor {
         for message_to_editor in messages_to_editor {
             self.send_to_editor_client(
                 &editor_id,
-                EditorProtocolObject::Request(message_to_editor),
+                OutgoingMessage::Notification(message_to_editor),
             )
             .await;
         }
