@@ -89,6 +89,9 @@ pub struct EditorProtocolMessageError {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "method", content = "params", rename_all = "camelCase")]
 pub enum EditorProtocolMessageFromEditor {
+    Initialize {
+        version: String,
+    },
     Open {
         uri: DocumentUri,
         content: String,

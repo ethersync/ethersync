@@ -170,6 +170,7 @@ pub enum ComponentMessage {
         cursor_id: CursorId,
         cursor_state: CursorState,
     },
+    None,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

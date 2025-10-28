@@ -717,6 +717,7 @@ impl DocumentActor {
 
                 let _ = self.ephemeral_message_tx.send(new_cursor_state);
             }
+            ComponentMessage::None => {}
         }
 
         self.broadcast_to_editors(from_editor, message).await;
