@@ -231,7 +231,7 @@ fn get_directory(directory: Option<PathBuf>) -> Result<PathBuf> {
         let teamtype_dir = directory.join(config::CONFIG_DIR);
 
         warn!(
-            "'{}' hasn't been used as an Teamtype directory before.",
+            "'{}' hasn't been used as a Teamtype directory before.",
             &directory.display()
         );
 

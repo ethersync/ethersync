@@ -35,7 +35,7 @@ The plugins also display other peoples' cursors in real-time.
 
 ## Daemon
 
-On each participant's computer, there's an Teamtype daemon, keeping the file's content in a data structure called "CRDT".
+On each participant's computer, there's a Teamtype daemon, keeping the file's content in a data structure called "CRDT".
 
 The daemon collects changes being communicated by the connected editor, and syncs them with other peers.
 If conflicts arise, because two edits happened at the same time, they will be resolved by the daemon automatically.

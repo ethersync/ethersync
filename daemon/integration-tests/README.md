@@ -9,7 +9,7 @@ SPDX-License-Identifier: CC-BY-SA-4.0
 This directory contains integration tests for Teamtype. They assume that your `PATH` contains:
 
 - An `nvim` with installed Teamtype plugin, and
-- an `teamtype` binary (for connecting via `teamtype client`).
+- a `teamtype` binary (for connecting via `teamtype client`).
 
 To run all integration tests, run:
 

@@ -38,7 +38,7 @@ it is (was) easy to build and we think it will be easy to change if necessary.
 
 ### Store user state in a map in the main Automerge document
 
-The Automerge document for an Teamtype project could be split into a `files` key (which contains the file contents like before), and a `peers` key (which stores information about the peers' state, like cursor positions).
+The Automerge document for a Teamtype project could be split into a `files` key (which contains the file contents like before), and a `peers` key (which stores information about the peers' state, like cursor positions).
 
 * Good, because transmitting this information would be trivial, with no work required from us at all. The Automerge sync protocol handles it for us.
 * Bad, because this "ephemeral" data would become part of the CRDT, that each peer needs to persist. The persisted data would be larger as a result, and contain data that's completely irrelevant after a short amount of time.

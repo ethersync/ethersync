@@ -15,7 +15,7 @@ date: 2024-03-14
 
 Usually, when opening a file in a text editor, the content is read into its buffer. The user then works on the buffer, and sometimes writes it back to the file.
 
-In an Teamtype scenario, we could follow a different approach, where the daemon also writes to files.
+In a Teamtype scenario, we could follow a different approach, where the daemon also writes to files.
 
 The question is: Who writes to files, and when? Who has "ownership" of the files?
 
