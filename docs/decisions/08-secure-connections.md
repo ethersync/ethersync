@@ -14,7 +14,7 @@ date: 2024-08-22
 
 In many situations, we don't want shared directories to be publicly readable & writable. How can we make sure that only the people we want can get access?
 
-Our "attack surface" for an Teamtype daemon is connections from the Internet. We explicitly don't guard against misbehaving editor plugins, as they'd run on the local machine anyway (and as such could do damage more directly than going through the deamon, which is assumed to only run with user privileges).
+Our "attack surface" for a Teamtype daemon is connections from the Internet. We explicitly don't guard against misbehaving editor plugins, as they'd run on the local machine anyway (and as such could do damage more directly than going through the deamon, which is assumed to only run with user privileges).
 
 We need two things:
 

@@ -31,7 +31,7 @@ local function is_empty(diff)
         and diff.range["start"].character == diff.range["end"].character
 end
 
--- Convert an LSP TextDocumentContentChangeEvent to an Teamtype delta.
+-- Convert an LSP TextDocumentContentChangeEvent to a Teamtype delta.
 local function lsp_diff_to_teamtype_delta(diff)
     return {
         {
@@ -41,7 +41,7 @@ local function lsp_diff_to_teamtype_delta(diff)
     }
 end
 
--- Convert an Teamtype delta to a list of LSP `TextEdit`s.
+-- Convert a Teamtype delta to a list of LSP `TextEdit`s.
 local function teamtype_delta_to_lsp_text_edits(delta)
     local text_edits = {}
     for _, replacement in ipairs(delta) do
@@ -173,7 +173,7 @@ function M.track_changes(buffer, initial_lines, callback)
     -- calculate the difference between the previous and the current content.
     local prev_lines = initial_lines
 
-    -- Computes an Teamtype delta containing the changes between curr_lines and prev_lines.
+    -- Computes a Teamtype delta containing the changes between curr_lines and prev_lines.
     -- If the delta is not empty, call the callback.
     local function line_change(first_line, last_line, new_last_line)
         -- TODO: optimize with a cache

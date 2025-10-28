@@ -11,7 +11,7 @@ SPDX-License-Identifier: CC-BY-SA-4.0
 
 1. `npm install`
 2. Open this directory in VS Code, then start debugging with F5.
-3. Open a file in an Teamtype-enabled directory to launch the plugin.
+3. Open a file in a Teamtype-enabled directory to launch the plugin.
 
 ## How to run locally without "host"
 

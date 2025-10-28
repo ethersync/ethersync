@@ -11,7 +11,7 @@ For the workflows below, we assume that you already have an established Git repo
 
 ## How Teamtype and Git interact
 
-Teamtype tracks changes that you make to files in editors with an Teamtype plugin, and with [external tools](file-events.md).
+Teamtype tracks changes that you make to files in editors with a Teamtype plugin, and with [external tools](file-events.md).
 
 However, any change to the `.git` directory and the staging area (which is in fact also tracked in the `.git` repository) is *ignored* by Teamtype by default. This means that in this mode, Teamtype does not sync
 - commits you create,

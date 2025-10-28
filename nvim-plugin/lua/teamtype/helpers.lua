@@ -5,7 +5,7 @@
 
 local M = {}
 
--- Recusively scan up directories. If we find an .teamtype directory on any level, return its parent, and nil otherwise.
+-- Recusively scan up directories. If we find a .teamtype directory on any level, return its parent, and nil otherwise.
 function M.find_directory(filename, marker)
     if vim.version().api_level < 12 then
         -- In Neovim 0.9, do it manually.

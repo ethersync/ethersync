@@ -35,7 +35,7 @@ Usually, you will add the string `"teamtype/teamtype-nvim"` to your plugin manag
 ```lua
 {
   "teamtype/teamtype-nvim",
-  keys = { 
+  keys = {
     { "<leader>ej", "<cmd>TeamtypeJumpToCursor<cr>" },
     { "<leader>ef", "<cmd>TeamtypeFollow<cr>" },
   },
@@ -57,7 +57,7 @@ Usually, you will add the string `"teamtype/teamtype-nvim"` to your plugin manag
 
 ### Nix
 
-For testing purposes, you can run an Teamtype-enabled Neovim like this:
+For testing purposes, you can run a Teamtype-enabled Neovim like this:
 
 ```bash
 nix run github:teamtype/teamtype#neovim

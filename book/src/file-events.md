@@ -16,7 +16,7 @@ Teamtype tries to sync not only file changes done by supported editors, but also
 
 ## Creating files
 
-- Opening a new file with an Teamtype-enabled text editor (this will create the file in the directory of connected peers).
+- Opening a new file with a Teamtype-enabled text editor (this will create the file in the directory of connected peers).
 
     Example: `nvim new_file`
 
@@ -30,7 +30,7 @@ Teamtype tries to sync not only file changes done by supported editors, but also
 
 ## Changing files
 
-- Editing a file in an Teamtype-enabled text editor.
+- Editing a file in a Teamtype-enabled text editor.
 
     Example: `nvim existing_file`
 
