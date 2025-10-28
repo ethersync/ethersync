@@ -74,6 +74,13 @@ enum Commands {
     Client,
 }
 
+fn has_ethersync_directory(dir: &Path) -> bool {
+    let ethersync_dir = dir.join(config::LEGACY_CONFIG_DIR);
+    // Using the sandbox method here is technically unnecessary,
+    // but we want to really run all path operations through the sandbox module.
+    sandbox::exists(dir, &ethersync_dir).expect("Failed to check") && ethersync_dir.is_dir()
+}
+
 fn has_teamtype_directory(dir: &Path) -> bool {
     let teamtype_dir = dir.join(config::CONFIG_DIR);
     // Using the sandbox method here is technically unnecessary,
@@ -201,12 +208,31 @@ fn get_directory(directory: Option<PathBuf>) -> Result<PathBuf> {
         .unwrap_or_else(|| std::env::current_dir().expect("Could not access current directory"))
         .canonicalize()
         .expect("Could not access given directory");
+    if has_ethersync_directory(&directory) {
+        let old_directory = directory.join(config::LEGACY_CONFIG_DIR);
+
+        warn!("You have an '{}/' directory, back from when the project was called \"Ethersync\" until October 2025.", &old_directory.display());
+
+        if ask(&format!(
+            "Do you want to rename {}/ to {}/?",
+            &config::LEGACY_CONFIG_DIR,
+            &config::CONFIG_DIR,
+        ))? {
+            let new_directory = directory.join(config::CONFIG_DIR);
+            sandbox::rename_file(&directory, &old_directory, &new_directory)?;
+        } else {
+            bail!(
+                "Aborting launch. Rename or remove the {} directory yourself to continue.",
+                &config::LEGACY_CONFIG_DIR
+            );
+        }
+    }
     if !has_teamtype_directory(&directory) {
         let teamtype_dir = directory.join(config::CONFIG_DIR);
 
         warn!(
-            "{:?} hasn't been used as an Teamtype directory before.",
-            &directory
+            "'{}' hasn't been used as an Teamtype directory before.",
+            &directory.display()
         );
 
         if ask(&format!(
@@ -216,7 +242,7 @@ fn get_directory(directory: Option<PathBuf>) -> Result<PathBuf> {
             sandbox::create_dir(&directory, &teamtype_dir)?;
             info!("Created! Resuming launch.");
         } else {
-            bail!("Aborting launch. Teamtype needs an .teamtype/ directory to function");
+            bail!("Aborting launch. Teamtype needs a .teamtype/ directory to function");
         }
     }
     Ok(directory)
