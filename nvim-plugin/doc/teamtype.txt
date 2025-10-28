@@ -1,4 +1,4 @@
-*teamtype.txt*  Editor-agnostic collaborative editing                 *teamtype*
+*teamtype.txt*  Editor-agnostic collaborative editing                   *teamtype*
 
 This plugin adds real-time collaborative editing functionality to Neovim.
 You can use it for pair programming or note-taking, for example. It is mainly
@@ -6,18 +6,18 @@ meant to be used with Teamtype, but can also be configured to work with other
 collaborative software speaking the same protocol.
 
 ==============================================================================
-INSTALLATION                                            *teamtype-installation*
+INSTALLATION                                             *teamtype-installation*
 
 See main README at |https://github.com/teamtype/teamtype-nvim|.
 
 ==============================================================================
-CONFIGURATION                                          *teamtype-configuration*
+CONFIGURATION                                           *teamtype-configuration*
 
 This plugin allows you to configure multiple collaboration servers.
 A configuration for connecting to Teamtype daemons is provided and enabled by
 default.
 
-config({name}, {cfg})                                       *teamtype.config()*
+config({name}, {cfg})                                        *teamtype.config()*
     Set or update the configuration for a client.
 
     Examples:
@@ -45,7 +45,7 @@ config({name}, {cfg})                                       *teamtype.config()*
       • {name}  (`string`)
       • {cfg}   A configuration (see |teamtype.Config|)
 
-enable({name}, {enable})                                    *teamtype.enable()*
+enable({name}, {enable})                                     *teamtype.enable()*
     Connects to the collaboration server when a buffer is opened, based on the
     `root_markers` and `root_dir` fields of the configuration.
 
@@ -80,18 +80,18 @@ enable({name}, {enable})                                    *teamtype.enable()*
                          example at `teamtype.config` for an example.
 
 ==============================================================================
-USAGE                                                          *teamtype-usage*
+USAGE                                                           *teamtype-usage*
 
-:TeamtypeInfo                                                  *:TeamtypeInfo*
+:TeamtypeInfo                                                    *:TeamtypeInfo*
     Shows the active collaboration clients and cursor positions.
 
-:TeamtypeJumpToCursor                                  *:TeamtypeJumpToCursor*
+:TeamtypeJumpToCursor                                    *:TeamtypeJumpToCursor*
     Jumps to the cursor of another peer. If multiple cursors are present,
     gives you a selection menu.
 
     Tip: Create an easily accessible mapping for this command!
 
-:TeamtypeFollow                                              *:TeamtypeFollow*
+:TeamtypeFollow                                                *:TeamtypeFollow*
     Follows another peer, keeping their cursor in view. If multiple cursors
     are present, gives you a selection menu.
     It will automatically unfollow as soon as a key is pressed.
