@@ -250,6 +250,13 @@ local function print_info()
     print(result)
 end
 
+local function legacy_command(f)
+    return function()
+        print("You are using a deprecated user command Ethersync*. Please use the corresponding Teamtype* instead.")
+        f()
+    end
+end
+
 local function activate_plugin()
     vim.api.nvim_create_autocmd({ "BufRead" }, { callback = on_buffer_open })
     vim.api.nvim_create_autocmd({ "BufNewFile" }, { callback = on_buffer_open })
@@ -262,6 +269,12 @@ local function activate_plugin()
     vim.api.nvim_create_user_command("TeamtypeInfo", print_info, {})
     vim.api.nvim_create_user_command("TeamtypeJumpToCursor", cursor.jump_to_cursor, {})
     vim.api.nvim_create_user_command("TeamtypeFollow", cursor.follow_cursor, {})
+
+    -- Support the old commands for a while, as they might be residing in user configurations.
+    -- TODO: Remove this after a while.
+    vim.api.nvim_create_user_command("EthersyncInfo", legacy_command(print_info), {})
+    vim.api.nvim_create_user_command("EthersyncJumpToCursor", legacy_command(cursor.jump_to_cursor), {})
+    vim.api.nvim_create_user_command("EthersyncFollow", legacy_command(cursor.follow_cursor), {})
 end
 
 activate_plugin()
