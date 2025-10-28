@@ -3,9 +3,9 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-use teamtype::sandbox;
 use serde_json::Value as JSONValue;
 use std::path::Path;
+use teamtype::sandbox;
 use tokio::{
     io::{split, AsyncBufReadExt, AsyncWriteExt, BufReader, BufWriter},
     net::UnixListener,
