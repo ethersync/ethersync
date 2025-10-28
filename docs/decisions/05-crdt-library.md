@@ -146,7 +146,7 @@ We didn't look at this in detail. It was a too low-level approach for us.
 ## More Information
 
 The decision was done after looking at each library for at least a bit, and we tried most of them.
-Our experiments with the different libraries can be found [here](https://github.com/ethersync/automerge-playground)
+Our experiments with the different libraries can be found [here](https://github.com/teamtype/automerge-playground)
 (see `./src/bin/` for non-automerge code).
 
 It's worth noting that we are planning to write our software in a way that encapsulates the library,

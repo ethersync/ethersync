@@ -39,22 +39,22 @@ jobs:
       - uses: taiki-e/upload-rust-binary-action@v1
         with:
           manifest-path: ./daemon/Cargo.toml
-          bin: ethersync
+          bin: teamtype
           include: README.md,LICENSE.md
           target: ${{ matrix.target }}
           token: ${{ secrets.GITHUB_TOKEN }}
 
   # There's a "mirror to develop" step in deploy-nvim-plugin.yml, make sure to change both accordingly.
   mirror-nvim-plugin:
-    name: Mirror Neovim plugin to ethersync/ethersync-nvim
+    name: Mirror Neovim plugin to teamtype/teamtype-nvim
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: s0/git-publish-subdir-action@develop
         env:
-          REPO: git@github.com:ethersync/ethersync-nvim
+          REPO: git@github.com:teamtype/teamtype-nvim
           BRANCH: main
           FOLDER: nvim-plugin
           SSH_PRIVATE_KEY: ${{ secrets.NVIM_PLUGIN_DEPLOY_PRIVATE_KEY }}
           SKIP_EMPTY_COMMITS: true
-          MESSAGE: "Automatic mirror of release ${{ github.ref_name }} in main Ethersync repository"
+          MESSAGE: "Automatic mirror of release ${{ github.ref_name }} in main Teamtype repository"

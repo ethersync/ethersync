@@ -5,7 +5,7 @@
 
 use anyhow::{bail, Context, Result};
 use clap::{Args, CommandFactory, FromArgMatches, Parser, Subcommand};
-use ethersync::{
+use teamtype::{
     cli::ask,
     config::{self, AppConfig},
     daemon::Daemon,
@@ -17,7 +17,7 @@ use tracing::{debug, info, warn};
 
 mod jsonrpc_forwarder;
 
-// TODO: Define these constants in the ethersync crate, and use them here.
+// TODO: Define these constants in the teamtype crate, and use them here.
 #[derive(Parser)]
 #[command(version, about, long_about = None)]
 #[command(propagate_version = true)]
@@ -70,15 +70,15 @@ enum Commands {
         #[arg(long)]
         tool: String,
     },
-    /// Open a JSON-RPC connection to the Ethersync daemon on stdin/stdout. Used by text editor plugins.
+    /// Open a JSON-RPC connection to the Teamtype daemon on stdin/stdout. Used by text editor plugins.
     Client,
 }
 
-fn has_ethersync_directory(dir: &Path) -> bool {
-    let ethersync_dir = dir.join(config::CONFIG_DIR);
+fn has_teamtype_directory(dir: &Path) -> bool {
+    let teamtype_dir = dir.join(config::CONFIG_DIR);
     // Using the sandbox method here is technically unnecessary,
     // but we want to really run all path operations through the sandbox module.
-    sandbox::exists(dir, &ethersync_dir).expect("Failed to check") && ethersync_dir.is_dir()
+    sandbox::exists(dir, &teamtype_dir).expect("Failed to check") && teamtype_dir.is_dir()
 }
 
 #[tokio::main]
@@ -97,7 +97,7 @@ async fn main() -> Result<()> {
 
     logging::initialize().context("Failed to initialize logging")?;
 
-    let directory = get_directory(cli.directory).context("Failed to find .ethersync/ directory")?;
+    let directory = get_directory(cli.directory).context("Failed to find .teamtype/ directory")?;
 
     let config_file = directory.join(config::CONFIG_DIR).join(config::CONFIG_FILE);
 
@@ -109,13 +109,13 @@ async fn main() -> Result<()> {
         Commands::Share { .. } | Commands::Join { .. } => {
             let persist = !config::has_git_remote(&directory);
             if !persist {
-                // TODO: drop .ethersync/doc here? Would that be rude?
+                // TODO: drop .teamtype/doc here? Would that be rude?
                 info!(
                     "Detected a Git remote: Assuming a pair-programming use-case and starting a new history."
                 );
             }
 
-            config::ensure_ethersync_is_ignored(&directory)?;
+            config::ensure_teamtype_is_ignored(&directory)?;
 
             let mut init_doc = false;
             let mut app_config;
@@ -172,7 +172,7 @@ async fn main() -> Result<()> {
                 warn!("You have a local user configuration in your .git/config. In --sync-vcs mode, this file will also be synchronized between peers. If your version \"wins\", all peers will have the same Git identity. As a workaround, you could use `git commit --author`.");
             }
 
-            debug!("Starting Ethersync on {}.", app_config.base_dir.display());
+            debug!("Starting Teamtype on {}.", app_config.base_dir.display());
 
             // TODO: Derive socket_path inside the constructor.
             let _daemon = Daemon::new(app_config, &socket_path, init_doc, persist)
@@ -182,7 +182,7 @@ async fn main() -> Result<()> {
         }
         Commands::Bookmark => {
             history::bookmark(&directory).context("Bookmark command failed")?;
-            info!("Successfully created a bookmark. Use `ethersync diff` to later see what changed since bookmarking.");
+            info!("Successfully created a bookmark. Use `teamtype diff` to later see what changed since bookmarking.");
         }
         Commands::Diff { tool } => {
             history::diff(&directory, &tool).context("Diff command failed")?;
@@ -201,11 +201,11 @@ fn get_directory(directory: Option<PathBuf>) -> Result<PathBuf> {
         .unwrap_or_else(|| std::env::current_dir().expect("Could not access current directory"))
         .canonicalize()
         .expect("Could not access given directory");
-    if !has_ethersync_directory(&directory) {
-        let ethersync_dir = directory.join(config::CONFIG_DIR);
+    if !has_teamtype_directory(&directory) {
+        let teamtype_dir = directory.join(config::CONFIG_DIR);
 
         warn!(
-            "{:?} hasn't been used as an Ethersync directory before.",
+            "{:?} hasn't been used as an Teamtype directory before.",
             &directory
         );
 
@@ -213,10 +213,10 @@ fn get_directory(directory: Option<PathBuf>) -> Result<PathBuf> {
             "Do you want to enable live collaboration here? (This will create an {}/ directory.)",
             config::CONFIG_DIR
         ))? {
-            sandbox::create_dir(&directory, &ethersync_dir)?;
+            sandbox::create_dir(&directory, &teamtype_dir)?;
             info!("Created! Resuming launch.");
         } else {
-            bail!("Aborting launch. Ethersync needs an .ethersync/ directory to function");
+            bail!("Aborting launch. Teamtype needs an .teamtype/ directory to function");
         }
     }
     Ok(directory)

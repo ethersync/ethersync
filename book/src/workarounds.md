@@ -7,11 +7,11 @@ SPDX-License-Identifier: CC-BY-SA-4.0
 
 # Common pitfalls and workarounds
 
-Some things about Ethersync are currently still a bit annoying. Let us show you how to work around them!
+Some things about Teamtype are currently still a bit annoying. Let us show you how to work around them!
 
 ## Restarting the daemon requires restarting the editor
 
-The editor plugins currently only try to connect to Ethersync when they first start. If you need to restart the daemon for any reason, you will also need to restart all open editors to reconnect.
+The editor plugins currently only try to connect to Teamtype when they first start. If you need to restart the daemon for any reason, you will also need to restart all open editors to reconnect.
 
 ## Can't work on files from multiple projects in one editor session
 
@@ -20,7 +20,7 @@ To work on files from another project, either use a second editor instance, or c
 
 ## Opening binary files in editors converts them to UTF-8
 
-This happens because most editors are [not well-equipped](https://github.com/ethersync/ethersync/issues/360) for editing binary data directly.
+This happens because most editors are [not well-equipped](https://github.com/teamtype/teamtype/issues/360) for editing binary data directly.
 
 To edit a binary file together, first convert to a hexdump like this (`-R never` is to disable color output):
 

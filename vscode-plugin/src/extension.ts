@@ -90,18 +90,18 @@ class Client {
 
         this.process.on("error", (err) => {
             vscode.window.showErrorMessage(
-                `Failed to start Ethersync client. Maybe the command is not in your PATH?: ${err.message}`,
+                `Failed to start Teamtype client. Maybe the command is not in your PATH?: ${err.message}`,
             )
         })
 
         this.process.on("exit", () => {
             vscode.window.showErrorMessage(
-                `Connection to Ethersync daemon in '${directory}' lost or failed to initiate. Maybe there's no daemon running there?`,
+                `Connection to Teamtype daemon in '${directory}' lost or failed to initiate. Maybe there's no daemon running there?`,
             )
         })
 
         if (!this.process.stdout || !this.process.stdin) {
-            die("Failed to spawn Ethersync client (no stdin/stdout)")
+            die("Failed to spawn Teamtype client (no stdin/stdout)")
         }
 
         this.connection = rpc.createMessageConnection(
@@ -160,14 +160,14 @@ function charOffsetToUTF16CodeUnitOffset(charOffset: number, content: string): n
     return utf16Offset
 }
 
-function vsCodeRangeToEthersyncRange(content: string[], range: vscode.Range): Range {
+function vsCodeRangeToTeamtypeRange(content: string[], range: vscode.Range): Range {
     return {
-        start: vsCodePositionToEthersyncPosition(content, range.start),
-        end: vsCodePositionToEthersyncPosition(content, range.end),
+        start: vsCodePositionToTeamtypePosition(content, range.start),
+        end: vsCodePositionToTeamtypePosition(content, range.end),
     }
 }
 
-function vsCodePositionToEthersyncPosition(content: string[], position: vscode.Position): Position {
+function vsCodePositionToTeamtypePosition(content: string[], position: vscode.Position): Position {
     let lineText = content[position.line]
     return {
         line: position.line,
@@ -175,21 +175,21 @@ function vsCodePositionToEthersyncPosition(content: string[], position: vscode.P
     }
 }
 
-function ethersyncPositionToVSCodePosition(document: vscode.TextDocument, position: Position): vscode.Position {
+function teamtypePositionToVSCodePosition(document: vscode.TextDocument, position: Position): vscode.Position {
     let lineText = document.lineAt(position.line).text
     return new vscode.Position(position.line, charOffsetToUTF16CodeUnitOffset(position.character, lineText))
 }
 
-function ethersyncRangeToVSCodeRange(document: vscode.TextDocument, range: Range): vscode.Range {
+function teamtypeRangeToVSCodeRange(document: vscode.TextDocument, range: Range): vscode.Range {
     return new vscode.Range(
-        ethersyncPositionToVSCodePosition(document, range.start),
-        ethersyncPositionToVSCodePosition(document, range.end),
+        teamtypePositionToVSCodePosition(document, range.start),
+        teamtypePositionToVSCodePosition(document, range.end),
     )
 }
 
-function ethersyncDeltasToVSCodeTextEdits(document: vscode.TextDocument, deltas: Delta[]): vscode.TextEdit[] {
+function teamtypeDeltasToVSCodeTextEdits(document: vscode.TextDocument, deltas: Delta[]): vscode.TextEdit[] {
     return deltas.map((delta) => {
-        let range = ethersyncRangeToVSCodeRange(document, delta.range)
+        let range = teamtypeRangeToVSCodeRange(document, delta.range)
         return vscode.TextEdit.replace(range, delta.replacement)
     })
 }
@@ -248,7 +248,7 @@ async function processEditFromDaemon(client: Client, edit: Edit) {
 
             const document = documentForUri(uri)
             if (document) {
-                let textEdits = ethersyncDeltasToVSCodeTextEdits(document, edit.delta)
+                let textEdits = teamtypeDeltasToVSCodeTextEdits(document, edit.delta)
                 expectedContentAfterRemoteEdit = contentAfterEdits(document, textEdits)
                 let worked = await applyEdit(client, document, edit)
                 if (worked) {
@@ -281,7 +281,7 @@ async function processEditFromDaemon(client: Client, edit: Edit) {
             }
         })
     } catch (e) {
-        vscode.window.showErrorMessage(`Error while processing edit from Ethersync daemon: ${e}`)
+        vscode.window.showErrorMessage(`Error while processing edit from Teamtype daemon: ${e}`)
     }
 }
 
@@ -294,7 +294,7 @@ async function processCursorFromDaemon(cursor: CursorFromDaemon) {
         let selections: vscode.DecorationOptions[] = []
         if (document) {
             selections = cursor.ranges
-                .map((r) => ethersyncRangeToVSCodeRange(document, r))
+                .map((r) => teamtypeRangeToVSCodeRange(document, r))
                 .map(vsCodeRangeToSelection)
                 .map((s) => {
                     return {
@@ -305,17 +305,17 @@ async function processCursorFromDaemon(cursor: CursorFromDaemon) {
         }
         setCursor(cursor.userid, cursor.name || "anonymous", vscode.Uri.parse(uri), selections)
     } catch {
-        // If we couldn't convert ethersyncRangeToVSCodeRange, it's probably because
+        // If we couldn't convert teamtypeRangeToVSCodeRange, it's probably because
         // we received the cursor message before integrating the edits, typing at the end of a line.
         // In practice, this isn't a problem, as the cursor decoration is pushed to the back automatically.
-        // TODO: Make the ethersyncRangeToVSCodeRange function still return a proper range?
+        // TODO: Make the teamtypeRangeToVSCodeRange function still return a proper range?
     }
 }
 
 async function applyEdit(client: Client, document: vscode.TextDocument, edit: Edit): Promise<boolean> {
     let edits = []
     for (const delta of edit.delta) {
-        const range = ethersyncRangeToVSCodeRange(document, delta.range)
+        const range = teamtypeRangeToVSCodeRange(document, delta.range)
         let edit = new vscode.TextEdit(range, delta.replacement)
         debug(`Edit applied to document ${decodeURI(document.uri.toString())}`)
         edits.push(edit)
@@ -437,7 +437,7 @@ function processUserEdit(event: vscode.TextDocumentChangeEvent) {
 
                 let revision = client.ot_states[uri].revision
 
-                let edits = vsCodeChangeEventToEthersyncEdits(client, event)
+                let edits = vsCodeChangeEventToTeamtypeEdits(client, event)
 
                 for (const theEdit of edits) {
                     // interestingly this seems to block when it can't send
@@ -462,7 +462,7 @@ function processUserEdit(event: vscode.TextDocumentChangeEvent) {
                 }
             })
             .catch((e: Error) => {
-                vscode.window.showErrorMessage(`Error while sending edit to Ethersync daemon: ${e}`)
+                vscode.window.showErrorMessage(`Error while sending edit to Teamtype daemon: ${e}`)
             })
     }
 }
@@ -472,13 +472,13 @@ function processSelection(event: vscode.TextEditorSelectionChangeEvent) {
         let uri = event.textEditor.document.uri.toString()
         let content = client.ot_states[uri].content
         let ranges = event.selections.map((s) => {
-            return vsCodeRangeToEthersyncRange(content, s)
+            return vsCodeRangeToTeamtypeRange(content, s)
         })
         client.connection.sendNotification(cursorType, {uri, ranges})
     }
 }
 
-function vsCodeChangeEventToEthersyncEdits(client: Client, event: vscode.TextDocumentChangeEvent): Edit[] {
+function vsCodeChangeEventToTeamtypeEdits(client: Client, event: vscode.TextDocumentChangeEvent): Edit[] {
     let document = event.document
     let uri = document.uri.toString()
 
@@ -489,16 +489,16 @@ function vsCodeChangeEventToEthersyncEdits(client: Client, event: vscode.TextDoc
     let edits = []
 
     for (const change of event.contentChanges) {
-        let delta = vsCodeChangeToEthersyncDelta(content, change)
+        let delta = vsCodeChangeToTeamtypeDelta(content, change)
         let theEdit: Edit = {uri, revision: revision.daemon, delta: [delta]}
         edits.push(theEdit)
     }
     return edits
 }
 
-function vsCodeChangeToEthersyncDelta(content: string[], change: vscode.TextDocumentContentChangeEvent): Delta {
+function vsCodeChangeToTeamtypeDelta(content: string[], change: vscode.TextDocumentContentChangeEvent): Delta {
     return {
-        range: vsCodeRangeToEthersyncRange(content, change.range),
+        range: vsCodeRangeToTeamtypeRange(content, change.range),
         replacement: change.text,
     }
 }
@@ -508,9 +508,9 @@ function showCursorNotification() {
 }
 
 export function activate(context: vscode.ExtensionContext) {
-    debug("Ethersync extension activated!")
+    debug("Teamtype extension activated!")
 
-    configurations = vscode.workspace.getConfiguration("ethersync").get<{[key: string]: Configuration}>("configs", {})
+    configurations = vscode.workspace.getConfiguration("teamtype").get<{[key: string]: Configuration}>("configs", {})
 
     context.subscriptions.push(
         vscode.workspace.onDidChangeTextDocument(processUserEdit),
@@ -518,7 +518,7 @@ export function activate(context: vscode.ExtensionContext) {
         vscode.workspace.onDidCloseTextDocument(processUserClose),
         vscode.window.onDidChangeTextEditorSelection(processSelection),
         vscode.window.onDidChangeActiveTextEditor(drawCursors),
-        vscode.commands.registerCommand("ethersync.showCursors", showCursorNotification),
+        vscode.commands.registerCommand("teamtype.showCursors", showCursorNotification),
     )
 
     openCurrentTextDocuments()

@@ -13,7 +13,7 @@ date: 2024-02-08
 
 ## Context and Problem Statement
 
-Ethersync needs processes on the client device, to sync up with other nodes, and to communicate with the editors.
+Teamtype needs processes on the client device, to sync up with other nodes, and to communicate with the editors.
 
 How many processes should there be, and how should the communication on a device be structured?
 
@@ -43,7 +43,7 @@ There is a single daemon process on the client device, which is responsible for 
 
 The central daemon needs some kind of protocol to initiate new shares. For example, there could be a {"method": "request-init", "params": {"path": "path/to/dir"}} message type.
 
-The editors (or the sidecar processes) can find the daemon via a fixed soket path like `/var/user/1000/ethersync`.
+The editors (or the sidecar processes) can find the daemon via a fixed soket path like `/var/user/1000/teamtype`.
 
 * Good, because there's just one single process to manage (plus potentially "sidecar processes", see "More Information")
 * Neutral, because it makes the daemon-client protocol a bit more complicated (initiating new shares, for example). But this complexity exists anyway.
@@ -54,20 +54,20 @@ This is the approach we used in the first prototype. There needs to be a daemon 
 
 If you want to start a new collaborative session from within an editor, the editor needs to spawn the new daemon somehow.
 
-How do editors find the correct daemon? Maybe use UNIX domain socket `.ethersync/socket` as connection point. Is that cross-platform?
+How do editors find the correct daemon? Maybe use UNIX domain socket `.teamtype/socket` as connection point. Is that cross-platform?
 
 * Good, because the daemons can be built a bit simpler. They have a single directory to take care of, and don't need to dispatch to different "sub-systems".
 * Bad, because editors need to do more work: They need to find the correct daemon, and send messages to it. Potentially, they need multiple connections (if you open files from multiple synced shares).
 
 ### One daemon per editor session
 
-This is how LSPs usually seem to work. Once an editor is started, it kicks off its own LSP process, and connects with it using stdin/stdout. That process will be closed together with the editor. In Ethersync, there would be one daemon per opened editor session.
+This is how LSPs usually seem to work. Once an editor is started, it kicks off its own LSP process, and connects with it using stdin/stdout. That process will be closed together with the editor. In Teamtype, there would be one daemon per opened editor session.
 
 What happens when one editor opens files from multiple shared directories?
 
 * Good, because it's extremely simple.
 * Bad, because when the same file is opened in multiple editors, it seems difficult to coordinate them. This is a strong reason not to use this option.
-* Bad, because in this setting, there will be no sync without an opened editor. We want Ethersync to work with other command line tools that modify the data.
+* Bad, because in this setting, there will be no sync without an opened editor. We want Teamtype to work with other command line tools that modify the data.
 
 ## More Information
 
@@ -99,7 +99,7 @@ Many software seems to put UNIX sockets in /run/user/<user-id> or /run directly.
 
 A related, but independent question: How should editors communicate with the daemon processes? There seem to be at least three options:
 
-1. Using a "connector/sidecar process" (started by `ethersync editor-connect`, for example), which each editor spawns itself, and then communicates with it via stdin/stdout. This is similar to how LSPs are spawned. The connector processes would then connect with the respective daemon process using a socket connection, and just pass messages through.
+1. Using a "connector/sidecar process" (started by `teamtype editor-connect`, for example), which each editor spawns itself, and then communicates with it via stdin/stdout. This is similar to how LSPs are spawned. The connector processes would then connect with the respective daemon process using a socket connection, and just pass messages through.
 2. Directly using a Unix domain socket connection.
 3. Directly using a TCP connection.
 

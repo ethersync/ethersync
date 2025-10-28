@@ -1,37 +1,37 @@
-*ethersync.txt*  Editor-agnostic collaborative editing                 *ethersync*
+*teamtype.txt*  Editor-agnostic collaborative editing                 *teamtype*
 
 This plugin adds real-time collaborative editing functionality to Neovim.
 You can use it for pair programming or note-taking, for example. It is mainly
-meant to be used with Ethersync, but can also be configured to work with other
+meant to be used with Teamtype, but can also be configured to work with other
 collaborative software speaking the same protocol.
 
 ==============================================================================
-INSTALLATION                                            *ethersync-installation*
+INSTALLATION                                            *teamtype-installation*
 
-See main README at |https://github.com/ethersync/ethersync-nvim|.
+See main README at |https://github.com/teamtype/teamtype-nvim|.
 
 ==============================================================================
-CONFIGURATION                                          *ethersync-configuration*
+CONFIGURATION                                          *teamtype-configuration*
 
 This plugin allows you to configure multiple collaboration servers.
-A configuration for connecting to Ethersync daemons is provided and enabled by
+A configuration for connecting to Teamtype daemons is provided and enabled by
 default.
 
-config({name}, {cfg})                                       *ethersync.config()*
+config({name}, {cfg})                                       *teamtype.config()*
     Set or update the configuration for a client.
 
     Examples:
-    • Attempt to connect Ethersync in directories that have a `.ethersync`
+    • Attempt to connect Teamtype in directories that have a `.teamtype`
       directory (this is configured by default): >lua
-        ethersync.config("ethersync", {
-            cmd = { "ethersync", "client" },
-            root_markers = ".ethersync",
+        teamtype.config("teamtype", {
+            cmd = { "teamtype", "client" },
+            root_markers = ".teamtype",
         })
 <
-    • Use the `ethersync-http` command to sync buffers that are https URLs. The
+    • Use the `teamtype-http` command to sync buffers that are https URLs. The
       directory name might not be important: >lua
-        ethersync.config("http", {
-            cmd = { "ethersync-http" },
+        teamtype.config("http", {
+            cmd = { "teamtype-http" },
             root_dir = function(bufnr, on_dir)
                 local name = vim.api.nvim_buf_get_name(bufnr)
                 if string.find(name, "https://") == 1 then
@@ -43,24 +43,24 @@ config({name}, {cfg})                                       *ethersync.config()*
 
     Parameters: ~
       • {name}  (`string`)
-      • {cfg}   A configuration (see |ethersync.Config|)
+      • {cfg}   A configuration (see |teamtype.Config|)
 
-enable({name}, {enable})                                    *ethersync.enable()*
+enable({name}, {enable})                                    *teamtype.enable()*
     Connects to the collaboration server when a buffer is opened, based on the
     `root_markers` and `root_dir` fields of the configuration.
 
-    The `"ethersync"` configuration is enabled by default.
+    The `"teamtype"` configuration is enabled by default.
 
     Examples: >lua
-        ethersync.enable('ethersync-http')
-        ethersync.disable('ethersync')
+        teamtype.enable('teamtype-http')
+        teamtype.disable('teamtype')
 <
 
     Parameters: ~
       • {name}    (`string`) Name of the client to enable.
       • {enable}  (`boolean`) `true|nil` to enable, `false` to disable.
 
-*ethersync.Config*
+*teamtype.Config*
     Inspired by |vim.lsp.Config|, but with fewer options.
 
     Fields: ~
@@ -69,7 +69,7 @@ enable({name}, {enable})                                    *ethersync.enable()*
                          collaborative project. The plugin will search upwards
                          (from the buffer file), and stop in the first
                          directory with that marker. Typical values might be
-                         `'.git'` or `'.ethersync'`. Unused if `root_dir` is
+                         `'.git'` or `'.teamtype'`. Unused if `root_dir` is
                          defined.
       • {root_dir}?      (`fun(bufnr: integer, on_dir:fun(root_dir?:string))`)
                          Called to decide the root of the collaborative
@@ -77,21 +77,21 @@ enable({name}, {enable})                                    *ethersync.enable()*
                          with the root directory if the configuration should
                          be activated. You can use this function to
                          conditionally activate (or skip) collaboration. See
-                         example at `ethersync.config` for an example.
+                         example at `teamtype.config` for an example.
 
 ==============================================================================
-USAGE                                                          *ethersync-usage*
+USAGE                                                          *teamtype-usage*
 
-:EthersyncInfo                                                  *:EthersyncInfo*
+:TeamtypeInfo                                                  *:TeamtypeInfo*
     Shows the active collaboration clients and cursor positions.
 
-:EthersyncJumpToCursor                                  *:EthersyncJumpToCursor*
+:TeamtypeJumpToCursor                                  *:TeamtypeJumpToCursor*
     Jumps to the cursor of another peer. If multiple cursors are present,
     gives you a selection menu.
 
     Tip: Create an easily accessible mapping for this command!
 
-:EthersyncFollow                                              *:EthersyncFollow*
+:TeamtypeFollow                                              *:TeamtypeFollow*
     Follows another peer, keeping their cursor in view. If multiple cursors
     are present, gives you a selection menu.
     It will automatically unfollow as soon as a key is pressed.

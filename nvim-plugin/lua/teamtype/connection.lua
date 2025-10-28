@@ -22,7 +22,7 @@ function Connection:send_request(method, params, result_callback, err_callback)
 
     self.connection.request(method, params, function(err, result)
         if err then
-            local error_msg = "[ethersync] Error for '" .. method .. "': " .. err.message
+            local error_msg = "[teamtype] Error for '" .. method .. "': " .. err.message
             if err.data and err.data ~= "" then
                 error_msg = error_msg .. " (" .. err.data .. ")"
             end
@@ -40,7 +40,7 @@ function M.connect(cmd, directory, on_notification)
     local executable = cmd[1]
     if vim.fn.executable(executable) == 0 then
         vim.api.nvim_err_writeln(
-            "Tried to connect to the Ethersync daemon, but `"
+            "Tried to connect to the Teamtype daemon, but `"
                 .. executable
                 .. "` executable was not found. Make sure that is in your PATH."
         )
@@ -50,21 +50,21 @@ function M.connect(cmd, directory, on_notification)
     local dispatchers = {
         notification = on_notification,
         on_error = function(code, ...)
-            print("Ethersync connection error: ", code, vim.inspect({ ... }))
+            print("Teamtype connection error: ", code, vim.inspect({ ... }))
         end,
         on_exit = function(code, _)
             if code == 0 then
                 vim.schedule(function()
                     vim.api.nvim_err_writeln(
-                        "Connection to Ethersync daemon lost. Probably it crashed or was stopped. Please restart the daemon, then Neovim."
+                        "Connection to Teamtype daemon lost. Probably it crashed or was stopped. Please restart the daemon, then Neovim."
                     )
                     -- TODO: Enable writing here again, so that user can make backup of file?
                 end)
             else
                 print(
-                    "Could not connect to Ethersync daemon. Did you start it (in "
+                    "Could not connect to Teamtype daemon. Did you start it (in "
                         .. directory
-                        .. ")? To stop trying, remove the .ethersync/ directory."
+                        .. ")? To stop trying, remove the .teamtype/ directory."
                 )
             end
         end,
@@ -86,7 +86,7 @@ function M.connect(cmd, directory, on_notification)
         connection = vim.lsp.rpc.start(cmd, dispatchers, extra_spawn_params)
     end
 
-    print("Connected to Ethersync daemon!")
+    print("Connected to Teamtype daemon!")
 
     local result = { connection = connection }
     setmetatable(result, { __index = Connection })

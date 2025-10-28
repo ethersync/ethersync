@@ -98,9 +98,9 @@ pub fn exists(absolute_base_dir: &Path, absolute_file_path: &Path) -> Result<boo
 }
 
 pub fn enumerate_non_ignored_files(app_config: &AppConfig) -> Vec<PathBuf> {
-    let mut ignored_things = vec![".ethersync"];
+    let mut ignored_things = vec![".teamtype"];
     if !app_config.sync_vcs {
-        ignored_things.extend([".ethersync", ".git", ".bzr", ".hg", ".jj", ".pijul", ".svn"]);
+        ignored_things.extend([".teamtype", ".git", ".bzr", ".hg", ".jj", ".pijul", ".svn"]);
     }
 
     let walk = WalkBuilder::new(&app_config.base_dir)

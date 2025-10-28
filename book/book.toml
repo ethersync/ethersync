@@ -8,7 +8,7 @@ authors = ["blinry", "zormit"]
 language = "en"
 multilingual = false
 src = "src"
-title = "Ethersync Documentation"
+title = "Teamtype Documentation"
 
 [output.html]
-site-url = "/ethersync/"
+site-url = "/teamtype/"

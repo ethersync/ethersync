@@ -7,9 +7,9 @@ SPDX-License-Identifier: CC-BY-SA-4.0
 
 # Synchronized method
 
-It is possible to tightly integrate Ethersync and Git by setting the `--sync-vcs` flag.
+It is possible to tightly integrate Teamtype and Git by setting the `--sync-vcs` flag.
 
-Setting it causes Ethersync to *not* [ignore](ignored-files.md) version-control directories when synchronizing files.
+Setting it causes Teamtype to *not* [ignore](ignored-files.md) version-control directories when synchronizing files.
 This might seem like an unusual approach to working with Git, but in our tests, when pairing, it seems to work more or less smoothly.
 
 Beware that this is quite **EXPERIMENTAL** and be prepared to potentially loose your data (especially when learning to "think" in this potentially unfamiliar scheme). Note that all peers should use the `--sync-vcs` flag.

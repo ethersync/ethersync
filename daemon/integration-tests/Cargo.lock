@@ -1180,57 +1180,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "ethersync"
-version = "0.8.0"
-dependencies = [
- "anyhow",
- "async-trait",
- "automerge",
- "constant_time_eq",
- "derive_more 2.0.1",
- "dissimilar",
- "futures 0.3.31",
- "git2",
- "ignore",
- "iroh",
- "magic-wormhole",
- "notify",
- "operational-transform",
- "path-clean",
- "postcard",
- "rand 0.8.5",
- "ropey",
- "rust-ini",
- "serde",
- "serde_json",
- "temp-dir",
- "time",
- "tokio",
- "tokio-util",
- "tracing",
- "tracing-subscriber",
- "url",
-]
-
-[[package]]
-name = "ethersync-integration-tests"
-version = "0.0.0"
-dependencies = [
- "anyhow",
- "async-trait",
- "ethersync",
- "futures 0.3.31",
- "nvim-rs",
- "pretty_assertions",
- "rand 0.8.5",
- "serde_json",
- "serial_test",
- "temp-dir",
- "tokio",
- "tracing",
-]
-
-[[package]]
 name = "event-listener"
 version = "2.5.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4418,6 +4367,57 @@ dependencies = [
  "filetime",
  "libc",
  "xattr",
+]
+
+[[package]]
+name = "teamtype"
+version = "0.8.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "automerge",
+ "constant_time_eq",
+ "derive_more 2.0.1",
+ "dissimilar",
+ "futures 0.3.31",
+ "git2",
+ "ignore",
+ "iroh",
+ "magic-wormhole",
+ "notify",
+ "operational-transform",
+ "path-clean",
+ "postcard",
+ "rand 0.8.5",
+ "ropey",
+ "rust-ini",
+ "serde",
+ "serde_json",
+ "temp-dir",
+ "time",
+ "tokio",
+ "tokio-util",
+ "tracing",
+ "tracing-subscriber",
+ "url",
+]
+
+[[package]]
+name = "teamtype-integration-tests"
+version = "0.0.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "futures 0.3.31",
+ "nvim-rs",
+ "pretty_assertions",
+ "rand 0.8.5",
+ "serde_json",
+ "serial_test",
+ "teamtype",
+ "temp-dir",
+ "tokio",
+ "tracing",
 ]
 
 [[package]]

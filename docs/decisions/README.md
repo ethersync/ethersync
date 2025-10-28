@@ -7,7 +7,7 @@ SPDX-License-Identifier: CC-BY-SA-4.0
 
 # Decisions
 
-This directory contains decision records for Ethersync.
+This directory contains decision records for Teamtype.
 
 For new ADRs, please use [adr-template.md](adr-template.md) as basis.
 More information on MADR is available at <https://adr.github.io/madr/>.

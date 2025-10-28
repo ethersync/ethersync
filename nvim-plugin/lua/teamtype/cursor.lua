@@ -16,7 +16,7 @@ local M = {}
 --    }
 -- }
 local user_cursors = {}
-local cursor_namespace = vim.api.nvim_create_namespace("Ethersync")
+local cursor_namespace = vim.api.nvim_create_namespace("Teamtype")
 local offset_encoding = "utf-32"
 local cursor_timeout_ms = 300 * 1000
 local following_user_id = nil
@@ -29,7 +29,7 @@ end
 vim.api.nvim_create_autocmd("ColorScheme", {
     pattern = "*",
     callback = function()
-        vim.api.nvim_set_hl(0, "EthersyncUsername", { fg = "#808080", ctermfg = 12 })
+        vim.api.nvim_set_hl(0, "TeamtypeUsername", { fg = "#808080", ctermfg = 12 })
     end,
 })
 vim.api.nvim_exec_autocmds("ColorScheme", {})
@@ -114,7 +114,7 @@ function M.set_cursor(uri, user_id, name, ranges)
 
             local virt_text = {}
             if i == 1 and name then
-                virt_text = { { name, "EthersyncUsername" } }
+                virt_text = { { name, "TeamtypeUsername" } }
             end
 
             -- Try setting the extmark, ignore errors (which can happen at end of lines/buffers).

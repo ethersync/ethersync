@@ -10,21 +10,21 @@ use tokio::time::sleep;
 use tracing::{error, info, warn};
 
 pub async fn put_secret_address_into_wormhole(address: &str) {
-    let config = transfer::APP_CONFIG.id(AppID::new("ethersync"));
+    let config = transfer::APP_CONFIG.id(AppID::new("teamtype"));
     let payload: Vec<u8> = address.into();
 
     tokio::spawn(async move {
         loop {
             let Ok(mailbox_connection) = MailboxConnection::create(config.clone(), 2).await else {
                 error!(
-                    "Failed to share join code via magic wormhole. Restart Ethersync to try again."
+                    "Failed to share join code via magic wormhole. Restart Teamtype to try again."
                 );
                 return;
             };
             let code = mailbox_connection.code().clone();
 
             info!(
-                "\n\tOne other person can use this to connect to you:\n\n\tethersync join {}\n",
+                "\n\tOne other person can use this to connect to you:\n\n\tteamtype join {}\n",
                 &code
             );
 
@@ -42,7 +42,7 @@ pub async fn put_secret_address_into_wormhole(address: &str) {
 }
 
 pub async fn get_secret_address_from_wormhole(code: &str) -> Result<String> {
-    let config = transfer::APP_CONFIG.id(AppID::new("ethersync"));
+    let config = transfer::APP_CONFIG.id(AppID::new("teamtype"));
 
     let mut wormhole =
         Wormhole::connect(MailboxConnection::connect(config, Code::from_str(code)?, false).await?)

@@ -117,9 +117,9 @@ impl DocumentActor {
         is_host: bool,
         persist: bool,
     ) -> Self {
-        // If there is a persisted version in base_dir/.ethersync/doc, load it.
-        // TODO: Pull out ".ethersync" string into a constant.
-        let persistence_file = app_config.base_dir.join(".ethersync/doc");
+        // If there is a persisted version in base_dir/.teamtype/doc, load it.
+        // TODO: Pull out ".teamtype" string into a constant.
+        let persistence_file = app_config.base_dir.join(".teamtype/doc");
         let persistence_file_exists = sandbox::exists(&app_config.base_dir, &persistence_file)
             .expect("Could not check for the existence of the persistence file");
 
@@ -192,7 +192,7 @@ impl DocumentActor {
                 self.read_current_content_from_dir(false);
             }
             DocMessage::Persist => {
-                let persistence_file = self.app_config.base_dir.join(".ethersync/doc");
+                let persistence_file = self.app_config.base_dir.join(".teamtype/doc");
                 if self.save_fully {
                     debug!("Persisting CRDT document fully.");
                     let bytes = self.crdt_doc.save();
@@ -966,7 +966,7 @@ impl Daemon {
 
         if app_config.emit_secret_address {
             info!(
-            "\n\n\tOthers can connect by putting the following secret address in their .ethersync/config:\n\n\t{}\n",
+            "\n\n\tOthers can connect by putting the following secret address in their .teamtype/config:\n\n\t{}\n",
             address
             );
         }

@@ -1,8 +1,8 @@
 {
-    "name": "ethersync",
-    "displayName": "Ethersync",
+    "name": "teamtype",
+    "displayName": "Teamtype",
     "version": "0.6.0",
-    "publisher": "ethersync",
+    "publisher": "teamtype",
     "description": "Editor-agnostic real-time collaborative editing of local text files.",
     "contributors": [
         "blinry",
@@ -15,14 +15,14 @@
     "contributes": {
         "commands": [
             {
-                "command": "ethersync.showCursors",
-                "title": "Ethersync: List other cursor positions"
+                "command": "teamtype.showCursors",
+                "title": "Teamtype: List other cursor positions"
             }
         ],
         "configuration": {
-            "title": "Ethersync",
+            "title": "Teamtype",
             "properties": {
-                "ethersync.configs": {
+                "teamtype.configs": {
                     "type": "object",
                     "description": "Map of configurations",
                     "additionalProperties": {
@@ -49,13 +49,13 @@
                         ]
                     },
                     "default": {
-                        "ethersync": {
+                        "teamtype": {
                             "cmd": [
-                                "ethersync",
+                                "teamtype",
                                 "client"
                             ],
                             "rootMarkers": [
-                                ".ethersync"
+                                ".teamtype"
                             ]
                         }
                     }
@@ -75,12 +75,12 @@
     ],
     "repository": {
         "type": "git",
-        "url": "https://github.com/ethersync/ethersync"
+        "url": "https://github.com/teamtype/teamtype"
     },
     "bugs": {
-        "url": "https://github.com/ethersync/ethersync/issues"
+        "url": "https://github.com/teamtype/teamtype/issues"
     },
-    "icon": "images/ethersync-logo.png",
+    "icon": "images/teamtype-logo.png",
     "activationEvents": [
         "onFileSystem:file"
     ],

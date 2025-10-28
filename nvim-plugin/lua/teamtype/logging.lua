@@ -5,7 +5,7 @@
 
 local M = {}
 
-local logfile = os.getenv("ETHERSYNC_NVIM_LOGFILE")
+local logfile = os.getenv("TEAMTYPE_NVIM_LOGFILE")
 if logfile then
     M._log_file_handle = io.open(logfile, "a")
 end

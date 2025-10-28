@@ -3,12 +3,12 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-use ethersync_integration_tests::actors::{Actor, Neovim};
+use teamtype_integration_tests::actors::{Actor, Neovim};
 
-use ethersync::config::{self, AppConfig};
-use ethersync::daemon::{Daemon, TEST_FILE_PATH};
-use ethersync::logging;
-use ethersync::sandbox;
+use teamtype::config::{self, AppConfig};
+use teamtype::daemon::{Daemon, TEST_FILE_PATH};
+use teamtype::logging;
+use teamtype::sandbox;
 
 use anyhow::Result;
 use futures::future::join_all;
@@ -31,14 +31,14 @@ async fn perform_random_edits(actor: &mut (impl Actor + ?Sized)) {
 
 fn initialize_directory() -> (temp_dir::TempDir, PathBuf, PathBuf) {
     let dir = temp_dir::TempDir::new().expect("Failed to create temp directory");
-    let mut ethersync_dir = dir.path().to_path_buf();
-    ethersync_dir.push(".ethersync");
-    sandbox::create_dir(dir.path(), &ethersync_dir).expect("Failed to create .ethersync directory");
+    let mut teamtype_dir = dir.path().to_path_buf();
+    teamtype_dir.push(".teamtype");
+    sandbox::create_dir(dir.path(), &teamtype_dir).expect("Failed to create .teamtype directory");
 
     let file = dir.child(TEST_FILE_PATH);
     sandbox::write_file(dir.path(), &file, b"").expect("Failed to create file in temp directory");
 
-    let mut socket_path = dir.child(".ethersync");
+    let mut socket_path = dir.child(".teamtype");
     socket_path.push("socket");
 
     (dir, file, socket_path)

@@ -7,21 +7,21 @@ SPDX-License-Identifier: CC-BY-SA-4.0
 
 # Editor plugin development guide
 
-This document describes the protocol between the Ethersync daemon and the text editors. It should contain everything you need to implement a plugin for a new editor!
+This document describes the protocol between the Teamtype daemon and the text editors. It should contain everything you need to implement a plugin for a new editor!
 
 ## How to connect to the daemon
 
-Ethersync consists of two parts: The daemon and editor plugins.
+Teamtype consists of two parts: The daemon and editor plugins.
 
 The daemon takes care of synchronization with other peers. An editor, on the other hand, has to communicate with the daemon to send it changes made to the file by the user, as well as changes of cursor positions. The daemon will send other people's changes and cursor positions back to the editor.
 
 To make this as easy as possible for your plugin, we're using the same protocol as the [Language Server Protocol](https://microsoft.github.io/language-server-protocol/overviews/lsp/overview/): [JSON-RPC](https://www.jsonrpc.org/specification). So if your editor plugin system allows connecting to an LSP, you'll hopefully can re-use the component opening a JSON-RPC connection.
 
-The editor plugin will need to spawn the command `ethersync client` (which is our helper tool to connect to a running Ethersync daemon), and speak JSON-RPC (with Content-Length headers) with the standard input/output of that process. Think of `ethersync client` as the LSP Server when looking at it from the editor's perspective.
+The editor plugin will need to spawn the command `teamtype client` (which is our helper tool to connect to a running Teamtype daemon), and speak JSON-RPC (with Content-Length headers) with the standard input/output of that process. Think of `teamtype client` as the LSP Server when looking at it from the editor's perspective.
 
 ## File ownership
 
-Ethersync has the concept of file ownership. By default, the daemon has ownership, which means that, as external tools make changes to files, the daemon will pick up those changes.
+Teamtype has the concept of file ownership. By default, the daemon has ownership, which means that, as external tools make changes to files, the daemon will pick up those changes.
 
 But when an editor sends an "open" message, it takes ownership; changes by external tools will be ignored.
 
@@ -34,9 +34,9 @@ For each open file, editors store two integers:
 - The *editor revision* describes how many changes the user has made to the file. It needs to be incremented after each edit made by the user.
 - The *daemon revision* describes how many changes the editor received from the daemon. It needs to be incremented after receiving an edit from the daemon.
 
-## How the editor recognizes Ethersync-enabled directories
+## How the editor recognizes Teamtype-enabled directories
 
-Similar how Git repositories have a `.git` directory at the top level, Ethersync-enabled directories have an `.ethersync` directory at the top level. The editor must only send messages for files inside Ethersync-enabled directories.
+Similar how Git repositories have a `.git` directory at the top level, Teamtype-enabled directories have an `.teamtype` directory at the top level. The editor must only send messages for files inside Teamtype-enabled directories.
 
 ## The daemon-editor protocol
 
@@ -108,12 +108,12 @@ These should be sent as notifications, there is no need to reply to them.
 
 To send messages to the daemon manually, you can try the following. Assuming you can start the daemon on a playground as described in the [first steps](first-steps.md), now we add some debugging output:
 ```bash
-RUST_LOG=ethersync=debug ethersync share playground
-# Note for below: You will see some output like "Listening on UNIX socket: <dir>/.ethersync/socket"
+RUST_LOG=teamtype=debug teamtype share playground
+# Note for below: You will see some output like "Listening on UNIX socket: <dir>/.teamtype/socket"
 ```
 You can then start the client, in another terminal, but in the same directory:
 ```bash
-ethersync client
+teamtype client
 ```
 This will already produce an output in the daemon which indicates that an Editor connected.
 This happens because the client connects to the daemon's socket.
@@ -128,16 +128,16 @@ python tools/dummy-jsonrpc.py playground/file
 You can send it to the daemon like this:
 
 ```bash
-python tools/dummy-jsonrpc.py playground/file | ethersync client
+python tools/dummy-jsonrpc.py playground/file | teamtype client
 ```
 
-### Seeing what an existing Ethersync plugin sends
+### Seeing what an existing Teamtype plugin sends
 
 On the other hand, not running any daemon, you can see what the plugin "wants" to communicate as follows.
 In the demon console (stop it), we now just plainly listen on the socket for incoming data:
 ```bash
 # nc can only bind to existing sockets, so we'll drop potentially existing ones
-rm <dir>/.ethersync/socket; nc -lk -U <dir>/.ethersync/socket
+rm <dir>/.teamtype/socket; nc -lk -U <dir>/.teamtype/socket
 ```
 
 In the client console, start nvim on a file, move the cursor and edit something:
@@ -155,7 +155,7 @@ Do do that on a single machine, follow these steps:
 2. Create a new, empty directory for the second daemon.
 3. Start the second daemon:
     - The directory should be the additional directory you created.
-    - Use `ethersync join <join code>`.
+    - Use `teamtype join <join code>`.
 4. Connect an editor to the first daemon by opening a file in the first directory.
 5. Connect an editor to the second daemon.
     - Example: `nvim directory2/file`
