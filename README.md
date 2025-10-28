@@ -52,6 +52,8 @@ The [releases on GitHub](https://github.com/teamtype/teamtype/releases/latest) c
 
 </details>
 
+<!-- TODO: Uncomment once the packages are renamed.
+
 <details>
 <summary>Arch Linux</summary>
 
@@ -71,6 +73,8 @@ nix shell nixpkgs#teamtype
 
 Make sure to also have it in your PATH when you run the editors, or install it to your environment in your preferred way.
 </details>
+
+-->
 
 <details>
 <summary>Via Cargo</summary>
@@ -122,7 +126,7 @@ The directories are now connected, and changes will be synced instantly. You can
 (These are all work-in-progress!)
 
 - @schrieveslaach's [Jetbrains plugin](https://github.com/teamtype/teamtype-jetbrains)
-- @sohalt's [Emacs plugin](https://github.com/sohalt/teamtype.el)
+- @sohalt's [Emacs plugin](https://github.com/sohalt/ethersync.el)
 - @winniehell's [web editor](https://github.com/teamtype/teamtype-web)
 
 ## 🔨 Contributing
