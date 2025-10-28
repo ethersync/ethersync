@@ -114,8 +114,8 @@ The directories are now connected, and changes will be synced instantly. You can
 ## 🎓 Learn more
 
 - Learn more about Teamtype in [the documentation](https://teamtype.github.io/teamtype).
-- Watch a [10-minute talk](https://fosdem.org/2025/schedule/event/fosdem-2025-4890-teamtype-real-time-collaboration-in-your-text-editor-/) given at FOSDEM 2025.
-- Watch a (German) [1-hour talk](https://media.ccc.de/v/2024-355-teamtype-echtzeit-kollaboration-in-deinem-texteditor-) given at MRMCD 2024.
+- Watch a [10-minute talk](https://fosdem.org/2025/schedule/event/fosdem-2025-4890-ethersync-real-time-collaboration-in-your-text-editor-/) given at FOSDEM 2025.
+- Watch a (German) [1-hour talk](https://media.ccc.de/v/2024-355-ethersync-echtzeit-kollaboration-in-deinem-texteditor-) given at MRMCD 2024.
 
 ## 🚧 Community projects
 
