@@ -5,13 +5,13 @@
 
 use anyhow::{bail, Context, Result};
 use clap::{Args, CommandFactory, FromArgMatches, Parser, Subcommand};
+use std::path::{Path, PathBuf};
 use teamtype::{
     cli::ask,
     config::{self, AppConfig},
     daemon::Daemon,
     history, logging, sandbox,
 };
-use std::path::{Path, PathBuf};
 use tokio::signal;
 use tracing::{debug, info, warn};
 
