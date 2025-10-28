@@ -3,11 +3,11 @@
 --
 -- SPDX-License-Identifier: AGPL-3.0-or-later
 
-local changetracker = require("ethersync.changetracker")
-local connection = require("ethersync.connection")
-local cursor = require("ethersync.cursor")
-local debug = require("ethersync.logging").debug
-local helpers = require("ethersync.helpers")
+local changetracker = require("teamtype.changetracker")
+local connection = require("teamtype.connection")
+local cursor = require("teamtype.cursor")
+local debug = require("teamtype.logging").debug
+local helpers = require("teamtype.helpers")
 
 local M = {}
 
@@ -80,7 +80,7 @@ local function ensure_autoread_is_off()
     end
 end
 
--- In ethersync-ed buffers, "writing" is no longer a concept. We also want to avoid error messages
+-- In teamtype-ed buffers, "writing" is no longer a concept. We also want to avoid error messages
 -- when the file has changed on disk, so make all writing operations a no-op.
 local function disable_writing()
     local buf = vim.api.nvim_get_current_buf()
@@ -235,7 +235,7 @@ end
 
 local function print_info()
     if #clients == 0 then
-        print("Not connected to any Ethersync daemon.")
+        print("Not connected to any Teamtype daemon.")
         return
     end
 
@@ -259,9 +259,9 @@ local function activate_plugin()
     -- it should not attempt to reload it. Related to issue #176.
     vim.api.nvim_create_autocmd("FileChangedShell", { callback = function() end })
 
-    vim.api.nvim_create_user_command("EthersyncInfo", print_info, {})
-    vim.api.nvim_create_user_command("EthersyncJumpToCursor", cursor.jump_to_cursor, {})
-    vim.api.nvim_create_user_command("EthersyncFollow", cursor.follow_cursor, {})
+    vim.api.nvim_create_user_command("TeamtypeInfo", print_info, {})
+    vim.api.nvim_create_user_command("TeamtypeJumpToCursor", cursor.jump_to_cursor, {})
+    vim.api.nvim_create_user_command("TeamtypeFollow", cursor.follow_cursor, {})
 end
 
 activate_plugin()

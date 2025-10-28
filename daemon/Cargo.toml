@@ -5,14 +5,14 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
 [package]
-name = "ethersync"
+name = "teamtype"
 description = "Enables real-time co-editing of local text files."
 version = "0.8.0"
 authors = ["Moritz Neeb <nt4u@kpvn.de>", "blinry <mail@blinry.org>"]
 license = "AGPL-3.0-or-later"
 readme = "../README.md"
-documentation = "https://ethersync.github.io"
-repository = "https://github.com/ethersync/ethersync"
+documentation = "https://teamtype.github.io"
+repository = "https://github.com/teamtype/teamtype"
 keywords = [
     "collaboration",
     "local-first",
@@ -23,13 +23,13 @@ keywords = [
 categories = ["command-line-utilities", "text-editors"]
 edition = "2021"
 rust-version = "1.81.0"
-default-run = "ethersync"
+default-run = "teamtype"
 
 [lib]
-name = "ethersync"
+name = "teamtype"
 
 [[bin]]
-name = "ethersync"
+name = "teamtype"
 test = false
 bench = false
 doc = false

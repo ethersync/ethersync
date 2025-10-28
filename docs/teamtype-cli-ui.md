@@ -9,7 +9,7 @@ SPDX-License-Identifier: CC-BY-SA-4.0
 status: accepted
 date: 2024-03-14
 ---
-# Ethersync UI Specification
+# Teamtype UI Specification
 
 This document contains our current idea of how the Commandline User Interface looks like.
 (This document could later become the README. Note that the UI doesn't exist yet in this form.)
@@ -40,14 +40,14 @@ A shared project is an (ephemeral) session that is initiated from one end and ca
 
 Host / initiator:
 ```
-$ ethersync share
+$ teamtype share
 Initiating a new shared directory!
 Sharing code: apple-camel-icecream
 ```
 
 Joining peers:
 ```
-$ ethersync join apple-camel-icecream
+$ teamtype join apple-camel-icecream
 ```
 
 ## Longer Running Session

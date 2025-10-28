@@ -23,7 +23,7 @@ SPDX-License-Identifier: CC-BY-SA-4.0
     - [Offline support](offline-support.md)
     - [Configuration](configuration.md)
     - [Workarounds](workarounds.md)
-- [Ethersync in practice](in-practice.md)
+- [Teamtype in practice](in-practice.md)
     - [Pair programming](pair-programming.md)
     - [Shared notes](shared-notes.md)
     - [Working with Git](git-integration.md)

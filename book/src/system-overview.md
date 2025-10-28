@@ -7,7 +7,7 @@ SPDX-License-Identifier: CC-BY-SA-4.0
 
 # System overview
 
-Ethersync is a system for real-time local-first collaboration on text files, where
+Teamtype is a system for real-time local-first collaboration on text files, where
 - *real-time* means that edits and cursor movements should appear immediately while you are in a connection with your peer
 - *local-first* means that it's also possible to continue working on the project while you're (temporarily) offline
 
@@ -28,14 +28,14 @@ system |                  system |
 
 ## Text editor
 
-Text editors (with an installed Ethersync plugin) is what users most directly communicate with.
+Text editors (with an installed Teamtype plugin) is what users most directly communicate with.
 If they make a change to a file, the editor instantly communicates every single character edit to the daemon.
 
 The plugins also display other peoples' cursors in real-time.
 
 ## Daemon
 
-On each participant's computer, there's an Ethersync daemon, keeping the file's content in a data structure called "CRDT".
+On each participant's computer, there's an Teamtype daemon, keeping the file's content in a data structure called "CRDT".
 
 The daemon collects changes being communicated by the connected editor, and syncs them with other peers.
 If conflicts arise, because two edits happened at the same time, they will be resolved by the daemon automatically.
@@ -55,6 +55,6 @@ Most files are synchronized, except for [ignored files](ignored-files.md).
 Currently, you will need to start one daemon *per project*.
 When you start the daemon, you have the option to provide the directory as an optional `--directory` parameter, for example:
 
-    ethersync share --directory [DIRECTORY]
+    teamtype share --directory [DIRECTORY]
 
 If you leave it out, the current directory is selected.

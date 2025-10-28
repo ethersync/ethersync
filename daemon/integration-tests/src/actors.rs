@@ -5,8 +5,8 @@
 
 use crate::socket::*;
 
-use ethersync::daemon::Daemon;
-use ethersync::sandbox;
+use teamtype::daemon::Daemon;
+use teamtype::sandbox;
 
 use async_trait::async_trait;
 pub use nvim_rs::{compat::tokio::Compat, create::tokio::new_child_cmd, rpc::handler::Dummy};
@@ -170,15 +170,15 @@ fn rand_usize_inclusive(start: usize, end: usize) -> usize {
 
 impl Neovim {
     // The caller should store the TempDir, so that it is not garbage collected.
-    pub async fn new_ethersync_enabled(
+    pub async fn new_teamtype_enabled(
         initial_content: &str,
     ) -> (Self, PathBuf, MockSocket, TempDir) {
         let dir = TempDir::new().unwrap();
-        let ethersync_dir = dir.child(".ethersync");
+        let teamtype_dir = dir.child(".teamtype");
         let file_path = dir.child("test");
-        let socket_path = ethersync_dir.clone().join("socket");
+        let socket_path = teamtype_dir.clone().join("socket");
 
-        sandbox::create_dir(dir.path(), &ethersync_dir).unwrap();
+        sandbox::create_dir(dir.path(), &teamtype_dir).unwrap();
 
         sandbox::write_file(dir.path(), &file_path, initial_content.as_bytes())
             .expect("Failed to write initial file content");

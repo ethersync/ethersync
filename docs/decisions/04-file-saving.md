@@ -15,7 +15,7 @@ date: 2024-03-14
 
 Usually, when opening a file in a text editor, the content is read into its buffer. The user then works on the buffer, and sometimes writes it back to the file.
 
-In an Ethersync scenario, we could follow a different approach, where the daemon also writes to files.
+In an Teamtype scenario, we could follow a different approach, where the daemon also writes to files.
 
 The question is: Who writes to files, and when? Who has "ownership" of the files?
 
@@ -43,9 +43,9 @@ Chosen option: "When editors open a file, they take ownership of it. When no edi
 
 Notes:
 
-- We could provide another "interface" to the content, through ethersync tooling, like `ethersync run "sed -i s/foo/bar file"`.
+- We could provide another "interface" to the content, through teamtype tooling, like `teamtype run "sed -i s/foo/bar file"`.
 - Maybe we should implement a ping mechanism, so that the daemon can detect when editors have crashed.
-- When a file is opened in more than one editor at once, there could be conflicting writes anyway. This is true without a software like Ethersync. The only way to prevent that would be to stop editors from writing at all, which doesn't seem desirable.
+- When a file is opened in more than one editor at once, there could be conflicting writes anyway. This is true without a software like Teamtype. The only way to prevent that would be to stop editors from writing at all, which doesn't seem desirable.
 - To incorporate changes done by external tools, we watch the file system, compute diffs, and apply changes to the CRDT. This is independent of whether the file is open or closed in editors.
 
 ## Pros and Cons of the Options
@@ -69,7 +69,7 @@ The daemon doesn't write to the file when it's opended in an editor, but the edi
 
 ### The daemon writes the current CRDT state to closed files occasionally, with its own caching/writing logic
 
-Ethersync could decide on a default update interval, but make it configurable to the user preferences. The write intervals could change dependent on whether the user is "active" (i.e. has other files open)
+Teamtype could decide on a default update interval, but make it configurable to the user preferences. The write intervals could change dependent on whether the user is "active" (i.e. has other files open)
 
 * Good, because it strikes a middle ground between damaging the hard drive by writing to often, and neglecting external files by not updating the file at all.
 * Neutral, because its a bit more complex than the other options.

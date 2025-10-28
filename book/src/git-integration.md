@@ -7,7 +7,7 @@ SPDX-License-Identifier: CC-BY-SA-4.0
 
 # Working with Git
 
-There are two ways to collaborate on a Git repository with Ethersync.
+There are two ways to collaborate on a Git repository with Teamtype.
 
 - The first is a manual method, where `.git` is ignored.
 - The second one a more integrated (and more adventurous) method (which is activated with `--sync-vcs`), where you can commit and change branches together.

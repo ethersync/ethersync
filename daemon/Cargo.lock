@@ -1253,42 +1253,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "ethersync"
-version = "0.8.0"
-dependencies = [
- "anyhow",
- "async-trait",
- "automerge",
- "clap",
- "constant_time_eq",
- "derive_more 2.0.1",
- "dissimilar",
- "futures",
- "git2",
- "ignore",
- "iroh",
- "magic-wormhole",
- "notify",
- "operational-transform",
- "path-clean",
- "postcard",
- "pretty_assertions",
- "rand 0.8.5",
- "ropey",
- "rust-ini",
- "serde",
- "serde_json",
- "temp-dir",
- "time",
- "tokio",
- "tokio-util",
- "tracing",
- "tracing-subscriber",
- "tracing-test",
- "url",
-]
-
-[[package]]
 name = "event-listener"
 version = "2.5.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4415,6 +4379,42 @@ dependencies = [
  "filetime",
  "libc",
  "xattr",
+]
+
+[[package]]
+name = "teamtype"
+version = "0.8.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "automerge",
+ "clap",
+ "constant_time_eq",
+ "derive_more 2.0.1",
+ "dissimilar",
+ "futures",
+ "git2",
+ "ignore",
+ "iroh",
+ "magic-wormhole",
+ "notify",
+ "operational-transform",
+ "path-clean",
+ "postcard",
+ "pretty_assertions",
+ "rand 0.8.5",
+ "ropey",
+ "rust-ini",
+ "serde",
+ "serde_json",
+ "temp-dir",
+ "time",
+ "tokio",
+ "tokio-util",
+ "tracing",
+ "tracing-subscriber",
+ "tracing-test",
+ "url",
 ]
 
 [[package]]

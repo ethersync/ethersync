@@ -6,10 +6,10 @@ SPDX-FileCopyrightText: 2024 zormit <nt4u@kpvn.de>
 SPDX-License-Identifier: CC-BY-SA-4.0
 -->
 
-This directory contains integration tests for Ethersync. They assume that your `PATH` contains:
+This directory contains integration tests for Teamtype. They assume that your `PATH` contains:
 
-- An `nvim` with installed Ethersync plugin, and
-- an `ethersync` binary (for connecting via `ethersync client`).
+- An `nvim` with installed Teamtype plugin, and
+- an `teamtype` binary (for connecting via `teamtype client`).
 
 To run all integration tests, run:
 

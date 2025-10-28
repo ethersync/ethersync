@@ -7,16 +7,16 @@ SPDX-License-Identifier: CC-BY-SA-4.0
 
 # File Events
 
-Ethersync tries to sync not only file changes done by supported editors, but also by external tools.
+Teamtype tries to sync not only file changes done by supported editors, but also by external tools.
 
 > ⚠️ **Warning:**
 >
 > When one peer edits a file from an editor, and another peer changes it with an external tool at the same time, the latter change might get lost.
-> This is a restriction that seems hard to avoid. If you want to make sure changes by external tools are recorded correctly, do them while the daemon is not running, and make use of Ethersync's [offline support](offline-support.md).
+> This is a restriction that seems hard to avoid. If you want to make sure changes by external tools are recorded correctly, do them while the daemon is not running, and make use of Teamtype's [offline support](offline-support.md).
 
 ## Creating files
 
-- Opening a new file with an Ethersync-enabled text editor (this will create the file in the directory of connected peers).
+- Opening a new file with an Teamtype-enabled text editor (this will create the file in the directory of connected peers).
 
     Example: `nvim new_file`
 
@@ -30,7 +30,7 @@ Ethersync tries to sync not only file changes done by supported editors, but als
 
 ## Changing files
 
-- Editing a file in an Ethersync-enabled text editor.
+- Editing a file in an Teamtype-enabled text editor.
 
     Example: `nvim existing_file`
 

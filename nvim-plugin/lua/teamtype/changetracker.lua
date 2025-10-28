@@ -4,7 +4,7 @@
 -- SPDX-License-Identifier: AGPL-3.0-or-later
 
 local sync = require("vim.lsp.sync")
-local lsp_util = require("ethersync.lsp_util")
+local lsp_util = require("teamtype.lsp_util")
 
 local M = {}
 
@@ -31,8 +31,8 @@ local function is_empty(diff)
         and diff.range["start"].character == diff.range["end"].character
 end
 
--- Convert an LSP TextDocumentContentChangeEvent to an Ethersync delta.
-local function lsp_diff_to_ethersync_delta(diff)
+-- Convert an LSP TextDocumentContentChangeEvent to an Teamtype delta.
+local function lsp_diff_to_teamtype_delta(diff)
     return {
         {
             range = diff.range,
@@ -41,8 +41,8 @@ local function lsp_diff_to_ethersync_delta(diff)
     }
 end
 
--- Convert an Ethersync delta to a list of LSP `TextEdit`s.
-local function ethersync_delta_to_lsp_text_edits(delta)
+-- Convert an Teamtype delta to a list of LSP `TextEdit`s.
+local function teamtype_delta_to_lsp_text_edits(delta)
     local text_edits = {}
     for _, replacement in ipairs(delta) do
         local text_edit = {
@@ -91,7 +91,7 @@ local function fix_diff(diff, prev_lines, curr_lines)
     -- TODO: Update the following comment to describe the problem and the solution more clearly.
 
     -- Sometimes, Neovim deletes full lines by deleting the last line, plus an imaginary newline at the end. For example, to delete the second line, Neovim would delete from (line: 1, column: 0) to (line: 2, column 0).
-    -- But, in the case of deleting the last line, what we expect in the rest of Ethersync is to delete the newline *before* the line.
+    -- But, in the case of deleting the last line, what we expect in the rest of Teamtype is to delete the newline *before* the line.
     -- So let's change the deleted range to (line: 0, column: [last character of the first line]) to (line: 1, column: [last character of the second line]).
 
     if diff.range["end"].line == #prev_lines then
@@ -125,12 +125,12 @@ local function fix_diff(diff, prev_lines, curr_lines)
                     diff.range["end"].character = vim.fn.strchars(prev_lines[diff.range["end"].line + 1])
                 else
                     vim.api.nvim_err_writeln(
-                        "[ethersync] We don't know how to handle this case for a deletion after the last visible line. Please file a bug."
+                        "[teamtype] We don't know how to handle this case for a deletion after the last visible line. Please file a bug."
                     )
                 end
             else
                 vim.api.nvim_err_writeln(
-                    "[ethersync] We think a delta ending inside the line after the visible ones cannot happen. Please file a bug."
+                    "[teamtype] We think a delta ending inside the line after the visible ones cannot happen. Please file a bug."
                 )
             end
         end
@@ -173,7 +173,7 @@ function M.track_changes(buffer, initial_lines, callback)
     -- calculate the difference between the previous and the current content.
     local prev_lines = initial_lines
 
-    -- Computes an Ethersync delta containing the changes between curr_lines and prev_lines.
+    -- Computes an Teamtype delta containing the changes between curr_lines and prev_lines.
     -- If the delta is not empty, call the callback.
     local function line_change(first_line, last_line, new_last_line)
         -- TODO: optimize with a cache
@@ -207,7 +207,7 @@ function M.track_changes(buffer, initial_lines, callback)
             return
         end
 
-        local delta = lsp_diff_to_ethersync_delta(diff)
+        local delta = lsp_diff_to_teamtype_delta(diff)
         callback(delta)
     end
 
@@ -222,7 +222,7 @@ function M.track_changes(buffer, initial_lines, callback)
             new_last_line
         )
             -- First, clear the "modified" option, so that the buffer is not displayed as dirty.
-            -- Being modified doesn't have meaning for ethersync-ed files.
+            -- Being modified doesn't have meaning for teamtype-ed files.
             vim.api.nvim_buf_set_option(buffer, "modified", false)
 
             -- Line counts that we get called with are zero-based.
@@ -238,7 +238,7 @@ function M.track_changes(buffer, initial_lines, callback)
 end
 
 function M.apply_delta(buffer, delta)
-    local text_edits = ethersync_delta_to_lsp_text_edits(delta)
+    local text_edits = teamtype_delta_to_lsp_text_edits(delta)
 
     ignore_edits = true
     lsp_util.apply_text_edits(text_edits, buffer, "utf-32")

@@ -7,7 +7,7 @@ SPDX-License-Identifier: CC-BY-SA-4.0
 
 # Related Projects
 
-There have been a number of attempts of enabling collaborative text editing! If you think a project is missing, feel free to [submit an issue or a PR](https://github.com/ethersync/ethersync) to add them to the list!
+There have been a number of attempts of enabling collaborative text editing! If you think a project is missing, feel free to [submit an issue or a PR](https://github.com/teamtype/teamtype) to add them to the list!
 
 | | Open-source | Actively developed[^active] | Peer-to-peer | Local-first[^local-first] | Editor-agnostic |
 |-|-|-|-|-|-|

@@ -9,11 +9,11 @@ SPDX-License-Identifier: CC-BY-SA-4.0
 
 For the workflows below, we assume that you already have an established Git repository among the collaborating peers.
 
-## How Ethersync and Git interact
+## How Teamtype and Git interact
 
-Ethersync tracks changes that you make to files in editors with an Ethersync plugin, and with [external tools](file-events.md).
+Teamtype tracks changes that you make to files in editors with an Teamtype plugin, and with [external tools](file-events.md).
 
-However, any change to the `.git` directory and the staging area (which is in fact also tracked in the `.git` repository) is *ignored* by Ethersync by default. This means that in this mode, Ethersync does not sync
+However, any change to the `.git` directory and the staging area (which is in fact also tracked in the `.git` repository) is *ignored* by Teamtype by default. This means that in this mode, Teamtype does not sync
 - commits you create,
 - files that you stage or unstage, or
 - changes you're making to the HEAD.
@@ -56,7 +56,7 @@ git push
 
 ### Other peers
 
-1. Any other peer can then fetch the changes without applying them. Note: The changes *are* already applied to their working tree, through Ethersync.
+1. Any other peer can then fetch the changes without applying them. Note: The changes *are* already applied to their working tree, through Teamtype.
 
     ```bash
     git fetch

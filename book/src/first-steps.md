@@ -7,14 +7,14 @@ SPDX-License-Identifier: CC-BY-SA-4.0
 
 # First steps
 
-Here's how to try out Ethersync!
+Here's how to try out Teamtype!
 
 ## 🎬 1. Share a directory
 
 In an empty directory, run:
 
 ```bash
-ethersync share
+teamtype share
 ```
 This will print a "join code" that others can use to connect.
 
@@ -24,7 +24,7 @@ Open a file in the project directory:
 nvim file
 ```
 
-You should see `Ethersync activated!` in Neovim, and a `Client connected` message in the logs of the daemon.
+You should see `Teamtype activated!` in Neovim, and a `Client connected` message in the logs of the daemon.
 
 
 ## 🧑‍🤝‍🧑 2. Join the directory
@@ -34,7 +34,7 @@ You can try this on your local computer with a different directory, but it also 
 In another empty directory run the join command that the first daemon printed:
 
 ```bash
-ethersync join 3-exhausted-bananas
+teamtype join 3-exhausted-bananas
 ```
 
 Both sides will indicate success with a log message "Peer connected" and "Connected to peer" respectively.
@@ -47,4 +47,4 @@ You should also see your peer's cursor.
 
 ### Opening files in Neovim doesn't show a "Client connected" message in the logs of the daemon.
 
-Make sure that the `ethersync` command is in the `PATH` in the terminal where you run Neovim.
+Make sure that the `teamtype` command is in the `PATH` in the terminal where you run Neovim.

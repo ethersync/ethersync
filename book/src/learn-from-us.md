@@ -5,21 +5,21 @@ SPDX-FileCopyrightText: 2024 zormit <nt4u@kpvn.de>
 SPDX-License-Identifier: CC-BY-SA-4.0
 -->
 
-# What to learn from us (after Ethersync is dead)
+# What to learn from us (after Teamtype is dead)
 
-This page is written for people in the future, who discover Ethersync, and want to learn from it, to start their own project.
+This page is written for people in the future, who discover Teamtype, and want to learn from it, to start their own project.
 
-Maybe you don't agree with some of our technical choices. Or maybe you're unhappy with how we lead the project. But the most probable cause you're reading this is that we stopped to maintain and improve Ethersync, and the project is essentially dead. Looking at similar projects, many of them had the same fate.
+Maybe you don't agree with some of our technical choices. Or maybe you're unhappy with how we lead the project. But the most probable cause you're reading this is that we stopped to maintain and improve Teamtype, and the project is essentially dead. Looking at similar projects, many of them had the same fate.
 
 Because of that, we want to give you as much useful information as we can, so that you can learn from our ideas and mistakes.
 
 ## The documentation
 
-This documentation already gives you many insights into how Ethersync works and behaves. The list of related projects might be helpful for you to discover other approaches.
+This documentation already gives you many insights into how Teamtype works and behaves. The list of related projects might be helpful for you to discover other approaches.
 
 ## The Architecural Decision Records
 
-In addition to the documentation, we wrote a number of "architectural decision records", which each look at a certain problem we were facing, document the possible options, which one we picked, and why. We believe these records might be useful for future projects facing the same problems. You can find them [here](https://github.com/ethersync/ethersync/tree/main/docs/decisions).
+In addition to the documentation, we wrote a number of "architectural decision records", which each look at a certain problem we were facing, document the possible options, which one we picked, and why. We believe these records might be useful for future projects facing the same problems. You can find them [here](https://github.com/teamtype/teamtype/tree/main/docs/decisions).
 
 ## The editor plugins
 

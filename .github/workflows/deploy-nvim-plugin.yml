@@ -15,15 +15,15 @@ on:
 # There's a "mirror to main" step in release.yml, make sure to change both accordingly.
 jobs:
   mirror:
-    name: Mirror to ethersync/ethersync-nvim
+    name: Mirror to teamtype/teamtype-nvim
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: s0/git-publish-subdir-action@develop
         env:
-          REPO: git@github.com:ethersync/ethersync-nvim
+          REPO: git@github.com:teamtype/teamtype-nvim
           BRANCH: develop
           FOLDER: nvim-plugin
           SSH_PRIVATE_KEY: ${{ secrets.NVIM_PLUGIN_DEPLOY_PRIVATE_KEY }}
           SKIP_EMPTY_COMMITS: true
-          MESSAGE: "Automatic mirror of commit {sha} in main Ethersync repository"
+          MESSAGE: "Automatic mirror of commit {sha} in main Teamtype repository"

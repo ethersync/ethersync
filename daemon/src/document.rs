@@ -176,7 +176,7 @@ impl Document {
     }
 
     pub fn initialize_text(&mut self, text: &str, file_path: &RelativePath) {
-        info!("Initializing {file_path} in the Ethersync history.");
+        info!("Initializing {file_path} in the Teamtype history.");
 
         // Now it should definitely work?
         let file_map = self
@@ -227,7 +227,7 @@ impl Document {
             return;
         }
 
-        info!("Removing {file_path} from the Ethersync history.");
+        info!("Removing {file_path} from the Teamtype history.");
 
         let file_map = self
             .top_level_map_obj("files")
@@ -252,7 +252,7 @@ impl Document {
 
         // If the file was not in the document before, log this.
         if !self.file_exists(file_path) {
-            info!("Initializing binary {file_path} in the Ethersync history.");
+            info!("Initializing binary {file_path} in the Teamtype history.");
         }
 
         self.doc

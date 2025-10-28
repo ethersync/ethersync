@@ -3,9 +3,9 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-use ethersync_integration_tests::actors::*;
+use teamtype_integration_tests::actors::*;
 
-use ethersync::types::{
+use teamtype::types::{
     factories::*, EditorProtocolMessageFromEditor, EditorProtocolMessageToEditor,
     EditorProtocolObject, EditorTextDelta, EditorTextOp, JSONRPCFromEditor,
 };
@@ -20,29 +20,29 @@ async fn plugin_loaded() {
     let mut cmd = tokio::process::Command::new("nvim");
     cmd.arg("--headless").arg("--embed");
     let (nvim, _, _) = new_child_cmd(&mut cmd, handler).await.unwrap();
-    nvim.command("EthersyncInfo")
+    nvim.command("TeamtypeInfo")
         .await
-        .expect("Failed to run EthersyncInfo");
+        .expect("Failed to run TeamtypeInfo");
 }
 
 #[tokio::test]
-async fn ethersync_executable_from_nvim() {
+async fn teamtype_executable_from_nvim() {
     let handler = Dummy::new();
     let mut cmd = tokio::process::Command::new("nvim");
     cmd.arg("--headless").arg("--embed");
     let (nvim, _, _) = new_child_cmd(&mut cmd, handler).await.unwrap();
     assert_eq!(
-        nvim.command_output("echomsg executable('ethersync')")
+        nvim.command_output("echomsg executable('teamtype')")
             .await
             .expect("Failed to run executable() in Neovim"),
         "1",
-        "Failed to run ethersync executable from Neovim"
+        "Failed to run teamtype executable from Neovim"
     );
 }
 
 #[tokio::test]
 async fn nvim_sends_something_to_socket() {
-    let (nvim, _file_path, mut socket, _dir) = Neovim::new_ethersync_enabled("hi").await;
+    let (nvim, _file_path, mut socket, _dir) = Neovim::new_teamtype_enabled("hi").await;
     dbg!(nvim.content().await);
     timeout(Duration::from_millis(1000), async {
         socket.acknowledge_open().await;
@@ -56,7 +56,7 @@ async fn assert_nvim_deltas_yield_content(
     deltas: Vec<EditorTextOp>,
     expected_content: &str,
 ) {
-    let (nvim, file_path, mut socket, _dir) = Neovim::new_ethersync_enabled(initial_content).await;
+    let (nvim, file_path, mut socket, _dir) = Neovim::new_teamtype_enabled(initial_content).await;
     socket.acknowledge_open().await;
 
     for op in &deltas {
@@ -135,7 +135,7 @@ async fn assert_nvim_input_yields_replacements(
     mut expected_replacements: Vec<EditorTextOp>,
 ) {
     timeout(Duration::from_millis(5000), async {
-                let (mut nvim, _file_path, mut socket, _dir) = Neovim::new_ethersync_enabled(initial_content).await;
+                let (mut nvim, _file_path, mut socket, _dir) = Neovim::new_teamtype_enabled(initial_content).await;
                 socket.acknowledge_open().await;
 
                 {

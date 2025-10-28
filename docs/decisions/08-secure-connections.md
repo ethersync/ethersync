@@ -14,14 +14,14 @@ date: 2024-08-22
 
 In many situations, we don't want shared directories to be publicly readable & writable. How can we make sure that only the people we want can get access?
 
-Our "attack surface" for an Ethersync daemon is connections from the Internet. We explicitly don't guard against misbehaving editor plugins, as they'd run on the local machine anyway (and as such could do damage more directly than going through the deamon, which is assumed to only run with user privileges).
+Our "attack surface" for an Teamtype daemon is connections from the Internet. We explicitly don't guard against misbehaving editor plugins, as they'd run on the local machine anyway (and as such could do damage more directly than going through the deamon, which is assumed to only run with user privileges).
 
 We need two things:
 
 * **Transport encryption**, so that nobody can spy on ongoing connections.
 * An **authorization mechanism**, so that only certain people can start speaking the Automerge sync protocol with existing peers. Exactly those people should be able to read/change/delete all content in the shared directory.
 
-The session lifetime is up to the users and can, in the ["note-taking use-case"](https://ethersync.github.io/ethersync/use-cases/shared-notes.html)
+The session lifetime is up to the users and can, in the ["note-taking use-case"](https://teamtype.github.io/teamtype/use-cases/shared-notes.html)
 be for an indefinite amount of time.
 A scenario where we're probably most vulnerable is when someone is leaving a "cloud peer" open and accessible by everyone.
 We probably won't be able to solve this problem ourselves, but users might need to add other solutions, e.g. a VPN,

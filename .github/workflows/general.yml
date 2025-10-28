@@ -45,11 +45,11 @@ jobs:
             daemon
             daemon/integration-tests
           cache-on-failure: true
-      - name: Build Ethersync
+      - name: Build Teamtype
         run: cargo build --release
-      - name: Add ethersync binary to PATH
+      - name: Add teamtype binary to PATH
         run: echo "$PWD/target/release" >> $GITHUB_PATH
-      - run: ethersync --version
+      - run: teamtype --version
       - name: Install Neovim
         uses: rhysd/action-setup-vim@v1
         with:
@@ -59,7 +59,7 @@ jobs:
       - name: Install Neovim plugin
         run: |
           mkdir -p $HOME/.local/share/nvim/site/pack/plugins/start
-          ln -s $PWD/../nvim-plugin $HOME/.local/share/nvim/site/pack/plugins/start/ethersync
+          ln -s $PWD/../nvim-plugin $HOME/.local/share/nvim/site/pack/plugins/start/teamtype
       - name: Compile unit tests
         run: cargo test --no-default-features --no-run --locked
       - name: Run unit tests

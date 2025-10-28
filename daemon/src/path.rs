@@ -71,7 +71,7 @@ impl RelativePath {
         })?;
         let relative_path = path.strip_prefix(&shared_dir).with_context(|| {
             format!(
-                "The path {path} is not in the shared directory '{}'. Your plugin probably doesn't support opening files from multiple Ethersync directories.",
+                "The path {path} is not in the shared directory '{}'. Your plugin probably doesn't support opening files from multiple Teamtype directories.",
                 shared_dir.display()
             )
         })?;

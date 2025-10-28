@@ -5,32 +5,32 @@ SPDX-FileCopyrightText: 2024 zormit <nt4u@kpvn.de>
 SPDX-License-Identifier: CC-BY-SA-4.0
 -->
 
-# VS Code plugin for 🍃 [Ethersync](https://github.com/ethersync/ethersync)-compatible projects
+# VS Code plugin for 🍃 [Teamtype](https://github.com/teamtype/teamtype)-compatible projects
 
-Note: You will need to install and run a "collaboration server" like Ethersync in addition to this plugin!
+Note: You will need to install and run a "collaboration server" like Teamtype in addition to this plugin!
 
-Refer to the [main project](https://github.com/ethersync/ethersync) for documentation and usage instructions.
+Refer to the [main project](https://github.com/teamtype/teamtype) for documentation and usage instructions.
 
 ## Configuration
 
-A configuration for connecting to Ethersync daemons is provided as a default value.
+A configuration for connecting to Teamtype daemons is provided as a default value.
 
 You can also use this plugin with other collaboration servers.
 
 To add other configurations, add a section like this to your `settings.json` (you can access it using *F1 -> Preferences: Open User Settings (JSON)*):
 
 ```jsonc
-"ethersync.configs": {
+"teamtype.configs": {
   /* Default configuration */
-  "ethersync": {
-    "cmd": [ "ethersync", "client" ],
-    "rootMarkers": [ ".ethersync" ]
+  "teamtype": {
+    "cmd": [ "teamtype", "client" ],
+    "rootMarkers": [ ".teamtype" ]
    },
 
   /* Hypothetical configuration for another program */
   "http": {
-    "cmd": [ "ethersync-http" ],
-    "rootMarkers": [ ".ethersync-http" ]
+    "cmd": [ "teamtype-http" ],
+    "rootMarkers": [ ".teamtype-http" ]
   },
 }
 ```

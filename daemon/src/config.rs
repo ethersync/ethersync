@@ -14,7 +14,7 @@ use tracing::info;
 
 pub const DOC_FILE: &str = "doc";
 pub const DEFAULT_SOCKET_NAME: &str = "socket";
-pub const CONFIG_DIR: &str = ".ethersync";
+pub const CONFIG_DIR: &str = ".teamtype";
 pub const CONFIG_FILE: &str = "config";
 pub const BOOKMARK_FILE: &str = "bookmark";
 
@@ -98,7 +98,7 @@ impl AppConfig {
                 Peer::SecretAddress(secret_address)
             }
             None => {
-                bail!("Missing join code, and no peer=<secret address> in .ethersync/config");
+                bail!("Missing join code, and no peer=<secret address> in .teamtype/config");
             }
         };
         Ok(Self {
@@ -136,7 +136,7 @@ impl AppConfig {
 }
 
 pub fn store_peer_in_config(directory: &Path, config_file: &Path, peer: &str) -> Result<()> {
-    info!("Storing peer's address in .ethersync/config.");
+    info!("Storing peer's address in .teamtype/config.");
 
     let content = format!("peer={peer}\n");
     sandbox::write_file(directory, config_file, content.as_bytes())
@@ -154,11 +154,11 @@ pub fn has_git_remote(path: &Path) -> bool {
 }
 
 #[must_use]
-fn ethersync_directory_should_be_ignored_but_isnt(path: &Path) -> bool {
+fn teamtype_directory_should_be_ignored_but_isnt(path: &Path) -> bool {
     if let Ok(repo) = find_git_repo(path) {
-        let ethersync_dir = path.join(CONFIG_DIR);
+        let teamtype_dir = path.join(CONFIG_DIR);
         return !repo
-            .is_path_ignored(ethersync_dir)
+            .is_path_ignored(teamtype_dir)
             .expect("Should have been able to determine ignore state of path");
     }
     false
@@ -203,11 +203,11 @@ fn find_git_repo(path: &Path) -> Result<git2::Repository, git2::Error> {
     git2::Repository::discover(path)
 }
 
-fn add_ethersync_to_local_gitignore(directory: &Path) -> Result<()> {
+fn add_teamtype_to_local_gitignore(directory: &Path) -> Result<()> {
     let mut ignore_file_path = directory.join(CONFIG_DIR);
     ignore_file_path.push(".gitignore");
 
-    // It's very unlikely that .ethersync/.gitignore will already contain something, but let's
+    // It's very unlikely that .teamtype/.gitignore will already contain something, but let's
     // still append.
     let bytes_in = sandbox::read_file(directory, &ignore_file_path).unwrap_or_default();
     // TODO: use String::from_utf8
@@ -223,9 +223,9 @@ fn add_ethersync_to_local_gitignore(directory: &Path) -> Result<()> {
     Ok(())
 }
 
-pub fn ensure_ethersync_is_ignored(directory: &Path) -> Result<()> {
-    if ethersync_directory_should_be_ignored_but_isnt(directory) {
-        add_ethersync_to_local_gitignore(directory)?;
+pub fn ensure_teamtype_is_ignored(directory: &Path) -> Result<()> {
+    if teamtype_directory_should_be_ignored_but_isnt(directory) {
+        add_teamtype_to_local_gitignore(directory)?;
     }
     Ok(())
 }

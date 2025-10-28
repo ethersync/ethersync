@@ -24,7 +24,7 @@ use tracing::{debug, info, warn};
 
 mod sync;
 
-const ALPN: &[u8] = b"/ethersync/0";
+const ALPN: &[u8] = b"/teamtype/0";
 
 struct SecretAddress {
     node_addr: NodeAddr,
@@ -119,7 +119,7 @@ impl ConnectionManager {
     }
 
     fn get_keypair(base_dir: &Path) -> (SecretKey, SecretKey) {
-        let keyfile = base_dir.join(".ethersync").join("key");
+        let keyfile = base_dir.join(".teamtype").join("key");
         if keyfile.exists() {
             let metadata =
                 fs::metadata(&keyfile).expect("Expected to have access to metadata of the keyfile");
@@ -128,7 +128,7 @@ impl ConnectionManager {
             let allowed_permissions = 0o100_600;
             assert!(current_permissions == allowed_permissions, "For security reasons, please make sure to set the key file to user-readable only (set the permissions to 600).");
 
-            assert!(metadata.len() == 64, "Your keyfile is not 64 bytes long. This is a sign that it was created by an Ethersync version older than 0.7.0, which is not compatible. Please remove .ethersync/key, and try again.");
+            assert!(metadata.len() == 64, "Your keyfile is not 64 bytes long. This is a sign that it was created by an Teamtype version older than 0.7.0, which is not compatible. Please remove .teamtype/key, and try again.");
 
             debug!("Re-using existing keypair.");
             let mut file = File::open(keyfile).expect("Failed to open key file");
