@@ -55,14 +55,6 @@ Usually, you will add the string `"teamtype/teamtype-nvim"` to your plugin manag
 }
 ```
 
-### Nix
-
-For testing purposes, you can run a Teamtype-enabled Neovim like this:
-
-```bash
-nix run github:teamtype/teamtype#neovim
-```
-
 ## Confirm the installation
 
 To confirm that the plugin is installed, try running the `:TeamtypeInfo` command in Neovim. It should show the message "Not connected to Teamtype daemon."
