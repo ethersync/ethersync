@@ -1,7 +1,7 @@
 {
     "name": "teamtype",
     "displayName": "Teamtype",
-    "version": "0.6.0",
+    "version": "0.8.0",
     "publisher": "teamtype",
     "description": "Editor-agnostic real-time collaborative editing of local text files.",
     "contributors": [
