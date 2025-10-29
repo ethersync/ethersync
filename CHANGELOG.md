@@ -5,6 +5,52 @@ SPDX-FileCopyrightText: 2024 zormit <nt4u@kpvn.de>
 SPDX-License-Identifier: CC-BY-SA-4.0
 -->
 
+# 0.9.0 (2025-10-29)
+
+Teamtype (previously called Ethersync) enables real-time collaborative editing of local text files, with plugins for Neovim and VS Code.
+
+## Breaking change: Renamed from Ethersync to Teamtype
+
+This release exists mostly because we decided to rename the project! It used to be called "Ethersync", derived from software like EtherPad and SubEthaEdit. But ultimately, we think the name "Teamtype" will serve the project better, because of a couple of reasons:
+
+- It's more self-descriptive.
+- It highlights the collaborative aspect.
+- It avoids associations with "Ethereum".
+- It's easier to pronounce in English, German, and hopefully other languages as well.
+- When we made the decision a couple of months ago, it was completely unoccupied on the Internet.
+- We got a great domain!
+- It's already crowd-validated, because in [a poll](https://pol.is/report/r74mttmj5vrbh6c7hm64h) we did last year, it was in the top 5 of the suggestions.
+
+We hope you like the new name as much as we do.
+
+Because of the name change, old versions of the Ethersync daemon and the plugins are no longer compatible with this release.
+
+### Upgrade instructions from 0.8.0
+
+- Install the `teamtype` daemon binary via some method as described in the README.
+- Uninstall the old editor plugins, and then install the new Teamtype plugins.
+- Updating the local metadata: When you first run `teamtype share/join`, the program will offer you to rename `.ethersync/` to `.teamtype/` automatically. This will happen for every previously shared project independently.
+
+## Note for package maintainers: Shell completions and man pages
+
+Thanks to @EdJoPaTo, `cargo build` now generates shell completion files (in `target/completions/`) and man pages. It'd be great to include/install them! Thank you for maintaining the package :)
+
+## Make transmission of file changes less noisy
+
+When pair programming on a software repository, using commands like `git checkout <file>` used to be a bad experience, because it would first remove the file from the CRDT document, and then re-create it. This led to a lot of noise in the logs, and to less stable collaboration on these files.
+
+We rewrote our file watcher to "de-bounce" the observed file events. When a file disappears, the watcher will now wait for 100 ms, and if it re-appears in that time, only the diff is communicated to the peers.
+
+## Experiment: Smoothly collaborate on Git repositories
+
+We have added a flag `--sync-vcs` to enable synchronization of Git and other Version Control Systems' local data. It allows working closely together when pair programming: Creating commits (and even writing the commit messages collaboratively!), switching branches, etc.
+
+As mentioned in many places: This might possibly corrupt your local `.git` directory, so beware and use with caution. We can recommend it as a fun experiment to see how it feels to break up a common pattern of previously asynchronous workflows.
+
+## Other improvements in this release
+
+- In the Neovim plugin, the follow mode automatically stops whenever any key is pressed (thanks, @MichaelBitard).
+
 # 0.8.0 (2025-09-26)
 
 Ethersync enables real-time collaborative editing of local text files, with plugins for Neovim and VS Code.
