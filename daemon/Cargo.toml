@@ -7,7 +7,7 @@
 [package]
 name = "teamtype"
 description = "Enables real-time co-editing of local text files."
-version = "0.8.0"
+version = "0.9.0"
 authors = ["Moritz Neeb <nt4u@kpvn.de>", "blinry <mail@blinry.org>"]
 license = "AGPL-3.0-or-later"
 readme = "../README.md"
