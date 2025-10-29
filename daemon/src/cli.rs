@@ -52,15 +52,7 @@ pub enum Commands {
         #[command(flatten)]
         sync_vcs: SyncVcsFlag,
     },
-    /// Remember the current state of the directory, allowing you to compare it later.
-    Bookmark,
-    /// Show the differences between the bookmark and the current state with a tool of your choice.
-    Diff {
-        /// Which external command to use to compare the two revisions. A good option is `meld`.
-        #[arg(long)]
-        tool: String,
-    },
-    /// Open a JSON-RPC connection to the Ethersync daemon on stdin/stdout. Used by text editor plugins.
+    /// Open a JSON-RPC connection to the Teamtype daemon on stdin/stdout. Used by text editor plugins.
     Client,
 }
 

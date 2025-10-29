@@ -52,8 +52,4 @@ teamtype join
 
 ## Tracking edits over time
 
-To keep track of edits over time, you can use the `bookmark` and `diff` subcommands.
-
-`teamtype bookmark` will remember the current directory contents, so that you can compare to that state later. You can run this before connecting to your peer, for example, so that you can see which changes the peer introduced.
-
-`teamtype diff --tool <tool>` will create snapshots of the bookmark and the current state and opens a diff-viewer of your choice to compare them. A good graphical diff viewer is [meld](https://meldmerge.org/).
+To keep track of edits over time, we recommend you use a version control system like Git, see the [Working with Git](git-integration.md) section.
