@@ -11,7 +11,7 @@ use teamtype::{
     cli_ask::ask,
     config::{self, AppConfig},
     daemon::Daemon,
-    history, logging, sandbox,
+    logging, sandbox,
 };
 use tokio::signal;
 use tracing::{debug, info, warn};
@@ -113,7 +113,7 @@ async fn main() -> Result<()> {
                         .await
                         .context("Failed to resolve peer")?;
                 }
-                _ => {
+                Commands::Client => {
                     panic!("This can't happen, as we earlier matched on Share|Join.")
                 }
             }
@@ -131,13 +131,6 @@ async fn main() -> Result<()> {
                 .await
                 .context("Failed to launch the daemon")?;
             wait_for_shutdown().await;
-        }
-        Commands::Bookmark => {
-            history::bookmark(&directory).context("Bookmark command failed")?;
-            info!("Successfully created a bookmark. Use `teamtype diff` to later see what changed since bookmarking.");
-        }
-        Commands::Diff { tool } => {
-            history::diff(&directory, &tool).context("Diff command failed")?;
         }
         Commands::Client => {
             jsonrpc_forwarder::connection(&socket_path)
